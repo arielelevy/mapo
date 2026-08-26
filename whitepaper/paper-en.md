@@ -1,0 +1,775 @@
+# Feasibility Before Selection: When Orchestration Topology Actually Matters for LLM Agents
+
+**Draft 0.1 — 2026-08-23**
+**Author**: Ariel Edgardo Levy
+**Status**: working draft. Theory is complete and machine-checked; measurements are
+preliminary at n=1 per cell. Every empirical claim below carries its sample size.
+Target: arXiv cs.LG (primary), cs.AI (cross-list).
+
+---
+
+## Abstract
+
+Per-task selection of an agent's reasoning paradigm has a large, measured prize: oracle
+selection beats the best fixed paradigm by 17.1pp, and the best published router recovers
+about a quarter of that gap while zero-shot self-routing recovers negative value. We argue
+the bottleneck is not selector capacity but decision framing, and we develop three results
+in front of the learning problem rather than inside it.
+
+First, **feasibility is arithmetic**. Whether a topology can run a task is computable from
+declared quantities — unit count, unit length, budget — with no model call and no
+statistics. On a corpus scaled from 16k to 1.27M tokens this prunes three of seven
+candidate topologies before any token is spent, and it separates two failure modes that
+are routinely conflated: map-reduce is bounded by *cardinality*, not by total size.
+
+Second, **selection pays only under a precise condition**. We give the Selection Value
+Theorem, `π·α·G > (1−π)·β·L`, and its corollaries: a router obliged to always choose has no
+control over its false-positive rate, so optimal coverage is generally well below one. We
+further show that where a cheap failure detector exists, escalation dominates prediction —
+a router that misroutes pays a quality loss, a cascade pays a cost loss — which partitions
+the problem by verifiability rather than by task type.
+
+Third, and empirically, **tool surface governs the variance that topology choice is
+credited with**. Across four feature cells, paradigms that do not use tools span a 1.2×
+cost range; paradigms that do span 50×. Adding one signal — that the retriever has
+returned nothing new for three consecutive searches — cut the cost of the most
+elaborate topology by 3.05× against a replicate spread of 1.62× on the same measure.
+
+We contribute the theory, a machine-checked measurement layer, a corpus generator with
+exact ground truth at four scales, and a preliminary failure analysis of seven topologies.
+We do not yet contribute a validated selector.
+
+**Keywords**: LLM agents, orchestration, selective prediction, learning to defer,
+retrieval-augmented generation, tool design, agent evaluation
+
+---
+
+# 1. Introduction
+
+## 1.1 A measured prize that nobody captures
+
+An LLM agent's *paradigm* — the control structure wrapped around the model, such as a
+single call, a reasoning loop, a decomposition, or a verify-replan graph — is normally
+chosen once at design time and frozen in code. Recent work measures what that costs.
+Across six paradigms, four frontier models and ten benchmarks (~18,000 runs), oracle
+per-task selection beats the best fixed paradigm by **17.1pp** on average, with individual
+swings as large as +44pp and −15pp depending on the pairing [Select-then-Solve,
+arXiv:2604.06753].
+
+The same work shows the prize is not being collected. A trained embedding router recovers
+roughly a quarter of the gap. Zero-shot self-routing — asking the model to pick its own
+paradigm — recovers *negative* value: two models fall below their own single-paradigm
+baselines, one to 27.5%.
+
+So: the prize is large, the best published attempt captures a minority of it, and the naive
+attempt is worse than not trying. That pattern invites the conclusion that better selectors
+are needed. We argue it invites a different one.
+
+## 1.2 Three claims that precede the learning problem
+
+**Feasibility is arithmetic, and it is free.** Before asking which topology is *best*, one
+can ask which can *run*. That question is answerable from quantities the task already
+declares. A learned policy that spends episodes discovering that map-reduce loses on
+500-unit tasks is learning arithmetic the hard way; the cap was computable before the first
+token.
+
+**Selection pays only under a precise condition.** A router that must always choose has no
+degree of freedom over its false-positive rate and therefore pays for every misroute. We
+formalise when selection beats a fixed fallback and show that the optimal operating point
+generally involves abstaining on most requests — which is not a weaker router but a
+different objective.
+
+**Much of what is attributed to topology is attributable to tools.** In our measurements
+the paradigms that use retrieval tools span a fifty-fold cost range while those that do not
+span 1.2×. A benchmark that does not report the quality of its tool surface is not
+comparing topologies; it is comparing one retriever wrapped seven ways.
+
+## 1.3 What this draft does and does not establish
+
+Established: the theory (§5), machine-checked against synthetic distributions with known
+answers; a feasibility layer (§4) validated across four corpus scales; a corpus generator
+whose ground truth is re-derived independently from the documents (§6).
+
+Preliminary: every empirical number in §7 and §8 is n=1 per cell on one corpus with one
+model. Replicate variance on the most elaborate topology was measured at up to 3.93× in
+cost, so magnitudes are indicative. The *mechanisms* are more robust than the magnitudes,
+because they rest on tool-usage traces rather than on effect sizes.
+
+Not established: a validated selector, any result on public benchmarks, and any claim about
+a regime other than exact-answer extraction over document collections.
+
+---
+
+# 2. Related work
+
+## 2.1 Automatic workflow search
+
+AFlow reformulates workflow optimisation as search over code-represented workflows with
+MCTS over operators [arXiv:2410.10762]; ADAS and GPTSwarm search related spaces. These
+produce **one** workflow per benchmark, offline. Our concern is per-request selection among
+a fixed set, and — before that — which members of the set can run at all.
+
+## 2.2 Inference-time paradigm selection
+
+Select-then-Solve trains a lightweight embedding router to pick a paradigm per task
+[arXiv:2604.06753]. FlowBank builds a portfolio offline and selects per query
+[arXiv:2606.11290]. TRACE-Router routes at the granularity of a task trace rather than a
+request [arXiv:2607.22465]. Uno-Orchestra learns a joint decomposition-and-dispatch policy
+[arXiv:2605.05007].
+
+All of these operate at **coverage one**: every task receives a paradigm. §5.1 argues that
+this is the binding constraint rather than model capacity, and none of them reports a
+risk-coverage curve. Two details of Select-then-Solve, verified against the full paper
+rather than its abstract (2026-08-26): its oracle is an *uncorrected empirical maximum* per
+task, and its own limitations note that the benchmark sample is fixed with no re-sampling
+across seeds — which is precisely the upward bias our noise-floor protocol (§6.1) is built
+to discount. And the deferral machinery exists next door without having crossed over:
+ReDAct defers individual decisions to a larger model on a calibrated uncertainty threshold
+[arXiv:2604.07036]; uncertainty-decomposition routing unifies abstention and routing with
+distribution-free guarantees, for classifiers [arXiv:2605.07805]; and compositional
+meta-routing trains an interpretable router over textual features and names a learned
+confidence gate with fallback to static routing as unevaluated future work
+[arXiv:2608.00106]. Nobody applies abstention to paradigm selection (searched 2026-08-26);
+the window is visibly closing.
+
+## 2.3 Cost models for workflows
+
+GLOW predicts agentic workflow performance from graph and language features
+[arXiv:2512.15751]; Cost-Aware Optimization for Agentic Query Execution draws the analogy
+to classical query optimisation explicitly [arXiv:2606.03152]. We take the analogy as
+settled and do not claim it. Our addition is upstream: a hard feasibility filter that a
+cost model does not replace, because an infeasible plan has no cost.
+
+## 2.4 Symbolic governance over probabilistic inference
+
+The Structured Cognitive Loop introduces Soft Symbolic Control, a governance mechanism
+over probabilistic inference [arXiv:2511.17673]. This is the closest related work to §6.2,
+and read in full (2026-08-26) its governance splits in two: *Regulation*, a persistent
+natural-language metaprompt whose enforcement the paper itself notes depends on how well
+the LLM interprets instructions, and *Control*, a deterministic runtime applying fixed hard
+rules to the turn's execution history — duplicate calls, error counts, cycle depth — not to
+propositional content. Control does carry a per-action risk classification (cache a safe
+read, block a repeated critical call, freeze for human authorisation), but that is a static
+class on individual actions inside one fixed loop. It operates as a **single global mode**:
+it does not graduate assurance per request, derive the required level from beliefs about
+the request, restrict the admissible plan space by level, or calibrate model-stated
+confidence. Those four are what we add — over a belief base the symbolic layer decides on,
+rather than a metaprompt the model is asked to obey.
+
+Nearby in the belief layer itself: Nous caps belief reliability by channel provenance
+[arXiv:2606.22030], MemIR types memory by provenance to prevent source collapse
+[arXiv:2605.25869], Eywa promotes facts only after validators pass against immutable
+evidence [arXiv:2605.30771], and HEP makes hypothesis evolution auditable — though all
+validated evidence moves belief equally, with no provenance hierarchy gating promotion
+[arXiv:2607.09195]. The garden-of-forking-paths problem — agents that propose and score
+hypotheses on the same data — is diagnosed empirically in [arXiv:2607.01507] without a
+mechanism; §6.3's propose/score partition is one.
+
+MINERVA/HADD is the closest antecedent of the belief layer itself, and read in full
+(2026-08-26) it supplies **mechanism, not vocabulary** [Zenodo 10.5281/zenodo.20003407].
+The HADD invariants already contain: the LLM confined to a typed sensor that never makes
+control-flow decisions; a deterministic cognition layer that is a pure function of the
+belief base — "same state → same action", which is the guarantee form §6.2 adopts; an
+epistemic admission gate on beliefs at the perception boundary (the EVR gate, specified in
+a companion paper [Zenodo 10.5281/zenodo.19791686]); an append-only belief history an
+auditor can replay; per-belief numeric confidence with adaptive calibration (EMRE); and
+the Kautz Type-2 framing. Its scope is general — goal generation, plan selection and
+execution control are all deterministic over beliefs about concrete state — within a
+pre-verified plan library and a fixed topology.
+
+What HADD does not have is what §6.2 adds: provenance as a **typed hierarchy with
+admissibility semantics** rather than a traceability field; the rule that elicited
+assertions are inadmissible for irreversible actions (HADD's nearest device is mandatory
+human confirmation, a consent mechanism, not an epistemic one); assurance **graduated per
+request** — HADD's guarantee is uniform, its only adaptive dial a per-tenant escalation
+threshold; the admissible **pattern space bounded by level** — HADD bounds its plan
+library globally; and **measured** calibration (EMRE learns confidence but never measures
+it — no ECE, no reliability diagrams). Paradigm selection, abstention and deferral are
+outside HADD's scope entirely.
+
+## 2.5 Selective prediction and learning to defer
+
+Our theory is an application of an established framework. Chow's rule gives optimal
+rejection; Mozannar and Sontag give a consistent surrogate for deferral to an expert
+[PMLR v119]; Verma and Nalisnick add calibrated one-vs-all deferral [arXiv:2202.03673];
+Mohri and colleagues give principled multi-expert formulations. We contribute the
+application to paradigm selection and the specific corollaries in §5.1, not the framework.
+
+## 2.6 Agents that learn without weight updates
+
+Experiential memory approaches — ExpeL, experiential reflective learning, MemSkill, R²-Mem
+— accumulate insights, rules or memory entries. Sleep-time compute shifts inference to idle
+time and reports ~1/5 the tokens at inference [Letta]; SCM and related work add
+biologically-inspired consolidation [arXiv:2604.20943, arXiv:2605.26099]. All consolidate
+*content*. §6.3 consolidates the *control policy*, and the claim survives a dated search
+(2026-08-26) only as a conjunction, so we state it as one: the policy is learned from the
+agent's own episodes, consolidated offline, into a versioned deterministic artifact
+executed outside the LLM, over structural task features. Each conjunct has a strong
+neighbour. Trace2Policy distills control from *expert* traces into rule bases that are
+injected back *as prompt text* [arXiv:2606.10457]; declarative policy compilation gives
+orchestration policies exactly the artifact form we want — deterministic, auditable,
+versioned — but *human-authored* rather than learned [arXiv:2603.27299]; compositional
+meta-routing learns an interpretable router offline, over textual rather than structural
+features [arXiv:2608.00106]. None learns its own control policy into such an artifact.
+
+## 2.7 Evaluation and judges
+
+We deliberately use no LLM judge. A large-scale study across 21 models and 541,000
+judgments reports reliability without validity, and that raw agreement overstates
+discriminative ability [arXiv:2606.19544]. RAGAS-style metrics exhibit position, verbosity
+and self-enhancement bias, and the recommended mitigation is repeated runs with spread
+inspection. Since our effect sizes are single-digit percentage points and judge variance is
+of the same order — and since verbosity bias would systematically favour the expensive
+paradigms whose value is in question — a judge would introduce a bias aligned with the
+hypothesis. §6.1 explains the alternative.
+
+On failure attribution, MemFail isolates memory-system failures into summarisation,
+storage, retrieval and reasoning modes, and can attribute an error to one of them only
+because the intermediate operations are recorded [arXiv:2605.26667] — convergent with
+§8.4's requirement, though their attribution itself runs on an LLM judge where ours runs
+on deterministic tool traces. Their headline is also ours in miniature: scaling retrieved
+memories or model strength yields little and sometimes degrades, task-dependently.
+
+## 2.8 Positioning
+
+| | coverage | deterministic decision | auditable | feasibility filter | abstention |
+|---|---|---|---|---|---|
+| AFlow / ADAS / GPTSwarm | offline, single workflow | no | no | no | n/a |
+| Select-then-Solve | 1.0 | no | no | no | no |
+| FlowBank | 1.0 | no | no | no | no |
+| TRACE-Router | 1.0 | no | no | no | no |
+| SCL | global mode | yes | yes | no | no |
+| **This work** | **selective** | **yes** | **yes** | **yes** | **yes** |
+
+---
+
+# 3. Preliminaries
+
+A **task** `t` supplies a question, a set of *units* (documents), a declared token budget,
+and flags for irreversibility and shared-state writes. A **paradigm** `p ∈ P` is a control
+structure that may call tools and must emit an answer. **Quality** `q(t,p) ∈ [0,1]` is set
+F1 against an exact oracle. **Cost** `c(t,p)` is total tokens over every call the paradigm
+makes.
+
+The **best fixed paradigm** is `p⋆ = argmax_p E_t[u(t,p)]`. The **oracle** is
+`E_t[max_p u(t,p)]`, and the **oracle gap** is their difference. Utility is
+quality net of a cost preference:
+
+```
+u(t,p) = q(t,p) − λ · (c(t,p) / min_{p'} c(t,p') − 1)
+```
+
+Normalising by the cheapest paradigm on that task makes λ interpretable — the quality one
+will trade for one extra multiple of the minimum cost — and λ=0 recovers pure quality
+exactly. **No single λ is chosen**: raw quality and raw cost are stored unmodified and the
+trade-off is applied at analysis time, so results are reported as a function of λ rather
+than under an assumption about it.
+
+The seven paradigms are Direct, CoT, ReAct, Map-Reduce, Plan-Execute, Reflection, and a DAG
+with verify-replan over a shared blackboard. Five mirror the Select-then-Solve grid so
+numbers can be checked against theirs; Map-Reduce is added because it should win on high
+cardinality, and the DAG because a comparison that omits the most elaborate available
+topology is stacked in favour of the simple ones.
+
+---
+
+# 4. Feasibility is arithmetic
+
+## 4.1 The check
+
+Whether `p` can run `t` depends on quantities `t` already declares. With `n` units, content
+`C` tokens, budget `B`, and an allowance `A = 0.6·B` that leaves room for the conversation:
+
+| paradigm | binding constraint | infeasible when |
+|---|---|---|
+| Direct, CoT | one prompt holding every unit | `C > A` |
+| Map-Reduce | one call per unit, then a reduce over all partials | `n > 80` or `n·f > A` |
+| DAG | sub-questions × iterations × replans | projected calls > 200 |
+| ReAct, Reflection | own iteration cap; reads selectively | never |
+
+where `f` is the projected size of one finding. No model call, no statistics, no learning.
+
+## 4.2 It separates two failure modes that are routinely conflated
+
+Applied to **168 tasks across five corpora** from the same generator, each task carrying
+its own declared budget:
+
+| corpus | tokens/unit | units/task | max content | Direct, CoT | Map-Reduce |
+|---|---|---|---|---|---|
+| gold_v2 | 232 | 60 | 16k | 39/39 | 39/39 |
+| gold_v3 | 2,147 | 60 | 152k | 12/39 | 39/39 |
+| gold_wide | 264 | 500 | 135k | 20/32 | **18/32** |
+| gold_deep | 7,161 | 60 | **483k** | 2/26 | **26/26** |
+| gold_xl | 2,499 | 500 | 1,272k | 8/32 | 18/32 |
+
+Feasible tasks over total. The four remaining paradigms are feasible in **168/168**.
+
+Aggregated over paradigms, the admissible plan space contracts monotonically with scale —
+**273/273 cells on gold_v2, 186/224 on gold_wide, 134/182 on gold_deep, 162/224 on
+gold_xl**: from 100% admissible down to 72%, entirely by arithmetic and before any token is
+spent. A selector operating without this layer would have to learn that quarter of the
+space is unreachable, one failed episode at a time.
+
+**The decisive pair is gold_wide against gold_deep.** gold_deep carries 3.6× more content,
+and Map-Reduce moves from 18/32 feasible to **26/26** while Direct and CoT collapse to
+2/26. Total size does not predict Map-Reduce's feasibility; **cardinality does**. At 483k
+tokens over 60 units it runs, because it never holds them together. At 135k over 500 units
+it does not: 501 calls, and a reduce concatenating 500 findings. Treating its limit as a
+context limit leads to discarding it exactly where it works.
+
+The same accumulation bound applies to the DAG's blackboard, which renders every finding
+into every sub-agent prompt.
+
+**How hard the read-everything constraint bites is easy to underestimate.** In gold_deep a
+*single-unit* task is infeasible for Direct, because one document is 8,075 tokens against
+an allowance of 4,800. The constraint is not "the corpus is large" but "the smallest
+addressable piece already does not fit", and no amount of selective reading changes that
+for a paradigm whose only move is to read.
+
+**A second reading worth stating plainly.** The four selective paradigms are feasible in
+every one of the 168 tasks. That is a real property — they cap their own iterations and
+read on demand — but it also bounds what this layer can do. Feasibility constrains only
+paradigms that either hold material in context or fan out per unit; **it offers no
+protection against a selective paradigm spending its way through a 1.27M-token corpus**.
+That protection has to come from a budget, not from arithmetic over the corpus, and §7.2
+shows why it is needed: the selective paradigms are exactly the ones whose cost varies
+fifty-fold.
+
+## 4.3 Why this belongs in front of the learning problem
+
+Feasibility is deterministic, free, and upstream of everything else. It prunes the plan
+space before any selection, learned or otherwise. **The corollary for production is that
+knowing the length and declining is not a degradation** — it is the difference between a
+bounded system and a runaway.
+
+\1
+
+**Measured, and the distinction is not academic.** On four gold_deep cells, Direct was
+pruned on three and ran on one, where it scored 1.000. Recorded as wrong answers those
+three would make Direct's mean 0.250 — the worst paradigm in the table. Recorded as
+infeasible, the statement is the accurate one: *best where it can run, unavailable where it
+cannot.* The same layer that protects the study from a false conclusion is the layer a
+production system needs to decline instead of failing.
+
+---
+
+# 5. Theory
+
+## 5.1 The Selection Value Theorem
+
+Let `p⋆` be the fallback and `p_s` a specialist. Let `S = {t : u(t,p_s) > u(t,p⋆)}` with
+`π = Pr[t ∈ S]`. Let `α = Pr[route to p_s | t ∈ S]` and `β = Pr[route to p_s | t ∉ S]`, and
+let `G_α`, `L_β` be the mean gain and mean loss **conditioned on the routed subsets**.
+
+**Theorem 1.** `V(r) − V(p⋆) = π·α·G_α − (1−π)·β·L_β`, exactly. Hence selection beats the
+best fixed paradigm iff
+
+```
+π · α · G_α  >  (1 − π) · β · L_β
+```
+
+Conditioning the gain and loss on the *routed* subsets rather than on `S` makes the identity
+exact with no independence assumption, and it separates coverage quality (`α`, `β`) from
+selection quality within coverage (`G_α` versus the unconditional `G`).
+
+**Corollary 1 (precision over coverage).** When `p⋆` is near-optimal over wide regions, `G`
+is small and `L` large, so the condition demands `β → 0` even at the cost of `α`. Recall is
+not the objective.
+
+**Corollary 2 (impossibility threshold).** `β_max = π·α·G_α / ((1−π)·L)`. Any router above
+it loses to always-fallback however good its specialists are. `L` here must be the
+*distributional* loss, not the realised one: computed from the realised loss the threshold
+is circular, and a perfect router — which realises no loss — would report an infinite
+bound and appear unconstrained.
+
+**Corollary 3 (optimal coverage).** With a calibrated confidence and a variable threshold,
+captured value is unimodal in coverage and the optimum generally has coverage ≪ 1. A router
+obliged to choose has no control over `β` at all.
+
+**Identity.** The oracle gap equals `π·G`. The 17.1pp reported for a published suite *is*
+`π·G` for that suite, which allows a router's implied `β` to be recovered from its headline
+numbers.
+
+All of the above is verified in `tests/test_science.py` against distributions whose terms
+are known by construction, including the negative case where a router above `β_max` is
+confirmed to capture negative value.
+
+## 5.2 Cascade dominance, and its measured correction
+
+A **router** that errs pays `L`, a quality loss: a worse answer is delivered and nothing
+recovers it. A **cascade** that errs pays `cost(p_1)`, a cost loss: the cheap attempt is
+wasted and the good answer still arrives after escalation.
+
+With detector sensitivity `s`:
+
+```
+regret(router)  = (1−π)·β·L
+regret(cascade) = E[ladder cost] + (1−s)·L
+```
+
+**A correction we owe to measurement.** An earlier statement of this result gave the cost
+term as `cost(p_1)`. That is false. When no rung satisfies the detector the cascade runs the
+*whole ladder*: in our synthetic study it captured 100% of the gap at **4.4×** the cost of
+the best fixed paradigm. The bound is the expected ladder cost, and the pattern requires a
+budget cap.
+
+**Detector sensitivity is the critical variable, and a weak detector is catastrophic rather
+than merely suboptimal.** At `s = 0.6` the captured fraction measured **−5.98**: a missed
+failure leaves the cascade halted on a cheap rung with a bad answer. This is the structural
+analogue of Corollary 2 — as a router with high `β` loses, a cascade with low `s` loses, and
+loses harder.
+
+**Corollary (the verifiability partition).**
+
+```
+v = 1  (a cheap oracle exists)  ->  cascade; no router needed
+v = 0  (no oracle)              ->  route, under the discipline of Theorem 1
+```
+
+Prediction is only necessary where verification is impossible. If this holds, much of the
+routing literature is solving the wrong problem in the verifiable regime.
+
+---
+
+# 6. Design
+
+## 6.1 Measurement without a judge
+
+Every task carries a set-valued oracle, so quality is set F1 after normalisation. §2.7 gives
+the reason: the effect is single-digit percentage points and judge variance is of the same
+order, so a judge would not merely add noise but a bias — verbosity bias favours the long
+answers that the expensive paradigms produce, which is precisely the comparison under test.
+
+An empty oracle is a legitimate and important question — *list every X* where no X exists —
+and it tests whether a paradigm invents items. It is graded by requiring an explicit
+statement of emptiness; silence scores zero, because a paradigm that returned nothing
+because it crashed must not score as one that looked and reported finding nothing.
+
+## 6.2 Beliefs, provenance, and per-request assurance
+
+Full determinism is unavailable for an LLM, and pursuing it by excluding the model from the
+decision discards information the model has. The inversion is HADD's (§2.4): the model is a
+**sensor** that emits typed propositions, a deterministic symbolic layer decides over the
+belief base, and the guarantee takes the only shape it can have:
+
+> not *"the same prompt yields the same answer"* — false, always
+> but *"the same belief base yields the same decision"* — HADD's decision stability,
+> with the base recorded
+
+What this section adds is the **epistemology of the belief itself**. In HADD, provenance is
+a traceability field; here it carries the decision weight as a typed hierarchy: `COMPUTED`
+(a pure function, credence 1.0) > `OBSERVED` (measured by executing a probe) > `ELICITED`
+(the model asserted it, subject to calibration) > `ASSUMED`. A rule may demand a minimum
+provenance, so an irreversible action can be restricted to computed and observed evidence:
+*a model's opinion that an action is safe is not admissible evidence for taking it.*
+
+Assurance is then a property **of the request**, not of the system. A global mode makes all
+traffic pay for the strictest request. Four levels graduate the provenance floor, whether θ
+may learn online, whether the run is replayable from cache, and **which patterns are
+admissible** — the certified level excludes topologies whose control flow is unbounded, not
+because they are worse (they are often better) but because their failure modes are not
+enumerable. The floor is derived from beliefs about the request: a caller may ask for more
+and never for less. The derivation itself can learn, offline and under the same promotion
+guard as θ: a request category whose elicited assertions are repeatedly rejected by the
+gate is a category whose floor should rise — rejection statistics are evidence about the
+request class, and consuming them closes the loop without ever adjusting anything inside a
+request. We state this as design; it is not yet measured.
+
+Credence and effect size must not be conflated. A learned margin is a *certain* belief about
+a *large* effect — credence 1.0, value 0.9 — and encoding the magnitude as credence reports
+a computed fact as an uncertain one, destroying the distinction the layer exists for.
+
+## 6.3 Consolidation of the control policy
+
+Learning is offline and copy-on-write. Episodes are replayed in order of *surprise* rather
+than chronology, removing the recency bias the online update has by construction; statistics
+are downscaled and unused entries pruned; and an abstraction stage searches for feature
+partitions that separate paradigms better than the current binning.
+
+Two disciplines make this safe. A candidate policy is installed only if it does not regress
+on held-out episodes. And the record is split three ways *by task* — one part proposes
+partitions, one scores them, one is touched only by the promotion guard — because searching
+many partitions against one holdout is how detecting a truth becomes confabulating one. A
+discovered partition enters with zero episodes, below the confidence floor, and cannot drive
+a decision until it has earned evidence: **a dream is a hypothesis, not a fact.**
+
+Verified: given a record where utility is independent of every attribute, no partition
+survives validation.
+
+## 6.4 The tool surface is part of the topology
+
+Choosing *which* retrieval modality, at *what* granularity, in *what* sequence, with how
+much *batching* is the agent's own business — it is the topology. A harness offering one
+blunt search and one read has pre-decided all four and then measures what remains.
+
+Four tools at three granularities, with lexical and dense exposed separately alongside the
+fused entry point:
+
+| tool | returns | measured size, 3 units |
+|---|---|---|
+| `search` | summaries | 312 chars |
+| `keyword_search` | highlights `<< >>` | 937 |
+| `semantic_search` | full text | 3,502 |
+| `read` | full text, batched | 3,501 |
+
+**11× between summarising and reading**, and that difference is invisible when every search
+returns a fixed-size excerpt. Fusing lexical and dense into a single hybrid tool was a
+specific mistake: hybrid is the right default, but exposing only the fused view means the
+agent can never request exact matching for an identifier — and the answers in two of our
+cells *are* identifiers.
+
+Retrieval quality is a recorded variable with five arms: hybrid (BM25 + dense, RRF fusion),
+lexical, semantic, two degraded simulations at stated recall and precision, and an oracle.
+The simulations are deterministic functions of `(task, query, unit)`, so retrieval quality is
+a controlled dial rather than another noise source. Vectors are cached by content hash, so
+after a first pass fusion is local arithmetic.
+
+**A finding against the received view**: on the coupled cell, dense alone measured recall
+0.75, hybrid 0.50, lexical 0.25. RRF averages ranks, so a badly performing component drags a
+good one down. "Hybrid is always better" does not hold when one component is far below the
+other.
+
+---
+
+# 7. Preliminary measurements
+
+> **All numbers in §7 and §8 are n=1 per cell**, on one synthetic corpus, with one model
+> (`gpt-5-chat`), under hybrid retrieval. Replicate variance on the DAG topology was
+> measured at up to 3.93× in cost. Magnitudes are indicative; mechanisms rest on
+> tool-usage traces and are more robust.
+
+## 7.1 The aggregate over four feature cells
+
+| paradigm | mean quality | total tokens | cost range | hallucinated units |
+|---|---|---|---|---|
+| **Direct** | **0.938** | **46,101** | 1.2× | 0 |
+| CoT | 0.938 | 46,272 | 1.2× | 0 |
+| ReAct | 0.688 | 116,524 | **27.6×** | 0 |
+| Reflection | 0.688 | 126,254 | 6.9× | 0 |
+| Map-Reduce | 0.438 | 62,321 | 1.2× | 0 |
+| DAG | 0.438 | **439,319** | 24.5× | 0 |
+| Plan-Execute | 0.250 | 123,175 | 2.0× | **78** |
+
+The simplest paradigm wins on quality and is simultaneously cheapest; the most elaborate
+returns less than half the quality for 9.5× the cost.
+
+**This is governed by a validity threat we state rather than bury**: on this corpus every
+task fits in one prompt, and in that regime reading everything is optimal and the ordering is
+close to tautological. §4 exists to escape it, and §9 records that the escape is built but
+not yet measured.
+
+## 7.2 Tool quality governs the variance that topology is credited with
+
+| group | cost range |
+|---|---|
+| do not use tools (Direct, CoT, Map-Reduce) | **1.2×** |
+| use tools (ReAct, Reflection, Plan-Execute, DAG) | **50×** |
+
+Tool quality does not shift the mean; it governs the variance — and asymmetrically. The
+readers are expensive and stable; the searchers are cheap-or-ruinous, and which face the coin
+shows is decided by retrieval. A paradigm costing between 2,877 and 251,374 tokens depending
+on whether search worked is not something one can budget for.
+
+**Implication**: a benchmark that does not report the quality of its tool surface is not
+measuring topologies. It is measuring its retriever wrapped seven ways.
+
+## 7.3 An A/B on three accounting signals, and what a replicate did to it
+
+Same corpus, same retriever, same four cells; the only difference is the tool surface,
+recorded as a variable per row.
+
+The three paradigms that use no tools were **identical to the token** across arms. That
+control is what makes the rest attributable; without it any difference could be run noise.
+
+A third arm added four working-memory tools (`note`, `notes`, `plan`, `advance`) and
+produced a result we did not plan for. **The model never called them**: across 28 rows,
+one note, one compaction and zero plans. On a corpus where everything fits in one prompt
+there is no context pressure, so a working-memory tool has no work to do — exposing a
+capability is not the same as providing one. That arm is therefore a null result on the
+tools, and something more useful: an accidental **replicate** of the accounting surface.
+
+As a replicate it says what the aggregate hides. **Reproducibility is per-task, not
+global.** On three of the four cells, 10 of 10 quality values are identical across the
+pair. On the fourth — the three-hop chain — 2 of 4 flipped, and both flipped by the full
+unit. The instability is not spread thinly across the study; it is concentrated in the
+hardest task, where the outcome is bimodal. Cost was reproducible nowhere: mean spread
+2.05×, maximum 5.43× at *identical* quality.
+
+That converts the A/B from a list of effects into a list of effects with an attribution
+test. An effect that moves only the coin-flip cell is not attributable; one that moves a
+reproducible cell is.
+
+| paradigm | Δ reported | cells moved | attributable | verdict |
+|---|---|---|---|---|
+| DAG | +0.500 | c3 (unstable), c5 (stable) | **+0.250** | half survives |
+| Reflection | +0.250 | c3 (unstable) only | **0.000** | **withdrawn** |
+| ReAct | +0.000 | none | 0.000 | null, confirmed |
+| Plan-Execute | −0.139 | c2, c5 (both stable) | **−0.139** | survives |
+
+**We withdraw the Reflection result.** It came entirely from the cell that flips on its
+own, and at n=1 it is indistinguishable from noise.
+
+**The DAG's cost result survives, and it is the strongest thing here.** Total cost fell
+**3.05×** against a replicate spread of 1.62× on the same measure, and it fell exactly
+where the mechanism predicts: the two runaway cells, 251k → 51k and 143k → 10k, both
+carrying stall warnings. The other two cells did not fall at all. So telling an iterative
+loop that its retriever has stopped producing is worth a 3× cost reduction with the
+mechanism visible in the trace — while the quality gain that accompanied it is half what
+we first reported.
+
+**Plan-Execute's degradation survives, and on reproducible cells**: +0.444 on one and a
+full −1.000 on another. Our own analysis had called coverage accounting "the
+highest-leverage addition" for this paradigm. It made it worse. Knowing the answer is
+incomplete is useless when the architecture cannot complete it: the sub-agents have
+finished by the time synthesis learns units are missing. **A diagnostic without the
+capacity to act is worse than none** — and this is the one A/B effect that both moved
+stable cells and contradicted our prediction.
+
+**A second-order effect we did not predict.** `read_all` reduced the cost of a full read by
+7.6× and raised ReAct's net cost by 27%: it cheapened the *act*, and therefore the
+*decision*, of reading everything.
+
+**One cell did not run.** Two rows recorded zero tokens and an empty answer — not a wrong
+answer but an absent one. They are excluded from every figure above rather than scored as
+zero, since a paradigm that never executed must not be pooled with one that answered
+badly. Both belong to the cells marked *sin-correr* in the artefacts.
+
+---
+
+# 8. Failure mechanisms
+
+These rest on traces rather than magnitudes, and they are what we would defend.
+
+## 8.1 Decomposition destroys sequential dependency
+
+Both decomposing topologies fail both coupled cells, and both **with the evidence read**.
+The DAG spent 251,374 tokens on the three-hop chain, read 4 of 4 chain units, and scored
+zero. A chain is sequential by definition — hop 2 cannot be formulated before hop 1 is
+answered — so splitting it into parallel sub-questions leaves the blackboard holding the
+right units without the structure that orders them. This is a property of decomposing, not
+a coincidence of two implementations.
+
+## 8.2 Iterative loops amplify retrieval failure rather than absorbing it
+
+On the two-hop cell the DAG issued 31 keyword searches, read **zero** relevant units, and
+spent 142,694 tokens. After the third search the retriever had already demonstrated it would
+not find the target; the verify-replan loop read that as *search again*.
+
+This inverts a design intuition. Verification loops are added *for* robustness; here the loop
+is the amplification mechanism. Without it the failure would have cost 10k tokens rather than
+143k.
+
+## 8.3 One failure no tool can fix
+
+Map-Reduce fails both coupled cells and reads zero relevant units in all four, because by
+construction it views each unit in isolation. A chain and a cross-unit comparison are
+unresolvable that way however many times they are examined.
+
+\1
+
+**And the price of that failure scales with the corpus while the failure does not.** The
+same paradigm, on the same cell, at two unit sizes:
+
+| corpus | units | calls | relevant units read | cost | quality |
+|---|---|---|---|---|---|
+| gold_v2 | 48 | 49 | **0** | 13,931 | 0.000 |
+| gold_deep | 48 | 49 | **0** | **276,355** | 0.000 |
+
+Identical cardinality, identical call count, identical zero — and **19.8× the cost**. Thirty
+times more text per unit bought exactly thirty times more of nothing, because the obstacle
+was never the amount of evidence. This is the sharpest argument we have for deciding before
+running rather than after: a paradigm whose limitation is structural does not fail more
+loudly at scale, only more expensively, and an approach that learns from outcomes pays that
+bill every episode until it has learned what arithmetic could have told it for free.
+
+## 8.4 Attribution requires the trace
+
+The tool-usage trace separates *never saw the evidence* from *saw it and reasoned wrongly*.
+Without it a zero is a mystery; with it, it is a diagnosis. "The searching topology lost" is
+uninterpretable when the searcher never reached a relevant unit — that is a statement about
+the tool surface, and only a failure with the evidence in hand is evidence about the control
+structure.
+
+---
+
+# 9. Limitations and threats to validity
+
+**Everything fits in one prompt.** The corpus behind §7 is 16k tokens at its widest, so
+read-everything is both correct and cheapest and the ordering is near-tautological. Corpora
+at 135k, 483k and 1.27M tokens are generated and verified, and the harness now records
+infeasibility as distinct from error — but they have not been run. **This is the single
+largest threat and the next measurement.**
+
+**n=1 per cell, and the variance is now partly measured.** An unplanned replicate (§7.3)
+shows reproducibility is per-task: 10 of 10 quality values identical on three cells, 2 of 4
+flipped by a full unit on the fourth and hardest. Cost was reproducible nowhere — mean
+spread 2.05×, maximum 5.43× at identical quality. **Any quality effect at or below one
+flip's worth of a four-task mean (±0.250) is indistinguishable from noise at n=1**, which
+is why one reported effect is withdrawn above and another is halved. No proper noise floor
+has been measured: the harness computes the oracle-gap bias directly by treating `k`
+replicates of the *same* paradigm as `k` distinct ones, and the protocol requires
+`repeat ≥ 3` with all decisions taken against the net gap. Not yet run.
+
+**One model, and it cannot be pinned.** `gpt-5-chat` rejects an explicit temperature, so
+sampling is at the model default. A reasoning deployment that accepts temperature 0 is
+available as an escape but changes what is measured.
+
+**Synthetic corpus.** Ground truth is exact and independently re-derived, and structural
+parameters are dials rather than hopes — but the distribution of real tasks over those dials
+is unknown. Public benchmarks are required for external validity and are not yet used.
+
+**Latency is not comparable.** The DAG runs sequentially here where it would run concurrent
+waves; and once workers contend, per-row wall-clock stops measuring latency. Quality and
+token counts remain exact.
+
+**Novelty claims are verified as conjunctions, not as parts.** The two anchor works were
+read in full on 2026-08-26: every number cited from Select-then-Solve checks out against
+its body, and the concession to SCL stands. The remaining claims — control-policy
+consolidation (§6.3), provenance-gated proposition discovery, abstention in paradigm
+routing — survive dated searches only as conjunctions whose individual conjuncts each have
+a published neighbour (§2.2, §2.4, §2.6). A field moving this fast can close any of them
+in months; the searches are dated so a reader can re-run them.
+
+**Reproducibility caveat.** A seed alone does not pin a corpus. When the generation algorithm
+changed, the same seed produced a different world; manifests now stamp a generator version and
+results across versions must not be pooled.
+
+---
+
+# 10. Conclusion
+
+The prize in paradigm selection is real and measured, and the literature is pursuing it with
+selectors that must always choose. We argue that three things belong in front of that
+problem. Feasibility is arithmetic and prunes the space for free, separating a cardinality
+bound from a context bound that are routinely conflated. Selection pays only under a
+condition we can state and check, and the condition implies abstaining most of the time.
+And the variance that topology choice is credited with is largely governed by the tool
+surface: fifty-fold among tool-using paradigms against 1.2× among those that read.
+
+Our strongest measured result is not about topologies at all. Telling an iterative
+topology that its retriever had stopped producing cut its cost 3.05× against a replicate
+spread of 1.62×, with the fall localised in exactly the two runaway cells the mechanism
+predicts. An unplanned replicate also forced us to withdraw one reported effect and halve
+another, which is the discipline working rather than failing. The three largest cost failures we found were not fixed by
+better topologies or better models but by accounting signals that did not exist.
+
+What we do not have is a validated selector, a noise floor, or any measurement in the regime
+where reading everything is impossible. The harness for all three is built and the protocol
+is registered in advance, including the decision rule for the outcome in which no selector
+beats the fallback — which would be a result, and is stated as publishable before the data
+is in.
+
+---
+
+# Appendix A — Artefacts
+
+| artefact | contents |
+|---|---|
+| `PATTERNS.md` | pattern catalogue: 10 structural patterns, 4 control patterns, 15 anti-patterns, with applicability stated over the feature vector |
+| `ANALYSIS.md` | the failure analysis of §8 in full, per paradigm and per cell |
+| `GATE.md` | eight binary publication criteria and their current verdict |
+| `PLAN.md` | revision history of the thesis, including two superseded framings and why |
+| `D:\Apps\MAPO\paperlab` | the harness: 7 paradigms, 5 retrieval arms, 3 tool surfaces, 4 assurance levels, corpus generator with independent verifier, 63 machine-checked assertions |
+
+Seven of the fifteen anti-patterns in the catalogue are errors made and measured in the
+course of this work, including two that contradicted our own published predictions.

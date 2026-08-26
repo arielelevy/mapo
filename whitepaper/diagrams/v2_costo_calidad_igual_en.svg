@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 660" width="900" height="660">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a1a1a" stroke-width="1"/>
+    </pattern>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="900" height="660" fill="none"/>
+  <rect width="900" height="660" fill="url(#grid)" opacity="0.4"/>
+
+  <!-- Title -->
+  <rect x="25" y="18" width="850" height="52" rx="4" fill="#121212" stroke="#333333" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="450" y="43" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="2">COST AT EQUAL QUALITY</text>
+  <text x="450" y="61" font-family="Arial, sans-serif" font-size="12" fill="#888888" text-anchor="middle">what a quality-only utility function cannot see</text>
+
+  <!-- PRELIMINARY banner: inside the figure, not in a caption that can be dropped -->
+  <rect x="25" y="78" width="850" height="40" rx="4" fill="#141414" stroke="#ef4444" stroke-width="2"/>
+  <text x="42" y="95" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#ef4444">PRELIMINARY</text>
+  <text x="140" y="95" font-family="Arial, sans-serif" font-size="11" fill="#cccccc">n = 5 completed tasks · 1 synthetic corpus · 1 model (gpt-5-chat) · 1-2 replicates</text>
+  <text x="42" y="111" font-family="Arial, sans-serif" font-size="10" fill="#888888">Not an estimate of population effect. Sufficient to establish that the spread exists and is large; insufficient to size it.</text>
+
+  <!-- Column headers -->
+  <text x="42" y="152" font-family="Arial, sans-serif" font-size="10" fill="#666666" letter-spacing="1">PARADIGM</text>
+  <text x="700" y="152" font-family="Arial, sans-serif" font-size="10" fill="#666666" letter-spacing="1">MEAN TOKENS</text>
+  <text x="800" y="152" font-family="Arial, sans-serif" font-size="10" fill="#666666" letter-spacing="1">×</text>
+  <text x="845" y="152" font-family="Arial, sans-serif" font-size="10" fill="#666666" letter-spacing="1">QUALITY</text>
+  <line x1="42" y1="160" x2="858" y2="160" stroke="#333333" stroke-width="1"/>
+
+  <!-- direct : baseline -->
+  <text x="42" y="188" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#22c55e">direct</text>
+  <rect x="190" y="174" width="100" height="22" rx="3" fill="#141414" stroke="#22c55e" stroke-width="1.5" filter="url(#glow)"/>
+  <text x="762" y="188" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">2 039</text>
+  <text x="812" y="188" font-family="monospace" font-size="11" font-weight="bold" fill="#22c55e" text-anchor="end">1.00</text>
+  <text x="866" y="188" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">1.000</text>
+
+  <!-- cot -->
+  <text x="42" y="230" font-family="Arial, sans-serif" font-size="12" fill="#ffffff">cot</text>
+  <rect x="190" y="216" width="103" height="22" rx="3" fill="#141414" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="762" y="230" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">2 098</text>
+  <text x="812" y="230" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">1.03</text>
+  <text x="866" y="230" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">1.000</text>
+
+  <!-- map_reduce -->
+  <text x="42" y="272" font-family="Arial, sans-serif" font-size="12" fill="#ffffff">map_reduce</text>
+  <rect x="190" y="258" width="200" height="22" rx="3" fill="#141414" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="762" y="272" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">4 065</text>
+  <text x="812" y="272" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">1.99</text>
+  <text x="866" y="272" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">1.000</text>
+
+  <!-- plan_execute : the one quality failure -->
+  <text x="42" y="314" font-family="Arial, sans-serif" font-size="12" fill="#ffffff">plan_execute</text>
+  <rect x="190" y="300" width="211" height="22" rx="3" fill="#141414" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="762" y="314" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">4 282</text>
+  <text x="812" y="314" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">2.10</text>
+  <text x="866" y="314" font-family="monospace" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="end">0.600</text>
+
+  <!-- react : the fallback -->
+  <text x="42" y="356" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#3b82f6">react</text>
+  <text x="42" y="369" font-family="Arial, sans-serif" font-size="9" fill="#666666">the fallback</text>
+  <rect x="190" y="342" width="229" height="22" rx="3" fill="#141414" stroke="#3b82f6" stroke-width="1.5" filter="url(#glow)"/>
+  <text x="762" y="356" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">4 653</text>
+  <text x="812" y="356" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">2.28</text>
+  <text x="866" y="356" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">1.000</text>
+
+  <!-- dag_strategy -->
+  <text x="42" y="398" font-family="Arial, sans-serif" font-size="12" fill="#ffffff">dag_strategy</text>
+  <rect x="190" y="384" width="454" height="22" rx="3" fill="#141414" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="762" y="398" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">9 225</text>
+  <text x="812" y="398" font-family="monospace" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="end">4.53</text>
+  <text x="866" y="398" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">1.000</text>
+
+  <!-- reflection -->
+  <text x="42" y="440" font-family="Arial, sans-serif" font-size="12" fill="#ffffff">reflection</text>
+  <rect x="190" y="426" width="500" height="22" rx="3" fill="#141414" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="762" y="440" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">10 150</text>
+  <text x="812" y="440" font-family="monospace" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="end">4.98</text>
+  <text x="866" y="440" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="end">1.000</text>
+
+  <!-- The reading -->
+  <rect x="25" y="466" width="416" height="88" rx="4" fill="#141414" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="42" y="487" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#22c55e">SIX PARADIGMS TIE AT QUALITY 1.000</text>
+  <text x="42" y="506" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">and span a 5× cost range. On the single-unit task the</text>
+  <text x="42" y="521" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">spread is far wider: 160 tokens for direct against</text>
+  <text x="42" y="536" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">6 222 for dag_strategy — <tspan font-weight="bold" fill="#ffffff">38.9× for the same answer</tspan>.</text>
+  <text x="42" y="550" font-family="Arial, sans-serif" font-size="9" fill="#888888">A utility function of quality alone reports all of this as a tie.</text>
+
+  <!-- Replicate variance -->
+  <rect x="459" y="466" width="416" height="88" rx="4" fill="#141414" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="476" y="487" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#f59e0b">REPLICATE VARIANCE IS IN COST, NOT QUALITY</text>
+  <text x="476" y="506" font-family="monospace" font-size="10" fill="#cccccc">dag_strategy, c7-000-pos   12 788 / 3 253  = 3.93×</text>
+  <text x="476" y="521" font-family="monospace" font-size="10" fill="#cccccc">dag_strategy, c7-000-neg   17 236 / 5 092  = 3.38×</text>
+  <text x="476" y="536" font-family="monospace" font-size="10" fill="#cccccc">reflection,   c1-000        1 953 /   866  = 2.26×</text>
+  <text x="476" y="550" font-family="Arial, sans-serif" font-size="9" fill="#888888">Same task, same seed base, identical quality. Two noise floors, not one.</text>
+
+  <!-- Method note -->
+  <rect x="25" y="562" width="850" height="82" rx="4" fill="#121212" stroke="#333333" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="42" y="583" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff">METHOD</text>
+  <text x="42" y="601" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">Quality is set F1 against an exact oracle — no LLM judge, because the effect under study is a few points and judge</text>
+  <text x="42" y="616" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">variance is of the same order. Cost is total tokens, prompt plus completion, summed over every call a paradigm makes.</text>
+  <text x="42" y="631" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">Failed runs record zero tokens and are excluded from the cost normaliser: a run that produced no work is not evidence</text>
+  <text x="42" y="640" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">about what the work costs.</text>
+</svg>

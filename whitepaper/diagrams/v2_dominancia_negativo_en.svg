@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 660" width="900" height="660">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a1a1a" stroke-width="1"/>
+    </pattern>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <marker id="dom" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#22c55e"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="660" fill="none"/>
+  <rect width="900" height="660" fill="url(#grid)" opacity="0.4"/>
+
+  <!-- Title -->
+  <rect x="25" y="18" width="850" height="52" rx="4" fill="#121212" stroke="#333333" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="450" y="43" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="2">A ZERO ORACLE GAP, AND WHY</text>
+  <text x="450" y="61" font-family="Arial, sans-serif" font-size="12" fill="#888888" text-anchor="middle">the cheapest paradigm also answers correctly, so no selection can beat it</text>
+
+  <rect x="25" y="78" width="850" height="40" rx="4" fill="#141414" stroke="#ef4444" stroke-width="2"/>
+  <text x="42" y="95" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#ef4444">PRELIMINARY</text>
+  <text x="140" y="95" font-family="Arial, sans-serif" font-size="11" fill="#cccccc">n = 5 completed tasks · 1 synthetic corpus · 1 model (gpt-5-chat) · cells C1, C2, C4, C7</text>
+  <text x="42" y="111" font-family="Arial, sans-serif" font-size="10" fill="#888888">A negative result about THIS corpus. It says the corpus does not discriminate, not that selection cannot pay.</text>
+
+  <!-- ===== LEFT: quality vs cost ===== -->
+  <rect x="25" y="128" width="510" height="330" rx="4" fill="#121212" stroke="#333333" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="280" y="150" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="1">QUALITY AGAINST COST</text>
+
+  <line x1="120" y1="170" x2="120" y2="380" stroke="#666666" stroke-width="1.5"/>
+  <line x1="120" y1="380" x2="500" y2="380" stroke="#666666" stroke-width="1.5"/>
+  <text x="112" y="184" font-family="monospace" font-size="10" fill="#888888" text-anchor="end">1.0</text>
+  <text x="112" y="264" font-family="monospace" font-size="10" fill="#888888" text-anchor="end">0.8</text>
+  <text x="112" y="344" font-family="monospace" font-size="10" fill="#888888" text-anchor="end">0.6</text>
+  <text x="60" y="280" font-family="Arial, sans-serif" font-size="11" fill="#cccccc" text-anchor="middle" transform="rotate(-90 60 280)">quality (set F1)</text>
+  <text x="310" y="399" font-family="Arial, sans-serif" font-size="11" fill="#cccccc" text-anchor="middle">mean tokens per task</text>
+  <text x="120" y="396" font-family="monospace" font-size="9" fill="#888888" text-anchor="middle">2k</text>
+  <text x="300" y="396" font-family="monospace" font-size="9" fill="#888888" text-anchor="middle">6k</text>
+  <text x="480" y="396" font-family="monospace" font-size="9" fill="#888888" text-anchor="middle">10k</text>
+
+  <!-- iso-quality line at 1.0 -->
+  <line x1="120" y1="180" x2="500" y2="180" stroke="#3b82f6" stroke-width="1" stroke-dasharray="4,4" opacity="0.6"/>
+
+  <!-- points -->
+  <circle cx="120" cy="180" r="8" fill="#22c55e" stroke="#ffffff" stroke-width="2" filter="url(#glow)"/>
+  <text x="120" y="164" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#22c55e" text-anchor="middle">direct</text>
+
+  <circle cx="123" cy="180" r="5" fill="#141414" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="152" y="200" font-family="Arial, sans-serif" font-size="9" fill="#888888">cot</text>
+
+  <circle cx="210" cy="180" r="5" fill="#141414" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="210" y="167" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">map_reduce</text>
+
+  <circle cx="236" cy="180" r="6" fill="#141414" stroke="#3b82f6" stroke-width="2"/>
+  <text x="253" y="200" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#3b82f6">react (fallback)</text>
+
+  <circle cx="439" cy="180" r="5" fill="#141414" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="431" y="167" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">dag_strategy</text>
+
+  <circle cx="480" cy="180" r="5" fill="#141414" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="480" y="207" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">reflection</text>
+
+  <circle cx="220" cy="340" r="5" fill="#141414" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="238" y="344" font-family="Arial, sans-serif" font-size="9" fill="#f59e0b">plan_execute (0.60)</text>
+
+  <!-- dominance arrow -->
+  <line x1="136" y1="222" x2="470" y2="222" stroke="#22c55e" stroke-width="2" marker-end="url(#dom)"/>
+  <text x="300" y="240" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#22c55e" text-anchor="middle">direct weakly dominates every other paradigm</text>
+  <text x="300" y="255" font-family="Arial, sans-serif" font-size="9" fill="#888888" text-anchor="middle">equal or better quality, strictly lower cost — it is alone on the frontier</text>
+
+  <text x="140" y="300" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">Every paradigm but one sits on the same</text>
+  <text x="140" y="315" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">quality level. When quality ties, the cheapest</text>
+  <text x="140" y="330" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">choice is the oracle by definition.</text>
+
+  <text x="140" y="360" font-family="Arial, sans-serif" font-size="9" fill="#666666">Units average ~70 tokens, so 60 of them fit in one prompt for</text>
+  <text x="140" y="372" font-family="Arial, sans-serif" font-size="9" fill="#666666">4.3k tokens. Read-everything is both correct and cheapest.</text>
+
+  <!-- ===== RIGHT: the lambda curve ===== -->
+  <rect x="545" y="128" width="330" height="330" rx="4" fill="#121212" stroke="#333333" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="710" y="150" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="1">ORACLE GAP vs COST PREFERENCE</text>
+
+  <line x1="600" y1="180" x2="600" y2="330" stroke="#666666" stroke-width="1.5"/>
+  <line x1="600" y1="330" x2="850" y2="330" stroke="#666666" stroke-width="1.5"/>
+  <text x="592" y="184" font-family="monospace" font-size="9" fill="#888888" text-anchor="end">0.2</text>
+  <text x="592" y="334" font-family="monospace" font-size="9" fill="#888888" text-anchor="end">0.0</text>
+  <text x="570" y="255" font-family="Arial, sans-serif" font-size="10" fill="#cccccc" text-anchor="middle" transform="rotate(-90 570 255)">oracle gap</text>
+  <text x="725" y="352" font-family="monospace" font-size="10" fill="#cccccc" text-anchor="middle">λ  (quality traded per ×cost)</text>
+  <text x="600" y="346" font-family="monospace" font-size="9" fill="#888888" text-anchor="middle">0</text>
+  <text x="725" y="346" font-family="monospace" font-size="9" fill="#888888" text-anchor="middle">0.1</text>
+  <text x="850" y="346" font-family="monospace" font-size="9" fill="#888888" text-anchor="middle">0.2</text>
+
+  <line x1="600" y1="330" x2="850" y2="330" stroke="#ef4444" stroke-width="3" filter="url(#glow)"/>
+  <circle cx="600" cy="330" r="4" fill="#ef4444"/>
+  <circle cx="662" cy="330" r="4" fill="#ef4444"/>
+  <circle cx="725" cy="330" r="4" fill="#ef4444"/>
+  <circle cx="787" cy="330" r="4" fill="#ef4444"/>
+  <circle cx="850" cy="330" r="4" fill="#ef4444"/>
+  <text x="725" y="312" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="middle">flat at zero</text>
+
+  <text x="565" y="382" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">Making utility cost-aware was necessary — it is</text>
+  <text x="565" y="396" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">what the real decision optimises — but it does</text>
+  <text x="565" y="410" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">not rescue the study on its own. A dominating</text>
+  <text x="565" y="424" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">paradigm stays dominant at every λ.</text>
+  <text x="565" y="446" font-family="Arial, sans-serif" font-size="9" fill="#888888">λ = 0 recovers pure quality exactly, so earlier</text>
+  <text x="565" y="456" font-family="Arial, sans-serif" font-size="9" fill="#888888">results remain valid and comparable.</text>
+
+  <!-- ===== WHAT WOULD OPEN THE GAP ===== -->
+  <rect x="25" y="470" width="850" height="174" rx="4" fill="#121212" stroke="#22c55e" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="450" y="492" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#22c55e" text-anchor="middle" letter-spacing="1">WHAT WOULD HAVE TO CHANGE FOR THE GAP TO OPEN</text>
+
+  <rect x="45" y="504" width="264" height="122" rx="5" fill="#141414" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="60" y="524" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#3b82f6">1 · read-everything must fail</text>
+  <text x="60" y="543" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">While the whole task fits comfortably in</text>
+  <text x="60" y="557" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">one prompt, direct is correct and cheapest.</text>
+  <text x="60" y="571" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">Hardening raised width-48 from 4.3k to</text>
+  <text x="60" y="585" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">16.1k tokens — likely still comfortable.</text>
+  <text x="60" y="604" font-family="Arial, sans-serif" font-size="9" fill="#888888">Note the perverse direction: removing keyword</text>
+  <text x="60" y="615" font-family="Arial, sans-serif" font-size="9" fill="#888888">searchability punishes the paradigm that SEARCHES,</text>
+  <text x="60" y="623" font-family="Arial, sans-serif" font-size="9" fill="#888888">and leaves the one that reads untouched.</text>
+
+  <rect x="319" y="504" width="264" height="122" rx="5" fill="#141414" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="334" y="524" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#22c55e">2 · the answer must be assembled</text>
+  <text x="334" y="543" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">not merely located. A chain of hops cannot</text>
+  <text x="334" y="557" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">be resolved by reading all units at once:</text>
+  <text x="334" y="571" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">each step names what to look for next.</text>
+  <text x="334" y="590" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#ffffff">This is the sharpest and the cheapest lever.</text>
+  <text x="334" y="609" font-family="Arial, sans-serif" font-size="9" fill="#888888">Cell C3 is built this way and has NOT been</text>
+  <text x="334" y="620" font-family="Arial, sans-serif" font-size="9" fill="#888888">measured — the run ended before reaching it.</text>
+
+  <rect x="593" y="504" width="262" height="122" rx="5" fill="#141414" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="608" y="524" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#f59e0b">3 · or accept the finding</text>
+  <text x="608" y="543" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">If no corpus construction opens a gap, that</text>
+  <text x="608" y="557" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">is the result: on verifiable extraction, the</text>
+  <text x="608" y="571" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">elaborate topologies buy nothing and cost</text>
+  <text x="608" y="585" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">up to 39× — and Theorem 1 explains it: with</text>
+  <text x="608" y="599" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">π ≈ 0 no selector can win.</text>
+  <text x="608" y="618" font-family="Arial, sans-serif" font-size="9" fill="#888888">A publishable negative result, not a failed study.</text>
+</svg>
