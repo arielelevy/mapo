@@ -21,12 +21,16 @@ Deuda actual conocida: el piso de garantía que aprende de estadísticas de rech
 
 ## Orden de prioridad: EL PRODUCTO PRIMERO, EL PAPER DESPUÉS
 
-1. **El producto es `D:\Apps\MAPO\paperlab`**: una capa de decisión determinística para
-   agentes LLM (factibilidad aritmética → creencias con procedencia → dial de garantía
-   A0–A3 → ruteo selectivo con abstención → circuit breakers contables → EXPLAIN).
-   Qué hace y qué garantiza: `paperlab/README.md` (§"The deliverable") y
-   `paperlab/README.es.md`. Ante cualquier decisión de diseño, pensar primero cómo
-   mejora/afecta al producto; el paper viene después.
+1. **El producto es el motor MAPO** y tiene dos mitades (ver `engine/README.md`):
+   - **`engine/agentic/`** — capa de EJECUCIÓN (LangGraph): estrategias dag/react/
+     map_reduce/plan_execute, blackboard, semantic_search RRF, tools. Código propio del
+     autor, reusado; el sistema del que proviene NO se menciona en ningún lado.
+   - **`paperlab/app/`** — capa de DECISIÓN determinística (factibilidad aritmética →
+     creencias con procedencia → dial A0–A3 → ruteo selectivo con abstención → EXPLAIN),
+     que REEMPLAZA al clasificador LLM en prosa de `engine/agentic/understand.py`.
+   `paperlab/` además es el banco de medición (sin framework, por diseño — no meter
+   LangGraph ahí). Ante cualquier decisión de diseño, pensar primero cómo mejora al
+   producto; el paper viene después.
 2. **El paper documenta y valida el producto**, no al revés. Vive en `whitepaper/`
    (`paper-en.md` canónico, `paper-es.md` espejo — toda edición va a los DOS).
    `GATE.md` manda sobre qué se puede afirmar; `PLAN.md` es arqueología, no tesis.
