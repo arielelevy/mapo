@@ -49,6 +49,14 @@ paradigma es el caso medido primero, no el alcance del producto.
 
 ## Reglas de trabajo (establecidas por el autor)
 
+- **La ingeniería de prompts NO es un patrón** (2026-08-26): el catálogo de ruteo del
+  motor excluye a `cot` — dominado por `direct` en toda celda medida (misma utilidad,
+  nunca más barato) y redundante con modelos razonadores. Se conserva en el banco SOLO
+  como control nulo (es la evidencia de que el andamiaje por prompt no compra nada).
+  Los patrones se distinguen por ESTRUCTURA de control de flujo, jamás por fraseo. Las
+  mejoras vienen de señales de entorno (contables, deterministas), no de persuadir al
+  modelo.
+
 - **Evaluaciones livianas**: sets emparejados por celda, no producto cruzado completo.
   Lo que sea aritmética se saca gratis (factibilidad). Estimar tokens ANTES de correr.
 - **Un 429 no es parte de la evaluación**: fallos de infraestructura quedan como
