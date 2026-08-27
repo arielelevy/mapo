@@ -67,14 +67,18 @@ paradigma es el caso medido primero, no el alcance del producto.
 - **Nada se afirma sin medida, cita o rótulo de hipótesis** (G3). Novedades se enuncian
   como CONJUNCIÓN, nunca como partes (GATE §8quater).
 
-## Decisiones vigentes (2026-08-26)
+## Decisiones vigentes (actualizado 2026-08-27)
 
-- **MAPO es un repo git NUEVO en `D:\Apps\MAPO`** (whitepaper + paperlab juntos). El repo
-  viejo (`lumen-whitepaper`) queda archivado con v1. NO hacer push sin confirmación;
-  el remote de GitHub para MAPO todavía no existe.
+- **MAPO es este repo en `D:\Apps\MAPO`** (whitepaper + engine + paperlab juntos),
+  remote `origin` = github.com/arielelevy/mapo (PRIVADO), rama `main`, con las dos
+  historias fusionadas (la del lab y la del paper). El repo viejo de la marca
+  anterior queda archivado FUERA, con su v1. NO hacer push sin confirmación.
 - Aval arXiv vía Errecalde/Jaime: **CANCELADO**. Se busca otro endorser o se publica en
   **Zenodo con DOI**. §14 del PLAN es histórico.
-- Modelo de medición: `gpt-5-chat` (rechaza temperature explícita; escape verificado:
-  `gpt-5.4-1` acepta t=0 pero es razonador y cambia qué se mide).
-- `paperlab` se muda a `D:\Apps\MAPO\paperlab` cuando termine la corrida activa — NUNCA
-  mover mientras una corrida escribe en `results/`.
+- Modelo de medición (2026-08-26): **`gpt-5.4-nano`** en adelante (t=0 + seed,
+  determinismo casi al token verificado, cuota propia); la grilla `gpt-5-chat` queda
+  CONGELADA como primer modelo. Detalle completo en `paperlab/CLAUDE.md`.
+- `paperlab` YA vive en `D:\Apps\MAPO\paperlab` (mudado 2026-08-27, corridas
+  terminadas, conteos verificados). Los veredictos P10–P14 y P13a-c están en
+  `paperlab/README.md` §Findings y `paperlab/notes/`. Auditoría de código completa
+  en `paperlab/code-review-2026-08-27.md` (bloque crítico ya aplicado).

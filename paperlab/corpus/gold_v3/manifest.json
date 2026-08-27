@@ -1,0 +1,22 @@
+{
+  "seed": 7,
+  "hard": true,
+  "unit_tokens": 2500,
+  "people": 48,
+  "per_cell": 3,
+  "widths": [
+    4,
+    16,
+    48
+  ],
+  "documents": 76,
+  "tasks": 39,
+  "cells": {
+    "C1_single_verifiable": 3,
+    "C7_irreversible": 6,
+    "C3_coupled_chain": 3,
+    "C2_bulk_independent": 9,
+    "C4_aggregate_full_coverage": 9,
+    "C5_unknown_horizon": 9
+  }
+}
