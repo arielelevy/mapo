@@ -103,13 +103,15 @@ paradigma es el caso medido primero, no el alcance del producto.
   maduro. Antes de congelarlo se le hizo revisión a mano completa (26 módulos) y se
   aplicaron ~50 arreglos — está documentado en `legacy/README.md`, que es lo que hay
   que leer antes de portar cualquier pieza.
-- **Temporal (2026-08-27, decidido en principio)**: sí para la **ingesta** — workflow
-  por colección, fan-out de activities por unidad en task queues, idempotencia por
-  hash de contenido, reintentos declarados, y `VerifyIndex` antes de `Promote` con la
-  misma disciplina que la promoción de θ. En el **plano de query** queda como
-  envoltorio opcional, no como requisito. **La capa de decisión NUNCA depende de
-  Temporal**, y los paradigmas siguen siendo funciones async planas: es lo que
-  mantiene al banco midiendo exactamente lo que producción ejecuta.
+- **Arquitectura física (2026-08-27, posterior y manda): `lab/ARQUITECTURA.es.md`.**
+  Restricciones del autor: on-prem/Docker, Weaviate, single-tenant. Orquestación fase 0:
+  Redis Streams + workers, **Temporal todavía NO** — entra sólo si dispara uno de los
+  gatillos escritos en su §2.1 (gate A3 parkeado días con timers, fan-out multi-máquina,
+  o un segundo lenguaje/servicio en el pipeline). LangGraph descartado, no pospuesto.
+  Lo que NO cambia: **la capa de decisión nunca depende de un orquestador** y los
+  paradigmas siguen siendo funciones async planas — el banco mide exactamente lo que
+  producción ejecuta. (Supersede la entrada anterior "Temporal: sí para la ingesta",
+  que era una decisión en principio.)
 
 - **MAPO es este repo en `D:\Apps\MAPO`** (whitepaper + lab + legacy juntos),
   remote `origin` = github.com/arielelevy/mapo (PRIVADO), rama `main`, con las dos

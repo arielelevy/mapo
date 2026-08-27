@@ -23,10 +23,11 @@ producto.
 | Motor vectorial | Weaviate. |
 | Tenencia | Single-tenant. `tenant_id` queda en el esquema, sin RLS. |
 
-Referencia interna consultada: el proyecto Lumen (`D:\Apps\chat`) ya corre en producción
-Weaviate, Docling + PyMuPDF4LLM, Redis Streams y workers. Se toma de ahí lo que funciona
-y se corrigen tres cosas que ahí están resueltas de una forma que MAPO no puede copiar.
-Se lee, no se importa — la misma regla que rige `legacy/`.
+Referencia interna consultada: un sistema anterior del autor, en producción y FUERA de
+este repo, ya corre Weaviate, Docling + PyMuPDF4LLM, Redis Streams y workers. Se toma de
+ahí lo que funciona y se corrigen las cosas que ahí están resueltas de una forma que MAPO
+no puede copiar. Se lee, no se importa — la misma regla que rige `legacy/`, y por la regla
+del repo ese sistema no se nombra.
 
 ---
 
@@ -155,7 +156,7 @@ y eso es aceptable porque la ingesta es offline y batcheada.
 **Marker queda descartado por licencia** —restringe uso comercial sobre un umbral de
 facturación—, no por calidad.
 
-### 3.1 Las dos correcciones sobre lo que hace Lumen
+### 3.1 Las dos correcciones sobre el sistema de referencia
 
 `chat/batch/services/document_service.py` hace dos cosas que MAPO no debe copiar:
 
@@ -199,12 +200,12 @@ marca baja confianza. Sin dependencia de nube, consistente con la restricción o
 
 ## 4. Weaviate y el commit en dos stores
 
-Weaviate está fijado y hay razones buenas: ya corre en Lumen (1.38.x, `vectorizer: none`,
-embeddings externos), da **hybrid nativo** —BM25 más vector, con fusión—, filtros con
+Weaviate está fijado y hay razones buenas: ya corre en el sistema de referencia (1.38.x,
+`vectorizer: none`, embeddings externos), da **hybrid nativo** —BM25 más vector, con fusión—, filtros con
 índice de payload propio, y named vectors.
 
-**Mejora inmediata sobre lo que hace Lumen:** ahí sólo se usa `near_vector`. No hay una
-sola llamada a `query.hybrid` ni a BM25 en todo el repo. MAPO usa **hybrid con `alpha`
+**Mejora inmediata sobre el sistema de referencia:** ahí sólo se usa `near_vector` — ni
+una llamada a `query.hybrid` ni a BM25 en todo su repo. MAPO usa **hybrid con `alpha`
 declarado** y rerank cross-encoder sobre top-40 → top-8. La receta de cuatro ramas más
 RRF más rerank de `legacy/agentic/subgraphs/semantic_search.py` se porta como *diseño*,
 no como código.
