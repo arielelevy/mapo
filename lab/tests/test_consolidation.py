@@ -260,6 +260,134 @@ def check_learning_validity(ok: bool) -> bool:
     return ok
 
 
+def check_clause_certification(ok: bool) -> bool:
+    """REC F4: una clausula solo corre con certificado, el certificado solo sale de
+    tres mundos sin solapamiento, y el mundo final se gasta UNA vez."""
+    import tempfile  # noqa: PLC0415
+    from pathlib import Path as _Path  # noqa: PLC0415
+
+    from app.beliefs import Provenance  # noqa: PLC0415
+    from app.certify import (  # noqa: PLC0415
+        FinalLedger,
+        World,
+        WorldManifest,
+        certify_clause,
+        install_clause,
+    )
+    from app.policy import PolicyBundle  # noqa: PLC0415
+    from app.rec import AcquisitionClause  # noqa: PLC0415
+    from app.rules import BeliefPolicy  # noqa: PLC0415
+
+    print("\n8. REC F4: certificacion de clausulas (tres mundos, final de un solo uso)")
+
+    policy = BeliefPolicy(derived_floor=Provenance.OBSERVED, tau=0.3)
+    fallback = "react"
+
+    def make_world(corpus: str, start: int, n: int, gain: float) -> World:
+        """n tareas bulk sin oraculo (la forma del deficit de P15). El paradigma que
+        la decision REPARADA elegiria (rewoo, via theta_best) rinde `gain` mas que el
+        fallback en el registro."""
+        tasks, regions, utilities = {}, {}, {}
+        for i in range(start, start + n):
+            tid = f"t{i:03d}"
+            tasks[tid] = {"task_id": tid, "question": "q",
+                          "unit_ids": [f"u{j}" for j in range(20)],
+                          "budget_tokens": 60_000, "oracle": []}
+            regions[tid] = "many/no_oracle/unknown"
+            utilities[tid] = {"react": 0.4, "rewoo": 0.4 + gain, "dag_strategy": 0.3}
+        return World(corpus=corpus, tasks=tasks, regions=regions, utilities=utilities)
+
+    def theta_assert(region: str, candidates: list[str]):
+        return "rewoo", 0.9  # theta cree en rewoo con margen alto
+
+    draft = AcquisitionClause(
+        clause_id="rec-coupling-1", target_proposition="coupling_tight",
+        region_prefixes=("many/",), probe_kind="unit_read_pointer",
+        verifier="key-recurrence/1", reachable=Provenance.OBSERVED,
+        max_reads=1, max_calls=1, max_tokens=4_000, safe_exit="defer",
+    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = FinalLedger(_Path(tmp) / "final_ledger.jsonl")
+        worlds = (make_world("w-propose", 0, 4, 0.35),
+                  make_world("w-validate", 100, 4, 0.30),
+                  make_world("w-final", 200, 4, 0.30))
+
+        promoted, cert = certify_clause(
+            draft, incumbent_digest="inc-1", worlds=worlds, policy=policy,
+            theta_assert=theta_assert, fallback=fallback, noise_floor=0.06,
+            ledger=ledger, model_fingerprint="test-model", authorizer="tests",
+            claim_id="claim-1",
+        )
+        ok &= check("una clausula con beneficio > piso en validate Y final se promueve",
+                    promoted is not None and cert.accepted,
+                    f"validate={cert.validate_benefit:.2f} final={cert.final_benefit:.2f} "
+                    f"vs piso {cert.noise_floor}")
+        ok &= check("el certificado nombra a ESA clausula y la clausula lo porta",
+                    cert.clause_digest == draft.digest()
+                    and promoted.certificate == cert.digest)
+        ok &= check("ninguna fecha integra el digest del certificado",
+                    "created" not in cert.as_dict() and "date" not in cert.as_dict())
+
+        # el final se gasto: un segundo claim contra el MISMO mundo final falla
+        again = make_world("w-final", 200, 4, 0.30)
+        try:
+            certify_clause(
+                AcquisitionClause.from_dict(draft.as_dict()), "inc-1",
+                (worlds[0], worlds[1], again), policy, theta_assert, fallback,
+                0.06, ledger, "test-model", "tests", "claim-2",
+            )
+            spent = False
+        except PermissionError:
+            spent = True
+        ok &= check("el mundo final es de UN solo uso: el segundo claim falla",
+                    spent, "un held-out consultable dos veces es validation con marketing")
+
+        # mundos que se solapan: rechazo antes de mirar un numero
+        try:
+            certify_clause(
+                AcquisitionClause.from_dict(draft.as_dict()), "inc-1",
+                (worlds[0], worlds[0], make_world("w3", 300, 4, 0.3)),
+                policy, theta_assert, fallback, 0.06, ledger,
+                "test-model", "tests", "claim-3",
+            )
+            leaked = False
+        except ValueError:
+            leaked = True
+        ok &= check("mundos solapados se rechazan por identidad de tarea", leaked)
+
+        # beneficio bajo el piso: certificado con rechazo, y NO gasta el final
+        ledger2 = FinalLedger(_Path(tmp) / "ledger2.jsonl")
+        weak = (make_world("wa", 0, 4, 0.35), make_world("wb", 100, 4, 0.01),
+                make_world("wc", 200, 4, 0.30))
+        none_clause, weak_cert = certify_clause(
+            AcquisitionClause.from_dict(draft.as_dict()), "inc-1", weak, policy,
+            theta_assert, fallback, 0.06, ledger2, "test-model", "tests", "claim-4",
+        )
+        ok &= check("beneficio bajo el piso en validate: rechazo, y el final NI SE MIRA",
+                    none_clause is None and not weak_cert.accepted
+                    and weak_cert.final_benefit == 0.0
+                    and weak_cert.deficit_tasks["final"] == 0)
+
+        # instalacion fail-closed sobre el bundle firmado
+        bundle = PolicyBundle.cold_start(fallback="react", tau=0.3)
+        try:
+            install_clause(bundle, draft, cert)
+            draft_installed = True
+        except PermissionError:
+            draft_installed = False
+        ok &= check("un borrador no se instala", not draft_installed)
+
+        install_clause(bundle, promoted, cert)
+        ok &= check("la clausula promovida entra al payload FIRMADO del bundle",
+                    len(bundle.clauses) == 1 and bundle.verify())
+        bundle.clauses[0]["max_tokens"] = 999_999
+        ok &= check("editar una clausula instalada invalida la firma del bundle",
+                    not bundle.verify(),
+                    "el bundle es la unica fuente de clausulas de produccion")
+    return ok
+
+
 def main() -> int:
     ok = True
 
@@ -442,6 +570,7 @@ def main() -> int:
 
     ok = check_assurance_floor_learns(ok)
     ok = check_learning_validity(ok)
+    ok = check_clause_certification(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

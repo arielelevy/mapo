@@ -139,6 +139,11 @@ class PolicyBundle:
     # value, the router interprets it. The alternative -- importing Assurance here --
     # would make the thing that is signed depend on the thing that reads it.
     floors: dict[str, int] = field(default_factory=dict)
+    # Promoted acquisition clauses (REC F4), as recorded dicts. Inside the SIGNED
+    # payload on purpose: production reads clauses from here and nowhere else, and the
+    # only path that appends is certify.install_clause, which refuses drafts, refuses
+    # rejected certificates, and refuses certificates that name a different clause.
+    clauses: list[dict] = field(default_factory=list)
     signature: str = ""
     notes: str = ""
 
@@ -166,6 +171,9 @@ class PolicyBundle:
                 for region, paradigms in sorted(self.stats.items())
             },
             "floors": dict(sorted(self.floors.items())),
+            "clauses": sorted(
+                (json.dumps(c, sort_keys=True, ensure_ascii=False) for c in self.clauses)
+            ),
         }
         return json.dumps(body, sort_keys=True, ensure_ascii=False)
 
@@ -192,6 +200,7 @@ class PolicyBundle:
                 for region, paradigms in sorted(self.stats.items())
             },
             "floors": dict(sorted(self.floors.items())),
+            "clauses": list(self.clauses),
         }
 
     def save(self, directory: Path) -> Path:
@@ -215,6 +224,7 @@ class PolicyBundle:
                 for region, paradigms in raw["stats"].items()
             },
             floors={k: int(v) for k, v in (raw.get("floors") or {}).items()},
+            clauses=list(raw.get("clauses") or []),
             signature=raw.get("signature", ""),
             notes=raw.get("notes", ""),
         )
@@ -323,6 +333,10 @@ class Plasticity:
             # not about which regions refuse elicited evidence. The floors are learned
             # from the belief log, in their own stage, under their own guard.
             floors=dict(incumbent.floors),
+            # Same reason as floors: replaying episodes teaches theta about utility,
+            # never about which acquisitions are authorised. Clauses only change
+            # through certify.install_clause.
+            clauses=[dict(c) for c in incumbent.clauses],
             notes=notes or f"promoted from v{incumbent.version} on {len(episodes)} episodes",
         ).sign()
 
