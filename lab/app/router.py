@@ -177,7 +177,15 @@ class Router:
         floor_policy = BeliefPolicy.from_trust(trustworthy, self._theta.tau)
         provisional = sense(task, floor_policy)
         decision: AssuranceDecision = resolve(
-            provisional, requested=requested, calibration_trustworthy=trustworthy
+            provisional,
+            requested=requested,
+            calibration_trustworthy=trustworthy,
+            # The learned floor rides on the signed bundle, so a request cannot be
+            # raised to a stricter level by anything that has not been promoted.
+            learned={
+                r: Assurance(level) for r, level in self._theta.floors.items()
+            },
+            region=region,
         )
         profile: AssuranceProfile = decision.profile
 

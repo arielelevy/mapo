@@ -16,8 +16,16 @@ documentos activos ni en código.**
 **Todo lo que se haga tiene que existir en el programa ejecutable ANTES de entrar al
 paper.** Ninguna idea se escribe como diseño sin implementación que la corra. Si algo
 está hoy en el paper como "declarado, no medido", es deuda: implementarlo o sacarlo.
-Deuda actual conocida: el piso de garantía que aprende de estadísticas de rechazo
-(paper §6.2) — falta implementarlo en `assurance.py`/`policy.py`.
+El piso de garantía que aprende de estadísticas de rechazo (paper §6.2) se
+implementó el 2026-08-27 — rechazo tipado en `beliefs.py`, aprendizaje en `assurance.py`,
+transporte en el bundle firmado de `policy.py`, guarda de replicación en
+`consolidation.py`, probado en `tests/test_consolidation.py` §6.
+Deuda actual conocida: **la SONDA no se ejecuta**. `router.plan()` calcula `needs_probe`
+y la regla `probe_before_deciding_on_bulk` existe, pero nada corre una lectura barata de
+una unidad para convertir una creencia ELICITED de coupling en OBSERVED. Consecuencia:
+en cuanto un piso exige OBSERVED —y §6.2 ahora los sube solo— esas reglas son
+insatisfacibles por construcción. Es el patrón §2.2 de PATTERNS (rebanada de
+reconocimiento) y hay que implementarlo o sacar la afirmación.
 
 ## Orden de prioridad: EL PRODUCTO PRIMERO, EL PAPER DESPUÉS
 

@@ -43,6 +43,7 @@ on its own; a caller may request more but never less than the floor its beliefs 
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any
@@ -170,7 +171,121 @@ class AssuranceDecision:
         }
 
 
-def required_floor(base: BeliefBase) -> tuple[Assurance, list[str]]:
+# --- the floor that learns (paper §6.2) ------------------------------------------
+#
+# A request class whose ELICITED assertions are repeatedly refused by the gate is a
+# class where the model's opinions are not usable evidence. Saying that once, per
+# request, is the gate doing its job. Saying it in nine requests out of ten in the same
+# feature region is a fact ABOUT THE REGION, and consuming it raises the floor there
+# so the system probes instead of asking and being refused.
+#
+# Why this is safe to learn: it never adjusts anything INSIDE a request. It is computed
+# offline, from a record, and installed as data on a signed bundle — the same path θ
+# takes, under a guard that requires the evidence to replicate on data the search never
+# saw (see consolidation.learn_assurance_floors).
+#
+# Why the raise is capped at ACCOUNTABLE and never reaches CERTIFIED: CERTIFIED also
+# restricts which PATTERNS may run, and a statistic about evidence quality is not
+# evidence about certifiability. A floor that learns must not be able to silently
+# disqualify topologies.
+MIN_REQUESTS_PER_REGION = 8
+MIN_REJECTION_RATE = 0.5
+LEARNED_FLOOR_CEILING = Assurance.ACCOUNTABLE
+
+
+@dataclass(frozen=True)
+class RegionRejectionStats:
+    """What the record says about one feature region."""
+
+    region: str
+    requests: int  # requests in this region that carried an elicited assertion
+    rejected: int  # of those, how many had at least one refused by the gate
+
+    @property
+    def rate(self) -> float:
+        return self.rejected / self.requests if self.requests else 0.0
+
+    @property
+    def qualifies(self) -> bool:
+        return (
+            self.requests >= MIN_REQUESTS_PER_REGION
+            and self.rate >= MIN_REJECTION_RATE
+        )
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "region": self.region,
+            "requests": self.requests,
+            "rejected": self.rejected,
+            "rate": round(self.rate, 4),
+            "qualifies": self.qualifies,
+        }
+
+
+def rejection_stats(records: Iterable[dict[str, Any]]) -> dict[str, RegionRejectionStats]:
+    """Count, per region, how often the gate refused an elicited assertion.
+
+    `records` are belief-log entries. The counting is over TYPED fields written by the
+    governance layer (`context.gate_rejections`, produced from `beliefs.Rejection`),
+    never over the human-readable reason: a statistic assembled by matching substrings
+    of an explanation measures the explanation, and the explanations get reworded.
+    """
+    requests: dict[str, int] = {}
+    rejected: dict[str, int] = {}
+    for record in records:
+        context = record.get("context") or {}
+        region = context.get("region")
+        if not region:
+            continue
+        # Only requests that actually offered an elicited belief can have one refused;
+        # counting the rest would dilute the rate with requests that never asked.
+        if not context.get("elicited_offered"):
+            continue
+        requests[region] = requests.get(region, 0) + 1
+        if context.get("gate_rejections"):
+            rejected[region] = rejected.get(region, 0) + 1
+    return {
+        region: RegionRejectionStats(
+            region=region, requests=count, rejected=rejected.get(region, 0)
+        )
+        for region, count in requests.items()
+    }
+
+
+def learn_floors(
+    records: Iterable[dict[str, Any]],
+    incumbent: Mapping[str, Assurance] | None = None,
+) -> tuple[dict[str, Assurance], list[str]]:
+    """Regions whose floor the record says should rise, and why.
+
+    Monotone by construction: a learned floor is only ever raised, never lowered. The
+    evidence that RAISED it is a history of refusals; the absence of refusals afterwards
+    is what the raised floor was supposed to produce, so reading that absence as grounds
+    to lower it again would be a loop that oscillates by design.
+    """
+    floors: dict[str, Assurance] = dict(incumbent or {})
+    notes: list[str] = []
+    for region, stats in sorted(rejection_stats(records).items()):
+        if not stats.qualifies:
+            continue
+        current = floors.get(region, Assurance.EXPLORATORY)
+        raised = max(current, LEARNED_FLOOR_CEILING)
+        if raised == current:
+            continue
+        floors[region] = raised
+        notes.append(
+            f"{region}: {stats.rejected}/{stats.requests} requests had an elicited "
+            f"assertion refused by the gate ({stats.rate:.0%}) — floor raised to "
+            f"{raised.label}"
+        )
+    return floors, notes
+
+
+def required_floor(
+    base: BeliefBase,
+    learned: Mapping[str, Assurance] | None = None,
+    region: str = "",
+) -> tuple[Assurance, list[str]]:
     """The minimum assurance the beliefs about this request imply.
 
     A caller may ask for more. A caller may never get less: the floor exists so a
@@ -197,6 +312,14 @@ def required_floor(base: BeliefBase) -> tuple[Assurance, list[str]]:
         floor = max(floor, Assurance.CERTIFIED)
         reasons.append("request is flagged regulated")
 
+    learned_floor = (learned or {}).get(region)
+    if learned_floor is not None and learned_floor > floor:
+        floor = learned_floor
+        reasons.append(
+            f"region {region}: elicited assertions here are repeatedly refused by the "
+            f"gate, so the learned floor is {learned_floor.label} (paper §6.2)"
+        )
+
     if not reasons:
         reasons.append("no belief raises the floor above exploratory")
 
@@ -207,6 +330,8 @@ def resolve(
     base: BeliefBase,
     requested: Assurance = Assurance.STANDARD,
     calibration_trustworthy: bool = False,
+    learned: Mapping[str, Assurance] | None = None,
+    region: str = "",
 ) -> AssuranceDecision:
     """Pick the operating level for one request.
 
@@ -215,7 +340,7 @@ def resolve(
     confidence is unverified would defeat the level's purpose. When calibration has not
     been earned, the effective floor rises to OBSERVED even at A2.
     """
-    floor, reasons = required_floor(base)
+    floor, reasons = required_floor(base, learned=learned, region=region)
     level = max(requested, floor)
     profile = PROFILES[level]
 

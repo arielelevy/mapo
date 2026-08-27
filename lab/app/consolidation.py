@@ -55,6 +55,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable
 
 from .beliefs import Calibration, Provenance
+from .assurance import Assurance, learn_floors as learn_assurance_floors
 from .policy import Episode, Plasticity, PolicyBundle, Stat
 
 # A discovered partition must clear this utility separation to be proposed at all.
@@ -372,6 +373,8 @@ class DreamReport:
     homeostasis: dict[str, Any] = field(default_factory=dict)
     audit: list[dict[str, Any]] = field(default_factory=list)
     promotion: dict[str, Any] = field(default_factory=dict)
+    # Learned assurance floors installed by this cycle (paper §6.2), region -> level.
+    floors: dict[str, str] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -384,6 +387,7 @@ class DreamReport:
             "homeostasis": self.homeostasis,
             "proposition_audit": self.audit,
             "promotion": self.promotion,
+            "assurance_floors": self.floors,
             "notes": self.notes,
         }
 
@@ -394,6 +398,11 @@ SPLIT_ATTRIBUTES = (
     "iterations",
     "cost_tokens",
 )
+
+
+def _task_of(record: dict[str, Any]) -> str:
+    """The task a belief-log record belongs to, or empty when it predates the field."""
+    return (record.get("context") or {}).get("task_id", "")
 
 
 def sleep_cycle(
@@ -463,6 +472,52 @@ def sleep_cycle(
                 "no candidate proposition survived validation — the current partition "
                 "is not demonstrably improvable on this record"
             )
+
+    # ---- stage 2b: the assurance floor that learns (paper 6.2)
+    #
+    # Same discipline as theta and for the same reason: a floor learned on the records
+    # that suggested it is a floor that cannot fail to be learned. The search half
+    # proposes the regions; the validate half has to say the same thing independently,
+    # on requests the proposal never saw, or the region does not get its floor raised.
+    #
+    # The guard is REPLICATION, not utility, and that is deliberate. Raising a floor
+    # makes the system probe instead of believe: it costs tokens and can only lower
+    # measured utility in the short run. Scoring a governance floor by the utility it
+    # produces would reject every floor that ever worked.
+    if validate_ids:
+        incumbent_floors = {k: Assurance(v) for k, v in incumbent.floors.items()}
+        proposed, proposal_notes = learn_assurance_floors(
+            [r for r in belief_log if _task_of(r) in search_ids],
+            incumbent=incumbent_floors,
+        )
+        confirmed, _ = learn_assurance_floors(
+            [r for r in belief_log if _task_of(r) in validate_ids],
+            incumbent=incumbent_floors,
+        )
+        survivors = {
+            region: level
+            for region, level in proposed.items()
+            if confirmed.get(region) == level or incumbent_floors.get(region) == level
+        }
+        candidate.floors = {k: int(v) for k, v in survivors.items()}
+        report.floors = {k: v.label for k, v in survivors.items()}
+        newly_raised = [
+            region
+            for region, level in survivors.items()
+            if incumbent_floors.get(region) != level
+        ]
+        for note in proposal_notes:
+            region = note.split(":", 1)[0]
+            if region in newly_raised:
+                report.notes.append("assurance floor - " + note)
+        dropped = [r for r in proposed if r not in survivors]
+        if dropped:
+            report.notes.append(
+                f"{len(dropped)} region(s) proposed a higher assurance floor on the "
+                "search split and did not replicate on the validation split; their "
+                "floor is unchanged"
+            )
+        candidate.sign()
 
     # ---- stage 3: homeostasis
     from .policy import WEIGHT_MIN

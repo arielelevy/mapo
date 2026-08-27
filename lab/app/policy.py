@@ -130,6 +130,15 @@ class PolicyBundle:
     fallback: str
     tau: float
     stats: dict[str, dict[str, Stat]] = field(default_factory=dict)
+    # Learned assurance floors per region (paper §6.2), as the Assurance level's int.
+    # Stored here rather than beside the policy because it IS policy: it changes what a
+    # request is allowed to act on, it must be versioned and signed like theta, and it
+    # must not be installable except through the same promotion path.
+    #
+    # Kept as int so this module stays free of the assurance layer: policy carries the
+    # value, the router interprets it. The alternative -- importing Assurance here --
+    # would make the thing that is signed depend on the thing that reads it.
+    floors: dict[str, int] = field(default_factory=dict)
     signature: str = ""
     notes: str = ""
 
@@ -156,6 +165,7 @@ class PolicyBundle:
                 region: {p: s.as_dict() for p, s in sorted(paradigms.items())}
                 for region, paradigms in sorted(self.stats.items())
             },
+            "floors": dict(sorted(self.floors.items())),
         }
         return json.dumps(body, sort_keys=True, ensure_ascii=False)
 
@@ -181,6 +191,7 @@ class PolicyBundle:
                 region: {p: s.as_dict() for p, s in sorted(paradigms.items())}
                 for region, paradigms in sorted(self.stats.items())
             },
+            "floors": dict(sorted(self.floors.items())),
         }
 
     def save(self, directory: Path) -> Path:
@@ -203,6 +214,7 @@ class PolicyBundle:
                 region: {p: Stat.from_dict(s) for p, s in paradigms.items()}
                 for region, paradigms in raw["stats"].items()
             },
+            floors={k: int(v) for k, v in (raw.get("floors") or {}).items()},
             signature=raw.get("signature", ""),
             notes=raw.get("notes", ""),
         )
@@ -307,6 +319,10 @@ class Plasticity:
             fallback=incumbent.fallback,
             tau=tau,
             stats=stats,
+            # Carried forward untouched: replaying episodes teaches theta about utility,
+            # not about which regions refuse elicited evidence. The floors are learned
+            # from the belief log, in their own stage, under their own guard.
+            floors=dict(incumbent.floors),
             notes=notes or f"promoted from v{incumbent.version} on {len(episodes)} episodes",
         ).sign()
 

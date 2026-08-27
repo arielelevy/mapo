@@ -67,6 +67,47 @@ class Provenance(str, Enum):
         return self.rank >= floor.rank
 
 
+class Rejection(str, Enum):
+    """Why a requirement was not met — as a value, not as a sentence.
+
+    The whole point of §6.2 is to consume rejection statistics, and a statistic built
+    by matching substrings of an explanation measures the explanation. These are the
+    five ways a requirement can fail, and they are distinguishable by construction.
+    """
+
+    ABSENT = "absent"  # nothing is believed about the proposition at all
+    PROVENANCE = "provenance"  # believed, but not on strong enough evidence
+    CREDENCE = "credence"  # believed on good evidence, but not confidently enough
+    VALUE = "value"  # believed and confident, but the value is not the one required
+    MAGNITUDE = "magnitude"  # the value is numeric and below the threshold
+
+
+@dataclass(frozen=True)
+class Check:
+    """One requirement, evaluated. The reason is for humans; the rest is for counting."""
+
+    proposition: str
+    met: bool
+    reason: str
+    rejection: Rejection | None = None
+    held: Provenance | None = None  # the provenance actually held
+    needed: Provenance | None = None  # the provenance the rule demanded
+
+    def as_dict(self) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "proposition": self.proposition,
+            "met": self.met,
+            "reason": self.reason,
+        }
+        if self.rejection is not None:
+            body["rejection"] = self.rejection.value
+        if self.held is not None:
+            body["held"] = self.held.value
+        if self.needed is not None:
+            body["needed"] = self.needed.value
+        return body
+
+
 @dataclass(frozen=True)
 class Belief:
     """A typed proposition with a credence and a provenance.
@@ -214,37 +255,86 @@ class Requirement:
     expected: Any = None
     min_value: float | None = None
 
-    def met_by(self, base: BeliefBase) -> tuple[bool, str]:
+    def met_by(self, base: BeliefBase) -> Check:
         belief = base.current(self.proposition)
         if belief is None:
-            return False, f"nothing believed about {self.proposition}"
+            return Check(
+                proposition=self.proposition,
+                met=False,
+                reason=f"nothing believed about {self.proposition}",
+                rejection=Rejection.ABSENT,
+                needed=self.min_provenance,
+            )
         if not belief.provenance.at_least(self.min_provenance):
-            return False, (
-                f"{self.proposition} is {belief.provenance.value}, "
-                f"rule needs at least {self.min_provenance.value}"
+            return Check(
+                proposition=self.proposition,
+                met=False,
+                reason=(
+                    f"{self.proposition} is {belief.provenance.value}, "
+                    f"rule needs at least {self.min_provenance.value}"
+                ),
+                rejection=Rejection.PROVENANCE,
+                held=belief.provenance,
+                needed=self.min_provenance,
             )
         if belief.credence < self.min_credence:
-            return False, (
-                f"{self.proposition} credence {belief.credence:.2f} "
-                f"< required {self.min_credence:.2f}"
+            return Check(
+                proposition=self.proposition,
+                met=False,
+                reason=(
+                    f"{self.proposition} credence {belief.credence:.2f} "
+                    f"< required {self.min_credence:.2f}"
+                ),
+                rejection=Rejection.CREDENCE,
+                held=belief.provenance,
+                needed=self.min_provenance,
             )
         if self.expected is not None and belief.value != self.expected:
-            return False, (
-                f"{self.proposition} is {belief.value!r}, rule needs {self.expected!r}"
+            return Check(
+                proposition=self.proposition,
+                met=False,
+                reason=(
+                    f"{self.proposition} is {belief.value!r}, "
+                    f"rule needs {self.expected!r}"
+                ),
+                rejection=Rejection.VALUE,
+                held=belief.provenance,
+                needed=self.min_provenance,
             )
         if self.min_value is not None:
             try:
                 magnitude = float(belief.value)
             except (TypeError, ValueError):
-                return False, (
-                    f"{self.proposition} value {belief.value!r} is not numeric, "
-                    "so a magnitude threshold cannot apply"
+                return Check(
+                    proposition=self.proposition,
+                    met=False,
+                    reason=(
+                        f"{self.proposition} value {belief.value!r} is not numeric, "
+                        "so a magnitude threshold cannot apply"
+                    ),
+                    rejection=Rejection.MAGNITUDE,
+                    held=belief.provenance,
+                    needed=self.min_provenance,
                 )
             if magnitude < self.min_value:
-                return False, (
-                    f"{self.proposition} = {magnitude:.3f} < required {self.min_value:.3f}"
+                return Check(
+                    proposition=self.proposition,
+                    met=False,
+                    reason=(
+                        f"{self.proposition} = {magnitude:.3f} < "
+                        f"required {self.min_value:.3f}"
+                    ),
+                    rejection=Rejection.MAGNITUDE,
+                    held=belief.provenance,
+                    needed=self.min_provenance,
                 )
-        return True, "met"
+        return Check(
+            proposition=self.proposition,
+            met=True,
+            reason="met",
+            held=belief.provenance,
+            needed=self.min_provenance,
+        )
 
 
 @dataclass
@@ -261,15 +351,9 @@ class Rule:
     rationale: str = ""
     priority: int = 0
 
-    def evaluate(self, base: BeliefBase) -> tuple[bool, list[str]]:
-        reasons: list[str] = []
-        fired = True
-        for requirement in self.requires:
-            met, why = requirement.met_by(base)
-            reasons.append(f"{'ok' if met else 'no'}: {why}")
-            if not met:
-                fired = False
-        return fired, reasons
+    def evaluate(self, base: BeliefBase) -> tuple[bool, list[Check]]:
+        checks = [requirement.met_by(base) for requirement in self.requires]
+        return all(check.met for check in checks), checks
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -299,6 +383,25 @@ class Verdict:
     belief_digest: str
     trace: list[dict[str, Any]] = field(default_factory=list)
     beliefs: dict[str, Any] = field(default_factory=dict)
+    # Every requirement that was not met, typed. This is the raw material §6.2 learns
+    # from: which propositions the gate refuses, and on what grounds.
+    rejections: list[Check] = field(default_factory=list)
+
+    def gate_rejections(self, floor: Provenance = Provenance.OBSERVED) -> list[Check]:
+        """Assertions refused because their PROVENANCE was below what a rule demanded.
+
+        Narrow on purpose. A belief refused for low credence, or for holding the wrong
+        value, says nothing about the evidence regime of this request class: it is the
+        system working. A belief refused because a model asserted it and the rule would
+        only act on something measured is exactly the event §6.2 counts.
+        """
+        return [
+            check
+            for check in self.rejections
+            if check.rejection is Rejection.PROVENANCE
+            and check.held is not None
+            and not check.held.at_least(floor)
+        ]
 
     def as_dict(self) -> dict[str, Any]:
         body = {
@@ -307,6 +410,7 @@ class Verdict:
             "belief_digest": self.belief_digest,
             "trace": self.trace,
             "beliefs": self.beliefs,
+            "gate_rejections": [c.as_dict() for c in self.gate_rejections()],
         }
         body["verdict_digest"] = hashlib.sha256(
             json.dumps(body, sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -329,9 +433,17 @@ class Governance:
 
     def decide(self, base: BeliefBase) -> Verdict:
         trace: list[dict[str, Any]] = []
+        rejections: list[Check] = []
         for rule in self._rules:
-            fired, reasons = rule.evaluate(base)
-            trace.append({"rule": rule.name, "fired": fired, "checks": reasons})
+            fired, checks = rule.evaluate(base)
+            trace.append(
+                {
+                    "rule": rule.name,
+                    "fired": fired,
+                    "checks": [check.as_dict() for check in checks],
+                }
+            )
+            rejections.extend(check for check in checks if not check.met)
             if fired:
                 return Verdict(
                     action=rule.then,
@@ -339,12 +451,19 @@ class Governance:
                     belief_digest=base.digest(),
                     trace=trace,
                     beliefs=base.as_dict(),
+                    rejections=rejections,
                 )
 
         trace.append({
             "rule": "<default>",
             "fired": True,
-            "checks": ["no rule was satisfied by the belief base"],
+            "checks": [
+                Check(
+                    proposition="<none>",
+                    met=True,
+                    reason="no rule was satisfied by the belief base",
+                ).as_dict()
+            ],
         })
         return Verdict(
             action=self._default,
@@ -352,6 +471,7 @@ class Governance:
             belief_digest=base.digest(),
             trace=trace,
             beliefs=base.as_dict(),
+            rejections=rejections,
         )
 
     def as_dict(self) -> dict[str, Any]:

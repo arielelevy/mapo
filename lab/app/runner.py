@@ -28,6 +28,7 @@ import httpx
 from .config import Settings
 from .llm import RETRYABLE_STATUS
 from .features import FeatureExtractor, Features
+from .beliefs import Provenance
 from .llm import LLMClient, SealedCacheMiss, SeededClient, Usage
 from .metrics import Observation, Study
 from .paradigms import COST_PRIORS, FALLBACK, REGISTRY, Infeasible
@@ -623,14 +624,25 @@ class Runner:
             # ever written, so calibration could never be computed, so elicited
             # credence could never earn trust. Honouring the flag closes that loop.
             if profile.log_belief_base:
+                beliefs = plan.verdict.get("beliefs", {})
                 self.store.append_belief_base(
-                    plan.verdict.get("beliefs", {}),
+                    beliefs,
                     context={
                         "task_id": task_id,
+                        "region": region_of(task_id),
                         "assurance": assurance.label,
                         "action": plan.action,
                         "paradigm": plan.paradigm,
                         "theta_version": plan.theta_version,
+                        # The two fields §6.2 learns from. `elicited_offered` is the
+                        # denominator: a request that never asserted anything elicited
+                        # cannot have one refused, and counting it would dilute the
+                        # rate with requests that never asked.
+                        "elicited_offered": any(
+                            b.get("provenance") == Provenance.ELICITED.value
+                            for b in beliefs.get("beliefs", [])
+                        ),
+                        "gate_rejections": plan.verdict.get("gate_rejections", []),
                     },
                 )
             return plan.paradigm

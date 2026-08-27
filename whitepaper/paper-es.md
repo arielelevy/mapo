@@ -495,12 +495,40 @@ procedencia, si θ puede aprender online, si la corrida es reproducible desde ca
 patrones son admisibles** — el nivel certificado excluye topologías cuyo flujo de control es no
 acotado, no porque sean peores (a menudo son mejores) sino porque sus modos de falla no son
 enumerables. El piso se deriva de creencias sobre la solicitud: quien llama puede pedir más y
-nunca menos. La derivación misma puede aprender, offline y bajo la misma guarda de promoción
-que θ: una categoría de solicitudes cuyas afirmaciones elicitadas son rechazadas
-repetidamente por la compuerta es una categoría cuyo piso debería subir — las estadísticas
-de rechazo son evidencia sobre la clase de solicitud, y consumirlas cierra el bucle sin
-ajustar jamás nada adentro de una solicitud. Lo enunciamos como diseño; todavía no está
-medido.
+nunca menos. La derivación misma aprende, offline: una categoría de solicitudes cuyas
+afirmaciones elicitadas son rechazadas repetidamente por la compuerta es una categoría
+cuyo piso sube — las estadísticas de rechazo son evidencia sobre la clase de solicitud, y
+consumirlas cierra el bucle sin ajustar jamás nada adentro de una solicitud.
+
+Tres propiedades lo vuelven seguro de correr, y cada una está impuesta, no pretendida.
+
+**El evento es tipado, no parseado.** Un rechazo lleva su motivo como valor — la
+procedencia que se tenía contra la que la regla exigía — de modo que la estadística cuenta
+el evento. Contarlo emparejando subcadenas de la explicación mediría el fraseo, y el
+fraseo es prosa que se reescribe. Sólo cuentan los rechazos por PROCEDENCIA insuficiente:
+una creencia rechazada por credencia baja, o por tener el valor equivocado, es el sistema
+funcionando, y no dice nada sobre el régimen de evidencia de la clase.
+
+**La guarda es replicación, no utilidad.** El registro se parte por tarea; una mitad
+propone las regiones cuyo piso debería subir, y el piso se instala sólo si la otra mitad
+—solicitudes que la propuesta nunca vio— dice lo mismo de manera independiente. La
+utilidad sería el criterio equivocado acá, y descartarla no es una concesión: subir un
+piso hace que el sistema exija evidencia medida donde habría actuado sobre una
+afirmación, lo que cuesta tokens y sólo puede bajar la utilidad medida en el corto plazo. Un piso de gobierno puntuado por la utilidad que
+produce es un piso que nunca sube.
+
+**El aumento es acotado y monótono.** Se detiene en accountable y nunca llega a
+certified, porque certified además restringe qué patrones pueden correr y una estadística
+sobre calidad de evidencia no es evidencia sobre certificabilidad — un piso que aprende no
+puede quedar habilitado a descalificar una topología. Y nunca baja solo: la ausencia de
+rechazos después de que un piso sube es justamente lo que ese piso se instaló para
+producir, así que leer esa ausencia como motivo para bajarlo sería una oscilación puesta
+en el diseño.
+
+Los pisos aprendidos viajan en el bundle de política firmado, así que nada puede elevar el
+nivel de una solicitud salvo por el mismo camino de promoción que recorre θ. Verificado:
+una región cuyos rechazos replican a través de la partición recibe su piso; una región que
+califica sólo en la mitad que la propuso, no.
 
 Credencia y tamaño de efecto no deben confundirse. Un margen aprendido es una creencia *certera*
 sobre un efecto *grande* — credencia 1,0, valor 0,9 — y codificar la magnitud como credencia

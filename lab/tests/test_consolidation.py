@@ -21,7 +21,20 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.beliefs import Provenance  # noqa: E402
+from app.assurance import (  # noqa: E402
+    Assurance,
+    learn_floors,
+    required_floor,
+)
+from app.beliefs import (  # noqa: E402
+    Belief,
+    BeliefBase,
+    Governance,
+    Provenance,
+    Rejection,
+    Requirement,
+    Rule,
+)
 from app.consolidation import (  # noqa: E402
     audit_propositions,
     discover_partitions,
@@ -95,6 +108,123 @@ def rows_to_episodes(rows: list[dict]) -> list[Episode]:
         )
         for r in rows
     ]
+
+
+def _belief_record(task_id: str, region: str, refused: bool) -> dict:
+    """One belief-log entry, in the shape the runner writes."""
+    return {
+        "context": {
+            "task_id": task_id,
+            "region": region,
+            "elicited_offered": True,
+            "gate_rejections": (
+                [
+                    {
+                        "proposition": "coupling_tight",
+                        "rejection": "provenance",
+                        "held": "elicited",
+                        "needed": "observed",
+                    }
+                ]
+                if refused
+                else []
+            ),
+        }
+    }
+
+
+def check_assurance_floor_learns(ok: bool) -> bool:
+    """Paper 6.2: a request class whose elicited assertions are repeatedly refused
+    by the gate is a class whose floor should rise."""
+    print("\n6. El piso de garantia que aprende (paper 6.2)")
+
+    # --- the rejection is TYPED, not parsed out of the explanation
+    base = BeliefBase()
+    base.assert_(Belief(
+        proposition="coupling_tight",
+        value=True,
+        credence=0.9,
+        provenance=Provenance.ELICITED,
+        evidence="the model said so",
+    ))
+    rule = Rule(
+        name="needs_observed",
+        requires=[Requirement(
+            proposition="coupling_tight",
+            expected=True,
+            min_credence=0.7,
+            min_provenance=Provenance.OBSERVED,
+        )],
+        then="specialise",
+    )
+    verdict = Governance([rule], default_action="defer").decide(base)
+    refusals = verdict.gate_rejections()
+    ok &= check("un rechazo por procedencia se registra TIPADO",
+                len(refusals) == 1
+                and refusals[0].rejection is Rejection.PROVENANCE
+                and refusals[0].held is Provenance.ELICITED,
+                str(refusals[0].rejection.value if refusals else "-"))
+    ok &= check("un rechazo por CREDENCE no cuenta como rechazo del gate",
+                not Governance([Rule(
+                    name="needs_credence",
+                    requires=[Requirement(
+                        proposition="coupling_tight",
+                        expected=True,
+                        min_credence=0.99,
+                        min_provenance=Provenance.ELICITED,
+                    )],
+                    then="specialise",
+                )], default_action="defer").decide(base).gate_rejections())
+
+    # --- una region con rechazos repetidos sube; una sin rechazos, no
+    hot = [_belief_record(f"t{i}", "many/no_oracle/tight", True) for i in range(9)]
+    cold = [_belief_record(f"c{i}", "few/oracle/loose", False) for i in range(9)]
+    floors, notes = learn_floors(hot + cold)
+    ok &= check("la region con rechazos repetidos sube el piso",
+                floors.get("many/no_oracle/tight") == Assurance.ACCOUNTABLE,
+                notes[0][:80] if notes else "sin notas")
+    ok &= check("la region sin rechazos NO sube",
+                "few/oracle/loose" not in floors)
+
+    # --- el piso nunca llega a CERTIFIED: eso restringiria patrones
+    ok &= check("el piso aprendido no alcanza CERTIFIED",
+                all(level <= Assurance.ACCOUNTABLE for level in floors.values()))
+
+    # --- pocos requests no alcanzan, por mas que la tasa sea 1.0
+    few = [_belief_record(f"f{i}", "single/oracle/loose", True) for i in range(3)]
+    floors_few, _ = learn_floors(few)
+    ok &= check("con pocos requests no se aprende nada",
+                "single/oracle/loose" not in floors_few, "3 requests")
+
+    # --- el denominador excluye requests que nunca ofrecieron nada elicited
+    silent = [
+        {"context": {"task_id": f"s{i}", "region": "R", "elicited_offered": False,
+                     "gate_rejections": []}}
+        for i in range(50)
+    ]
+    hot_r = [_belief_record(f"h{i}", "R", True) for i in range(9)]
+    floors_r, _ = learn_floors(silent + hot_r)
+    ok &= check("los requests que no ofrecieron creencia elicited no diluyen la tasa",
+                floors_r.get("R") == Assurance.ACCOUNTABLE, "9 de 9, no 9 de 59")
+
+    # --- y el piso llega al ruteo: sube el nivel efectivo del request
+    floor, reasons = required_floor(
+        BeliefBase(), learned={"R": Assurance.ACCOUNTABLE}, region="R"
+    )
+    ok &= check("el piso aprendido eleva el nivel del request",
+                floor == Assurance.ACCOUNTABLE,
+                reasons[-1][:80] if reasons else "")
+    floor_other, _ = required_floor(
+        BeliefBase(), learned={"R": Assurance.ACCOUNTABLE}, region="OTRA"
+    )
+    ok &= check("y no toca a las demas regiones",
+                floor_other == Assurance.EXPLORATORY)
+
+    # --- monotono: no baja aunque el registro nuevo no muestre rechazos
+    kept, _ = learn_floors(cold, incumbent={"few/oracle/loose": Assurance.ACCOUNTABLE})
+    ok &= check("un piso ya aprendido no baja solo",
+                kept["few/oracle/loose"] == Assurance.ACCOUNTABLE)
+    return ok
 
 
 def main() -> int:
@@ -213,13 +343,46 @@ def main() -> int:
             lambda bundle, eps: Router(bundle, COST_PRIORS, "react").value_on(eps),
         )
 
+    # Two regions in the belief log, and only one of them says the same thing on both
+    # halves of the split. REPLICA replicates; SOLO qualifies on the search half alone,
+    # which is exactly the shape a floor learned from its own proposal would have.
+    all_tasks = sorted({r["task_id"] for r in rows})
+    cut_a, cut_b = int(len(all_tasks) * 0.5), int(len(all_tasks) * 0.75)
+    search_tasks = all_tasks[:cut_a]
+    validate_tasks = all_tasks[cut_a:cut_b]
+    floor_log = list(log)
+    for i, tid in enumerate(search_tasks):
+        floor_log.append(_belief_record(tid, "REPLICA", True))
+        floor_log.append(_belief_record(tid, "SOLO", True))
+    for tid in validate_tasks:
+        floor_log.append(_belief_record(tid, "REPLICA", True))
+        floor_log.append(_belief_record(tid, "SOLO", False))
+
     result_bundle, report = sleep_cycle(
         incumbent=incumbent,
         rows=rows,
         episodes=episodes,
-        belief_log=log,
+        belief_log=floor_log,
         promote_fn=promote_fn,
         cycle=1,
+    )
+    ok &= check(
+        "el piso que REPLICA en la mitad de validacion se instala",
+        report.floors.get("REPLICA") == "A2_ACCOUNTABLE",
+        f"search={len(search_tasks)} validate={len(validate_tasks)}",
+    )
+    ok &= check(
+        "el piso que NO replica no se instala",
+        "SOLO" not in report.floors,
+        "propuesto en search, desmentido en validate",
+    )
+    ok &= check(
+        "el piso instalado viaja en el bundle FIRMADO",
+        result_bundle.verify()
+        and (
+            result_bundle.floors.get("REPLICA") == 2
+            or incumbent.floors.get("REPLICA") is None
+        ),
     )
     ok &= check("incumbent was not mutated",
                 incumbent.signature == signature_before
@@ -237,6 +400,8 @@ def main() -> int:
     print("\n  notes from the cycle:")
     for note in report.notes:
         print(f"    - {note[:96]}")
+
+    ok = check_assurance_floor_learns(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

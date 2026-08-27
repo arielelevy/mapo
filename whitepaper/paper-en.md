@@ -469,11 +469,39 @@ may learn online, whether the run is replayable from cache, and **which patterns
 admissible** — the certified level excludes topologies whose control flow is unbounded, not
 because they are worse (they are often better) but because their failure modes are not
 enumerable. The floor is derived from beliefs about the request: a caller may ask for more
-and never for less. The derivation itself can learn, offline and under the same promotion
-guard as θ: a request category whose elicited assertions are repeatedly rejected by the
-gate is a category whose floor should rise — rejection statistics are evidence about the
-request class, and consuming them closes the loop without ever adjusting anything inside a
-request. We state this as design; it is not yet measured.
+and never for less. The derivation itself learns, offline: a request category whose
+elicited assertions are repeatedly refused by the gate is a category whose floor rises —
+rejection statistics are evidence about the request class, and consuming them closes the
+loop without ever adjusting anything inside a request.
+
+Three properties make that safe to run, and each is enforced rather than intended.
+
+**The event is typed, not parsed.** A refusal carries why it happened as a value — the
+provenance held against the provenance the rule demanded — so the statistic counts the
+event. Counting it by matching substrings of the explanation would measure the phrasing,
+and the phrasing is prose that gets reworded. Only refusals for insufficient PROVENANCE
+count: a belief refused for low credence, or for holding the wrong value, is the system
+working, and says nothing about the evidence regime of the class.
+
+**The guard is replication, not utility.** The record is split by task; one half proposes
+the regions whose floor should rise, and the floor is installed only if the other half —
+requests the proposal never saw — says the same thing independently. Utility would be the
+wrong criterion here and rejecting it is not a concession: raising a floor makes the
+system demand measured evidence where it would have acted on an assertion, which costs
+tokens and can only lower measured utility in the short run. A governance floor scored by the utility it produces is a governance floor
+that never rises.
+
+**The raise is bounded and monotone.** It stops at accountable and never reaches
+certified, because certified also restricts which patterns may run and a statistic about
+evidence quality is not evidence about certifiability — a floor that learns must not be
+able to disqualify a topology. And it never falls on its own: the absence of refusals
+after a floor rises is what the floor was installed to produce, so reading that absence as
+grounds to lower it again would be an oscillation built into the design.
+
+The learned floors ride on the signed policy bundle, so nothing can raise a request's
+level except through the same promotion path θ takes. Verified: a region whose refusals
+replicate across the split has its floor installed; a region that qualifies on the
+proposing half alone does not.
 
 Credence and effect size must not be conflated. A learned margin is a *certain* belief about
 a *large* effect — credence 1.0, value 0.9 — and encoding the magnitude as credence reports
