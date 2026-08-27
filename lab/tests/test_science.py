@@ -189,6 +189,67 @@ def check_probe(ok: bool) -> bool:
     return ok
 
 
+def check_product_path(ok: bool) -> bool:
+    """El camino de producto: un request real entra, y el vocabulario del banco sale
+    DERIVADO de el -- nunca al reves."""
+    from app.features import FeatureExtractor  # noqa: PLC0415
+    from app.paradigms import COST_PRIORS, FALLBACK, REGISTRY  # noqa: PLC0415
+    from app.policy import PolicyBundle  # noqa: PLC0415
+    from app.router import Router  # noqa: PLC0415
+    from app.serve import Request  # noqa: PLC0415
+
+    print("\n17. El camino de producto: request -> decision -> ejecucion")
+
+    request = Request(
+        question="who holds the flagged account?",
+        documents={"memo-002": "irrelevant", "memo-001": "account AR9911 is flagged"},
+        budget_tokens=60_000,
+        oracle=["AR9911"],
+    )
+    task = request.as_task()
+    ok &= check("un request sin id se identifica por CONTENIDO",
+                task["task_id"] == request.as_task()["task_id"]
+                and task["task_id"].startswith("req-"),
+                task["task_id"])
+    ok &= check("el mismo request dos veces es la MISMA linea del registro",
+                Request(question=request.question, documents=dict(request.documents),
+                        budget_tokens=request.budget_tokens,
+                        oracle=list(request.oracle)).identity() == request.identity())
+    ok &= check("los unit_ids salen ordenados, no en orden de dict",
+                task["unit_ids"] == ["memo-001", "memo-002"],
+                "dos corridas iguales no pueden armar dos prompts distintos")
+
+    features, _ = FeatureExtractor().extract(
+        {"question": request.question, "units": task["unit_ids"],
+         "oracle": task["oracle"], "irreversible": False, "shared_writes": False,
+         "budget_tokens": request.budget_tokens},
+        allow_derived=False,
+    )
+    ok &= check("phi se computa sin red y sin cliente", bool(features.region()),
+                features.region())
+
+    bundle = PolicyBundle.cold_start(fallback="react", tau=0.3)
+    router = Router(bundle, COST_PRIORS, FALLBACK)
+
+    irreversible = Request(question="close the account", documents={"m1": "x"},
+                           budget_tokens=60_000, irreversible=True)
+    it = irreversible.as_task()
+    fi, _ = FeatureExtractor().extract(
+        {"question": it["question"], "units": it["unit_ids"], "oracle": [],
+         "irreversible": True, "shared_writes": False, "budget_tokens": 60_000},
+        allow_derived=False,
+    )
+    gated = router.plan(task=it, candidates=sorted(REGISTRY), region=fi.region())
+    ok &= check("un request irreversible queda GATED antes de ejecutar nada",
+                gated.gated and gated.action == "gate_then_fallback",
+                "la consecuencia la firma un humano, no el ruteo")
+
+    ok &= check("regulated viaja del request a la base de creencias",
+                Request(question="q", documents={"m": "x"}, budget_tokens=1000,
+                        regulated=True).as_task()["regulated"] is True)
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -440,6 +501,7 @@ def main() -> int:
                 RETRY_BUDGET_SECONDS >= 300, f"{RETRY_BUDGET_SECONDS:.0f}s")
 
     ok = check_probe(ok)
+    ok = check_product_path(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

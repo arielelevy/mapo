@@ -19,6 +19,7 @@ from .paradigms import COST_PRIORS, FALLBACK, REGISTRY
 from .assurance import Assurance
 from .llm import LLMClient
 from .policy import Plasticity, PolicyBundle, promote
+from . import serve
 from .probe import probe_coupling
 from .router import Router
 from .runner import Runner
@@ -168,6 +169,46 @@ def decide(request: DecideRequest) -> dict[str, Any]:
             ),
         }
     return explained
+
+
+class AnswerRequest(BaseModel):
+    """A real request: a question, the documents, a budget. No task_id, no corpus."""
+
+    question: str
+    documents: dict[str, str]
+    budget_tokens: int = Field(default=60_000, gt=0)
+    irreversible: bool = False
+    shared_writes: bool = False
+    regulated: bool = False
+    oracle: list[str] = Field(default_factory=list)
+    assurance: Assurance = Assurance.STANDARD
+    probe: bool = True
+
+
+@app.post("/answer")
+def answer_request(request: AnswerRequest) -> dict[str, Any]:
+    """Decide AND execute, on documents the caller brought.
+
+    /decide returns a plan; this returns what the plan produced. The difference is the
+    difference between a decision layer and a product, and both endpoints exist because
+    both questions are legitimate: "what would you do" is auditable on its own.
+    """
+    result = serve.answer(
+        serve.Request(
+            question=request.question,
+            documents=request.documents,
+            budget_tokens=request.budget_tokens,
+            irreversible=request.irreversible,
+            shared_writes=request.shared_writes,
+            regulated=request.regulated,
+            oracle=request.oracle,
+        ),
+        settings=settings,
+        bundle=_current_bundle(),
+        requested=request.assurance,
+        probe=request.probe,
+    )
+    return result.as_dict()
 
 
 @app.get("/policy")
