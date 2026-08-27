@@ -50,9 +50,19 @@ que el harness termine de medir el catálogo y la selección quede decidida por 
 3. [ ] Adaptadores por los 5 imports internos de la app original:
        `get_model_info`, `ChatRequest`, `redis_cache`, `search_helpers`, `search_service`
 4. [ ] Reemplazo del clasificador de `understand.py` por la capa de decisión de paperlab
-5. [ ] **Temporal.io como runtime de ejecución** (decisión diferida a esta fase): durable
-       execution, retries, replay determinístico — mapea a la mitad de ejecución del
-       motor; no toca la capa de decisión ni entra jamás al harness (sin frameworks)
+5. [ ] **Temporal.io como runtime** (decisión diferida a esta fase), en DOS planos:
+       - **Plano de ingesta** (el mejor caso de Temporal): workflow `IngestCollection`
+         → fan-out de activities por unidad (parsear → embeber → resumir → extraer
+         entidades para el grafo) → `BuildIndexes` → `VerifyIndex` → `Promote`.
+         Idempotencia por hash de contenido; 429/backoff como política de retry de
+         activity; el event-history es el EXPLAIN de la ingesta. **Un índice candidato
+         se promueve solo si no regresiona: la verificación es correr las tareas-sonda
+         del harness contra el índice nuevo** (mismo patrón que la promoción de θ).
+         La ingesta no se evalúa directo en el harness, pero es lo más evaluado
+         indirectamente: la superficie de herramientas gobierna la varianza (50× vs
+         1,2× medido), y la superficie es el producto de la ingesta.
+       - **Plano de query**: durable execution para la ejecución de paradigmas;
+         no toca la capa de decisión ni entra jamás al harness (sin frameworks)
 6. [ ] El objetivo medible: corpus gold NUEVO → el motor le gana a todo paradigma fijo
        del harness (brecha de oráculo neta positiva, held-out)
 
