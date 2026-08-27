@@ -330,6 +330,106 @@ def check_belief_history(ok: bool) -> bool:
     return ok
 
 
+def check_rec_solver(ok: bool) -> bool:
+    """REC F3: que cambio minimo en una creencia habria alterado el plan — replay puro,
+    sin modelo, sin corpus, y sin tocar jamas la base factual."""
+    from app.beliefs import BeliefBase, Provenance  # noqa: PLC0415
+    from app.rec import (  # noqa: PLC0415
+        AcquisitionClause,
+        diagnose,
+        verify_key_recurrence,
+    )
+    from app.rules import BeliefPolicy, sense  # noqa: PLC0415
+
+    print("\n19. REC: el deficit contrafactual minimo")
+
+    task = {"task_id": "t", "question": "q",
+            "unit_ids": [f"u{i}" for i in range(20)],
+            "budget_tokens": 60_000, "oracle": []}
+
+    # --- el caso con la forma de P15: bulk sin coupling medido -> probe_then_decide
+    policy = BeliefPolicy(derived_floor=Provenance.OBSERVED, tau=0.3)
+    base = sense(task, policy, theta_best="rewoo", theta_confidence=0.9)
+    records = base.as_dict()["beliefs"]
+    digest_before = base.digest()
+
+    d = diagnose(records, policy, fallback="react")
+    ok &= check("el plan original se re-deriva del registro, sin modelo",
+                d.original.action == "probe_then_decide")
+    minimal = d.minimal
+    ok &= check("encuentra el deficit con la forma de P15",
+                minimal is not None
+                and minimal.interventions[0].proposition == "coupling_tight",
+                "coupling resuelto => el plan cambia")
+    ok &= check("el requisito sigue al piso: bajo OBSERVED exige OBSERVED",
+                minimal.required_provenance is Provenance.OBSERVED,
+                "una hipotesis ELICITED no puede apagar una regla que exige medir")
+
+    lax = BeliefPolicy(derived_floor=Provenance.ELICITED, tau=0.3)
+    base_lax = sense(task, lax, theta_best="rewoo", theta_confidence=0.9)
+    d_lax = diagnose(base_lax.as_dict()["beliefs"], lax, fallback="react")
+    ok &= check("bajo un piso ELICITED el requisito baja con el piso",
+                d_lax.minimal is not None
+                and d_lax.minimal.required_provenance is Provenance.ELICITED)
+
+    # --- invariante 2 de PATRON_REC 9: la hipotesis JAMAS entra a la base factual
+    ok &= check("la base factual queda byte-identica tras diagnosticar",
+                BeliefBase.from_dicts(records).digest() == digest_before
+                and base.digest() == digest_before)
+
+    # --- una decision que ninguna creencia admitida cambia: sin deficits
+    small = {"task_id": "s", "question": "q", "unit_ids": ["u1"],
+             "budget_tokens": 60_000, "oracle": ["x"]}
+    base_small = sense(small, policy)
+    d_small = diagnose(base_small.as_dict()["beliefs"], policy, fallback="react")
+    ok &= check("una decision insensible a creencias adquiribles reporta 0 deficits",
+                not d_small.deficits and d_small.minimal is None,
+                d_small.original.action)
+
+    # --- clausulas: borrador != promovida, y el digest excluye el certificado
+    draft = AcquisitionClause(
+        clause_id="rec-coupling-1", target_proposition="coupling_tight",
+        region_prefixes=("many/",), probe_kind="unit_read_pointer",
+        verifier="key-recurrence/1", reachable=Provenance.OBSERVED,
+        max_reads=1, max_calls=1, max_tokens=4_000, safe_exit="defer",
+    )
+    ok &= check("una clausula sin certificado es BORRADOR y no puede ejecutar",
+                not draft.promoted)
+    promoted = AcquisitionClause.from_dict({**draft.as_dict(), "certificate": "cert-x"})
+    ok &= check("la clausula viaja por registro con la MISMA identidad",
+                AcquisitionClause.from_dict(draft.as_dict()).digest() == draft.digest())
+    ok &= check("el certificado NO integra el digest: firma a la clausula, no al reves",
+                promoted.digest() == draft.digest() and promoted.promoted)
+    ok &= check("la clausula aplica solo a su deficit y su region",
+                promoted.applies_to(minimal, "many/oracle/loose")
+                and not promoted.applies_to(minimal, "few/oracle/loose"))
+
+    # --- verificador de recurrencia de clave (PATRON_REC 5)
+    docs = {
+        "filing-01": "Settlement account AR9911 was flagged for review.",
+        "memo-14": "Account AR9911 is held by V. Simoni.",
+        "memo-99": "unrelated content",
+    }
+    scope = list(docs)
+    hit = verify_key_recurrence("AR9911", "filing-01", docs, scope)
+    ok &= check("la clave que RECURRE en otra unidad produce evidencia OBSERVED",
+                hit is not None and hit["provenance"] == "observed"
+                and hit["source"]["unit_id"] == "filing-01"
+                and hit["target"]["unit_id"] == "memo-14")
+    ok &= check("la evidencia lleva spans, hashes y version del verificador",
+                hit["source"]["span_offset"] >= 0
+                and len(hit["source"]["content_sha256"]) == 64
+                and hit["verifier"] == "key-recurrence/1")
+    ok &= check("una clave que NO recurre devuelve None, no una negacion",
+                verify_key_recurrence("ZZ0000", "filing-01", docs, scope) is None,
+                "el silencio de un scope acotado no demuestra nada global")
+    ok &= check("la misma unidad no cuenta como recurrencia",
+                verify_key_recurrence("AR9911", "filing-01",
+                                      {"filing-01": docs["filing-01"]},
+                                      ["filing-01"]) is None)
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -583,6 +683,7 @@ def main() -> int:
     ok = check_probe(ok)
     ok = check_product_path(ok)
     ok = check_belief_history(ok)
+    ok = check_rec_solver(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

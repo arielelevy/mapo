@@ -30,6 +30,17 @@ Contrafactual: diseño en `lab/PATRON_REC.es.md`; arquitectura y deuda en
 `lab/DISENO.es.md`. Nada de eso entra al paper hasta ejecutarse y medirse.
 Handoff exhaustivo para retomar sin el chat: `lab/CIERRE-2026-08-27.es.md`.
 
+**Arquitectura de plataforma (PROPUESTA, 2026-08-27): `lab/ARQUITECTURA.es.md`.** Fija
+las decisiones físicas del producto: on-prem/Docker; NO Temporal todavía (work table en
+Postgres ahora, DBOS después, Temporal sólo con disparadores escritos) y NO LangGraph
+nunca; Docling como extractor primario con procedencia página+bbox y un sensor barato
+—`pypdfium2`, no PyMuPDF, que es AGPL— decidiendo OCR antes de la primera pasada;
+Weaviate con hybrid y una colección por versión de índice, con `live_pointer` en Postgres
+como único flip atómico de promoción; Postgres como ledger epistémico con un esquema que
+hace estructuralmente imposibles las deudas §5.2 y §5.8 de `DISENO.es.md`; FastAPI con
+SSE resumible y eventos tipados, donde A3 buffea la respuesta hasta verificar citas.
+Ninguna de esas piezas está ejecutada.
+
 ## Orden de prioridad: EL PRODUCTO PRIMERO, EL PAPER DESPUÉS
 
 1. **El producto es el motor MAPO, y todavía no existe como tal.** Se construye a

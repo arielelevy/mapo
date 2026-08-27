@@ -275,6 +275,8 @@
           <tr><td>Handoff REC aceptado</td><td>revisado contra el código (5/5 afirmaciones ciertas); dirección aprobada, no implementada</td><td class="num">82ad9fb</td></tr>
           <tr><td>Fase 0: validez del aprendizaje</td><td>episodios por celda (no por trial), was_best sobre medias, la candidata no ve el bloque final. <strong>Sensibilidad: P15 no se mueve (−0,0874 idéntico)</strong> — la refutación no era un artefacto</td><td class="num">369edb0</td></tr>
           <tr><td>REC F1: integridad epistémica</td><td>una sola historia de creencias por request (pre/post sonda en UNA base, digest sobre toda la historia), supersesión por recencia en empates, reconstrucción desde el registro</td><td class="num">hoy</td></tr>
+          <tr><td>REC F3: el solver contrafactual</td><td>qué cambio mínimo en una creencia admitida habría alterado el plan — replay puro desde el registro (sin modelo, sin corpus), la hipótesis jamás toca la base factual (digest byte-idéntico), el requisito de procedencia sigue al piso; cláusulas de adquisición serializables (borrador ≠ promovida: sin certificado no ejecutan) y el verificador de recurrencia de clave con spans + hashes; el diagnóstico viaja en el EXPLAIN de /answer</td><td class="num">hoy</td></tr>
+          <tr><td>Hebbiano: medido, no opinado</td><td>seleccionar por peso Hebbiano, por utilidad media o por tasa de victorias elige IDÉNTICO en gold_transfer (0,5263 los tres): el peso es registro, no política — la plasticidad que gobierna es el decay de θ y el ratchet de §6.2</td><td class="num">gratis</td></tr>
           <tr><td>REC F2: evidencia</td><td>span literal obligatorio (un id en scope que el texto no contiene NO resuelve; auto-puntero tampoco), unidad elegida por recuperación léxica determinista, costo de sonda en la factura, <strong>fail-closed</strong>: necesidad de sonda sin resolver ⟹ se difiere, jamás se ejecuta el placeholder</td><td class="num">hoy</td></tr>
         </tbody>
       </table>
@@ -285,8 +287,7 @@
       <table>
         <thead><tr><th>Qué</th><th>Por qué importa</th><th>Costo</th></tr></thead>
         <tbody>
-          <tr><td><strong>REC F3: el solver contrafactual</strong></td><td>el corazón de REC: qué cambio mínimo en una creencia habría alterado el plan, y la cláusula acotada de adquisición que lo resuelve</td><td>código + pizarra</td></tr>
-          <tr><td><strong>REC F4: certificado de promoción</strong></td><td>un solo camino de instalación fail-closed que ligue incumbente, candidata, cláusula y medición</td><td>código</td></tr>
+          <tr><td><strong>REC F4: aprendizaje offline de cláusulas + certificado</strong></td><td>el loop de §6 del patrón: diagnósticos agrupados → cláusulas propuestas → validación en mundos separados → certificado de un solo uso que ligue incumbente, candidata, cláusula y medición. Sin esto ninguna cláusula pasa de borrador</td><td>código</td></tr>
           <tr><td><strong>P16 registrada</strong> (REC F5)</td><td>la réplica limpia de P15 con sensado: selección <em>con</em> la sonda contra el mejor fijo, seed nuevo, predicción antes de gastar</td><td>~10M tokens</td></tr>
           <tr><td>Brazo logístico</td><td>si θ no le gana a una regresión de 200 parámetros sobre φ, la maquinaria es decoración — implementados ya los dos brazos de prosa</td><td>análisis</td></tr>
           <tr><td>Retención de contexto</td><td>la variable mediadora: ¿la ventaja topológica sobrevive al control?</td><td>re-análisis, gratis</td></tr>

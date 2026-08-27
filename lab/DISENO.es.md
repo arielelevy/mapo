@@ -251,7 +251,8 @@ El diseño completo vive en [`PATRON_REC.es.md`](PATRON_REC.es.md). Su estado es
 
 | Documento | Alcance |
 |---|---|
-| `DISENO.es.md` | Arquitectura, decisiones, garantías y deuda. |
+| `DISENO.es.md` | Arquitectura lógica, decisiones, garantías y deuda. |
+| `ARQUITECTURA.es.md` | Arquitectura de plataforma: orquestación, ingesta, persistencia y backend. **Propuesta.** |
 | `PATRON_REC.es.md` | Patrón propuesto y protocolo de investigación. |
 | `app/README.es.md` | Mapa de módulos del producto. |
 | `app/paradigms/README.es.md` | Catálogo y estado de paradigmas. |

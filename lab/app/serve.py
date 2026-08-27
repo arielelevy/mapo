@@ -38,7 +38,10 @@ from .features import FeatureExtractor
 from .llm import LLMClient, Usage
 from .paradigms import COST_PRIORS, FALLBACK, REGISTRY
 from .policy import PolicyBundle
+from .beliefs import Provenance
 from .probe import ProbeResult, probe_coupling
+from .rec import diagnose as rec_diagnose
+from .rules import BeliefPolicy
 from .embeddings import EmbeddingClient
 from .retrieval import CorpusView, build_arms
 from .router import Router
@@ -220,6 +223,23 @@ def answer(
 
     explain = plan.explain()
     probe_record = reading.as_dict() if reading else None
+
+    # REC F3: the counterfactual reading of THIS decision travels with it. Pure CPU,
+    # replayable from the record alone (no model, no corpus): which minimal admitted
+    # belief change would have altered the plan, and what evidence strength it needs.
+    # This is what the offline clause-learning loop consumes — and what an auditor
+    # reads to see whether the decision was belief-sensitive at all.
+    diagnosis_policy = BeliefPolicy(
+        derived_floor=Provenance(
+            plan.assurance.get("profile", {}).get("derived_floor", "observed")
+        ),
+        tau=bundle.tau,
+    )
+    explain["rec_diagnosis"] = rec_diagnose(
+        plan.verdict.get("beliefs", {}).get("beliefs", []),
+        diagnosis_policy,
+        fallback=bundle.fallback,
+    ).as_dict()
 
     if plan.gated:
         gate_usage = Usage()

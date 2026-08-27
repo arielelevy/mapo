@@ -458,6 +458,13 @@ pseudoreplicated trials became 140 cell episodes — and the candidate no longer
 the final block), the verdict is **unchanged: −0.0874**. The refutation is not an
 artifact of pseudoreplication; the missing-axis mechanism dominates.
 
+**The Hebbian weight is selection-redundant (exploratory, free, 2026-08-27).** Selecting
+by learned Hebbian weight, by mean utility, or by win rate produces IDENTICAL choices on
+`gold_transfer` (router value 0.5263 all three): the weight is driven by the same episodes,
+so its argmax coincides. The plasticity that GOVERNS is elsewhere — θ's reinforce/decay and
+the §6.2 assurance ratchet; the weight column is record, not policy, and the operational
+story should stop implying otherwise (handoff Fase 0, item 5).
+
 **What this changes.** The product claim as registered — per-request selection beats the
 best fixed paradigm on an unseen world — is false for θ over these features on this
 world, and the honest headline is the mechanism: **selection without sensing loses to a
