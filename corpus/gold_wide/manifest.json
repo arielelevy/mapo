@@ -1,0 +1,24 @@
+{
+  "generator_version": 2,
+  "seed": 7,
+  "hard": true,
+  "unit_tokens": 0,
+  "people": 400,
+  "per_cell": 2,
+  "widths": [
+    8,
+    32,
+    128,
+    400
+  ],
+  "documents": 543,
+  "tasks": 32,
+  "cells": {
+    "C1_single_verifiable": 2,
+    "C7_irreversible": 4,
+    "C3_coupled_chain": 2,
+    "C2_bulk_independent": 8,
+    "C4_aggregate_full_coverage": 8,
+    "C5_unknown_horizon": 8
+  }
+}

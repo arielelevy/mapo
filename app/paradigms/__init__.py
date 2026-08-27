@@ -1,0 +1,407 @@
+"""The seven paradigms under comparison, over a differentiated tool surface.
+
+Five mirror Select-then-Solve (Direct, CoT, ReAct, Plan-Execute, Reflection). Keeping the
+set comparable to a published grid matters more than having the "best" set: it is what
+lets these numbers be checked against theirs. Two are added: Map-Reduce, which their grid
+omits and which should win on high cardinality; and the DAG with verify-replan over a
+blackboard (`dag.py`), the most elaborate topology available, included so the comparison
+is not stacked in favour of the simple ones.
+
+Each paradigm is deliberately thin. The experiment measures the CONTROL STRUCTURE, so
+every paradigm shares the same tools, the same model, the same decoding and the same
+answer format. Any prompt cleverness that helped one paradigm and not another would be a
+confound, not a result.
+
+The tools come from `app.tools`: four of them, at three granularities, with lexical and
+dense exposed separately alongside the fused entry point. That matters because choosing
+the modality, the granularity, the sequence and the batching IS the topology — and while
+the harness offered one blunt search returning a fixed excerpt, none of those choices
+existed to be measured.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+from ..llm import Completion, LLMClient, Usage
+from ..cognitive import compact_history, manage_history
+from ..tools import ToolFailure, ToolSurface, specs_for
+
+ANSWER_CONTRACT = (
+    "End your reply with a single line of the form:\nANSWER: <answer>\n"
+    "For a set-valued answer, separate items with '; '. Nothing after that line."
+)
+
+
+def parse_answer(text: str) -> str:
+    matches = re.findall(r"^ANSWER:\s*(.+)$", text, flags=re.MULTILINE)
+    # Last wins: a paradigm that revises its answer (Reflection) emits the contract
+    # line more than once, and the final one is the one it stands behind.
+    return matches[-1].strip() if matches else text.strip()
+
+
+@dataclass
+class Result:
+    answer: str
+    usage: Usage
+    transcript: list[dict[str, Any]]
+    iterations: int = 0
+    # The observable trace of the topology: which modality it reached for, whether it
+    # summarised before reading, whether it batched. Two paradigms with the same answer
+    # and the same token count can have used the surface completely differently, and
+    # that difference is the object of study.
+    tool_usage: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def cross_unit_lookups(self) -> int:
+        return max(0, int(self.tool_usage.get("units_read", 0)) - 1)
+
+    @property
+    def hallucinated_units(self) -> int:
+        return int(self.tool_usage.get("hallucinated_units", 0))
+
+
+# -- helpers -------------------------------------------------------------------
+
+
+def _run_tool_loop(
+    client: LLMClient,
+    surface: ToolSurface,
+    messages: list[dict[str, Any]],
+    max_iterations: int,
+) -> tuple[Completion | None, Usage, list[dict[str, Any]], int]:
+    """Shared tool loop. Usage accounting lives on the surface, not here."""
+    usage = Usage()
+    iterations = 0
+    completion = None
+
+    for _ in range(max_iterations):
+        iterations += 1
+        completion = client.complete(
+            messages=messages, tools=specs_for(surface.variant)
+        )
+        usage.merge(completion.usage)
+
+        if not completion.tool_calls:
+            break
+
+        messages.append({
+            "role": "assistant",
+            "content": completion.text or None,
+            "tool_calls": completion.tool_calls,
+        })
+        for call in completion.tool_calls:
+            fn = call["function"]
+            args = json.loads(fn["arguments"] or "{}")
+            try:
+                output = surface.dispatch(fn["name"], args)
+            except ToolFailure as failure:
+                # A tool call the model got wrong returns to it, recoverable, as it
+                # would in a real system. Raising here scored the whole task zero and
+                # conflated "invented one citation" with "got the answer wrong".
+                output = json.dumps({
+                    "error": str(failure),
+                    "hint": "Use only unit ids returned by a search.",
+                })
+            messages.append({
+                "role": "tool",
+                "tool_call_id": call["id"],
+                "content": output,
+            })
+
+        # Compaction happens after the batch of calls, not inside it, so a note written
+        # in this turn can compact a read from the same turn. This is where the cost
+        # saving lives: a tool result stays in history and is resent every subsequent
+        # turn, so text read on turn 2 is paid for again on turn 12.
+        if surface.variant == "cognitive":
+            compact_history(messages, surface.state.noted_units, surface.state)
+        elif surface.variant == "managed":
+            # Unconditional and deterministic: the environment does the bookkeeping the
+            # cognitive arm measured the model will not do voluntarily.
+            manage_history(messages)
+
+    return completion, usage, messages, iterations
+
+
+class Infeasible(Exception):
+    """The material does not fit; no answer was possible at any quality.
+
+    Distinct from a wrong answer on purpose. Above a certain corpus size,
+    read-everything is not expensive — it is unavailable, and reporting that as a
+    quality failure would describe the wrong thing.
+    """
+
+
+def _units_block(surface: ToolSurface) -> str:
+    """Every unit, in full — if the task budget allows it.
+
+    The read-everything paradigms pay for this by construction, and above a size they
+    cannot pay at all. Raising here rather than sending the call is what keeps
+    "could not run" from being recorded as "answered incorrectly".
+    """
+    if not surface.bulk_read_fits():
+        raise Infeasible(
+            f"reading all {len(surface.unit_ids())} units is about "
+            f"{surface.bulk_read_tokens()} tokens against a budget of "
+            f"{surface.budget_tokens}"
+        )
+    return "\n\n".join(f"[{u}]\n{surface.read_one(u)}" for u in surface.unit_ids())
+
+
+def _finish(
+    answer_text: str,
+    usage: Usage,
+    surface: ToolSurface,
+    transcript: list[dict[str, Any]],
+    iterations: int,
+) -> Result:
+    return Result(
+        answer=parse_answer(answer_text),
+        usage=usage,
+        transcript=transcript,
+        iterations=iterations,
+        tool_usage=surface.usage(),
+    )
+
+
+# -- the paradigms -------------------------------------------------------------
+
+
+def direct(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
+    """One call, no tools, no reasoning scaffold."""
+    prompt = (
+        f"{task['question']}\n\n"
+        f"Material:\n{_units_block(surface)}\n\n{ANSWER_CONTRACT}"
+    )
+    completion = client.complete(messages=[{"role": "user", "content": prompt}])
+    return _finish(
+        completion.text, completion.usage, surface,
+        [{"role": "user", "content": prompt}], 1,
+    )
+
+
+def cot(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
+    """One call with an explicit reasoning instruction."""
+    prompt = (
+        f"{task['question']}\n\n"
+        f"Material:\n{_units_block(surface)}\n\n"
+        f"Reason step by step before answering.\n\n{ANSWER_CONTRACT}"
+    )
+    completion = client.complete(messages=[{"role": "user", "content": prompt}])
+    return _finish(
+        completion.text, completion.usage, surface,
+        [{"role": "user", "content": prompt}], 1,
+    )
+
+
+def react(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
+    """Interleaved reasoning and tool use. The fallback paradigm."""
+    messages = [{
+        "role": "user",
+        "content": (
+            f"{task['question']}\n\n"
+            f"There are {len(surface.unit_ids())} units available. Use the search and "
+            f"read tools to gather what you need, then answer.\n\n{ANSWER_CONTRACT}"
+        ),
+    }]
+    completion, usage, transcript, iterations = _run_tool_loop(
+        client, surface, messages, max_iterations=20
+    )
+    return _finish(
+        completion.text if completion else "", usage, surface, transcript, iterations
+    )
+
+
+def map_reduce(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
+    """Extract from every unit independently, then combine. No cross-unit context."""
+    usage = Usage()
+    partials: list[str] = []
+    unit_ids = surface.unit_ids()
+
+    for unit_id in unit_ids:
+        prompt = (
+            f"Task: {task['question']}\n\n"
+            f"Consider ONLY this unit. Report what it contributes, or 'NOTHING'.\n\n"
+            f"[{unit_id}]\n{surface.read_one(unit_id)}"
+        )
+        completion = client.complete(
+            messages=[{"role": "user", "content": prompt}], max_tokens=800
+        )
+        usage.merge(completion.usage)
+        if "NOTHING" not in completion.text.upper():
+            partials.append(f"[{unit_id}] {completion.text.strip()}")
+
+    reduce_prompt = (
+        f"Task: {task['question']}\n\n"
+        f"Per-unit findings:\n" + "\n".join(partials) +
+        f"\n\nCombine them into one answer. De-duplicate.\n\n{ANSWER_CONTRACT}"
+    )
+    final = client.complete(messages=[{"role": "user", "content": reduce_prompt}])
+    usage.merge(final.usage)
+
+    return _finish(
+        final.text, usage, surface,
+        [{"role": "user", "content": reduce_prompt}], len(unit_ids) + 1,
+    )
+
+
+def plan_execute(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
+    """Decompose into sub-questions, answer each with tools, then synthesise."""
+    usage = Usage()
+
+    plan_prompt = (
+        f"Task: {task['question']}\n\n"
+        f"{len(surface.unit_ids())} units are available. Break this into at most 5 "
+        f"independent sub-questions. Return JSON: {{\"sub_questions\": [\"...\"]}}. "
+        f"JSON only."
+    )
+    plan = client.complete(
+        messages=[{"role": "user", "content": plan_prompt}], max_tokens=600
+    )
+    usage.merge(plan.usage)
+
+    try:
+        sub_questions = json.loads(plan.text.strip())["sub_questions"][:5]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        # A malformed plan is a real failure of this paradigm on this task. Recording it
+        # as such is the point; substituting the original question would hide it.
+        sub_questions = []
+
+    findings: list[str] = []
+    for sub in sub_questions:
+        messages = [{
+            "role": "user",
+            "content": f"{sub}\n\nUse the search and read tools to answer concisely.",
+        }]
+        completion, sub_usage, _, _ = _run_tool_loop(
+            client, surface, messages, max_iterations=4
+        )
+        usage.merge(sub_usage)
+        findings.append(f"Q: {sub}\nA: {completion.text if completion else ''}")
+
+    synth_prompt = (
+        f"Task: {task['question']}\n\nSub-findings:\n" + "\n\n".join(findings) +
+        f"\n\n{ANSWER_CONTRACT}"
+    )
+    final = client.complete(messages=[{"role": "user", "content": synth_prompt}])
+    usage.merge(final.usage)
+
+    return _finish(
+        final.text, usage, surface,
+        [{"role": "user", "content": synth_prompt}], len(sub_questions) + 2,
+    )
+
+
+def reflection(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
+    """Answer with tools, critique that answer, then revise once."""
+    usage = Usage()
+
+    messages = [{
+        "role": "user",
+        "content": (
+            f"{task['question']}\n\nUse the search and read tools as needed.\n\n"
+            f"{ANSWER_CONTRACT}"
+        ),
+    }]
+    first, first_usage, transcript, iterations = _run_tool_loop(
+        client, surface, messages, max_iterations=10
+    )
+    usage.merge(first_usage)
+    draft = first.text if first else ""
+
+    critique_prompt = (
+        f"Task: {task['question']}\n\nProposed answer:\n{draft}\n\n"
+        f"List concrete defects: omissions, unsupported claims, wrong scope. "
+        f"If it is correct and complete, reply exactly 'NO DEFECTS'."
+    )
+    critique = client.complete(
+        messages=[{"role": "user", "content": critique_prompt}], max_tokens=800
+    )
+    usage.merge(critique.usage)
+
+    if "NO DEFECTS" in critique.text.upper():
+        return _finish(draft, usage, surface, transcript, iterations + 1)
+
+    revise_messages = transcript + [
+        {"role": "assistant", "content": draft},
+        {
+            "role": "user",
+            "content": (
+                f"A reviewer raised these defects:\n{critique.text}\n\n"
+                f"Address them. You may use the tools again.\n\n{ANSWER_CONTRACT}"
+            ),
+        },
+    ]
+    revised, revise_usage, _, revise_iters = _run_tool_loop(
+        client, surface, revise_messages, max_iterations=8
+    )
+    usage.merge(revise_usage)
+
+    return _finish(
+        revised.text if revised else draft, usage, surface,
+        revise_messages, iterations + revise_iters + 1,
+    )
+
+
+ParadigmFn = Callable[[LLMClient, ToolSurface, dict[str, Any]], Result]
+
+REGISTRY: dict[str, ParadigmFn] = {
+    "direct": direct,
+    "cot": cot,
+    "react": react,
+    "map_reduce": map_reduce,
+    "plan_execute": plan_execute,
+    "reflection": reflection,
+}
+
+# Relative cost priors. Only the ORDER matters: they seed the cascade ladder before any
+# episodes exist, and are superseded by measured mean_cost once theta has data.
+COST_PRIORS: dict[str, float] = {
+    "direct": 1.0,
+    "cot": 1.3,
+    "react": 3.0,
+    "reflection": 5.0,
+    "plan_execute": 6.0,
+    "map_reduce": 8.0,
+}
+
+FALLBACK = "react"
+
+
+# The DAG paradigm is registered from the bottom of this module rather than imported at
+# the top: `dag.py` needs ANSWER_CONTRACT, Result, parse_answer and _run_tool_loop from
+# here, so importing it any earlier is a circular import.
+from .dag import dag_strategy  # noqa: E402
+
+REGISTRY["dag_strategy"] = dag_strategy
+# Costliest by a distance: plan + waves + verify + up to 3 replans + synthesise. The
+# prior puts it last on any cascade ladder, which is where its measured cost belongs.
+COST_PRIORS["dag_strategy"] = 12.0
+
+# The modern paradigms (2026-08-26) live in modern.py for the same circular-import
+# reason as dag.py: they need ANSWER_CONTRACT, Result and _finish from here.
+from .modern import (  # noqa: E402
+    extract_compute, gist_reader, graph_traverse, pointer_chase, rewoo,
+    streaming_scan,
+)
+
+REGISTRY["rewoo"] = rewoo
+REGISTRY["gist_reader"] = gist_reader
+REGISTRY["graph_traverse"] = graph_traverse
+REGISTRY["extract_compute"] = extract_compute
+REGISTRY["streaming_scan"] = streaming_scan
+REGISTRY["pointer_chase"] = pointer_chase
+# rewoo/gist_reader/graph_traverse are cheap by construction (2 LLM calls, no history
+# resend; the graph index is amortised across the corpus). extract_compute and
+# streaming_scan pay the corpus once, in short bounded calls.
+COST_PRIORS["rewoo"] = 2.0
+COST_PRIORS["gist_reader"] = 2.5
+COST_PRIORS["graph_traverse"] = 2.5
+COST_PRIORS["extract_compute"] = 7.0
+COST_PRIORS["streaming_scan"] = 6.0
+# Anchor pick + at most 6 one-unit sensor hops + solve, no history resend: bounded by
+# arithmetic, cheaper than react wherever the chain is short.
+COST_PRIORS["pointer_chase"] = 2.5
