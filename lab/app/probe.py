@@ -108,28 +108,47 @@ def _extract_json(raw: str) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _resolve(references: list[str], scope: list[str], unit_text: str) -> list[str]:
-    """Which of the named references actually point at another unit in scope.
+def _resolve(
+    references: list[str], scope: list[str], unit_text: str, source: str
+) -> list[tuple[str, int]]:
+    """Which named references verify: (target, span offset) pairs, checked by code.
 
-    Two ways to resolve, both by code:
-      - the reference IS a unit id in scope, and not the unit we are holding;
-      - the reference is a literal string that appears in this unit and names an id.
-    A reference that resolves to nothing is dropped: the model may have invented it, and
-    an invented pointer must not raise a provenance.
+    Three conditions, all required — this used to accept any in-scope id even when the
+    unit never mentioned it, which let the model promote its own guess to OBSERVED by
+    naming a unit it knew existed:
+      - the reference is a unit id in scope,
+      - it is NOT the unit being held (a unit pointing at itself is not a dependency),
+      - it appears LITERALLY in the unit's text — the span offset is recorded, so an
+        auditor can find the exact characters the observation rests on.
     """
     in_scope = set(scope)
-    resolved = []
+    resolved: dict[str, int] = {}
     for reference in references:
         if not isinstance(reference, str):
             continue
         candidate = reference.strip()
-        if not candidate:
+        if not candidate or candidate == source or candidate not in in_scope:
             continue
-        if candidate in in_scope and candidate in unit_text:
-            resolved.append(candidate)
-        elif candidate in in_scope:
-            resolved.append(candidate)
-    return sorted(set(resolved))
+        offset = unit_text.find(candidate)
+        if offset < 0:
+            continue
+        if candidate not in resolved:
+            resolved[candidate] = offset
+    return sorted(resolved.items())
+
+
+def _select_unit(surface: Any, task: dict[str, Any], scope: list[str]) -> str:
+    """The unit the probe reads: top of the lexical ranking, or the first in scope."""
+    lexical = getattr(surface, "lexical", None)
+    view = getattr(surface, "view", None)
+    if lexical is not None and view is not None:
+        try:
+            ranked = lexical.rank(view, task.get("question", ""), 1)
+        except Exception:  # noqa: BLE001 — a ranking failure must not kill the probe
+            ranked = []
+        if ranked and ranked[0] in set(scope):
+            return ranked[0]
+    return scope[0]
 
 
 def probe_coupling(
@@ -140,9 +159,10 @@ def probe_coupling(
 ) -> ProbeResult:
     """Read one unit, ask the sensor, verify the answer against the scope.
 
-    The unit is chosen deterministically (the first in the task's own order) so that two
-    runs of the same task probe the same unit: a probe that sampled would make the
-    decision it feeds unreproducible, which is the one thing this layer promises.
+    The unit is chosen by deterministic lexical retrieval over the question (falling
+    back to the first in scope), so two runs of the same task probe the same unit: a
+    probe that sampled would make the decision it feeds unreproducible, which is the
+    one thing this layer promises.
     """
     scope = list(surface.unit_ids())
     if not scope:
@@ -156,7 +176,12 @@ def probe_coupling(
             claimed=[],
         )
 
-    target = unit_id or scope[0]
+    # F2.2: the unit is chosen by DETERMINISTIC retrieval over the question, not by
+    # position. The first unit was a fixed guess; the lexical ranking is free, needs no
+    # network, and is reproducible for a fixed corpus and question — which keeps the
+    # promise that two runs of the same task probe the same unit, while probing the
+    # unit most likely to bear on the question instead of whichever came first.
+    target = unit_id or _select_unit(surface, task, scope)
     unit_text = surface.read_one(target)
 
     completion = client.complete(
@@ -190,7 +215,8 @@ def probe_coupling(
 
     claimed = payload.get("references") or []
     claimed = [r for r in claimed if isinstance(r, str)]
-    resolved = _resolve(claimed, scope, unit_text)
+    resolved_spans = _resolve(claimed, scope, unit_text, source=target)
+    resolved = [name for name, _ in resolved_spans]
 
     if resolved:
         # Verified by code against the scope: the unit names something that is really
@@ -201,8 +227,9 @@ def probe_coupling(
             credence=1.0,
             evidence=(
                 f"unit {target} names {len(resolved)} identifier(s) that resolve to "
-                f"other units in scope ({', '.join(resolved[:3])}): the dependency was "
-                "verified, not asserted"
+                "other units in scope ("
+                + ", ".join(f"{n}@{off}" for n, off in resolved_spans[:3])
+                + "): dependency verified at those literal spans, not asserted"
             ),
             unit_id=target,
             resolved=resolved,

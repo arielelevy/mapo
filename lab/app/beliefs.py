@@ -146,6 +146,23 @@ class Belief:
         }
 
 
+def belief_from_dict(raw: dict[str, Any]) -> Belief:
+    """A Belief back from its recorded form.
+
+    Needed so a request's SECOND decision can start from the history of its first: the
+    plan records the base as dicts, and without this constructor the replan built a
+    fresh base and the ELICITED->OBSERVED story was split across two objects with two
+    digests and no lineage.
+    """
+    return Belief(
+        proposition=str(raw["proposition"]),
+        value=raw.get("value"),
+        credence=float(raw["credence"]),
+        provenance=Provenance(raw["provenance"]),
+        evidence=str(raw.get("evidence", "")),
+    )
+
+
 class BeliefBase:
     """The set of beliefs a decision rests on, plus its own identity.
 
@@ -155,6 +172,14 @@ class BeliefBase:
 
     def __init__(self) -> None:
         self._beliefs: list[Belief] = []
+
+    @classmethod
+    def from_dicts(cls, records: list[dict[str, Any]]) -> "BeliefBase":
+        """Rebuild a base from recorded beliefs, order preserved (it is history)."""
+        base = cls()
+        for raw in records:
+            base.assert_(belief_from_dict(raw))
+        return base
 
     def assert_(self, belief: Belief) -> "BeliefBase":
         self._beliefs.append(belief)
@@ -170,10 +195,16 @@ class BeliefBase:
         overrides a model's assertion even if the model claimed to be more confident,
         which is the correct precedence: evidence beats opinion.
         """
-        candidates = [b for b in self._beliefs if b.proposition == proposition]
+        candidates = [
+            (i, b) for i, b in enumerate(self._beliefs) if b.proposition == proposition
+        ]
         if not candidates:
             return None
-        return max(candidates, key=lambda b: (b.provenance.rank, b.credence))
+        # Recency breaks ties. With equal provenance and equal credence the OLD belief
+        # used to win (max keeps the first), so a re-measurement that produced the same
+        # confidence could never supersede what it re-measured. Position in the
+        # append-only history is the tiebreaker because it IS the order of knowing.
+        return max(candidates, key=lambda ib: (ib[1].provenance.rank, ib[1].credence, ib[0]))[1]
 
     def value(self, proposition: str, default: Any = None) -> Any:
         belief = self.current(proposition)

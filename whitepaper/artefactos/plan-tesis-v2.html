@@ -227,7 +227,7 @@
 
 <header>
   <div class="eyebrow">
-    <span>MAPO</span><span>plan de tesis · v2</span><span>2026-08-27</span><span>tras P15 y revisión adversarial</span>
+    <span>MAPO</span><span>plan de tesis · v2.1</span><span>2026-08-27</span><span>estado vivo — se actualiza con cada avance</span>
   </div>
   <h1>El precio de la solidez</h1>
   <p class="standfirst">El mismo día llegaron dos golpes: el criterio de éxito del proyecto salió refutado en held-out, y una revisión adversarial partió la tesis v1 por el medio. Los dos golpes empujan hacia el mismo lugar — y ese lugar es mejor que donde estábamos.</p>
@@ -257,8 +257,54 @@
   </div>
 </section>
 
+
 <section>
-  <div class="sec-head"><div class="sec-num">02</div><h2>La revisión adversarial: qué mató de la tesis v1</h2></div>
+  <div class="sec-head"><div class="sec-num">02</div><h2>Estado vivo: hecho, en curso, pendiente</h2></div>
+  <div class="sec-body">
+    <p class="lead">Esta sección se actualiza con cada avance. Lo que no está acá abajo como hecho, no está hecho.</p>
+
+    <h3>Hecho (2026-08-27, todo commiteado y con tests en verde)</h3>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Qué</th><th>Detalle</th><th>Commit</th></tr></thead>
+        <tbody>
+          <tr><td>§6.2 implementado</td><td>el piso de garantía aprende de rechazos tipados, viaja en el bundle firmado, guarda de replicación</td><td class="num">1a2d8f5</td></tr>
+          <tr><td>P15 corrida y refutada</td><td>−0,087 neto, mecanismo verificado (el eje ausente), P15d confirmada 26/26</td><td class="num">eef4096</td></tr>
+          <tr><td>La sonda ejecuta</td><td>puntero verificado ⟹ OBSERVED; silencio se queda ELICITED; /decide y /answer replanifican</td><td class="num">cb13959</td></tr>
+          <tr><td>Camino de producto</td><td>Request → decisión → ejecución → EXPLAIN; gated ≠ deferred; POST /answer</td><td class="num">e3b7aa1</td></tr>
+          <tr><td>Handoff REC aceptado</td><td>revisado contra el código (5/5 afirmaciones ciertas); dirección aprobada, no implementada</td><td class="num">82ad9fb</td></tr>
+          <tr><td>Fase 0: validez del aprendizaje</td><td>episodios por celda (no por trial), was_best sobre medias, la candidata no ve el bloque final. <strong>Sensibilidad: P15 no se mueve (−0,0874 idéntico)</strong> — la refutación no era un artefacto</td><td class="num">369edb0</td></tr>
+          <tr><td>REC F1: integridad epistémica</td><td>una sola historia de creencias por request (pre/post sonda en UNA base, digest sobre toda la historia), supersesión por recencia en empates, reconstrucción desde el registro</td><td class="num">hoy</td></tr>
+          <tr><td>REC F2: evidencia</td><td>span literal obligatorio (un id en scope que el texto no contiene NO resuelve; auto-puntero tampoco), unidad elegida por recuperación léxica determinista, costo de sonda en la factura, <strong>fail-closed</strong>: necesidad de sonda sin resolver ⟹ se difiere, jamás se ejecuta el placeholder</td><td class="num">hoy</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Pendiente, en orden</h3>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Qué</th><th>Por qué importa</th><th>Costo</th></tr></thead>
+        <tbody>
+          <tr><td><strong>REC F3: el solver contrafactual</strong></td><td>el corazón de REC: qué cambio mínimo en una creencia habría alterado el plan, y la cláusula acotada de adquisición que lo resuelve</td><td>código + pizarra</td></tr>
+          <tr><td><strong>REC F4: certificado de promoción</strong></td><td>un solo camino de instalación fail-closed que ligue incumbente, candidata, cláusula y medición</td><td>código</td></tr>
+          <tr><td><strong>P16 registrada</strong> (REC F5)</td><td>la réplica limpia de P15 con sensado: selección <em>con</em> la sonda contra el mejor fijo, seed nuevo, predicción antes de gastar</td><td>~10M tokens</td></tr>
+          <tr><td>Brazo logístico</td><td>si θ no le gana a una regresión de 200 parámetros sobre φ, la maquinaria es decoración — implementados ya los dos brazos de prosa</td><td>análisis</td></tr>
+          <tr><td>Retención de contexto</td><td>la variable mediadora: ¿la ventaja topológica sobrevive al control?</td><td>re-análisis, gratis</td></tr>
+          <tr><td>FDR + IC + AURC</td><td>16 predicciones sin control de comparaciones múltiples</td><td>análisis, gratis</td></tr>
+          <tr><td>Semántica del contrato + mis-binding</td><td>sin esto, F6 (contratos) mide algo indefinido; buscar nuestro propio contraejemplo primero</td><td>pizarra</td></tr>
+          <tr><td>Cota nativa del ratchet</td><td>pérdida de cobertura por endurecimiento — reemplaza el préstamo del Teorema 10.1</td><td>pizarra</td></tr>
+          <tr><td>Calibración por proposición cargada al router activo</td><td>hoy se persiste pero los routers se crean sin leerla (handoff 3.7.1)</td><td>código</td></tr>
+          <tr><td>Horizonte con evidencia propia</td><td>coupling y horizonte comparten credencia en algunos caminos (handoff 3.5.9) — y el horizonte es el eje que P15 señaló</td><td>código</td></tr>
+          <tr><td>Corpus natural + segunda familia de modelos</td><td>validez externa real; un segundo generador propio reformula la objeción</td><td>la fase cara</td></tr>
+          <tr><td>Vecinos de REC leídos completos</td><td>EnvProbe, Kintsugi, SHARP, Trace2Policy… antes de usar «primero» en el paper; reabrir el claim de consolidación del GATE</td><td>lectura</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><div class="sec-num">03</div><h2>La revisión adversarial: qué mató de la tesis v1</h2></div>
   <div class="sec-body">
     <p class="lead">La tesis v1 era «generación acotada por procedencia»: para clases contratadas, la alucinación se vuelve imposible de producir. La revisión la partió en cinco ataques, tres letales.</p>
 
@@ -278,7 +324,7 @@
 </section>
 
 <section>
-  <div class="sec-head"><div class="sec-num">03</div><h2>La tesis v2: solidez epistémica, con su precio medido</h2></div>
+  <div class="sec-head"><div class="sec-num">04</div><h2>La tesis v2: solidez epistémica, con su precio medido</h2></div>
   <div class="sec-body">
     <div class="claim">
       <span class="label">La tesis</span>
@@ -330,7 +376,7 @@
 </section>
 
 <section>
-  <div class="sec-head"><div class="sec-num">04</div><h2>El plan v2</h2></div>
+  <div class="sec-head"><div class="sec-num">05</div><h2>El plan v2</h2></div>
   <div class="sec-body">
     <div class="rule-note">REGLA QUE ORDENA TODO: primero corre en el lab, después entra al paper. El producto se construye desde lo que el banco pruebe — y P15 acaba de mostrar por qué ese orden no es negociable: sin él, hoy habría un producto construido sobre un ruteo que pierde.</div>
 
@@ -348,7 +394,7 @@
       <div>
         <h3>Cerrar el ciclo del mecanismo: sensar y re-decidir</h3>
         <p>Exploratorio sobre el mismo corpus (etiquetado así — no es predicción): re-correr el pase de decisión con la sonda aportando coupling y con un eje de horizonte en φ; medir cuánto de los −0,087 recupera. Después, <strong>P16 registrada</strong> en un corpus nuevo (seed nuevo): selección <em>con</em> sensado contra el mejor fijo. Es la réplica limpia de P15 con la variable que el mecanismo señaló.</p>
-        <div class="phase-meta"><span class="chip hot">lo primero</span><span class="chip">sonda ya construida</span><span class="chip">~26 llamadas + corpus nuevo</span></div>
+        <div class="phase-meta"><span class="chip run">en curso</span><span class="chip done">saneamiento hecho (Fase 0 + REC F1–F2)</span><span class="chip">falta: P16 con seed nuevo</span></div>
       </div>
     </div>
 
@@ -409,7 +455,7 @@
 </section>
 
 <section>
-  <div class="sec-head"><div class="sec-num">05</div><h2>Cómo se cae</h2></div>
+  <div class="sec-head"><div class="sec-num">06</div><h2>Cómo se cae</h2></div>
   <div class="sec-body">
     <div class="scroll">
       <table>
@@ -428,7 +474,7 @@
 </section>
 
 <footer>
-  <p>v2, 2026-08-27 — mismo día que el veredicto de P15 (refutada, mecanismo verificado, commit <span class="mono">eef4096</span>) y la revisión adversarial que degradó «generación acotada» de tesis a corolario. Cada fase termina en algo que corre; el paper documenta lo que sobrevivió.</p>
+  <p>v2.1, 2026-08-27 — la sección «Estado vivo» es la fuente de verdad de avance. Mismo día que el veredicto de P15 (refutada, mecanismo verificado, commit <span class="mono">eef4096</span>) y la revisión adversarial que degradó «generación acotada» de tesis a corolario. Cada fase termina en algo que corre; el paper documenta lo que sobrevivió.</p>
 </footer>
 
 </div>

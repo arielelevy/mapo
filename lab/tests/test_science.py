@@ -183,6 +183,46 @@ def check_probe(ok: bool) -> bool:
         provenance=verified.provenance,
         evidence=verified.evidence,
     ))
+
+    # --- F2.2: la unidad se elige por recuperacion, no por posicion
+    class _Lex:
+        def rank(self, view, query, limit):
+            return ["memo-014"]
+
+    class _RankedSurface(_Surface):
+        def __init__(self, units: dict) -> None:
+            super().__init__(units)
+            self.lexical = _Lex()
+            self.view = object()
+
+    ranked = probe_coupling(
+        _Sensor('{"self_contained": true, "references": []}'),
+        _RankedSurface(units), task,
+    )
+    ok &= check("la sonda lee la unidad que la recuperacion senala",
+                ranked.unit_id == "memo-014",
+                "lexico, gratis y determinista - no la primera del scope")
+
+    # --- F2.1: sin span literal no hay observacion
+    ghost = probe_coupling(
+        _Sensor('{"self_contained": false, "references": ["memo-014"]}'),
+        _Surface({"memo-001": "no menciona a nadie", "memo-014": "x"}), task,
+    )
+    ok &= check("un id en scope que el texto NO contiene no se resuelve",
+                ghost.provenance is Provenance.ELICITED and not ghost.resolved,
+                "el modelo puede nombrar una unidad que sabe que existe")
+
+    selfp = probe_coupling(
+        _Sensor('{"self_contained": false, "references": ["memo-001"]}'),
+        _Surface(units), task,
+    )
+    ok &= check("una unidad que se apunta a si misma no es una dependencia",
+                selfp.provenance is Provenance.ELICITED and not selfp.resolved)
+
+    ok &= check("la observacion registra el span literal",
+                "@" in verified.evidence,
+                verified.evidence[verified.evidence.find("("):][:40])
+
     ok &= check("lo observado satisface una regla que exige OBSERVED",
                 base.satisfies("coupling_tight", 0.7, Provenance.OBSERVED),
                 "que es lo que un piso aprendido de 6.2 puede llegar a exigir")
@@ -247,6 +287,46 @@ def check_product_path(ok: bool) -> bool:
     ok &= check("regulated viaja del request a la base de creencias",
                 Request(question="q", documents={"m": "x"}, budget_tokens=1000,
                         regulated=True).as_task()["regulated"] is True)
+    return ok
+
+
+def check_belief_history(ok: bool) -> bool:
+    """REC F1: una sola historia de creencias por solicitud, con supersesion."""
+    from app.beliefs import Belief, BeliefBase, Provenance  # noqa: PLC0415
+
+    print("\n18. La historia de creencias es UNA, y supersede en orden")
+
+    base = BeliefBase()
+    base.assert_(Belief(
+        proposition="coupling_tight", value=False, credence=0.6,
+        provenance=Provenance.ELICITED, evidence="estimated",
+    ))
+    # reconstruccion desde el registro: la historia viaja entre planes
+    rebuilt = BeliefBase.from_dicts(base.as_dict()["beliefs"])
+    ok &= check("la base se reconstruye desde su registro con el MISMO digest",
+                rebuilt.digest() == base.digest())
+
+    rebuilt.assert_(Belief(
+        proposition="coupling_tight", value=True, credence=1.0,
+        provenance=Provenance.OBSERVED, evidence="probe: verified pointer",
+    ))
+    current = rebuilt.current("coupling_tight")
+    ok &= check("lo OBSERVADO supersede a lo estimado en la misma historia",
+                current.provenance is Provenance.OBSERVED and current.value is True)
+    ok &= check("la estimacion superada sigue en el registro",
+                len([b for b in rebuilt.all()
+                     if b.proposition == "coupling_tight"]) == 2,
+                "append-only: el digest cubre la historia entera")
+
+    # empate exacto: gana la re-medicion, no la primera
+    tie = BeliefBase()
+    tie.assert_(Belief(proposition="p", value="vieja", credence=0.6,
+                       provenance=Provenance.ELICITED, evidence="antes"))
+    tie.assert_(Belief(proposition="p", value="nueva", credence=0.6,
+                       provenance=Provenance.ELICITED, evidence="despues"))
+    ok &= check("en empate de procedencia y credencia gana la MAS RECIENTE",
+                tie.value("p") == "nueva",
+                "re-medir con la misma confianza tiene que poder supersede")
     return ok
 
 
@@ -502,6 +582,7 @@ def main() -> int:
 
     ok = check_probe(ok)
     ok = check_product_path(ok)
+    ok = check_belief_history(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

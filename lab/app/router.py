@@ -151,7 +151,11 @@ class Router:
         coupling_provenance: Provenance = Provenance.ELICITED,
         coupling_credence: float = 0.0,
         horizon_unknown: bool | None = None,
+        prior_beliefs: list[dict[str, Any]] | None = None,
     ) -> Plan:
+        """`prior_beliefs` continues a recorded history (a first plan's base) so that a
+        post-probe replan supersedes rather than forgets: one base, one digest lineage,
+        with the ELICITED estimate still on the record under the OBSERVED reading."""
         if not candidates:
             raise ValueError("No candidate paradigms were supplied.")
 
@@ -202,6 +206,9 @@ class Router:
         # it into OBSERVED -- the strictest floor of the four, at the least strict level.
         policy = BeliefPolicy(derived_floor=profile.derived_floor, tau=self._theta.tau)
         best, margin = self.theta_assertions(region, admissible)
+        history = (
+            BeliefBase.from_dicts(prior_beliefs) if prior_beliefs else None
+        )
         base: BeliefBase = sense(
             task,
             policy,
@@ -211,6 +218,7 @@ class Router:
             coupling_provenance=coupling_provenance,
             coupling_credence=coupling_credence,
             horizon_unknown=horizon_unknown,
+            base=history,
         )
 
         verdict: Verdict = standard_rules(policy).decide(base)

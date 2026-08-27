@@ -179,13 +179,15 @@ def answer(
         allow_derived=False,
     )
 
-    def plan_with(coupling=None, provenance=None, credence=0.0):
+    def plan_with(coupling=None, provenance=None, credence=0.0, prior=None):
         kwargs: dict[str, Any] = {}
         if coupling is not None:
             kwargs["coupling"] = coupling
             kwargs["coupling_credence"] = credence
             if provenance is not None:
                 kwargs["coupling_provenance"] = provenance
+        if prior:
+            kwargs["prior_beliefs"] = prior
         return router.plan(
             task=task,
             candidates=sorted(REGISTRY),
@@ -206,7 +208,15 @@ def answer(
         # left — which is the exact failure P15 measured: the vocabulary not seeing
         # what the sensing knew.
         features = replace(features, coupling=reading.coupling)
-        plan = plan_with(reading.coupling, reading.provenance, reading.credence)
+        # ONE history: the replan continues the first plan's belief base, so the
+        # OBSERVED reading supersedes the estimate on the same record instead of
+        # opening a second story with no lineage back to the first.
+        plan = plan_with(
+            reading.coupling,
+            reading.provenance,
+            reading.credence,
+            prior=plan.verdict.get("beliefs", {}).get("beliefs", []),
+        )
 
     explain = plan.explain()
     probe_record = reading.as_dict() if reading else None
@@ -233,6 +243,38 @@ def answer(
             note=(
                 "This request is gated: it declares an irreversible action or a write to "
                 "shared state. The plan is returned for review; nothing was executed."
+            ),
+        )
+
+    if plan.needs_probe:
+        # FAIL-CLOSED. The plan still wants evidence nobody produced — probing was
+        # disabled, or the reading did not reach the floor the rules demand. The
+        # paradigm on the plan is a PLACEHOLDER the probe rule chose as "cheapest to
+        # try after probing"; executing it as if it were a decision would act on
+        # evidence the gate just said is insufficient. Deferring to the fallback is
+        # the honest move, and it is recorded as exactly that.
+        fallback_result = REGISTRY[bundle.fallback](client, surface, task)
+        deferred_usage = Usage()
+        if reading is not None:
+            deferred_usage.merge(
+                Usage(
+                    prompt_tokens=reading.cost_tokens,
+                    completion_tokens=0,
+                    calls=reading.calls,
+                )
+            )
+        deferred_usage.merge(fallback_result.usage)
+        return Answer(
+            outcome="deferred",
+            text=fallback_result.answer,
+            paradigm=bundle.fallback,
+            explain=explain,
+            usage=deferred_usage.as_dict(),
+            probe=probe_record,
+            note=(
+                "the probe requirement was not resolved (probing disabled, or the "
+                "reading stayed below the required provenance floor): the fallback "
+                "ran instead of the plan's placeholder paradigm"
             ),
         )
 

@@ -211,6 +211,7 @@ def sense(
     coupling_provenance: Provenance = Provenance.ELICITED,
     coupling_credence: float = 0.0,
     horizon_unknown: bool | None = None,
+    base: BeliefBase | None = None,
 ) -> BeliefBase:
     """Populate a belief base from a task and whatever else is known.
 
@@ -218,8 +219,13 @@ def sense(
     the payload. The derived ones are asserted only when something actually supports
     them: asserting a belief with credence 0 would let a rule see a proposition that
     nothing backs.
+
+    `base` continues an existing history instead of opening a fresh one: a request
+    that was sensed, probed, and sensed again is ONE epistemic story, and the digest
+    must cover all of it. Supersession comes free from `current()` — an OBSERVED
+    probe result outranks the ELICITED estimate it replaces, and recency breaks ties.
     """
-    base = BeliefBase()
+    base = base if base is not None else BeliefBase()
     units = task.get("unit_ids") or []
     n_units = len(units) if units else 1
 
