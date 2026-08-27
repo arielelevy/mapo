@@ -80,7 +80,7 @@ import copy
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional, TypedDict
+from typing import Any, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langsmith import traceable
@@ -204,9 +204,8 @@ class SearchContext:
     ontology: str = ""  # Index name (e.g. "os_ontology_v1")
     timbr_token: str = ""  # Auth token for Timbr workspace filtering
     username: str = ""  # For Redis cache keying
-    cached_workspaces: Optional[list[str]] = (
-        None  # None=not fetched, []=no filter, [ids]=filter
-    )
+    # None or empty = not established, filter server-side. Non-empty = filter locally.
+    cached_workspaces: list[str] | None = None
     has_fragments: bool = False  # True if index has os_fragment entities (pages).
     doc_labels: dict[str, str] = field(
         default_factory=dict
@@ -253,7 +252,7 @@ async def init_opensearch_tools(
 
     try:
         cached = await cache_get(username, "workspace_filter", ontology)
-        if cached is not None:
+        if cached:
             ctx.cached_workspaces = cached
             logger.info(
                 "init_opensearch_tools: workspace filter from Redis cache (%d ws)",
@@ -311,30 +310,41 @@ def truncate_vectors(obj: object) -> object:
 async def _proxy_search(ctx: SearchContext, raw_payload: bytes) -> Any:
     """Execute msearch via SearchService with workspace filter optimization.
 
-    Handles 3 states of cached_workspaces:
-      None  → not yet fetched → need_workspace_filter=True (Timbr applies filter server-side)
-      []    → fetched, empty → no workspace filter needed
-      [ids] → fetched, has values → apply filter locally before sending to OpenSearch
+    Two states of cached_workspaces:
+      empty/None → filtering happens server-side (need_workspace_filter=True)
+      [ids]      → apply the filter locally before sending to OpenSearch
+
+    There used to be a third: `[]` meaning "fetched, and no filter is needed". That
+    reading turned an ambiguous answer into a permission decision, and cached it.
     """
     if ctx.search_service is None:
         raise RuntimeError("SearchContext.search_service not initialized")
-    has_cache = ctx.cached_workspaces is not None
+    # A cached list only counts when it has entries. See the note on caching below: an
+    # empty list must never be the reason a query goes out unfiltered.
+    has_cache = bool(ctx.cached_workspaces)
 
-    # Parse ndjson payload, inject standard filters (exclude chat entities, require os_entity_uid)
+    # Parse ndjson payload, inject standard filters (exclude chat entities, require
+    # os_entity_uid). FAIL CLOSED: if the payload is not the ndjson shape this expects,
+    # the filters cannot be injected, and the previous code sent the query anyway --
+    # unfiltered, silently, on the path that enforces access scope.
     lines = raw_payload.decode("utf-8").strip().split("\n")
-    if len(lines) >= 2 and len(lines) % 2 == 0:
-        modified = []
-        for i in range(0, len(lines), 2):
-            header = lines[i]
-            query = json.loads(lines[i + 1])
-            # Exclude chat entities (content_type = chat+json) and require os_entity_uid exists
-            apply_standard_search_filters(query)
-            # If we have cached workspace IDs, apply workspace filter locally
-            if has_cache and ctx.cached_workspaces:
-                ctx.search_service.add_workspaces_filter(query, ctx.cached_workspaces)
-            modified.append(header)
-            modified.append(json.dumps(query))
-        raw_payload = ("\n".join(modified) + "\n").encode("utf-8")
+    if len(lines) < 2 or len(lines) % 2 != 0:
+        raise RuntimeError(
+            f"_proxy_search: malformed msearch payload ({len(lines)} lines); refusing "
+            "to send a query whose mandatory filters could not be applied"
+        )
+    modified = []
+    for i in range(0, len(lines), 2):
+        header = lines[i]
+        query = json.loads(lines[i + 1])
+        # Exclude chat entities (content_type = chat+json) and require os_entity_uid
+        apply_standard_search_filters(query)
+        # With cached workspace IDs, apply the workspace filter locally
+        if has_cache:
+            ctx.search_service.add_workspaces_filter(query, ctx.cached_workspaces)
+        modified.append(header)
+        modified.append(json.dumps(query))
+    raw_payload = ("\n".join(modified) + "\n").encode("utf-8")
 
     result = await ctx.search_service.proxy_search(
         ontology=ctx.ontology,
@@ -343,19 +353,31 @@ async def _proxy_search(ctx: SearchContext, raw_payload: bytes) -> Any:
         timbr_token=ctx.timbr_token,
     )
 
-    # After first uncached call, fetch and cache workspace list for future queries
+    # After the first uncached call, fetch the workspace list for future queries.
+    #
+    # An EMPTY result is never cached and never stored. "No workspaces" is ambiguous at
+    # this boundary -- it can mean "this user is scoped to none", or a transient failure
+    # upstream -- and the local optimisation used to read it as "no filter needed" and
+    # keep that reading for the whole TTL. Left unset, the next query goes out with
+    # need_workspace_filter=True and the filtering happens where the answer is known.
     if not has_cache and ctx.username:
         try:
             workspaces = await ctx.search_service.get_filter_workspaces(
                 ctx.ontology, ctx.timbr_token
             )
-            ctx.cached_workspaces = workspaces
-            await cache_set(
-                ctx.username, "workspace_filter", ctx.ontology, value=workspaces
-            )
-            logger.info("_proxy_search: cached %d workspaces", len(workspaces))
+            if workspaces:
+                ctx.cached_workspaces = workspaces
+                await cache_set(
+                    ctx.username, "workspace_filter", ctx.ontology, value=workspaces
+                )
+                logger.info("_proxy_search: cached %d workspaces", len(workspaces))
+            else:
+                logger.info(
+                    "_proxy_search: empty workspace list — not cached, filtering stays "
+                    "server-side"
+                )
         except Exception as e:
-            logger.warning("_proxy_search: workspace cache failed: %s", e)
+            logger.warning("_proxy_search: workspace lookup failed: %s", e)
 
     return result
 
@@ -380,12 +402,14 @@ async def os_search(body: dict, config: RunnableConfig | None) -> dict:
 
     result = await _proxy_search(ctx, payload.encode("utf-8"))
     if result.status_code != 200:
-        raise Exception(f"OpenSearch HTTP {result.status_code}: {result.content[:200]}")
+        raise RuntimeError(
+            f"OpenSearch HTTP {result.status_code}: {result.content[:200]}"
+        )
 
     parsed = json.loads(result.content.decode("utf-8"))
     responses = parsed.get("responses", [])
     if not responses:
-        raise Exception("OpenSearch msearch returned empty responses array")
+        raise RuntimeError("OpenSearch msearch returned empty responses array")
     return responses[0]
 
 
@@ -634,7 +658,7 @@ async def fetch_ner_entities(
 
     Returns {ner_type: [names]} e.g. {"person": ["Chiara Poggi", "Alberto Stasi"], "org": ["Carabinieri"]}.
 
-    NER is populated on os_fragment (per-page) by NiFi. When has_fragments=True,
+    NER is populated on os_fragment (per-page) by the ingestion pipeline. When has_fragments=True,
     os_file is excluded (its NER is just metadata YAML noise).
     Names are title-cased and deduplicated.
 
@@ -837,6 +861,25 @@ async def batch_search_entity_by_label(
         else:
             results[name] = None
     return results
+
+
+async def batch_verify_entity_types(
+    entity_ids: list[str], config: RunnableConfig | None = None
+) -> dict[str, str]:
+    """entity_id → entity_type, for the ids that exist.
+
+    Thin wrapper so callers stop choosing between two return SHAPES with a boolean and
+    casting the result: `include_label` made this function return dict[str, str] or
+    dict[str, dict] depending on an argument, which is two functions wearing one name.
+    """
+    return await batch_verify_entity_ids(entity_ids, config, include_label=False)
+
+
+async def batch_verify_entity_details(
+    entity_ids: list[str], config: RunnableConfig | None = None
+) -> dict[str, dict[str, str]]:
+    """entity_id → {"type": ..., "label": ...}, for the ids that exist."""
+    return await batch_verify_entity_ids(entity_ids, config, include_label=True)
 
 
 async def batch_verify_entity_ids(

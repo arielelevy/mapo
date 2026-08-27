@@ -174,7 +174,7 @@ class Router:
         # First pass: a provisional base, only to derive the assurance floor. The
         # floor depends on COMPUTED beliefs about the request, so a cheap policy is
         # sufficient here and the level it yields cannot be gamed by an estimate.
-        floor_policy = BeliefPolicy(trust_elicited=trustworthy, tau=self._theta.tau)
+        floor_policy = BeliefPolicy.from_trust(trustworthy, self._theta.tau)
         provisional = sense(task, floor_policy)
         decision: AssuranceDecision = resolve(
             provisional, requested=requested, calibration_trustworthy=trustworthy
@@ -189,10 +189,10 @@ class Router:
 
         # Second pass: the real base, built under the resolved profile so the sensors
         # and the rules agree on what provenance counts as known.
-        policy = BeliefPolicy(
-            trust_elicited=profile.derived_floor is Provenance.ELICITED,
-            tau=self._theta.tau,
-        )
+        # The profile's floor is carried through as-is. Projecting it onto a boolean
+        # lost A0: its ASSUMED floor is looser than elicited, and the projection turned
+        # it into OBSERVED -- the strictest floor of the four, at the least strict level.
+        policy = BeliefPolicy(derived_floor=profile.derived_floor, tau=self._theta.tau)
         best, margin = self.theta_assertions(region, admissible)
         base: BeliefBase = sense(
             task,
@@ -310,18 +310,46 @@ class Router:
         for observed in by_task.values():
             any_episode = next(iter(observed.values()))
             task = _task_from_region(any_episode.region)
+            # The region records what coupling was measured; not passing it made every
+            # tight region fall to the probe rule and pick the cheapest candidate, so
+            # the guard was valuing a router that is not the one in production.
+            coupling, credence = _coupling_from_region(any_episode.region)
             plan = self.plan(
                 task=task,
                 candidates=sorted(observed),
                 region=any_episode.region,
                 requested=requested,
+                coupling=coupling,
+                coupling_provenance=Provenance.OBSERVED,
+                coupling_credence=credence,
             )
-            if plan.paradigm not in observed:
-                continue
-            total += observed[plan.paradigm].utility
+            # An unmeasured pick is still a pick. Skipping the task made `counted`
+            # depend on WHICH paradigm each bundle chose, so incumbent and candidate
+            # were averaged over different populations and the guard tilted toward
+            # whichever bundle picked the rarely-run paradigm. Every task enters the
+            # denominator now: an unmeasured pick is scored at what the fallback
+            # actually achieved on that task, and at 0.0 when not even that was run.
+            if plan.paradigm in observed:
+                total += observed[plan.paradigm].utility
+            elif self._fallback in observed:
+                total += observed[self._fallback].utility
             counted += 1
 
         return total / counted if counted else 0.0
+
+
+# Representative mid-bin coupling for each region label. The bins are the router's own
+# (features.region), and the midpoint is the honest reconstruction: the label is all the
+# episode kept. "unknown" stays unmeasured -- credence 0 -- because inventing a value
+# there would assert a belief nothing backs.
+_REGION_COUPLING = {"loose": 0.15, "mixed": 0.5, "tight": 0.85}
+
+
+def _coupling_from_region(region: str) -> tuple[float | None, float]:
+    label = region.split("/")[2]
+    if label not in _REGION_COUPLING:
+        return None, 0.0
+    return _REGION_COUPLING[label], 1.0
 
 
 def _task_from_region(region: str) -> dict[str, Any]:
@@ -331,7 +359,7 @@ def _task_from_region(region: str) -> dict[str, Any]:
     recovers a representative point rather than the original task. Adequate for
     offline valuation, which only ever consults the region.
     """
-    card, oracle, coupling = region.split("/")
+    card, oracle, _coupling = region.split("/")
     n_units = {"single": 1, "few": 4, "many": 32, "bulk": 128}[card]
     return {
         "unit_ids": [f"u{i}" for i in range(n_units)],
@@ -339,5 +367,4 @@ def _task_from_region(region: str) -> dict[str, Any]:
         "irreversible": False,
         "shared_writes": False,
         "budget_tokens": 100_000,
-        "_region_coupling": coupling,
     }

@@ -10,10 +10,12 @@ queries per document regardless of page count:
 So a 1000-page document costs 2 OS queries, not 1000. The fragment texts
 are concatenated in memory and passed to the LLM as a single string.
 
-If the concatenated text exceeds MAX_CHUNKS_PER_LLM_CALL chars, it's split
-into parts and each part gets its own LLM call (parallel).
+If the concatenated text exceeds MAX_CHUNKS_PER_LLM_CALL * 4000 chars (~320K),
+it's split into parts and each part gets its own LLM call (parallel).
 
-Budget: MAX_MAP_REDUCE_LLM_CALLS (20) total documents processed.
+Budget: MAX_MAP_REDUCE_DOCS (20) documents. A split document costs more than one
+call, so this bounds documents read, not calls made. Documents beyond the cap are
+NOT processed and the answer says so — see mr_list_docs.
 """
 
 import logging
@@ -31,7 +33,7 @@ import asyncio as _aio
 from ..tools.opensearch_repository import list_workspace_docs_agg, fetch_entity_content
 from ..config import (
     MAX_CHUNKS_PER_LLM_CALL,
-    MAX_MAP_REDUCE_LLM_CALLS,
+    MAX_MAP_REDUCE_DOCS,
     TEMP_EXTRACT,
     TEMP_FORMAT,
     get_chat_model,
@@ -71,7 +73,7 @@ async def mr_list_docs(state: OrchestratorState, config: RunnableConfig) -> dict
         # Use the doc IDs the user has open (may be os_file or os_fragment IDs)
         docs = [{"doc_id": eid} for eid in context_docs]
         logger.info("mr_list_docs: %d docs from context_doc_ids", len(docs))
-        return {"documents": docs}
+        return _capped(docs, state)
 
     # Only list workspace docs when a single workspace_id is set.
     # Without it, the aggregation would scan the full index unscoped.
@@ -85,7 +87,35 @@ async def mr_list_docs(state: OrchestratorState, config: RunnableConfig) -> dict
     raw = await list_workspace_docs_agg(ws, config)
     docs = [{**d, "doc_id": d["entity_id"]} for d in raw]
     logger.info("mr_list_docs: %d docs from workspace", len(docs))
-    return {"documents": docs}
+    return _capped(docs, state)
+
+
+def _capped(docs: list[dict], state: OrchestratorState) -> dict:
+    """Apply the document budget HERE, where the drop can still be recorded.
+
+    The cap used to live in the fan-out, which returns Sends and cannot write state:
+    documents past the budget vanished with a log line, and the final answer — from the
+    strategy whose entire purpose is exhaustiveness — presented itself as complete over
+    a corpus it had silently halved.
+    """
+    if len(docs) <= MAX_MAP_REDUCE_DOCS:
+        return {"documents": docs}
+    dropped = len(docs) - MAX_MAP_REDUCE_DOCS
+    logger.warning(
+        "mr_list_docs: %d docs exceed the budget of %d — %d NOT processed",
+        len(docs),
+        MAX_MAP_REDUCE_DOCS,
+        dropped,
+    )
+    return {
+        "documents": docs[:MAX_MAP_REDUCE_DOCS],
+        "scope_warnings": list(state.get("scope_warnings", []))
+        + [
+            f"{dropped} of {len(docs)} documents were NOT read (budget is "
+            f"{MAX_MAP_REDUCE_DOCS}). This answer covers only the first "
+            f"{MAX_MAP_REDUCE_DOCS} documents and cannot be treated as exhaustive."
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -94,24 +124,15 @@ async def mr_list_docs(state: OrchestratorState, config: RunnableConfig) -> dict
 
 
 def mr_fan_out(state: OrchestratorState) -> list[Send] | str:
-    """Fan out: one Send per document, capped at MAX_MAP_REDUCE_LLM_CALLS.
+    """Fan out: one Send per document.
 
-    Each doc gets at least 1 LLM call (more if the doc is split into parts).
-    If there are more docs than the budget allows, only the first N are processed.
+    The budget was applied by mr_list_docs, which can record what it dropped; this
+    node only distributes what survived.
     """
     docs = state.get("documents", [])
     if not docs:
         logger.warning("mr_fan_out: no documents — skipping to merge")
         return "mr_merge_and_answer"
-
-    # Cap to budget — each doc costs at least 1 LLM call
-    if len(docs) > MAX_MAP_REDUCE_LLM_CALLS:
-        logger.warning(
-            "mr_fan_out: capping %d docs to %d",
-            len(docs),
-            MAX_MAP_REDUCE_LLM_CALLS,
-        )
-        docs = docs[:MAX_MAP_REDUCE_LLM_CALLS]
 
     domain = state.get("document_domain", "general")
     query_language = state.get("query_language", "English")
@@ -257,16 +278,27 @@ async def mr_process_document(
 
         # Collect successful and relevant summaries, log failures
         summaries = []
+        failed_parts = 0
         for i, result in enumerate(results):
             if isinstance(result, Exception):
+                failed_parts += 1
                 logger.error(
-                    "mr_process_document: %s part %d failed: %s",
+                    "mr_process_document: %s part %d/%d FAILED: %s",
                     doc_id,
                     i + 1,
+                    total_parts,
                     result,
                 )
             elif isinstance(result, tuple) and result[0]:
                 summaries.append(result[1])
+        if failed_parts:
+            # Carried into the extraction itself, so the merge step sees it and the
+            # answer can hedge. Dropping the part and saying nothing produced a
+            # confident answer over a document that was only partly read.
+            summaries.append(
+                f"[INCOMPLETE: {failed_parts} of {total_parts} parts of this document "
+                "could not be processed. Anything absent may be in those parts.]"
+            )
 
     # Combine all part summaries into one extraction for this document
     combined = "\n\n".join(s for s in summaries if s)
@@ -321,13 +353,25 @@ async def mr_merge_and_answer(
     # Build one section per document — non-relevant docs were already skipped
     # in mr_process_document (empty extractions list returned).
     doc_summaries = []
+    tool_context_parts = []
     for ext in extractions:
         ctx = ext.get("context", "")
         src = ext.get("source_document", "")
         if ctx:
             doc_summaries.append(f"### From {src}\n{ctx}")
+            tool_context_parts.append(ctx)
 
     combined = "\n\n".join(doc_summaries)
+    # This strategy was the only one that returned no tool_context, so the downstream
+    # faithfulness check had nothing to check exactly where the answer is assembled
+    # from many documents at once.
+    tool_context = "\n---\n".join(tool_context_parts)[:25000]
+
+    warnings = state.get("scope_warnings", [])
+    if warnings:
+        combined += "\n\n## Coverage warnings (state these in the answer)\n" + "\n".join(
+            f"- {w}" for w in warnings
+        )
 
     # No extractions — nothing relevant found in any document
     if not combined:
@@ -355,4 +399,4 @@ async def mr_merge_and_answer(
         )
     )
 
-    return {"answer": response.content}
+    return {"answer": response.content, "tool_context": tool_context}

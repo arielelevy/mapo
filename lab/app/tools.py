@@ -137,8 +137,8 @@ TOOL_SPECS = [
 ]
 
 
-# The accounting tools. Available only under the `accounting` surface variant, so the two
-# conditions stay comparable.
+# The accounting tools. Available under the variants that include them (`accounting` and,
+# cumulatively, `cognitive`), so the conditions stay comparable.
 ACCOUNTING_TOOL_SPECS = [
     {
         "type": "function",
@@ -173,6 +173,11 @@ ACCOUNTING_TOOL_SPECS = [
 
 
 VARIANTS = ("basic", "accounting", "cognitive", "managed")
+
+# The variants whose tool list includes the accounting tools. `cognitive` is cumulative
+# (see specs_for), so anything gated on "has accounting" must name both or the model is
+# offered a tool that dispatch then refuses.
+ACCOUNTING_VARIANTS = ("accounting", "cognitive")
 
 
 def specs_for(variant: str) -> list[dict[str, Any]]:
@@ -292,7 +297,7 @@ class ToolSurface:
             self.barren_searches = 0
             return ""
         self.barren_searches += 1
-        if self.barren_searches < 3 or self.variant != "accounting":
+        if self.barren_searches < 3 or self.variant not in ACCOUNTING_VARIANTS:
             return ""
         self.stall_warnings += 1
         unread = [u for u in self.view.unit_ids if u not in self.units_read]
@@ -370,8 +375,10 @@ class ToolSurface:
         self.calls[name] = self.calls.get(name, 0) + 1
 
         if name == "coverage":
-            if self.variant != "accounting":
-                raise ValueError("coverage is not available on the basic surface.")
+            if self.variant not in ACCOUNTING_VARIANTS:
+                raise ValueError(
+                    f"coverage is not available on the {self.variant} surface."
+                )
             return json.dumps(self._coverage())
 
         if name in ("note", "notes", "plan", "advance"):

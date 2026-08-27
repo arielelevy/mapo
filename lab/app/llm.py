@@ -281,11 +281,24 @@ class LLMClient:
     def __init__(self, settings: Settings, sealed: bool = False) -> None:
         self._settings = settings
         self._sealed = sealed
-        self._cache_dir: Path = settings.cache_dir
+        # Namespaced by account: a deployment name is not a model identity, and the
+        # keys themselves do not carry the endpoint (see Settings._account_tag).
+        self._cache_dir: Path = settings.cache_dir / settings.account_tag()
         self._url = (
             f"{settings.endpoint}/openai/deployments/{settings.chat_deployment}"
             f"/chat/completions?api-version={settings.api_version}"
         )
+
+    @property
+    def fingerprint(self) -> str:
+        """The decode identity, for anything that memoises model output of its own."""
+        return self._settings.fingerprint()
+
+    @property
+    def cache_root(self) -> Path:
+        """This account's cache namespace. Anything else memoised from model output
+        belongs under here too, for the same reason the completions do."""
+        return self._cache_dir
 
     # -- cache -------------------------------------------------------------
 
@@ -425,6 +438,22 @@ class SeededClient:
     def __init__(self, client: LLMClient, seed: int) -> None:
         self._client = client
         self._seed = seed
+        # Running total for THIS cell. A paradigm builds its own Usage as it goes and
+        # returns it with the answer, so when it raises, the accounting dies with it and
+        # the error row claims the failure was free. Tokens were spent; theta must not
+        # learn that the paradigm "fails cheaply". One wrapper per (task, trial,
+        # paradigm) cell makes this the cell's meter, not a global one.
+        self.spent = Usage()
+
+    # Forwarded, not reimplemented: a paradigm that memoises model output must land in
+    # the same namespace whether it was handed the client or a seeded view of it.
+    @property
+    def fingerprint(self) -> str:
+        return self._client.fingerprint
+
+    @property
+    def cache_root(self) -> Path:
+        return self._client.cache_root
 
     def complete(
         self,
@@ -432,9 +461,11 @@ class SeededClient:
         tools: list[dict[str, Any]] | None = None,
         max_tokens: int | None = None,
     ) -> Completion:
-        return self._client.complete(
+        completion = self._client.complete(
             messages=messages,
             tools=tools,
             max_tokens=max_tokens,
             seed_override=self._seed,
         )
+        self.spent.merge(completion.usage)
+        return completion

@@ -23,7 +23,7 @@ import httpx
 
 from .config import Settings
 from .fsio import write_atomic
-from .llm import request_with_retry
+from .llm import SealedCacheMiss, request_with_retry
 
 
 class EmbeddingClient:
@@ -33,7 +33,11 @@ class EmbeddingClient:
         self._settings = settings
         self._deployment = deployment
         self._sealed = sealed
-        self._dir: Path = settings.cache_dir / "embeddings"
+        # Same namespacing as the chat cache, and by the EMBEDDING endpoint, which is
+        # allowed to be a different account than chat.
+        self._dir: Path = (
+            settings.cache_dir / settings.embedding_account_tag() / "embeddings"
+        )
         self._dir.mkdir(parents=True, exist_ok=True)
         self._url = (
             f"{settings.embedding_endpoint}/openai/deployments/{deployment}"
@@ -68,7 +72,7 @@ class EmbeddingClient:
                 path.unlink(missing_ok=True)
 
         if self._sealed:
-            raise RuntimeError(
+            raise SealedCacheMiss(
                 f"Sealed replay needs embedding {key} which is not cached. "
                 "Run unsealed once to populate it."
             )

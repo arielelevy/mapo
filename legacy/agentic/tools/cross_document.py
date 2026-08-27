@@ -5,7 +5,7 @@ All OpenSearch queries are in opensearch_repository.py.
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
@@ -18,13 +18,13 @@ logger = logging.getLogger(__name__)
 
 
 async def do_find_recurring_names(
-    doc_ids: List[str],
+    doc_ids: list[str],
     config: RunnableConfig | None,
     workspace_id: str = "",
-    extra_names: List[str] | None = None,
-    entity_types: List[str] | None = None,
+    extra_names: list[str] | None = None,
+    entity_types: list[str] | None = None,
     ner_entities: dict | None = None,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Find entity names recurring across multiple documents.
 
     Steps:
@@ -87,7 +87,7 @@ async def do_find_recurring_names(
         return " ".join(sorted(words)) if len(words) == 2 else n.lower()
 
     candidate_norms = {_norm(c): c for c in all_candidates}
-    name_to_docs: Dict[str, set] = {}
+    name_to_docs: dict[str, set] = {}
 
     for hit in ner_hits:
         src = hit.get("_source", {})
@@ -105,7 +105,7 @@ async def do_find_recurring_names(
                     name_to_docs.setdefault(display, set()).add(doc_id)
 
     # Step 5: Return names found in >1 document
-    recurring: List[Dict[str, Any]] = [
+    recurring: list[dict[str, Any]] = [
         {
             "name": name,
             "document_count": len(docs),
@@ -116,7 +116,10 @@ async def do_find_recurring_names(
     ]
 
     recurring.sort(key=lambda x: x["document_count"], reverse=True)
-    recurring = _merge_name_variants(recurring)
+    # No second merge pass: `_norm` already sorts the words of a two-word name, so
+    # "Poggi Chiara" and "Chiara Poggi" collapse to the same key before they are ever
+    # counted. The merge afterwards was a second dedup layer for a case the first one
+    # had already handled, and its own tie-breaking differed.
 
     logger.info(
         "do_find_recurring_names: %d candidates → %d recurring | top: %s",
@@ -125,48 +128,3 @@ async def do_find_recurring_names(
         [(r["name"], r["document_count"]) for r in recurring[:5]],
     )
     return recurring
-
-
-def _merge_name_variants(
-    recurring: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    """Merge reversed name/surname variants (e.g. 'SURNAME NAME' + 'NAME SURNAME').
-
-    If "Poggi Chiara" and "Chiara Poggi" both appear, merge into one entry
-    keeping the first form and combining document lists.
-    """
-    merged: List[Dict[str, Any]] = []
-    consumed: set[int] = set()
-
-    for i, entry in enumerate(recurring):
-        if i in consumed:
-            continue
-        parts = entry["name"].lower().split()
-        if len(parts) != 2:
-            merged.append(entry)
-            continue
-
-        reversed_name = f"{parts[1]} {parts[0]}"
-        match_idx = None
-        for j in range(i + 1, len(recurring)):
-            if j in consumed:
-                continue
-            if recurring[j]["name"].lower() == reversed_name:
-                match_idx = j
-                break
-
-        if match_idx is not None:
-            other = recurring[match_idx]
-            consumed.add(match_idx)
-            all_docs = list(dict.fromkeys(entry["documents"] + other["documents"]))
-            merged.append(
-                {
-                    "name": entry["name"],
-                    "document_count": len(all_docs),
-                    "documents": all_docs,
-                }
-            )
-        else:
-            merged.append(entry)
-
-    return merged

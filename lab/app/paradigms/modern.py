@@ -174,14 +174,24 @@ def gist_reader(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -
 # streaming_scan  <- Chain-of-Agents 2406.02818
 # ---------------------------------------------------------------------------
 
-GRAPH_CACHE_DIR = Path(__file__).resolve().parents[2] / "cache" / "graph"
+# The graph index is MODEL OUTPUT (one extraction call per unit), so it lives under the
+# client's own cache namespace rather than at a path hardcoded relative to this file.
+# Two consequences, both intended: it follows MAPO_CACHE_DIR wherever that points, and an
+# index extracted on one account is never served to a run on another.
+GRAPH_CACHE_SUBDIR = "graph"
 GRAPH_INDEX_MAX_TOKENS = 500
 WALK_DEPTH = 2
 
 
-def _corpus_digest(surface: ToolSurface) -> str:
+def _corpus_digest(surface: ToolSurface, fingerprint: str = "") -> str:
+    """Identity of the index: the corpus it describes AND the decode that produced it.
+
+    The corpus alone was not enough. The index is extracted by the model, so an index
+    built by one model was being served to a run of another -- a silent cross-model
+    contamination in exactly the arm that depends on the index being faithful.
+    """
     key = json.dumps(
-        sorted((u, len(surface.read_one(u))) for u in surface.unit_ids())
+        [fingerprint, sorted((u, len(surface.read_one(u))) for u in surface.unit_ids())]
     ).encode()
     return hashlib.sha256(key).hexdigest()[:16]
 
@@ -196,8 +206,9 @@ def _entity_graph(
     free for every task after — plus the content-addressed LLM cache makes replicate
     runs cheap even when this file is deleted.
     """
-    GRAPH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    path = GRAPH_CACHE_DIR / f"{_corpus_digest(surface)}.json"
+    cache_dir = client.cache_root / GRAPH_CACHE_SUBDIR
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    path = cache_dir / f"{_corpus_digest(surface, client.fingerprint)}.json"
     if path.exists():
         try:
             return json.loads(path.read_text(encoding="utf-8"))

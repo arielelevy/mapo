@@ -69,7 +69,7 @@ async def pre_fetch(
         return update
 
     # No relevant results found — let the strategy know
-    logger.info("pre_fetch: no relevant results found")
+    logger.warning("pre_fetch: no relevant results found")
     await emit_ui_event(config, "No relevant documents found for this query")
     return {"prefetch_results": {}}
 
@@ -95,11 +95,9 @@ def _discover_docs(prefetch_data: dict, update: dict) -> None:
     if has_frags:
         update["has_fragments"] = True
 
-    update["entity_context"] = "\n".join(
-        f"--- [{doc_labels.get(did, did)}](entity:{did}/os_file) ---\n"
-        + "[Discovered via search — use tools to read full content]"
-        for did in discovered
-    )
+    # No entity_context here: _enrich_entity_context runs right after and rebuilds
+    # it from the same results with more detail. This branch used to write one too,
+    # and it was overwritten every single time -- dead work that read as a fallback.
     logger.info(
         "pre_fetch: discovery mode — scoped to %d docs from results",
         len(discovered),
@@ -141,7 +139,7 @@ def _enrich_entity_context(
                 label = label.rsplit(" (page ", 1)[0]
             # For fragments, remove _pageNNN suffix from label
             for suffix in (".pdf", ".tiff", ".jpg", ".png"):
-                if f"_page" in label and label.endswith(suffix):
+                if "_page" in label and label.endswith(suffix):
                     parts = label.rsplit("_page", 1)
                     if len(parts) == 2:
                         label = parts[0] + suffix
@@ -178,7 +176,16 @@ def _enrich_entity_context(
             lines.append(page_info)
 
     if lines:
-        update["entity_context"] = "\n".join(lines)
+        # The hints understand() appended (its key_terms) are carried over rather
+        # than discarded. Rebuilding entity_context from scratch used to delete them
+        # before any strategy saw them: the whole point of extracting search terms
+        # was lost between two nodes.
+        rebuilt = "\n".join(lines)
+        previous = state.get("entity_context", "")
+        marker = "\n\n## Search hints\n"
+        if marker in previous:
+            rebuilt += marker + previous.split(marker, 1)[1]
+        update["entity_context"] = rebuilt
         logger.info(
             "pre_fetch: entity_context rebuilt with %d docs, %d relevant pages",
             len(doc_pages),

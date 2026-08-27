@@ -54,7 +54,11 @@ def score(answer: str, oracle: list[str]) -> float:
     to raise, which meant the exception was swallowed upstream and every paradigm
     scored zero on a task that several would have answered correctly.
     """
-    truth = {normalise(o) for o in oracle}
+    # Only items with normalised CONTENT. An oracle of pure punctuation (";;;") used to
+    # normalise to {""}, and the empty string is a substring of everything: every
+    # single-item answer scored a perfect 1.0 against it. Now it is what it is -- an
+    # empty oracle -- and takes the explicit-emptiness path below.
+    truth = {n for n in (normalise(o) for o in oracle) if n}
     if not truth:
         stated = split_items(answer)
         explicit = {normalise(a) for a in EMPTY_ANSWERS}

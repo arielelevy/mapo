@@ -98,6 +98,28 @@ def _content_tokens(documents: dict[str, str], unit_ids: list[str]) -> int:
     return sum(len(documents[u]) for u in unit_ids) // CHARS_PER_TOKEN
 
 
+# The paradigms whose spend is a DECISION, not a guarantee: they read selectively and
+# cap their own iterations, so `content` is a worst case and pruning on it would discard
+# their only advantage. They are feasible here and bounded at runtime instead.
+WORST_CASE_ONLY = frozenset({"react", "reflection"})
+
+# Every name this layer has arithmetic for. Kept explicit so an unknown one raises
+# instead of falling through the last branch as "feasible".
+KNOWN_PARADIGMS = frozenset({
+    "direct",
+    "cot",
+    "map_reduce",
+    "dag_strategy",
+    "plan_execute",
+    "gist_reader",
+    "rewoo",
+    "pointer_chase",
+    "graph_traverse",
+    "extract_compute",
+    "streaming_scan",
+}) | WORST_CASE_ONLY
+
+
 def check(
     paradigm: str, documents: dict[str, str], task: dict[str, Any]
 ) -> Verdict:
@@ -271,6 +293,15 @@ def check(
     # Saying that plainly is the point. This layer bounds the paradigms whose spend is a
     # guarantee; it does not bound the ones whose spend is a decision, and a check that
     # claimed otherwise would be lying about which risk it retires.
+    if paradigm not in WORST_CASE_ONLY:
+        # A typo used to fall through to "feasible". The whole layer exists to say what
+        # can run and why; answering that about a name it does not know is not an
+        # answer, it is a guess with the shape of one.
+        raise ValueError(
+            f"Unknown paradigm {paradigm!r}: feasibility has no arithmetic for it. "
+            f"Known: {sorted(KNOWN_PARADIGMS)}."
+        )
+
     return Verdict(
         True,
         projected_tokens=content,

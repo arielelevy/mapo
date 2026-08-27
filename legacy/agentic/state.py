@@ -150,6 +150,10 @@ class OrchestratorState(TypedDict):
     verify_retried: bool  # whether verify_answer already triggered a retry
     total_chunks: int  # total chunks across all context docs (from load_context)
     has_fragments: bool  # True if index has os_fragment entities (pages). BM25 skips os_file when True.
+    # Anything that silently narrowed the corpus (a search set that failed to expand, a
+    # document cap that dropped documents). Carried so the answer can say so instead of
+    # looking complete over half the material.
+    scope_warnings: list[str]
 
 
 def format_history_turns(messages: list[BaseMessage], max_messages: int = 6) -> str:
@@ -216,6 +220,11 @@ class SubQueryState(TypedDict):
     document_domain: str
     query_language: str
     history_text: str
+    # Carried into the fan-out: without them the sub-agent's find_recurring_names has
+    # no candidate set and answers "none" to every cross-document question.
+    doc_ner_entities: dict
+    entity_types_filter: list[str]
+    scope_warnings: list[str]
     result: str
 
 
@@ -234,3 +243,6 @@ class DagSubQueryState(TypedDict):
     document_domain: str
     query_language: str
     history_text: str
+    doc_ner_entities: dict
+    entity_types_filter: list[str]
+    scope_warnings: list[str]

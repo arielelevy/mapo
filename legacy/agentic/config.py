@@ -1,7 +1,7 @@
-"""Centralized AI configuration for the AgenticIntel pipeline.
+"""Centralized AI configuration for the execution pipeline.
 
 All knobs (models, thresholds, token budgets, limits) are constants.
-If any need to be configurable, expose them via helm values and settings_definitions.py.
+If any need to be configurable, they are exposed by the deployment layer, not here.
 """
 
 import logging
@@ -48,18 +48,6 @@ def get_request_model(config: RunnableConfig | None) -> str:
     raise RuntimeError(
         "model_name not found in config — ChatService should always set it on the request"
     )
-
-
-def get_mini_model_name(config: RunnableConfig | None) -> str:
-    """Get the mini sibling of the request model, falling back to the request model itself.
-
-    Used for lightweight tasks (classification, planning, formatting) where a
-    smaller model is sufficient.  If the selected model has no mini_model
-    declared in MODEL_INFO the request model is returned unchanged.
-    """
-    model_name = get_request_model(config)
-    info = get_model_info(model_name)
-    return info.get("mini_model", model_name)
 
 
 async def get_chat_model(
@@ -116,12 +104,21 @@ GROUNDING_CONTEXT_CHARS = (
     20000  # max chars for grounding evidence in react_agent refine
 )
 
+# Refine context budget: this share of the model's window, never more than the cap.
+# Both were inline in react_agent, where the adaptive share was computed and then
+# capped to the same constant, so for any window above ~29K tokens it changed nothing.
+REFINE_CONTEXT_SHARE = 0.6
+REFINE_CONTEXT_CAP_CHARS = 70_000
+
 # ---------------------------------------------------------------------------
 # Map-Reduce
 # ---------------------------------------------------------------------------
 
 MAX_CHUNKS_PER_LLM_CALL = 80  # ~4K chars/chunk × 80 ≈ 320K chars ≈ 80K tokens
-MAX_MAP_REDUCE_LLM_CALLS = 20  # global budget: total LLM calls across all docs
+# Cap on DOCUMENTS processed, not on LLM calls: a document that does not fit is split
+# into parts and each part costs its own call, so the call count is >= this number. It
+# was documented as a call budget and applied as a document count.
+MAX_MAP_REDUCE_DOCS = 20
 
 # ---------------------------------------------------------------------------
 # Plan-Execute
@@ -129,8 +126,11 @@ MAX_MAP_REDUCE_LLM_CALLS = 20  # global budget: total LLM calls across all docs
 
 PE_MAX_SUB_QUERIES = 6  # max sub-queries for plan_execute decomposition
 PE_CONTEXT_CHARS = 10000  # entity_context + prefetch per sub-agent
-PE_SUB_ANSWER_CHARS = 5000  # target answer length per sub-agent
-PE_TOOL_CONTEXT_CHARS = 25000  # total tool_context in aggregate
+
+# Shared by every fan-out strategy, so the name no longer says PE_ while dag_strategy
+# imports it too (it did, for both of these).
+SUB_ANSWER_CHARS = 5000  # target answer length per sub-agent
+SYNTHESIS_TOOL_CONTEXT_CHARS = 25000  # total tool_context handed to the merge step
 
 # ---------------------------------------------------------------------------
 # Scratchpad compression
@@ -147,7 +147,11 @@ SCRATCHPAD_MARGIN_CHARS = 1000  # tolerance above target before hard truncation
 
 MAX_AGENT_ITERATIONS = 20  # react_agent main loop
 PE_SUB_AGENT_ITERATIONS = 3  # plan_execute sub-agents: focused sub-query
-PE_CONTEXT_CHAR_LIMIT = 30_000  # ~7.5K tokens — smaller window for sub-agents
+# Same ceilings the DAG sub-agents always had. plan_execute ran with none of them
+# because its loop was a separate copy, not because anyone decided it should.
+PE_MAX_TOTAL_TOOL_CALLS = 12
+PE_AGENT_TIMEOUT = 120
+PE_CONTEXT_GROWTH_LIMIT = 30_000  # growth per iteration before eviction
 PE_KEEP_RECENT_MESSAGES = 4  # sub-agents have fewer iterations
 
 # ---------------------------------------------------------------------------
@@ -162,7 +166,8 @@ DAG_SUB_AGENT_ITERATIONS = 10
 DAG_MAX_SAME_TOOL_CALLS = 10
 DAG_MAX_TOTAL_TOOL_CALLS = 30
 DAG_AGENT_TIMEOUT = 120
-DAG_CONTEXT_CHAR_LIMIT = 30_000
+# GROWTH per iteration before the context guard evicts, not a total size budget.
+DAG_CONTEXT_GROWTH_LIMIT = 30_000
 DAG_KEEP_RECENT_MESSAGES = 4
 DAG_DEP_CONTEXT_CHARS = 3_000
 DAG_MAX_CONCURRENT = 4
@@ -177,6 +182,10 @@ TEMP_AGENT = 0.1
 TEMP_EXTRACT = 0.0
 TEMP_PLAN = 0.1
 TEMP_FORMAT = 0.0
+# HyDE is the one place that wants variety: it invents plausible document text to
+# search WITH, not to answer with. It was hardcoded at the call site, the only
+# temperature in the system that was not declared here.
+TEMP_HYDE = 0.7
 
 # ---------------------------------------------------------------------------
 # Cross-Document

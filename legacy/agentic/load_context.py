@@ -1,4 +1,4 @@
-"""ContextLoader — first node of the AgenticIntel pipeline.
+"""ContextLoader — first node of the execution pipeline.
 
 Transforms the raw ChatRequest into structured OrchestratorState fields:
   - Parses add_entities / add_search_set messages → context_doc_ids
@@ -29,6 +29,19 @@ from .tools.opensearch_repository import (
 
 logger = logging.getLogger(__name__)
 
+
+def _field(obj: object, name: str, default: object = None) -> object:
+    """Read `name` off an object or a dict, whichever this is.
+
+    The request can arrive as typed objects or as plain dicts depending on the caller,
+    and this pair of accesses was written out eight times. Once, named, is the same
+    behaviour with one place to fix.
+    """
+    value = getattr(obj, name, None)
+    if value is None and isinstance(obj, dict):
+        value = obj.get(name)
+    return default if value is None else value
+
 # Matches entity links in assistant responses: [label](entity:uuid/type)
 _ENTITY_LINK_RE = re.compile(r"\]\(entity:([0-9a-f-]+)/(os_file|os_fragment)\)")
 
@@ -37,7 +50,7 @@ _FOLLOWUP_RESPONSE_WINDOW = 2
 
 
 class ContextLoader:
-    """LangGraph node: first step of the agentic_intel pipeline.
+    """LangGraph node: first step of the execution pipeline.
 
     Converts the raw ChatRequest into OrchestratorState fields:
 
@@ -69,15 +82,21 @@ class ContextLoader:
         request = state.get("request")
 
         if request is not None:
-            query, workspace_id, context_docs, followup_doc_ids, messages = (
-                await self._extract_from_request(request, state)
-            )
+            (
+                query,
+                workspace_id,
+                context_docs,
+                followup_doc_ids,
+                messages,
+                scope_warnings,
+            ) = await self._extract_from_request(request, state)
         else:
             query = state.get("query", "")
             workspace_id = state.get("workspace_id", "")
             context_docs = state.get("context_doc_ids", [])
             followup_doc_ids = state.get("followup_doc_ids", [])
             messages = state.get("messages", [])
+            scope_warnings = []
 
         (
             entity_context,
@@ -123,6 +142,7 @@ class ContextLoader:
             "has_fragments": has_fragments,
             "document_languages": document_languages,
             "forced_strategy": forced_strategy,
+            "scope_warnings": scope_warnings,
         }
 
     # ------------------------------------------------------------------
@@ -131,8 +151,9 @@ class ContextLoader:
 
     async def _extract_from_request(
         self, request: ChatRequest, state: OrchestratorState
-    ) -> tuple[str, str, list[str], list[str], list]:
-        """Parse ChatRequest → (query, workspace_id, context_docs, followup_doc_ids, messages)."""
+    ) -> tuple[str, str, list[str], list[str], list, list[str]]:
+        """Parse the request → (query, workspace_id, context_docs, followup_doc_ids,
+        messages, scope_warnings)."""
         query = getattr(request, "prompt", "") or ""
 
         workspace_id = ""
@@ -142,12 +163,7 @@ class ContextLoader:
             # Multiple open workspaces means the user is working across
             # workspaces — picking one arbitrarily would miss relevant docs.
             # Discovery mode in pre_fetch handles the no-scope case.
-            ws = open_ws[0]
-            workspace_id = (
-                getattr(ws, "entity_id", "")
-                if hasattr(ws, "entity_id")
-                else ws.get("entity_id", "")
-            )
+            workspace_id = _field(open_ws[0], "entity_id", "")
 
         context_docs: list[str] = []
         # Search sets keyed by entity_id — add_search_set inserts,
@@ -157,32 +173,20 @@ class ContextLoader:
         messages_raw = getattr(request, "messages", None) or []
 
         for msg in messages_raw:
-            msg_type = getattr(msg, "type", None) or (
-                msg.get("type") if isinstance(msg, dict) else None
-            )
-            content = getattr(msg, "content", None) or (
-                msg.get("content") if isinstance(msg, dict) else None
-            )
+            msg_type = _field(msg, "type")
+            content = _field(msg, "content")
 
             if msg_type == "add_entities":
                 if isinstance(content, list):
                     for entity in content:
-                        eid = (
-                            entity.get("entity_id", "")
-                            if isinstance(entity, dict)
-                            else getattr(entity, "entity_id", "")
-                        )
+                        eid = _field(entity, "entity_id", "")
                         if eid:
                             context_docs.append(eid)
 
             elif msg_type == "remove_entities":
                 if isinstance(content, list):
                     for entity in content:
-                        eid = (
-                            entity.get("entity_id", "")
-                            if isinstance(entity, dict)
-                            else getattr(entity, "entity_id", "")
-                        )
+                        eid = _field(entity, "entity_id", "")
                         if eid:
                             # Remove from explicit docs
                             context_docs = [d for d in context_docs if d != eid]
@@ -191,26 +195,22 @@ class ContextLoader:
 
             elif msg_type == "remove_search_set":
                 if content is not None:
-                    if isinstance(content, dict):
-                        ss_id = content.get("entity_id", "")
-                    else:
-                        ss_id = getattr(content, "entity_id", "")
+                    ss_id = _field(content, "entity_id", "")
                     if ss_id:
                         active_search_sets.pop(ss_id, None)
 
             elif msg_type == "add_search_set":
                 if content is not None:
-                    if isinstance(content, dict):
-                        ss_query = content.get("query", {})
-                        ss_label = content.get("entity_label", "")
-                        ss_id = content.get("entity_id", "")
-                    else:
-                        ss_query = getattr(content, "query", {})
-                        ss_label = getattr(content, "entity_label", "")
-                        ss_id = getattr(content, "entity_id", "")
+                    ss_query = _field(content, "query", {})
+                    ss_label = _field(content, "entity_label", "")
+                    ss_id = _field(content, "entity_id", "")
                     if ss_query:
                         active_search_sets[ss_id or ss_label] = (ss_query, ss_label)
 
+        # Anything that silently shrinks the corpus is collected here and travels with
+        # the state. A partial corpus that looks complete is the failure mode this
+        # whole layer exists to avoid.
+        scope_warnings: list[str] = []
         if active_search_sets:
             ontology = getattr(request, "ontology", "") or ""
             timbr_token = getattr(request, "timbr_token", "") or ""
@@ -226,18 +226,24 @@ class ContextLoader:
                         ss_label,
                         len(expanded_ids),
                     )
-                    context_docs = list(set(context_docs + expanded_ids))
+                    # dict.fromkeys, not set(): a set of strings iterates in an
+                    # order that depends on the per-process hash seed, and this order
+                    # reaches entity_context, which reaches the prompt. Two identical
+                    # runs must not build two different prompts.
+                    context_docs = list(dict.fromkeys(context_docs + expanded_ids))
                 except Exception as e:
-                    logger.warning(
-                        "load_context: failed to expand search set '%s': %s",
+                    logger.error(
+                        "load_context: failed to expand search set '%s': %s — "
+                        "the answer will be built over a REDUCED corpus",
                         ss_label,
                         e,
                     )
+                    scope_warnings.append(
+                        f"search set '{ss_label}' could not be expanded: its documents "
+                        "are NOT in scope for this answer"
+                    )
 
-        msg_types = [
-            getattr(m, "type", None) or (m.get("type") if isinstance(m, dict) else None)
-            for m in messages_raw
-        ]
+        msg_types = [_field(m, "type") for m in messages_raw]
         logger.info(
             "load_context: %d messages, types=%s, %d context_docs, %d search_sets",
             len(messages_raw),
@@ -251,12 +257,8 @@ class ContextLoader:
         messages = []
         assistant_contents: list[str] = []
         for msg in messages_raw:
-            msg_role = getattr(msg, "role", None) or (
-                msg.get("role") if isinstance(msg, dict) else None
-            )
-            msg_content = getattr(msg, "content", None) or (
-                msg.get("content") if isinstance(msg, dict) else None
-            )
+            msg_role = _field(msg, "role")
+            msg_content = _field(msg, "content")
             if isinstance(msg_content, str) and msg_content:
                 if msg_role == "user":
                     messages.append(HumanMessage(content=msg_content))
@@ -276,7 +278,14 @@ class ContextLoader:
                 len(followup_doc_ids),
             )
 
-        return query, workspace_id, context_docs, followup_doc_ids, messages
+        return (
+            query,
+            workspace_id,
+            context_docs,
+            followup_doc_ids,
+            messages,
+            scope_warnings,
+        )
 
     # ------------------------------------------------------------------
     # Build document context
@@ -319,7 +328,7 @@ class ContextLoader:
 
         if context_docs:
             doc_metadata, doc_labels, document_languages = (
-                await build_document_metadata(context_docs, query, config)
+                await build_document_metadata(context_docs, config)
             )
             get_search_context(config).doc_labels = doc_labels
             parts = [

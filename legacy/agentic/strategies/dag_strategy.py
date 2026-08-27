@@ -12,18 +12,18 @@ Examples: "extract ALL people connected to X", "how many victims named Y",
 "who are the most contacted individuals".
 """
 
-import asyncio
 import logging
 from collections import defaultdict
 
 from langchain_core.callbacks import adispatch_custom_event
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Send
 from pydantic import BaseModel, Field
 
 from ..blackboard import Blackboard
 from ..context_guard import ContextGuard
+from ..tool_loop import ToolLoopLimits, run_tool_loop
 from ..config import (
     DAG_MAX_SUB_QUESTIONS,
     DAG_MAX_REPLAN_ITERATIONS,
@@ -33,16 +33,16 @@ from ..config import (
     DAG_MAX_SAME_TOOL_CALLS,
     DAG_MAX_TOTAL_TOOL_CALLS,
     DAG_AGENT_TIMEOUT,
-    DAG_CONTEXT_CHAR_LIMIT,
+    DAG_CONTEXT_GROWTH_LIMIT,
     DAG_KEEP_RECENT_MESSAGES,
     DAG_DEP_CONTEXT_CHARS,
     DAG_MAX_CONCURRENT,
     DAG_HIERARCHICAL_THRESHOLD,
-    PE_SUB_ANSWER_CHARS,
+    SUB_ANSWER_CHARS,
+    SYNTHESIS_TOOL_CONTEXT_CHARS,
     TEMP_PLAN,
     TEMP_AGENT,
     TEMP_EXTRACT,
-    TEMP_FORMAT,
     SCRATCHPAD_THRESHOLD_CHARS,
     SCRATCHPAD_INPUT_CHARS,
     SCRATCHPAD_TARGET_CHARS,
@@ -59,6 +59,13 @@ from ..agent_config import (
     SCRATCHPAD_EXTRACT_PROMPT,
 )
 from ..utils import build_aggregate_messages, scratchpad_compress
+from .planning import planner_context
+from .synthesis import (
+    append_coverage,
+    append_scope_warnings,
+    build_sections,
+    final_answer,
+)
 from ..tools.agent_tools import build_agent_tools
 from ..state import (
     DagExtraction,
@@ -201,6 +208,11 @@ def _build_sub_state(
         "document_domain": state.get("document_domain", "general"),
         "query_language": state.get("query_language", "English"),
         "history_text": state.get("history_text", ""),
+        # Carried into the fan-out so the sub-agents' find_recurring_names has a
+        # candidate set instead of silently answering "none".
+        "doc_ner_entities": state.get("doc_ner_entities", {}),
+        "entity_types_filter": state.get("entity_types_filter", []),
+        "scope_warnings": state.get("scope_warnings", []),
     }
 
 
@@ -213,27 +225,8 @@ async def dag_plan(
     state: OrchestratorState, config: RunnableConfig | None = None
 ) -> dict:
     """Decompose the user's query into a DAG of sub-questions."""
-    import re as _re
-
     llm = await get_chat_model(config, temperature=TEMP_PLAN, mini=True)
     llm = llm.with_structured_output(DagPlan)
-
-    entity_context = state.get("entity_context", "")
-    doc_labels = (
-        _re.findall(r"--- \[(.+?)\] ---", entity_context) if entity_context else []
-    )
-    docs_info = (
-        "\nAvailable documents:\n" + "\n".join(f"- {lbl}" for lbl in doc_labels)
-        if doc_labels
-        else ""
-    )
-
-    domain = state.get("document_domain", "general")
-    domain_hint = ""
-    if domain != "general":
-        domain_extra = DOMAIN_INSTRUCTIONS.get(domain, "")
-        if domain_extra:
-            domain_hint = f"\n\nDocument domain: {domain}{domain_extra}"
 
     result: DagPlan = await llm.ainvoke(  # type: ignore[assignment]
         [
@@ -243,7 +236,7 @@ async def dag_plan(
                 )
             ),
             HumanMessage(
-                content=f"{docs_info}{domain_hint}\n\nQuery: {state['query']}"
+                content=f"{planner_context(state)}\n\nQuery: {state['query']}"
             ),
         ]
     )
@@ -271,7 +264,11 @@ async def dag_plan(
         cfgable["dag_blackboard"] = board
         wave_sizes = [len(g) for g in wave_groups.values()]
         max_wave_size = max(wave_sizes) if wave_sizes else 1
-        cfgable["dag_char_limit"] = DAG_CONTEXT_CHAR_LIMIT // max(max_wave_size, 1)
+        # A GROWTH threshold, which is what ContextGuard takes: how much the context
+        # may grow in one iteration before a tool result is evicted. It used to be the
+        # per-agent share of a context SIZE budget, handed to a parameter that measures
+        # something else — two different quantities under one name.
+        cfgable["dag_growth_limit"] = DAG_CONTEXT_GROWTH_LIMIT // max(max_wave_size, 1)
 
     logger.info(
         "dag_plan: %d sub-questions, %d waves, blackboard seeded",
@@ -372,7 +369,13 @@ async def dag_execute(
         config.get("configurable", {}).get("dag_blackboard") if config else None
     )
     tools = await build_agent_tools(
-        ws, suite, ctx_docs or None, config=config, investigation_queue=board
+        ws,
+        suite,
+        ctx_docs or None,
+        config=config,
+        investigation_queue=board,
+        ner_entities=state.get("doc_ner_entities", {}),
+        entity_types=state.get("entity_types_filter", []),
     )
     llm_with_tools = llm.bind_tools(tools)
 
@@ -397,7 +400,7 @@ async def dag_execute(
     if domain_extra:
         system_prompt += domain_extra
     system_prompt += (
-        f"\n\nSTRICT LIMIT: answer MUST be under {PE_SUB_ANSWER_CHARS} characters. "
+        f"\n\nSTRICT LIMIT: answer MUST be under {SUB_ANSWER_CHARS} characters. "
         "Only include facts. No filler."
         "\nCITATIONS: use **bold document names** for every fact."
         f"\nLANGUAGE: answer in {query_language}."
@@ -443,134 +446,57 @@ async def dag_execute(
         )
 
     # Context guard
-    char_limit = (
-        config.get("configurable", {}).get("dag_char_limit", DAG_CONTEXT_CHAR_LIMIT)
+    growth_limit = (
+        config.get("configurable", {}).get(
+            "dag_growth_limit", DAG_CONTEXT_GROWTH_LIMIT
+        )
         if config
-        else DAG_CONTEXT_CHAR_LIMIT
+        else DAG_CONTEXT_GROWTH_LIMIT
     )
     guard = ContextGuard(
-        growth_threshold=char_limit, keep_recent=DAG_KEEP_RECENT_MESSAGES
+        growth_threshold=growth_limit, keep_recent=DAG_KEEP_RECENT_MESSAGES
     )
 
-    # Tool-calling loop with safety limits
-    response = None
-    total_tool_calls = 0
-    same_tool_count = 0
-    last_tool_name = ""
+    # One loop, shared with react_agent and plan_execute (see agentic/tool_loop.py).
+    # The limits below are what actually distinguishes a DAG sub-agent: bounded wall
+    # time because a wave waits for its slowest member, and hard ceilings on tool use
+    # because nobody is watching a sub-agent in a fan-out.
+    loop_result = await run_tool_loop(
+        llm_with_tools,
+        tools,
+        messages,
+        extract_fn=_extract_relevant,
+        limits=ToolLoopLimits(
+            max_iterations=DAG_SUB_AGENT_ITERATIONS,
+            max_total_calls=DAG_MAX_TOTAL_TOOL_CALLS,
+            max_same_tool_calls=DAG_MAX_SAME_TOOL_CALLS,
+            timeout_seconds=DAG_AGENT_TIMEOUT,
+            emit_progress=False,
+        ),
+        config=config,
+        board=board,
+        guard=guard,
+        query=sub_question,
+        label=f"dag_execute[{sq_id}]",
+    )
+    response = loop_result.response
 
-    async def _run_loop() -> None:
-        nonlocal response, total_tool_calls, same_tool_count, last_tool_name
-
-        for iteration in range(DAG_SUB_AGENT_ITERATIONS):
-            if board and board.total_count > 0:
-                board.inject_into_messages(messages)
-
-            if guard.needs_eviction(messages):
-                await guard.evict(messages, board, config, query=sub_question)
-
-            response = await llm_with_tools.ainvoke(messages)
-            messages.append(response)
-
-            if not response.tool_calls:
-                logger.info(
-                    "dag_execute[%s] iter=%d no tool calls, finishing",
-                    sq_id,
-                    iteration,
-                )
-                break
-
-            for tool_call in response.tool_calls:
-                tool_fn = next((t for t in tools if t.name == tool_call["name"]), None)
-                tool_call_id: str = tool_call.get("id") or ""
-
-                # Safety limits
-                total_tool_calls += 1
-                if total_tool_calls > DAG_MAX_TOTAL_TOOL_CALLS:
-                    logger.warning(
-                        "dag_execute[%s] hit total tool call limit (%d)",
-                        sq_id,
-                        DAG_MAX_TOTAL_TOOL_CALLS,
-                    )
-                    messages.append(
-                        ToolMessage(
-                            content="Tool call limit reached. Write your answer now.",
-                            tool_call_id=tool_call_id,
-                        )
-                    )
-                    return
-
-                if tool_call["name"] == last_tool_name:
-                    same_tool_count += 1
-                else:
-                    same_tool_count = 1
-                    last_tool_name = tool_call["name"]
-
-                if same_tool_count > DAG_MAX_SAME_TOOL_CALLS:
-                    logger.warning(
-                        "dag_execute[%s] hit same-tool limit for %s",
-                        sq_id,
-                        tool_call["name"],
-                    )
-                    messages.append(
-                        ToolMessage(
-                            content=f"You've called {tool_call['name']} too many times. Try a different tool or write your answer.",
-                            tool_call_id=tool_call_id,
-                        )
-                    )
-                    continue
-
-                if not tool_fn:
-                    messages.append(
-                        ToolMessage(
-                            content=f"Error: unknown tool '{tool_call['name']}'",
-                            tool_call_id=tool_call_id,
-                        )
-                    )
-                    continue
-
-                logger.info(
-                    "dag_execute[%s] tool=%s args=%s",
-                    sq_id,
-                    tool_call["name"],
-                    str(tool_call.get("args", {}))[:100],
-                )
-
-                try:
-                    raw_result = str(await tool_fn.ainvoke(tool_call["args"]))
-                except Exception as e:
-                    logger.error(
-                        "dag_execute: tool %s failed: %s",
-                        tool_call["name"],
-                        e,
-                        exc_info=True,
-                    )
-                    messages.append(
-                        ToolMessage(
-                            content=f"Error: tool '{tool_call['name']}' failed: {e}",
-                            tool_call_id=tool_call_id,
-                        )
-                    )
-                    continue
-
-                extracted = await _extract_relevant(
-                    tool_call["name"], tool_call.get("args", {}), raw_result
-                )
-                messages.append(
-                    ToolMessage(content=extracted, tool_call_id=tool_call_id)
-                )
-
-    # Run with timeout
-    try:
-        await asyncio.wait_for(_run_loop(), timeout=DAG_AGENT_TIMEOUT)
-    except asyncio.TimeoutError:
-        logger.warning("dag_execute[%s] timed out after %ds", sq_id, DAG_AGENT_TIMEOUT)
-
-    answer = response.content if response else ""
+    answer = loop_result.answer
     if not answer:
         logger.warning(
-            "dag_execute[%s] returned EMPTY — tool_calls=%d, iterations used up",
+            "dag_execute[%s] returned EMPTY — stopped_by=%s after %d tool calls",
             sq_id,
-            total_tool_calls,
+            loop_result.stopped_by,
+            loop_result.tool_calls,
+        )
+    if loop_result.exhausted:
+        # The result carries the fact that it was cut short. dag_verify scores
+        # completeness, and "incomplete because the agent was stopped" is a different
+        # claim from "incomplete because the documents do not say" -- they used to be
+        # indistinguishable downstream.
+        answer = (
+            f"{answer}\n\n[TRUNCATED: this sub-answer stopped early "
+            f"({loop_result.stopped_by}) and may be incomplete.]"
         )
     logger.info("dag_execute: '%s' → %d chars", sq_id, len(answer))
 
@@ -646,25 +572,17 @@ async def dag_verify(
     sub_questions = dag.get("sub_questions", [])
     results_by_id = {e["id"]: e["result"] for e in extractions}
 
-    # Heuristic pre-check: skip LLM verify if all results look complete
-    all_long = all(len(r) > 1500 for r in results_by_id.values())
-    if all_long and results_by_id:
-        logger.info(
-            "dag_verify: heuristic pass — all results > 1500 chars, skipping LLM verify"
-        )
-        verification: list[VerificationDict] = [
-            {
-                "sub_question_id": sq["id"],
-                "status": "complete",
-                "completeness_score": 1.0,
-                "missing_aspects": [],
-                "contradictions": [],
-                "recommendation": "accept",
-            }
-            for sq in sub_questions
-            if sq["id"] in results_by_id
-        ]
-        return {"dag": {"verification": verification}}
+    # No heuristic pass. There used to be one: if every sub-answer was longer than 1500
+    # characters, all of them were scored complete=1.0 and accepted without any check.
+    # Length is not completeness — a long wrong answer passed and a short right one did
+    # not — and it skipped verification exactly on the queries that produce the most
+    # text, which are the ones most likely to have missed something. Verification is the
+    # entire point of this strategy; it is not the place to save a call.
+    #
+    # What IS skippable is verifying nothing: with no results there is nothing to score.
+    if not results_by_id:
+        logger.warning("dag_verify: no sub-results to verify")
+        return {"dag": {"verification": []}}
 
     # LLM verification
     llm = await get_chat_model(config, temperature=0, mini=True)
@@ -777,10 +695,15 @@ async def dag_replan(
             "dag_replan: diminishing returns (delta=%.3f), stopping",
             avg_score - prev_verification,
         )
+        # `iteration` jumps to the ceiling instead of advancing by one. Incrementing
+        # sent the graph back through wave-routing and dag_verify with an unchanged set
+        # of results: the verifier was called again on identical input, one or two more
+        # times, until the iteration cap happened to be reached. Deciding to stop and
+        # then paying for two more verifications is not stopping.
         return {
             "dag": {
                 "sub_questions": sub_questions,
-                "iteration": iteration + 1,
+                "iteration": DAG_MAX_REPLAN_ITERATIONS,
                 "prev_verification_avg": avg_score,
             }
         }
@@ -858,7 +781,7 @@ async def dag_replan(
         return {
             "dag": {
                 "sub_questions": sub_questions,
-                "iteration": iteration + 1,
+                "iteration": DAG_MAX_REPLAN_ITERATIONS,
                 "prev_verification_avg": avg_score,
             }
         }
@@ -904,17 +827,17 @@ async def dag_synthesize(
     sub_questions = dag.get("sub_questions", [])
     sq_by_id = {sq["id"]: sq for sq in sub_questions}
 
-    sub_results = []
-    tool_context_parts = []
+    items = []
     for ext in extractions:
         sq = sq_by_id.get(ext["id"], {})
         label = sq.get("question", ext["id"]) if sq else ext["id"]
-        ctx = ext.get("result", "")[: int(PE_SUB_ANSWER_CHARS * 1.2)]
-        sub_results.append(f"### {label}\n{ctx}")
-        tool_context_parts.append(ctx)
-
-    combined = "\n\n".join(sub_results)
-    tool_context = "\n---\n".join(tool_context_parts)[:25000]
+        items.append((label, ext.get("result", "")))
+    combined, tool_context = build_sections(
+        items,
+        per_item_chars=int(SUB_ANSWER_CHARS * 1.2),
+        tool_context_chars=SYNTHESIS_TOOL_CONTEXT_CHARS,
+    )
+    sub_results = combined.split("\n\n") if combined else []
 
     # Hierarchical synthesis for large result sets
     if len(combined) > DAG_HIERARCHICAL_THRESHOLD and len(sub_results) > 4:
@@ -935,33 +858,23 @@ async def dag_synthesize(
             summaries.append(summary.content)
         combined = "\n\n".join(summaries)
 
-    # Append blackboard coverage
+    # Coverage, not the operating record (see synthesis.append_coverage).
     board: Blackboard | None = (
         config.get("configurable", {}).get("dag_blackboard") if config else None
     )
-    if board and board.total_count > 0:
-        combined += "\n\n" + board.render()
-        logger.info(
-            "dag_synthesize: blackboard %d/%d done",
-            board.done_count,
-            board.total_count,
-        )
+    combined = append_coverage(combined, board)
+    combined = append_scope_warnings(combined, state)
 
-    # Final synthesis
-    llm = await get_chat_model(
-        config, temperature=TEMP_FORMAT, streaming=True, mini=False
-    )
-    response = await llm.ainvoke(
-        build_aggregate_messages(
-            DAG_SYNTHESIZE_PROMPT
-            + "\n\n"
-            + OUTPUT_FORMAT_PROMPT.format(
-                query_language=state.get("query_language", "English")
-            ),
-            state["query"],
-            state,
-            context=combined,
-        )
+    response = await final_answer(
+        DAG_SYNTHESIZE_PROMPT
+        + "\n\n"
+        + OUTPUT_FORMAT_PROMPT.format(
+            query_language=state.get("query_language", "English")
+        ),
+        state["query"],
+        state,
+        combined,
+        config,
     )
 
     logger.info(

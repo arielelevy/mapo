@@ -297,7 +297,7 @@ def main() -> int:
     llm_src = (ROOT / "app" / "llm.py").read_text(encoding="utf-8")
     emb_src = (ROOT / "app" / "embeddings.py").read_text(encoding="utf-8")
     defs = len(_re.findall(r"def request_with_retry", llm_src + emb_src))
-    imported = "from .llm import request_with_retry" in emb_src
+    imported = bool(_re.search(r"from \.llm import .*request_with_retry", emb_src))
     own_loop = bool(_re.search(r"for attempt in range|attempt \+= 1", emb_src))
     ok &= check("un solo bucle de reintento en los dos clientes",
                 defs == 1 and imported and not own_loop,

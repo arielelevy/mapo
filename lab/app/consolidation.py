@@ -483,10 +483,17 @@ def sleep_cycle(
         )
 
     # ---- promotion, on data the search never touched
-    holdout = [
-        e for e in episodes
-        if e.task_id in (final_ids if final_ids else {e.task_id for e in episodes})
-    ]
+    # With fewer than 6 tasks there is no `final` block. Falling back to the whole
+    # record scored the candidate on the very episodes that shaped it, so the guard
+    # could not fail -- and a guard that cannot fail is not one. With no holdout the
+    # promotion is skipped explicitly (`promote` refuses on an empty one and records
+    # why), the same way abstraction is skipped in that regime.
+    if not final_ids:
+        report.notes.append(
+            "no held-out split (fewer than 6 tasks): promotion is skipped rather than "
+            "evaluated on the data that trained the candidate, so the incumbent stands"
+        )
+    holdout = [e for e in episodes if e.task_id in final_ids]
     verdict = promote_fn(incumbent, candidate, holdout)
     report.promotion = verdict.as_dict()
     report.candidate_version = candidate.version

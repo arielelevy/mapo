@@ -21,16 +21,23 @@ Deuda actual conocida: el piso de garantía que aprende de estadísticas de rech
 
 ## Orden de prioridad: EL PRODUCTO PRIMERO, EL PAPER DESPUÉS
 
-1. **El producto es el motor MAPO** y tiene dos mitades (ver `engine/README.md`):
-   - **`engine/agentic/`** — capa de EJECUCIÓN (LangGraph): estrategias dag/react/
-     map_reduce/plan_execute, blackboard, semantic_search RRF, tools. Código propio del
-     autor, reusado; el sistema del que proviene NO se menciona en ningún lado.
-   - **`lab/app/`** — capa de DECISIÓN determinística (factibilidad aritmética →
-     creencias con procedencia → dial A0–A3 → ruteo selectivo con abstención → EXPLAIN),
-     que REEMPLAZA al clasificador LLM en prosa de `engine/agentic/understand.py`.
-   `lab/` además es el banco de medición (sin framework, por diseño — no meter
-   LangGraph ahí). Ante cualquier decisión de diseño, pensar primero cómo mejora al
-   producto; el paper viene después.
+1. **El producto es el motor MAPO, y todavía no existe como tal.** Se construye a
+   partir de lo que el banco pruebe, no antes (decisión del autor, 2026-08-27).
+   - **`lab/app/`** — hoy contiene DOS cosas que no son lo mismo y que se separan
+     cuando se arranque el producto: la **capa de decisión** (factibilidad aritmética
+     → creencias con procedencia → dial A0–A3 → ruteo selectivo con abstención →
+     EXPLAIN) más los 13 paradigmas, que SON producto; y el **banco de medición**
+     (runner, grading, metrics, corpus, tests, scripts `_*.py`), que NO lo es.
+   - **`legacy/agentic/`** — capa de ejecución anterior (LangGraph), **CONGELADA**.
+     No es el producto y no se evoluciona. Se conserva como referencia de lo único
+     que resolvió y el banco nunca tuvo que modelar: búsqueda sobre índice real,
+     scoping por permisos, citas verificadas contra el índice, streaming. El sistema
+     del que proviene NO se menciona en ningún lado.
+   - **La regla que evita que se vuelvan a mezclar**: el banco importa al producto;
+     el producto no sabe que el banco existe.
+   El banco es **sin framework, por diseño** — no meter LangGraph ni Temporal ahí:
+   mide paradigmas en proceso, y si el ejecutor necesitara un runtime para correr,
+   dejaría de medir lo que producción ejecuta.
 2. **El paper documenta y valida el producto**, no al revés. Vive en `whitepaper/`
    (`paper-en.md` canónico, `paper-es.md` espejo — toda edición va a los DOS).
    `GATE.md` manda sobre qué se puede afirmar; `PLAN.md` es arqueología, no tesis.
@@ -69,7 +76,20 @@ paradigma es el caso medido primero, no el alcance del producto.
 
 ## Decisiones vigentes (actualizado 2026-08-27)
 
-- **MAPO es este repo en `D:\Apps\MAPO`** (whitepaper + engine + lab juntos),
+- **`engine/` → `legacy/` (2026-08-27)**: no es el producto. Primero se sigue en `lab/`
+  midiendo patrones y validando; el producto se arranca cuando ese registro esté
+  maduro. Antes de congelarlo se le hizo revisión a mano completa (26 módulos) y se
+  aplicaron ~50 arreglos — está documentado en `legacy/README.md`, que es lo que hay
+  que leer antes de portar cualquier pieza.
+- **Temporal (2026-08-27, decidido en principio)**: sí para la **ingesta** — workflow
+  por colección, fan-out de activities por unidad en task queues, idempotencia por
+  hash de contenido, reintentos declarados, y `VerifyIndex` antes de `Promote` con la
+  misma disciplina que la promoción de θ. En el **plano de query** queda como
+  envoltorio opcional, no como requisito. **La capa de decisión NUNCA depende de
+  Temporal**, y los paradigmas siguen siendo funciones async planas: es lo que
+  mantiene al banco midiendo exactamente lo que producción ejecuta.
+
+- **MAPO es este repo en `D:\Apps\MAPO`** (whitepaper + lab + legacy juntos),
   remote `origin` = github.com/arielelevy/mapo (PRIVADO), rama `main`, con las dos
   historias fusionadas (la del lab y la del paper). El repo viejo de la marca
   anterior queda archivado FUERA, con su v1. NO hacer push sin confirmación.

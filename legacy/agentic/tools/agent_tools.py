@@ -40,12 +40,17 @@ from ..config import MAX_CROSS_DOC_TERMS
 logger = logging.getLogger(__name__)
 
 
-# TODO(NER): list_all_entities_by_type tool removed — NER quality from NiFi is
-# too poor to be useful (false positives: "egualmente"→person, "famiglia"→loc).
+# TODO(NER): list_all_entities_by_type tool removed — NER quality from the ingestion
+# pipeline is too poor to be useful (false positives: "egualmente"→person, "famiglia"→loc).
 # The LLM fallback was a reimplementation of map_reduce. Instead, understand_query
 # should route "list all X" queries to map_reduce strategy which reads each doc
 # and extracts entities with full document context.
-# When NiFi NER improves, re-add this tool reading from the NER index directly.
+# When ingestion-side NER improves, re-add this tool reading from the NER index.
+
+
+# A batch read is capped here, and the cap is the number the tool description promises.
+# It used to promise 10 and process 5, discarding the rest without a word.
+MAX_BATCH_READ = 10
 
 
 async def build_agent_tools(
@@ -55,11 +60,20 @@ async def build_agent_tools(
     key_terms: list[str] | None = None,
     config: RunnableConfig | None = None,
     investigation_queue: Blackboard | None = None,
+    ner_entities: dict | None = None,
+    entity_types: list[str] | None = None,
 ) -> list:
-    """Build all agent tools with scope hardcoded in closures."""
+    """Build all agent tools with scope hardcoded in closures.
+
+    `ner_entities` is not optional in practice: it is the candidate set
+    find_recurring_names works from, and without it that tool has nothing to look for
+    and answers "no recurring names" to every question.
+    """
     _ws = workspace_id
     _ctx_docs = context_doc_ids or []
     _key_terms = key_terms or []
+    _ner_entities = ner_entities or {}
+    _entity_types = entity_types or []
     _cfg = config
     _board = investigation_queue
     _read_fragments: set[str] = set()
@@ -262,16 +276,21 @@ async def build_agent_tools(
             )
         _executed_reads.add(read_key)
         ids = [fid.strip() for fid in fragment_ids.split(",") if fid.strip()]
+        over_batch = ids[MAX_BATCH_READ:]
+        ids = ids[:MAX_BATCH_READ]
 
         results = []
-        skipped = 0
-        for fid in ids[:5]:
-            # Only allow reading fragments found by search tools
-            if _board and not _board.has_entity(fid) and fid not in _read_fragments:
-                skipped += 1
-                continue
+        already_read: list[str] = []
+        not_discovered: list[str] = []
+        for fid in ids:
             if fid in _read_fragments:
-                skipped += 1
+                already_read.append(fid)
+                continue
+            # Only fragments surfaced by a search tool can be read: an id the model
+            # invented is refused. Refused is NOT the same as already read, and saying
+            # "already read" made the agent stop looking for content it had never seen.
+            if _board and not _board.has_entity(fid):
+                not_discovered.append(fid)
                 continue
             _read_fragments.add(fid)
             result = await fetch_fragment_content(fid, _cfg, neighbor_pages=0)
@@ -286,20 +305,32 @@ async def build_agent_tools(
                 _board.mark_fragment_read(parent_id or fid, fid, label=label)
             results.append(result)
 
-        if not results and skipped > 0:
-            return json.dumps(
-                {
-                    "already_read": True,
-                    "skipped": skipped,
-                    "next_step": (
-                        "All requested fragments already read. "
-                        "Use semantic_search with a DIFFERENT query to find new content."
-                    ),
-                }
+        report: dict = {}
+        if already_read:
+            report["already_read"] = already_read
+        if not_discovered:
+            report["not_discovered"] = not_discovered
+            report["not_discovered_note"] = (
+                "These ids were never surfaced by a search, so they were NOT read and "
+                "their content is unknown. Search for them before reading."
             )
-        if len(results) == 1:
+        if over_batch:
+            report["not_attempted"] = over_batch
+            report["not_attempted_note"] = (
+                f"Only {MAX_BATCH_READ} ids are read per call. Call again for the rest."
+            )
+
+        if not results:
+            report["next_step"] = (
+                "Nothing new was read. Use semantic_search or full_text_search to "
+                "surface the content you need."
+            )
+            return json.dumps(report)
+        if len(results) == 1 and not report:
             return json.dumps(results[0])
-        return json.dumps({"fragments_read": len(results), "results": results})
+        report["fragments_read"] = len(results)
+        report["results"] = results
+        return json.dumps(report)
 
     @lc_tool(
         description=(
@@ -349,11 +380,33 @@ async def build_agent_tools(
         ids = _ctx_docs or await get_unique_doc_ids(_ws, _cfg)
         if not ids:
             return json.dumps({"error": "No documents found"})
-        results = await do_find_recurring_names(ids, _cfg)
+        if not _ner_entities:
+            # An empty candidate set is not an empty ANSWER. This used to return
+            # {"recurring_names": []}, which reads as "there are none" -- a tool that
+            # could not run reporting a finding it never made.
+            return json.dumps(
+                {
+                    "error": "No NER index available for these documents",
+                    "next_step": (
+                        "This tool cannot run here. Use full_text_search with the "
+                        "candidate names, or read the documents and compare."
+                    ),
+                }
+            )
+        results = await do_find_recurring_names(
+            ids,
+            _cfg,
+            workspace_id=_ws,
+            entity_types=_entity_types or None,
+            ner_entities=_ner_entities,
+        )
         return json.dumps(
             {
                 "recurring_names": results,
                 "documents_analyzed": len(ids),
+                "candidates_considered": sum(
+                    len(v) for v in _ner_entities.values() if isinstance(v, list)
+                ),
                 "total_recurring": len(results),
             }
         )
@@ -393,16 +446,25 @@ async def build_agent_tools(
 
     @lc_tool(
         description=(
-            "Note an important discovery or flag something to check later. "
-            "Use sparingly — only for key findings or new leads, not every tool result."
+            "Record what you FOUND (default), or flag a lead you still need to CHECK "
+            "(is_lead=true). Use sparingly: key findings and real leads only, not "
+            "every tool result."
         )
     )
-    async def investigate(note: str) -> str:
-        """Record a finding or lead on the blackboard."""
+    async def investigate(note: str, is_lead: bool = False) -> str:
+        """Record a finding, or open a lead, on the blackboard.
+
+        These used to be one call, and every note opened a pending item: recording what
+        you already knew made the board look LESS complete, drove the coverage
+        percentage down and triggered more nudging. Noting a finding now closes
+        knowledge instead of opening work.
+        """
         if _board is None:
             return json.dumps({"ok": False, "note": "No blackboard active"})
         _board.add_finding(note)
-        return _board.add_lead(note)
+        if is_lead:
+            return _board.add_lead(note)
+        return json.dumps({"ok": True, "recorded": note[:120]})
 
     @lc_tool(
         description=(
@@ -414,7 +476,7 @@ async def build_agent_tools(
             "sum/mean/min/max for numeric columns. These stats cover most needs "
             "(counts per category come from value_counts).\n"
             "The optional `query` argument is a pandas .query() boolean filter "
-            "expression — NOT arbitrary Python. It selects rows; the tool then "
+            "expression over the columns. It selects rows; the tool then "
             "returns the filtered sample + query_matched_rows (use this for "
             "counts). Column names with spaces must be wrapped in backticks.\n"
             "Examples:\n"
@@ -462,8 +524,24 @@ async def build_agent_tools(
                 }
         result["column_stats"] = col_stats
 
-        # Run custom filter if provided (pandas query syntax, safe subset — no arbitrary code)
+        # Run the filter if provided.
+        #
+        # `pandas.query` is NOT a sandbox, and this comment used to claim it was. It
+        # parses an expression the MODEL wrote: `@name` reaches into the caller's
+        # locals, and attribute access opens the object graph. Both are rejected here
+        # rather than relied upon not to appear -- an expression that needs them is not
+        # a row filter.
         if query:
+            rejected = [
+                token for token in ("@", "__", "import", "lambda") if token in query
+            ]
+            if rejected:
+                result["query_error"] = (
+                    f"Expression rejected: it contains {rejected}. `query` takes a "
+                    "boolean row filter over the columns, e.g. \"amount > 1000 and "
+                    "currency == 'EUR'\"."
+                )
+                return json.dumps(result, default=str)
             try:
                 filtered = df.query(query)
                 result["query_result"] = json.loads(
@@ -474,6 +552,7 @@ async def build_agent_tools(
                 result["query_error"] = (
                     f"{exc}. Use pandas .query() syntax, e.g. \"col > 5 and name == 'foo'\"."
                 )
+
 
         return json.dumps(result, default=str)
 

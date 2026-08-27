@@ -1,6 +1,5 @@
 """Query understanding: follow-up resolution, NER, rewrite, strategy classification."""
 
-import asyncio as _aio
 import logging
 from typing import Literal
 
@@ -8,7 +7,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
-from .agent_config import RESOLVE_FOLLOWUP_PROMPT, UNDERSTAND_PROMPT
+from .agent_config import (
+    QUERY_SHAPE_LANGUAGE_RULE,
+    RESOLVE_FOLLOWUP_PROMPT,
+    UNDERSTAND_PROMPT,
+)
 from .config import (
     TEMP_CLASSIFY,
     get_chat_model,
@@ -33,9 +36,22 @@ STRATEGY_LABELS = {
 # ---------------------------------------------------------------------------
 
 
-class FollowupResult(BaseModel):
-    """Structured output for follow-up resolution — classification only, no rewriting."""
+class QueryShape(BaseModel):
+    """Everything that can be decided from the query and the history alone.
 
+    Language detection and follow-up classification were two separate mini calls that
+    saw the same material and neither of which saw any document. Merging them keeps the
+    property that justified the isolation — no contamination from the document
+    languages — and costs one call instead of two on every single request.
+    """
+
+    query_language: str = Field(
+        default="English",
+        description=(
+            "Language of the user's query, by sentence structure, ignoring proper "
+            "nouns. E.g. English, Spanish, Italian."
+        ),
+    )
     followup_type: Literal["standalone", "drill_down", "expansive"] = Field(
         default="standalone",
         description=(
@@ -138,14 +154,13 @@ class UnderstandResult(BaseModel):
             "in 1-2 docs ('what is the victim's name')."
         ),
     )
-    strategy: Literal[
-        "react_agent",
-        "map_reduce",
-        "plan_execute",
-        "conversational",
-    ] = Field(
+    strategy: Literal["react_agent", "conversational"] = Field(
         default="react_agent",
-        description="Best strategy for this query (used only for conversational detection)",
+        description=(
+            "conversational for greetings, thanks and small talk; react_agent for "
+            "everything else. This field ONLY separates chat from work — the actual "
+            "strategy is decided from needs_decomposition and complexity."
+        ),
     )
     reasoning: str = Field(
         default="",
@@ -161,12 +176,12 @@ class UnderstandResult(BaseModel):
 class QueryUnderstanding:
     """LangGraph node: analyse the user query before strategy execution.
 
-    Two-step process using lightweight (mini) LLM calls:
+    Two lightweight (mini) LLM calls:
 
-    1. **Follow-up classification** (_resolve_followup):
-       - Classifies whether the query is standalone, drill_down, or expansive.
+    1. **Query shape** (_query_shape):
+       - Language of the query, and whether it is standalone, drill_down or expansive.
        - Does NOT rewrite the query — keeps the original language intact.
-       - Sets followup_type so downstream nodes can scope searches correctly.
+       - Sees the query and the history only, never document content.
 
     2. **Strategy classification** (_classify):
        - Uses structured output (UnderstandResult) to produce in a single call:
@@ -174,7 +189,11 @@ class QueryUnderstanding:
          query_language, and the chosen strategy.
        - For follow-ups, includes chat history so rewritten_query can resolve
          pronouns/references while preserving the original query language.
-       - Guards: map_reduce on scopes >10 000 chunks or >20 docs falls back to plan_execute.
+       - No strategy guards: the ones that used to be described here were commented
+         out, and the comment claimed they were inactive because "strategy is always
+         react_agent" — which stopped being true when dag and the exhaustive variant
+         were added. The scope caps they described now live where they can be enforced
+         and recorded (map_reduce applies its own document budget).
 
     State fields produced:
         strategy, rewritten_query, router_reasoning, document_domain,
@@ -194,8 +213,11 @@ class QueryUnderstanding:
         entity_context = state.get("entity_context", "")
         followup_doc_ids = state.get("followup_doc_ids", [])
 
-        # Forced strategy override (from ChatRequest.strategy) — bypass LLM classification.
-        # Unknown values fall back to react_agent rather than crashing downstream.
+        # Forced strategy override — bypasses the CLASSIFIER, and only the classifier.
+        # It used to return here with history_relevant=False and history_text="", so
+        # forcing a strategy also silently switched off follow-up resolution: pronouns
+        # stopped resolving and drill-down scoping stopped narrowing, for a flag that
+        # says nothing about either.
         forced = (state.get("forced_strategy") or "").strip()
         if forced and forced not in STRATEGY_LABELS:
             logger.warning(
@@ -205,6 +227,8 @@ class QueryUnderstanding:
             forced = "react_agent"
         if forced:
             logger.info("understand: forced_strategy=%s (bypassing classifier)", forced)
+            shape = await self._query_shape(query, messages, followup_doc_ids, config)
+            history_relevant = shape.followup_type != "standalone"
             label = STRATEGY_LABELS.get(forced, forced)
             await emit_ui_event(config, label)
             return {
@@ -215,17 +239,18 @@ class QueryUnderstanding:
                 "entity_types_filter": [],
                 "document_domain": "general",
                 "complexity": "moderate",
-                "history_relevant": False,
-                "followup_type": "standalone",
-                "query_language": "English",
-                "history_text": "",
+                "history_relevant": history_relevant,
+                "followup_type": shape.followup_type,
+                "query_language": shape.query_language,
+                "history_text": (
+                    format_history_turns(messages) if history_relevant else ""
+                ),
             }
 
-        # Step 1: Detect query language + classify follow-up type (parallel, no doc context)
-        query_language, followup_type = await _aio.gather(
-            self._detect_language(query, config),
-            self._resolve_followup(query, messages, followup_doc_ids, config),
-        )
+        # Step 1: language + follow-up type, in ONE call (no document context)
+        shape = await self._query_shape(query, messages, followup_doc_ids, config)
+        query_language = shape.query_language
+        followup_type = shape.followup_type
         history_relevant = followup_type != "standalone"
         history_text = format_history_turns(messages) if history_relevant else ""
 
@@ -253,32 +278,13 @@ class QueryUnderstanding:
             strategy = "react_agent"
             reasoning = f"react_agent ({result.complexity}, {result.reasoning})"
 
-        # Strategy guards — currently inactive since strategy is always react_agent.
-        # Kept for reference if specialized strategies are re-enabled.
-        # total_chunks = state.get("total_chunks", 0)
-        # workspace_id = state.get("workspace_id", "")
-        # followup_docs = state.get("followup_doc_ids", [])
-        # if (
-        #     not context_docs and not workspace_id and not followup_docs
-        #     and strategy in ("map_reduce", "plan_execute")
-        # ):
-        #     strategy = "react_agent"
-        # elif strategy == "map_reduce" and total_chunks > 10000:
-        #     strategy = "plan_execute"
-        # effective_docs = (
-        #     state.get("followup_doc_ids", []) if followup_type == "drill_down"
-        #     else context_docs
-        # )
-        # if strategy == "map_reduce" and len(effective_docs) > MAX_MAP_REDUCE_LLM_CALLS:
-        #     strategy = "plan_execute"
-
         # Follow-up emit
         if history_relevant:
             label = (
                 f"Drill-down: {len(followup_doc_ids)} referenced documents"
                 if followup_type == "drill_down" and followup_doc_ids
                 else (
-                    f"Expansive follow-up: searching all documents"
+                    "Expansive follow-up: searching all documents"
                     if followup_type == "expansive"
                     else "Follow-up"
                 )
@@ -341,95 +347,64 @@ class QueryUnderstanding:
         }
 
     # ------------------------------------------------------------------
-    # Language detection — isolated from doc context to avoid contamination
+    # Step 1: query shape — language + follow-up, isolated from document context
     # ------------------------------------------------------------------
 
-    @staticmethod
-    async def _detect_language(query: str, config: RunnableConfig | None) -> str:
-        """Detect the language of the user's query via a tiny LLM call.
-
-        Runs with ONLY the query text — no document context, no entity names.
-        This prevents the LLM from being confused by Italian/Hebrew/etc doc content.
-        """
-        try:
-            llm = await get_chat_model(
-                config,
-                temperature=0,
-                mini=True,
-            )
-            response = await llm.ainvoke(
-                [
-                    SystemMessage(
-                        content=(
-                            "What language is the user writing in? "
-                            "Ignore proper nouns, entity names, and foreign words — "
-                            "detect the language of the SENTENCE STRUCTURE, not the names. "
-                            "Reply with ONLY the language name (e.g. English, Spanish, Italian)."
-                        )
-                    ),
-                    HumanMessage(content=query),
-                ]
-            )
-            detected = str(response.content).strip().strip(".")
-            logger.debug("_detect_language: '%s' → %s", query[:50], detected)
-            return detected
-        except Exception as e:
-            logger.error("_detect_language failed: %s", e, exc_info=True)
-            return "English"
-
-    # ------------------------------------------------------------------
-    # Step 1: Follow-up resolution
-    # ------------------------------------------------------------------
-
-    async def _resolve_followup(
+    async def _query_shape(
         self,
         query: str,
         messages: list,
         followup_doc_ids: list[str],
         config: RunnableConfig | None,
-    ) -> str:
-        """Classify if query is a follow-up. Does NOT rewrite the query.
+    ) -> QueryShape:
+        """Language and follow-up type in one call.
 
-        Returns followup_type: "standalone" | "drill_down" | "expansive"
-        The query stays untouched — _classify handles rewriting for retrieval.
+        Runs on the query and the history only — no document context, no entity names —
+        which is what keeps the language of the DOCUMENTS from being reported as the
+        language of the QUESTION.
         """
-        if not messages:
-            return "standalone"
-
-        history_text = format_history_turns(messages, max_messages=4)
-
+        history_text = (
+            format_history_turns(messages, max_messages=4) if messages else ""
+        )
         doc_hint = ""
-        if followup_doc_ids:
+        if followup_doc_ids and messages:
             doc_hint = "\n\nDocument IDs from prior responses:\n" + "\n".join(
                 followup_doc_ids
             )
 
         try:
-            resolve_llm = await get_chat_model(
-                config,
-                temperature=0,
-                mini=True,
+            llm = await get_chat_model(config, temperature=0, mini=True)
+            llm = llm.with_structured_output(QueryShape)
+            content = (
+                f"History:\n{history_text}{doc_hint}\n\nQuery: {query}"
+                if history_text
+                else f"Query: {query}"
             )
-            resolve_llm = resolve_llm.with_structured_output(FollowupResult)
-            result: FollowupResult = await resolve_llm.ainvoke(  # type: ignore[assignment]
+            result: QueryShape = await llm.ainvoke(  # type: ignore[assignment]
                 [
-                    SystemMessage(content=RESOLVE_FOLLOWUP_PROMPT),
-                    HumanMessage(
-                        content=f"History:\n{history_text}{doc_hint}\n\nQuery: {query}"
+                    SystemMessage(
+                        content=RESOLVE_FOLLOWUP_PROMPT + QUERY_SHAPE_LANGUAGE_RULE
                     ),
+                    HumanMessage(content=content),
                 ]
             )
-
-            followup_type = result.followup_type
+            if not messages:
+                # With no history there is nothing to follow up on, whatever the model
+                # says: the classification is only meaningful against a prior turn.
+                result.followup_type = "standalone"
+            result.query_language = (
+                str(result.query_language).strip().strip(".") or "English"
+            )
             logger.debug(
-                "understand_query: followup_type=%s for '%s'",
-                followup_type,
+                "understand_query: shape=%s/%s for '%s'",
+                result.query_language,
+                result.followup_type,
                 query[:50],
             )
-            return followup_type
+            return result
         except Exception as e:
-            logger.error("_resolve_followup failed: %s", e, exc_info=True)
-            return "standalone"
+            logger.error("_query_shape failed: %s", e, exc_info=True)
+            return QueryShape()
 
     # ------------------------------------------------------------------
     # Step 2: Classification

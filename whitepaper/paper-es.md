@@ -669,9 +669,8 @@ respondió mal.
 > (README del harness). Sets de tareas emparejados sobre `gold_v2` (en ventana, ~18k
 > tokens) y `gold_deep` (fuera de ventana, ~483k), `repeat = 3`, estabilidad por celda.
 > 126 + 158 filas válidas. Dos celdas pesadas fuera de ventana (`react`/`reflection`/
-> `dag` en c2-w48 y c5-w48) perdieron réplicas por rate limits del proveedor, quedaron
-> registradas como fallos de infraestructura, excluidas de toda cifra, y se están
-> re-corriendo; sus medias llevan menos trials y van marcadas †.
+> `dag` en c2-w48 y c5-w48) perdieron réplicas y se están re-corriendo; sus medias se
+> apoyan en menos trials que el resto y van marcadas †.
 
 Primero el barrido de factibilidad, porque no cuesta nada: a 135k tokens la aritmética
 poda leer-todo en 12 de 32 tareas; a 483k en **24 de 26**; a 1,27M en 24 de 32 — y a esa

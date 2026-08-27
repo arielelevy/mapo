@@ -117,7 +117,7 @@ Una extracción que diga "says nothing about X, but names Y as director" se desc
 | M16 | `app\consolidation.py:190-204` | `float(r[attribute])` crashea sobre filas legacy sin el atributo (values filtra None; splits no) | filtrar también en los splits |
 | M17 | `app\runner.py:229` + `main.py:80-86` | Default de `run_cross_product` incluye `cot` — contra la decisión "no se corre nunca más" | `RETIRED = {"cot"}` en app/ |
 | M18 | `app\main.py:78-92` | Dos `POST /run` concurrentes duplican celdas (doble peso en `study()`) | lockfile por results_path |
-| M19 | `requirements.txt` | Pins que nunca corrieron (`httpx 0.30.0` pineado > 0.28.1 instalado; scipy declarada, no importada NI instalada; py real: 3.14.3 global sin venv) | regenerar de `pip freeze`, borrar scipy, anotar intérprete |
+| M19 ✔ | `requirements.txt` → `pyproject.toml` | Pins que nunca corrieron (`httpx 0.30.0` pineado > 0.28.1 instalado; scipy declarada, no importada NI instalada) | APLICADO: pines reales del intérprete que produjo las mediciones, scipy fuera, intérprete anotado en `[tool.mapo]` |
 | M20 | `corpus\generate.py:630-632` | `inflate_units` corre ANTES de `build_tasks`: los `amend-*`/`alert-*` quedan sin inflar — la unidad-respuesta es el outlier corto del corpus (atajo estructural) | generar tareas primero, o padear al crearlos |
 
 ## LOW / INFO (selección — detalle completo en los apéndices de auditoría)
@@ -158,6 +158,63 @@ reforzado (el hueco era latente — ningún corpus real tiene C7 irresolubles).
 **Re-punteo** (`_fix_grading_regrade.py`): 10 archivos, 761 filas, **0 cambios** —
 el bug de grading nunca se disparó en los datos reales; los números publicados
 quedan en pie.
+
+Bloque "Antes de cerrar E0" (código) **aplicado y verificado**, misma fecha:
+**H1** (`embeddings` lanza `SealedCacheMiss`, así la replay sellada aborta en vez de
+seguir en vivo parcial), **H2** (`ACCOUNTING_VARIANTS`: `coverage` y los avisos de
+estancamiento valen también en `cognitive`, que hereda las tools de accounting),
+**H3** (`sense()` assertea `regulated` con provenance COMPUTED — el piso CERTIFIED
+deja de ser letra muerta), **H5** (`value_on` ya no saltea la tarea cuando el
+paradigma elegido no tiene episodio: entra al denominador con la utilidad observada
+del fallback, o 0.0 — incumbente y candidato se promedian sobre la MISMA población),
+**H6** (el coupling de la región se mapea a `plan()` con `_coupling_from_region`;
+la clave muerta `_region_coupling` se eliminó — la valuación offline vuelve a ser el
+router de producción), **H7** (con <6 tareas no hay bloque `final`: la promoción se
+saltea explícitamente con nota en vez de evaluarse sobre el training set),
+**H8** (`BeliefPolicy` lleva `derived_floor: Provenance` en vez de un booleano, con
+`from_trust()` para el paso previo al perfil — A0 EXPLORATORY vuelve a tener piso
+ASSUMED en lugar del OBSERVED que le imponía la proyección), **H9**
+(`compact_history` compacta ENTRADA por entrada: en un read batcheado sólo se demotan
+las unidades noteadas y el resto queda verbatim; el mensaje entero se reemplaza sólo
+si TODAS estaban noteadas), **H11** (guarda `refuse_if_applied` en los tres scripts de
+parche + `_wire_feasibility.py` ahora es de dos fases: nada llega a disco hasta que
+todas las anclas matchearon — re-ejecutarlo aborta sin tocar un solo archivo),
+**H12** (`SeededClient` mide lo gastado en la celda y la fila de excepción registra
+`cost_tokens`/`calls` reales: theta ya no aprende que el paradigma "falla barato").
+Tests: ambos suites PASAN; `app/` importa completo. Un ajuste en `test_science.py`:
+el chequeo del bucle único de reintento comparaba la línea de import textual, ahora
+es un regex sobre el símbolo.
+
+**Pendiente del bloque**: M4 (endpoint en fingerprint y en la clave de embeddings) —
+invalida las 7102 entradas de cache, así que va en un corte limpio y con decisión
+explícita del autor.
+
+Bloque MEDIUM de una pasada + M4, misma fecha: **M2** (`field(repr=False)` en las dos
+claves), **M5** (`if noise is not None`: un piso de ruido 0.0 es lo que MIDE un modelo
+determinístico, no un "no evaluable"), **M7** (`horizon_unknown` se assertea sólo si el
+mismo estimador trajo credence > 0; se acabó el 0.5 fabricado), **M9** (el oráculo se
+filtra a ítems con contenido normalizado: `";;;"` daba `{""}` y la cadena vacía es
+substring de todo — toda respuesta de un ítem sacaba 1.0), **M12** (`KNOWN_PARADIGMS` +
+`WORST_CASE_ONLY`: un nombre desconocido levanta `ValueError` en vez de caer por la
+última rama como "factible").
+
+**M4 — resuelto por namespace, no por invalidación.** La clave es sha256 sobre
+(fingerprint de decodificación, payload) y el registro en disco **no guarda el payload**:
+no hay migración capaz de re-derivar claves nuevas. Meter el host adentro del hash no
+era "invalidar una vez" sino tirar 6292 completions + 810 embeddings ya pagados y dejar
+sin replay sellada a la grilla congelada de `gpt-5-chat`. Se cierra la misma colisión
+namespaceando el DIRECTORIO: `Settings.account_tag()` /
+`embedding_account_tag()` (host legible + digest del endpoint completo), cache de chat en
+`cache/<tag>/<shard>/`, embeddings en `cache/<tag-emb>/embeddings/`. Las claves — y por
+lo tanto las replays — quedan idénticas. `_migrate_cache_namespace.py` mudó lo existente:
+**7102 → 7102, sin pérdidas**, y es idempotente.
+
+De yapa, misma clase de bug que M4 y por eso adyacente: el índice de entidades de
+`graph_traverse` vivía en una ruta hardcodeada relativa al archivo (ignoraba
+`MAPO_CACHE_DIR`) y se keyeaba SÓLO por corpus — un índice extraído con un modelo se le
+servía a una corrida de otro. Ahora cuelga de `client.cache_root` y el digest incluye el
+fingerprint. Los 2 índices viejos quedaron mudados y huérfanos; se reconstruyen gratis
+desde el cache de completions.
 
 ## Plan de acción sugerido
 

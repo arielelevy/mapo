@@ -27,6 +27,23 @@ import sys
 ROOT = pathlib.Path(__file__).parent
 
 
+# Guarda de idempotencia. Esto es una migracion de una sola vez, no una herramienta:
+# sus anclas siguen matcheando el archivo YA parcheado, asi que una segunda corrida
+# duplica el fragmento (y deja el modulo con SyntaxError) antes de abortar en un ancla
+# posterior. Se rechaza de entrada, y ademas se verifican TODAS las anclas antes de
+# escribir cualquier archivo.
+def refuse_if_applied(markers):
+    done = [p for p, m in markers if m in (ROOT / p).read_text(encoding="utf-8")]
+    if done:
+        sys.exit("YA APLICADO en " + ", ".join(done) + ": no se toca nada.")
+
+
+refuse_if_applied([
+    ("app/llm.py", "RETRY_BUDGET_SECONDS"),
+])
+
+
+
 def patch(path, pairs):
     p = ROOT / path
     s = p.read_text(encoding="utf-8")

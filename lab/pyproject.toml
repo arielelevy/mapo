@@ -1,0 +1,30 @@
+[project]
+name = "mapo-lab"
+description = "MAPO: capa de decisión determinística + banco de medición"
+version = "0.1.0"
+requires-python = ">=3.13"
+
+# Pines reales, tomados del intérprete con el que se corrieron las mediciones
+# (Python 3.14.3, sin venv). El requirements.txt anterior declaraba versiones que nunca
+# corrieron -- httpx 0.30.0 pineado sobre un 0.28.1 instalado -- y una scipy que ni se
+# importa ni está instalada. Un pin que miente es peor que no tener pin: describe un
+# entorno en el que los números del paper no se produjeron.
+dependencies = [
+    "fastapi==0.135.1",
+    "uvicorn[standard]==0.42.0",
+    "httpx==0.28.1",
+    "pydantic==2.12.5",
+    "python-dotenv==1.2.2",
+    "numpy==2.4.3",
+]
+
+[project.urls]
+Homepage = "https://github.com/arielelevy/mapo"
+
+# Sin dependencias de test: las dos suites (tests/test_science.py y
+# tests/test_consolidation.py) corren con `py tests/test_science.py`, sin framework y
+# por diseño -- el banco no importa nada que no vaya a estar en producción.
+
+[tool.mapo]
+# El intérprete con el que se produjeron las corridas registradas.
+measured-with = "CPython 3.14.3"

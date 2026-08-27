@@ -35,19 +35,13 @@ Rewrite the query for search retrieval. Make it self-contained. \
 Produce 2-5 key search terms: proper names + translated domain terms.
 Example: languages=["Italian"], query "victim name" → terms: ["vittima", "victim", "Chiara Poggi"]
 
-## Strategy Selection
+## Conversational detection
 
-react_agent is the DEFAULT — it handles most queries well with multi-pass search.
-
-Rules (first match wins):
-1. Greeting, thanks, small talk → conversational
-2. "extract ALL [people/addresses/locations/identifiers/entities] connected to X" \
-   where the answer requires scanning MANY documents exhaustively → plan_execute
-3. "how many [people/victims/subjects] did X" when counting across MANY documents → plan_execute
-4. "who are the most [contacted/frequent/common]" requiring aggregation across docs → plan_execute
-5. NEVER plan_execute for: "compare", "for each", "gaps/weaknesses/contradictions", \
-   images, single-document extraction, legal comprehension, summarize, timeline → react_agent
-6. Everything else → react_agent
+Set strategy=conversational for greetings, thanks and small talk. For anything else
+leave it at react_agent: the six rules that used to live here selected between
+plan_execute and react_agent, and NOTHING read the answer — the routing is decided from
+`needs_decomposition` and `complexity` below. They were paid for on every request and
+steered a field that was thrown away.
 
 ## Domain Detection
 Classify: legal, financial, forensic, criminology, intelligence, or general.
@@ -335,6 +329,13 @@ RULES:
 - If items are missing from the investigation tracker, state what was NOT found\
 """
 
+QUERY_SHAPE_LANGUAGE_RULE = '''
+Also report the language of the user's query.
+Judge it by SENTENCE STRUCTURE, never by proper nouns or entity names: a question in
+English about Italian documents is English. Reply with the language name (English,
+Spanish, Italian, ...).
+'''
+
 RESOLVE_FOLLOWUP_PROMPT = """\
 Classify this query relative to the conversation history.
 History is grouped by [Turn N] (User + Assistant share the same turn number). \
@@ -424,37 +425,22 @@ DOMAIN_INSTRUCTIONS: dict[str, str] = {
 
 
 class AgentConfig(BaseModel):
-    """Per-strategy agent configuration."""
+    """Per-strategy agent configuration.
 
-    name: str
-    tools: list[str]
+    Only what is actually read. `name`, `tools` and `temperature` were also declared:
+    the tool list is built by build_agent_tools (which never consulted this one, so the
+    two could disagree with nothing to catch it) and the temperature comes from the call
+    site. A configuration nobody reads is documentation that cannot go stale by being
+    wrong, because it was never right.
+    """
+
     max_iterations: int
     system_prompt: str
-    temperature: float = 0.1
 
 
 AGENT_CONFIGS: dict[str, AgentConfig] = {
     "react_agent": AgentConfig(
-        name="ReactAgent",
-        tools=[
-            "retrieval",
-            "full_text_search",
-            "semantic_search",
-            "read_fragment",
-            "read_document",
-            "list_documents",
-            "find_recurring_names",
-            "find_cross_document_patterns",
-            "analyze_table",
-            "investigate",
-        ],
         max_iterations=MAX_AGENT_ITERATIONS,
         system_prompt=REACT_AGENT_PROMPT,
-    ),
-    "map_reduce": AgentConfig(
-        name="MapReduceAgent",
-        tools=[],
-        max_iterations=1,
-        system_prompt=MAP_REDUCE_MAP_PROMPT,
     ),
 }

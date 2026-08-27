@@ -1,15 +1,15 @@
-"""Utility functions for the AgenticIntel pipeline.
+"""Utility functions for the execution pipeline.
 
-TODO: get_embedding uses OpenAI embeddings API.
-Could not find a platform embedding service in the cluster.
-Replace when available on-premise.
+TODO: get_embedding calls the OpenAI embeddings API directly, unlike every other
+model call here, which goes through the injected client. Route it through the same
+client once an embedding deployment is available behind it.
 """
 
 import logging
 import os
 
 from collections.abc import Mapping
-from typing import Any, List, Optional
+from typing import Any
 
 from .state import OrchestratorState
 
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "text-embedding-3-small")
 
-_openai_client: Optional[AsyncOpenAI] = None
+_openai_client: AsyncOpenAI | None = None
 
 
 def _get_openai_client() -> AsyncOpenAI:
@@ -45,10 +45,10 @@ def sanitize_text(text: str) -> str:
     # e.g. "T\n\n  M\n\n  M\n\n  G" → "T M M G"
     lines = text.split("\n")
     if len(lines) > 20:
-        short_lines = sum(1 for l in lines if len(l.strip()) <= 2)
+        short_lines = sum(1 for line in lines if len(line.strip()) <= 2)
         if short_lines > len(lines) * 0.5:
             # More than half are single chars → broken OCR, collapse
-            text = " ".join(l.strip() for l in lines if l.strip())
+            text = " ".join(line.strip() for line in lines if line.strip())
     return text
 
 
@@ -129,7 +129,7 @@ async def emit_ui_event(
     await adispatch_custom_event(name="on_ui_event", data=data, config=config)
 
 
-async def get_embedding(text: str) -> List[float]:
+async def get_embedding(text: str) -> list[float]:
     """Get embedding vector for KNN search.
 
     Uses OpenAI embeddings API. Returns empty list if unavailable,
@@ -137,7 +137,13 @@ async def get_embedding(text: str) -> List[float]:
     """
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
-        logger.info("get_embedding: no OPENAI_API_KEY, KNN disabled")
+        # WARNING, not INFO: with no embeddings the KNN and HyDE branches never run and
+        # every search silently degrades to BM25 alone. Callers surface it too (see the
+        # `degraded` field of the subgraph); this is the last line that can say it at all.
+        logger.warning(
+            "get_embedding: no OPENAI_API_KEY — vector search DISABLED, "
+            "retrieval degrades to keyword-only"
+        )
         return []
 
     try:
@@ -148,5 +154,7 @@ async def get_embedding(text: str) -> List[float]:
             return []
         return resp.data[0].embedding
     except Exception as e:
-        logger.error("get_embedding: failed: %s", e)
+        logger.error(
+            "get_embedding: failed (%s) — vector search unavailable for this query", e
+        )
         return []

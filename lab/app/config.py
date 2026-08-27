@@ -7,7 +7,10 @@ hard failure at import time, not a silent fallback to something plausible.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+import hashlib
+import re
+
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -67,14 +70,17 @@ class Settings:
     """
 
     endpoint: str
-    api_key: str
+    # repr=False on both keys: a dataclass prints every field, and a Settings object
+    # ends up in tracebacks, logs and notebook cells. A secret that is one exception
+    # away from stdout is a secret already leaked.
+    api_key: str = field(repr=False)
     api_version: str
     chat_deployment: str
     embedding_deployment: str
     # Embeddings can live on a DIFFERENT account than chat: a second chat model on a
     # fresh account still needs the one embedding deployment that exists and is cached.
     embedding_endpoint: str
-    embedding_api_key: str
+    embedding_api_key: str = field(repr=False)
     temperature: float | None
     seed: int
     max_tokens: int
@@ -102,6 +108,14 @@ class Settings:
             corpus_dir=_require_dir("MAPO_CORPUS_DIR"),
         )
 
+    def account_tag(self) -> str:
+        """Cache namespace for the chat account."""
+        return _account_tag(self.endpoint)
+
+    def embedding_account_tag(self) -> str:
+        """Cache namespace for the embedding account (it may be a different one)."""
+        return _account_tag(self.embedding_endpoint)
+
     def fingerprint(self) -> str:
         """Identity of the decode configuration.
 
@@ -113,3 +127,30 @@ class Settings:
             f"{self.chat_deployment}|{self.api_version}"
             f"|t={temp}|seed={self.seed}|max={self.max_tokens}"
         )
+
+
+def _account_tag(endpoint: str) -> str:
+    """A cache namespace for one account.
+
+    THE COLLISION. Cache keys are content-addressed over the payload and the DECODE
+    fingerprint -- deployment name, api-version, temperature, seed, max tokens. None of
+    that is the ACCOUNT. Two resources can each serve a deployment called `gpt-5-nano`,
+    and "same name" is not "same model": whoever owns the other resource decides what is
+    behind that name. Pointed at a second account, the client would have served the first
+    account's completions as if they were this one's, silently.
+
+    WHY A DIRECTORY AND NOT THE FINGERPRINT. Putting the host INSIDE the hash would have
+    closed the same hole and thrown away every entry ever paid for -- the record does not
+    keep the request payload, so no migration can re-derive the new keys, and a sealed
+    replay of the frozen grid would stop being replayable. Namespacing the directory
+    gives the same guarantee (two accounts can never read each other's entries) while the
+    keys, and therefore the replays, stay exactly as they were.
+
+    The tag keeps the host readable, because a human reading the cache tree is one of the
+    ways this gets audited, and appends a digest of the full endpoint so two hosts that
+    sanitise to the same string still cannot meet.
+    """
+    host = endpoint.split("://")[-1].split("/")[0].lower()
+    safe = re.sub(r"[^a-z0-9]+", "-", host).strip("-")[:40] or "endpoint"
+    digest = hashlib.sha256(endpoint.encode("utf-8")).hexdigest()[:8]
+    return f"{safe}-{digest}"

@@ -13,7 +13,7 @@ import logging
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 
-from .config import get_chat_model
+from .config import TEMP_HYDE, get_chat_model
 from .state import OrchestratorState
 from .utils import emit_ui_event
 
@@ -53,7 +53,7 @@ async def generate_hyde(
             unique_langs.append(lang)
     unique_langs = unique_langs[:3]
 
-    llm = await get_chat_model(config, temperature=0.7, mini=True)
+    llm = await get_chat_model(config, temperature=TEMP_HYDE, mini=True)
 
     try:
         resp = await llm.ainvoke(

@@ -215,7 +215,7 @@ tests/
 
 ```powershell
 cd "D:\Apps\lab"
-py -m pip install -r requirements.txt
+py -m pip install -e .        # pines reales en pyproject.toml
 copy .env.example .env    # then fill AZURE_OPENAI_API_KEY
 
 # 1. Validate the measurement layer. No API key needed. Must pass first.

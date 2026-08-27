@@ -45,6 +45,19 @@ MAX_CHUNKS_PER_DOC = 5
 KNN_MIN_SCORE = 0.3  # filter out low-quality vector matches from RRF input
 MAX_ENTITY_NAMES = 10  # cap entity_names to limit should clauses
 
+# RRF constant. With k=60 and the FTS weight below, a top-ranked result scores
+# 2/(60+1) = 0.033 per branch: the whole fused scale lives under ~0.05.
+RRF_K = 60
+FTS_WEIGHT = 2.0  # keyword matches are more precise for factual extraction
+
+# How much the density rerank may move a result, as a FRACTION of the top fused score.
+# This used to be an unnormalised `matches/sqrt(len)`, which reaches ~0.18 on a 3000-char
+# chunk with ten hits -- four to five times the ENTIRE range of the RRF scores it was
+# supposed to adjust. The rerank was not adjusting the fusion, it was replacing it with
+# term frequency. Expressed as a fraction of the top score, it breaks ties and nudges
+# neighbours, which is what a rerank is for.
+DENSITY_WEIGHT = 0.25
+
 
 # ---------------------------------------------------------------------------
 # Models
@@ -94,12 +107,18 @@ class SemanticSearchSubState(TypedDict, total=False):
 
     # Reducer: each content branch appends [list[RetrievedEntity]]
     branch_results: Annotated[list, operator.add]
+    # Reducer: each branch appends one BranchStatus. Provenance is built from these,
+    # so a branch that failed or was skipped is visible downstream instead of being
+    # absorbed into an empty list that looks like "no matches".
+    branch_status: Annotated[list, operator.add]
 
     # Output — content results (FTS + KNN fused)
     fused_entities: list[RetrievedEntity]
     # Output — entity lookup results (separate, NOT fused)
     entity_matches: list[EntityMatch]
-    provenance: str
+    provenance: str  # built from branch_status, never a literal
+    branch_report: list[dict]  # per-branch outcome, for the caller's record
+    degraded: list[str]  # branches that failed or were skipped, named
     note: str
 
 
@@ -405,6 +424,17 @@ def _hits_to_entities(
 # ---------------------------------------------------------------------------
 
 
+def _status(branch: str, state: str, results: int = 0, detail: str = "") -> dict:
+    """One branch's own report, so provenance can be assembled from what happened.
+
+    `provenance` used to be the constant "semantic_search+rrf+density": when the FTS
+    branch threw, its `except` returned an empty list and every downstream consumer was
+    still told the answer came from an FTS+KNN fusion. A claim about how evidence was
+    obtained cannot be a literal.
+    """
+    return {"branch": branch, "status": state, "results": results, "detail": detail[:200]}
+
+
 async def _node_semantic_fts(
     state: SemanticSearchSubState, config: RunnableConfig
 ) -> dict:
@@ -419,10 +449,18 @@ async def _node_semantic_fts(
         results = await os_search(query, config)
         hits = results.get("hits", {}).get("hits", [])
         entities = _hits_to_entities(hits, "opensearch_fts")
-        return {"branch_results": [entities]}
+        return {
+            "branch_results": [entities],
+            "branch_status": [
+                _status("fts", "ok" if entities else "empty", len(entities))
+            ],
+        }
     except Exception as e:
         logger.error("semantic_fts failed: %s", e, exc_info=True)
-        return {"branch_results": [[]]}
+        return {
+            "branch_results": [[]],
+            "branch_status": [_status("fts", "failed", 0, str(e))],
+        }
 
 
 async def _node_semantic_entity(
@@ -430,7 +468,7 @@ async def _node_semantic_entity(
 ) -> dict:
     """Entity lookup: find documents by name. Returns pointers, NOT in RRF."""
     if not state.get("entity_names", []):
-        return {"entity_matches": []}
+        return {"entity_matches": [], "branch_status": [_status("entity", "skipped")]}
     try:
         query = _build_entity_query(
             state.get("entity_names", []),
@@ -455,10 +493,44 @@ async def _node_semantic_entity(
             )
         if matches:
             logger.info("  entity_lookup: %d matches", len(matches))
-        return {"entity_matches": matches}
+        return {
+            "entity_matches": matches,
+            "branch_status": [
+                _status("entity", "ok" if matches else "empty", len(matches))
+            ],
+        }
     except Exception as e:
         logger.error("semantic_entity failed: %s", e, exc_info=True)
-        return {"entity_matches": []}
+        return {
+            "entity_matches": [],
+            "branch_status": [_status("entity", "failed", 0, str(e))],
+        }
+
+
+async def knn_entities(
+    query_vector: list[float],
+    context_entity_ids: list[str] | None = None,
+    workspace_id: str = "",
+    config: RunnableConfig | None = None,
+    size: int = MAX_STRATEGY_RESULTS,
+    source: str = "opensearch_knn",
+) -> list[RetrievedEntity]:
+    """The KNN branch as a plain callable: build, search, normalise.
+
+    Public because `tools.retrieval.knn_search` needs exactly this and used to reach
+    into this module for five private helpers to rebuild it by hand -- two
+    implementations of one query, free to drift apart. It takes the vector rather than
+    the text so that each caller can report "no embedding service" in its own terms.
+    """
+    query = _build_knn_query(
+        query_vector,
+        context_entity_ids=context_entity_ids,
+        workspace_id=workspace_id,
+        size=size,
+    )
+    raw = await os_search(query, config)
+    hits = raw.get("hits", {}).get("hits", [])
+    return _hits_to_entities(hits, source, min_score=KNN_MIN_SCORE)
 
 
 async def _node_semantic_knn(
@@ -468,20 +540,31 @@ async def _node_semantic_knn(
     try:
         query_vector = await get_embedding(state.get("rewritten_query", ""))
         if not query_vector:
-            logger.info("  semantic_knn  |  skipped (no embedding service)")
-            return {"branch_results": [[]]}
-        query = _build_knn_query(
+            logger.warning("  semantic_knn  |  SKIPPED: no embedding service")
+            return {
+                "branch_results": [[]],
+                "branch_status": [
+                    _status("knn", "skipped", 0, "no embedding service")
+                ],
+            }
+        entities = await knn_entities(
             query_vector,
             context_entity_ids=state.get("context_entity_ids") or None,
             workspace_id=state.get("workspace_id", ""),
+            config=config,
         )
-        results = await os_search(query, config)
-        hits = results.get("hits", {}).get("hits", [])
-        entities = _hits_to_entities(hits, "opensearch_knn", min_score=KNN_MIN_SCORE)
-        return {"branch_results": [entities]}
+        return {
+            "branch_results": [entities],
+            "branch_status": [
+                _status("knn", "ok" if entities else "empty", len(entities))
+            ],
+        }
     except Exception as e:
         logger.error("semantic_knn failed: %s", e, exc_info=True)
-        return {"branch_results": [[]]}
+        return {
+            "branch_results": [[]],
+            "branch_status": [_status("knn", "failed", 0, str(e))],
+        }
 
 
 async def _node_semantic_hyde(
@@ -490,7 +573,10 @@ async def _node_semantic_hyde(
     """Branch 4: HyDE KNN — one KNN per hypothetical answer (parallel embeds)."""
     hyde_queries = state.get("hyde_queries", [])
     if not hyde_queries:
-        return {"branch_results": [[]]}
+        return {
+            "branch_results": [[]],
+            "branch_status": [_status("hyde", "skipped")],
+        }
 
     try:
 
@@ -498,16 +584,12 @@ async def _node_semantic_hyde(
             vec = await get_embedding(hq)
             if not vec:
                 return []
-            q = _build_knn_query(
+            return await knn_entities(
                 vec,
                 context_entity_ids=state.get("context_entity_ids") or None,
                 workspace_id=state.get("workspace_id", ""),
-            )
-            r = await os_search(q, config)
-            return _hits_to_entities(
-                r.get("hits", {}).get("hits", []),
-                "opensearch_hyde",
-                min_score=KNN_MIN_SCORE,
+                config=config,
+                source="opensearch_hyde",
             )
 
         results = await asyncio.gather(*[run_one(hq) for hq in hyde_queries[:3]])
@@ -517,10 +599,18 @@ async def _node_semantic_hyde(
             len(all_entities),
             len(hyde_queries),
         )
-        return {"branch_results": [all_entities]}
+        return {
+            "branch_results": [all_entities],
+            "branch_status": [
+                _status("hyde", "ok" if all_entities else "empty", len(all_entities))
+            ],
+        }
     except Exception as e:
         logger.error("semantic_hyde failed: %s", e, exc_info=True)
-        return {"branch_results": [[]]}
+        return {
+            "branch_results": [[]],
+            "branch_status": [_status("hyde", "failed", 0, str(e))],
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -541,119 +631,189 @@ def _content_key(entity: RetrievedEntity) -> str:
 
 
 def _rrf_fuse(
-    branches: list[list[RetrievedEntity]], k: int = 60
+    branches: list[list[RetrievedEntity]], k: int = RRF_K
 ) -> list[RetrievedEntity]:
-    """Reciprocal Rank Fusion with content-based dedup.
+    """Reciprocal Rank Fusion, keyed by CONTENT.
 
-    Scores by position across branches. Duplicate fragments (same page from
-    different source PDFs) are deduplicated — keeps the highest-scored copy,
-    does NOT sum their scores.
+    The key is the content key, not the entity_id, and that is the whole point: the same
+    page reached through two different source files carries two entity_ids, and keying by
+    id made the two copies compete for slots with half the evidence each. Their ranks now
+    add, so content that several branches agree on rises -- which is what fusion means.
+
+    One contribution per branch per unique content: a branch that returns the same page
+    twice under two ids is one branch's opinion, not two, and its best rank is the one
+    that counts.
     """
     scores: dict[str, float] = {}
-    entity_map: dict[str, RetrievedEntity] = {}
+    best: dict[str, tuple[RetrievedEntity, int]] = {}
 
-    # FTS gets 2x weight — keyword matches are more precise for factual extraction
     for branch in branches:
-        is_fts = bool(branch) and getattr(branch[0], "source", "") == "opensearch_fts"
-        weight = 2.0 if is_fts else 1.0
+        weight = FTS_WEIGHT if _branch_is_fts(branch) else 1.0
+        seen_in_branch: set[str] = set()
         for rank, entity in enumerate(branch):
-            eid = entity.entity_id
-            scores[eid] = scores.get(eid, 0.0) + weight / (k + rank + 1)
-            if eid not in entity_map:
-                entity_map[eid] = entity
+            key = _content_key(entity)
+            if key in seen_in_branch:
+                continue
+            seen_in_branch.add(key)
+            scores[key] = scores.get(key, 0.0) + weight / (k + rank + 1)
+            previous = best.get(key)
+            if previous is None or rank < previous[1]:
+                best[key] = (entity, rank)
 
-    sorted_ids = sorted(scores, key=lambda eid: scores[eid], reverse=True)
-
-    # Dedup fragments with same content from different source files.
-    # Keep the highest-scored copy only.
-    seen_content: set[str] = set()
     results = []
-    for eid in sorted_ids:
-        e = entity_map[eid]
-        key = _content_key(e)
-        if key in seen_content:
-            continue
-        seen_content.add(key)
-        copy = e.model_copy()
-        copy.score = scores[eid]
+    for key in sorted(scores, key=lambda c: scores[c], reverse=True):
+        copy = best[key][0].model_copy()
+        copy.score = scores[key]
         results.append(copy)
     return results
+
+
+def _branch_is_fts(branch: list[RetrievedEntity]) -> bool:
+    """Whether a branch came from full-text search, and so carries the FTS weight."""
+    return bool(branch) and getattr(branch[0], "source", "") == "opensearch_fts"
 
 
 def _density_rerank(
     entities: list[RetrievedEntity], query: str
 ) -> list[RetrievedEntity]:
-    """Rerank by query term match density normalized by document size."""
+    """Rerank by query-term density, bounded to a fraction of the fused score.
+
+    Density is normalised twice before it is allowed to move anything: by the maximum
+    density in this result set (so it is a relative signal, not an absolute one that
+    depends on chunk length conventions), and by the top fused score (so its magnitude
+    lives on the same scale as the thing it adjusts). Unbounded, it decided the order
+    outright -- see DENSITY_WEIGHT.
+    """
     query_lower = (query or "").lower()
     terms = [t for t in query_lower.split() if len(t) > 2]
-    if not terms:
+    if not terms or not entities:
         return entities
 
+    densities: list[float] = []
     for e in entities:
         content_lower = (e.content or "").lower()
         content_len = max(len(content_lower), 1)
         matches = sum(content_lower.count(t) for t in terms)
-        density = matches / math.sqrt(content_len)
-        # Combine: RRF score (0-1 range) + density boost, preserving RRF ranking
-        e.score = (e.score or 0.0) + density
+        densities.append(matches / math.sqrt(content_len))
+
+    top_density = max(densities)
+    if top_density <= 0.0:
+        return entities
+    top_score = max((e.score or 0.0) for e in entities)
+    budget = DENSITY_WEIGHT * top_score
+
+    for e, density in zip(entities, densities):
+        e.score = (e.score or 0.0) + budget * (density / top_density)
 
     entities.sort(key=lambda e: e.score, reverse=True)
     return entities
 
 
+def _parent_doc(entity: RetrievedEntity) -> str:
+    """The document a chunk belongs to. For a fragment that is its parent file."""
+    return entity.source_entity_uid or entity.entity_id
+
+
 def _ensure_coverage(
     entities: list[RetrievedEntity], max_results: int = MAX_STRATEGY_RESULTS
 ) -> list[RetrievedEntity]:
-    """Ensure at least one chunk per unique document in the final list."""
+    """Ensure at least one chunk per unique DOCUMENT survives the cut.
+
+    Grouping used to be by `entity_id`, which is unique per result after fusion: every
+    count was 1, the "more than one chunk from this document" test could never be true,
+    and the function replaced nothing -- it was `entities[:max_results]` with extra
+    steps. Grouping by the parent file is what the docstring always claimed and what
+    makes the guarantee real: a document represented twice in the cut gives up its
+    weakest chunk so a document represented zero times can get in.
+    """
     if not entities:
         return entities
 
     included = entities[:max_results]
     overflow = entities[max_results:]
 
-    docs_in = {e.entity_id for e in included}
+    docs_in = {_parent_doc(e) for e in included}
 
     missing_best: dict[str, RetrievedEntity] = {}
     for e in overflow:
-        if e.entity_id not in docs_in and e.entity_id not in missing_best:
-            missing_best[e.entity_id] = e
+        doc = _parent_doc(e)
+        if doc not in docs_in and doc not in missing_best:
+            missing_best[doc] = e
 
     if not missing_best:
         return included
 
     doc_counts: dict[str, int] = {}
     for e in included:
-        doc_counts[e.entity_id] = doc_counts.get(e.entity_id, 0) + 1
+        doc = _parent_doc(e)
+        doc_counts[doc] = doc_counts.get(doc, 0) + 1
 
     result = list(included)
     for replacement in missing_best.values():
         worst_idx = None
         worst_score = float("inf")
         for i, e in enumerate(result):
-            if doc_counts.get(e.entity_id, 0) > 1 and e.score < worst_score:
+            doc = _parent_doc(e)
+            if doc_counts.get(doc, 0) > 1 and e.score < worst_score:
                 worst_idx = i
                 worst_score = e.score
-        if worst_idx is not None:
-            evicted = result[worst_idx]
-            doc_counts[evicted.entity_id] -= 1
-            result[worst_idx] = replacement
-            doc_counts[replacement.entity_id] = 1
+        if worst_idx is None:
+            # Nothing left to give up: every document in the cut is there exactly once,
+            # and evicting one to admit another would trade coverage for coverage.
+            break
+        evicted = result[worst_idx]
+        doc_counts[_parent_doc(evicted)] -= 1
+        result[worst_idx] = replacement
+        doc_counts[_parent_doc(replacement)] = 1
 
     return result
 
 
+def _describe_provenance(status: list[dict]) -> tuple[str, list[str]]:
+    """Build the provenance string from what the branches actually reported.
+
+    Returns (provenance, degraded) where `degraded` names the branches that failed or
+    were skipped. A consumer that reads "rrf(fts:20)" knows the vector branch did not
+    contribute; before, every answer claimed the full fusion regardless.
+    """
+    contributing = [
+        f"{s['branch']}:{s['results']}"
+        for s in status
+        if s.get("status") == "ok" and s.get("branch") != "entity"
+    ]
+    degraded = [
+        f"{s['branch']}({s['status']}{': ' + s['detail'] if s.get('detail') else ''})"
+        for s in status
+        if s.get("status") in ("failed", "skipped")
+    ]
+    if not contributing:
+        return "semantic_search: no branch contributed", degraded
+    return f"rrf({'+'.join(sorted(contributing))})+density", degraded
+
+
 def _node_semantic_fuse_and_rerank(state: SemanticSearchSubState) -> dict:
     """RRF fusion + density rerank + document coverage in one step."""
+    status = list(state.get("branch_status", []))
+    provenance, degraded = _describe_provenance(status)
     branches = [b for b in state.get("branch_results", []) if b]
     if not branches:
-        return {"fused_entities": [], "provenance": "semantic_search"}
+        return {
+            "fused_entities": [],
+            "provenance": provenance,
+            "branch_report": status,
+            "degraded": degraded,
+        }
 
     fused = _rrf_fuse(branches)
     fused = _density_rerank(fused, state.get("rewritten_query", ""))
     fused = _ensure_coverage(fused, max_results=MAX_STRATEGY_RESULTS)
+    if degraded:
+        logger.warning("semantic_search DEGRADED: %s", ", ".join(degraded))
     return {
         "fused_entities": fused,
-        "provenance": "semantic_search+rrf+density",
+        "provenance": provenance,
+        "branch_report": status,
+        "degraded": degraded,
     }
 
 

@@ -47,14 +47,28 @@ class BeliefPolicy:
     coupling was OBSERVED while the specialise rule was willing to accept ELICITED, so
     turning trust on changed one and not the other and the probe rule shadowed the
     specialise rule forever. A single source removes the possibility.
+
+    The floor is a Provenance, not a boolean. A boolean has two states and there are
+    four provenances, so the profiles could only ever project onto two of them: A0
+    EXPLORATORY declares an ASSUMED floor -- LOOSER than elicited -- and encoding it as
+    "does not trust elicited" turned the most permissive level into the STRICTEST one
+    (OBSERVED), stricter than A1 and A2. The dial has to be able to say what it means.
     """
 
-    trust_elicited: bool
+    derived_floor: Provenance
     tau: float
 
-    @property
-    def derived_floor(self) -> Provenance:
-        return Provenance.ELICITED if self.trust_elicited else Provenance.OBSERVED
+    @classmethod
+    def from_trust(cls, trust_elicited: bool, tau: float) -> "BeliefPolicy":
+        """The pre-profile pass, where the only thing known is whether elicited
+        credence has earned trust. Once a profile is resolved, pass its floor directly.
+        """
+        return cls(
+            derived_floor=(
+                Provenance.ELICITED if trust_elicited else Provenance.OBSERVED
+            ),
+            tau=tau,
+        )
 
 
 ACTION_GATE = "gate_then_fallback"
@@ -69,11 +83,12 @@ BULK_THRESHOLD = 8
 def standard_rules(policy: BeliefPolicy) -> Governance:
     """The paper's decision logic, as rules.
 
-    `trust_elicited` is the calibration switch. When elicited credence has not earned
-    trust (see `beliefs.Calibration`), rules that would act on a model-asserted belief
-    demand OBSERVED provenance instead, which forces a probe rather than a guess. The
-    switch is explicit because silently trusting an uncalibrated number is exactly the
-    failure the belief layer exists to prevent.
+    `policy.derived_floor` is the calibration dial. When elicited credence has not
+    earned trust (see `beliefs.Calibration`), the floor is OBSERVED and rules that would
+    act on a model-asserted belief force a probe rather than a guess. It is explicit
+    because silently trusting an uncalibrated number is exactly the failure the belief
+    layer exists to prevent -- and it is a provenance rather than a flag because A0
+    deliberately sits BELOW elicited.
     """
     derived_floor = policy.derived_floor
     tau = policy.tau
@@ -244,6 +259,13 @@ def sense(
         provenance=Provenance.COMPUTED,
         evidence="declared on the task",
     ))
+    base.assert_(Belief(
+        proposition="regulated",
+        value=bool(task.get("regulated", False)),
+        credence=1.0,
+        provenance=Provenance.COMPUTED,
+        evidence="declared on the task",
+    ))
 
     if coupling is not None and coupling_credence > 0.0:
         base.assert_(Belief(
@@ -275,11 +297,14 @@ def sense(
         ),
     ))
 
-    if horizon_unknown is not None:
+    # Asserted only when the same estimate that produced coupling actually carries
+    # credence. `coupling_credence or 0.5` invented a number out of nothing: a latent
+    # belief nothing backs, at exactly the strength that decides rules.
+    if horizon_unknown is not None and coupling_credence > 0.0:
         base.assert_(Belief(
             proposition="horizon_unknown",
             value=horizon_unknown,
-            credence=coupling_credence or 0.5,
+            credence=coupling_credence,
             provenance=coupling_provenance,
             evidence="estimated alongside coupling",
         ))

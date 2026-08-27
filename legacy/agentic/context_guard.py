@@ -13,16 +13,24 @@ or the most recent N messages.
 """
 
 import logging
+import re
 
 from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 
 from .blackboard import Blackboard
+from .config import get_chat_model
 
 logger = logging.getLogger(__name__)
 
 GROWTH_GAP_THRESHOLD = 20_000
 KEEP_RECENT_MESSAGES = 6
+
+# The head of the conversation is never evictable: system prompt, the question, and the
+# first exchange. It used to be the literal `range(3, end)`, which silently assumed a
+# prompt shape -- change the prompt and the guard either eats the instructions or stops
+# evicting. Named, and enforced by message type below, not by position alone.
+PROTECTED_PREFIX = 3
 
 
 class ContextGuard:
@@ -69,10 +77,21 @@ class ContextGuard:
         produces a precise finding. Called repeatedly by the tool loop
         whenever needs_eviction() is True.
         """
+        if config is None:
+            # Without a config there is no extraction call, and evicting would replace
+            # content with "[Evicted]": destroying material and leaving nothing in its
+            # place. Keeping a large context is the lesser failure.
+            logger.warning("context_guard: no config, refusing to evict without a summary")
+            self._last_size = self.estimate_chars(messages)
+            return 0
+
         end = max(0, len(messages) - self.keep_recent)
 
-        for i in range(3, end):
+        for i in range(PROTECTED_PREFIX, end):
             msg = messages[i]
+            # Only tool results are ever evicted: the system prompt and the question are
+            # not ToolMessages, so the type check is the real guarantee and the index is
+            # only a head start.
             if not isinstance(msg, ToolMessage):
                 continue
             content = str(msg.content)
@@ -91,9 +110,10 @@ class ContextGuard:
                 )
                 if board:
                     board.add_finding(finding)
-                    # Clear snippets of fragments in this tool response —
-                    # the raw content was evicted, the finding replaces it.
+                    # Attach it to every item this tool result was about, and drop their
+                    # raw snippets: the content is gone, the conclusion replaces it.
                     for eid in self._extract_entity_ids(content):
+                        board.record_findings(eid, finding)
                         board.clear_snippet(eid)
             else:
                 messages[i] = ToolMessage(
@@ -127,8 +147,6 @@ class ContextGuard:
         if not config:
             return ""
 
-        from .config import get_chat_model
-
         prompt = (
             f"Question: {query}\n\n"
             f"The following document content is being compressed. "
@@ -156,8 +174,6 @@ class ContextGuard:
     @staticmethod
     def _extract_entity_ids(text: str) -> list[str]:
         """Extract entity_id UUIDs from tool response text."""
-        import re
-
         return re.findall(
             r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}", text
         )

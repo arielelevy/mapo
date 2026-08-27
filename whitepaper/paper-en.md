@@ -640,9 +640,8 @@ badly. Both belong to the cells marked *sin-correr* in the artefacts.
 > README). Matched task sets on `gold_v2` (in-window, ~18k tokens) and `gold_deep`
 > (out-of-window, ~483k), `repeat = 3`, per-cell stability tracked. 126 + 158 valid
 > rows. Two heavy out-of-window cells (`react`/`reflection`/`dag` on c2-w48 and c5-w48)
-> lost replicates to provider rate limits, were recorded as infrastructure failures,
-> excluded from every figure, and are being re-run; their means below carry fewer trials
-> and are marked †.
+> lost replicates and are being re-run; their means below rest on fewer trials than the
+> rest and are marked †.
 
 The feasibility sweep, first, because it costs nothing: at 135k tokens the arithmetic
 prunes read-everything on 12 of 32 tasks; at 483k on **24 of 26**; at 1.27M on 24 of 32 —

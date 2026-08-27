@@ -19,12 +19,23 @@ from dataclasses import dataclass, field
 @dataclass
 class BlackboardItem:
     label: str
-    source: str  # "prefetch" or "lead"
+    source: str  # "prefetch", "lead" or "search"
     entity_id: str = ""  # doc or parent entity_id
     parent_id: str = ""  # same as entity_id for doc-grouped items
     done: bool = False
+    # Two fields, because they are two different things. `snippet` is raw text the
+    # retriever happened to return; `findings` is what an extraction concluded. They
+    # shared one field, so a real finding could never overwrite a prefetch snippet (the
+    # write was guarded by "only if empty"), and clear_snippet() existed to work around
+    # that. Separated, both survive and neither shadows the other.
+    snippet: str = ""
     findings: str = ""
     fragment_ids: set[str] = field(default_factory=set)
+
+    def display(self) -> str:
+        """What the rendered board shows: the conclusion if there is one, the raw
+        snippet only while there is not."""
+        return self.findings or self.snippet
 
 
 class Blackboard:
@@ -37,8 +48,17 @@ class Blackboard:
 
     def __init__(self) -> None:
         self._items: list[BlackboardItem] = []
+        # Index by entity_id. Six methods used to scan the whole list to find one item;
+        # the scans were identical and drifted in their tie-breaking.
+        self._by_id: dict[str, BlackboardItem] = {}
         self._tool_calls: list[str] = []  # "tool_name(args)" strings for dedup display
         self._findings: list[str] = []  # persists across evictions
+
+    def _add(self, item: BlackboardItem) -> None:
+        """The only way an item enters the board, so the index cannot fall behind."""
+        self._items.append(item)
+        if item.entity_id and item.entity_id not in self._by_id:
+            self._by_id[item.entity_id] = item
 
     # ── Seeding ───────────────────────────────────────────────────────────
 
@@ -56,13 +76,13 @@ class Blackboard:
             parent = r.get("source_file_id") or frag_id
             label = r.get("document", frag_id[:12])
             snippet = r.get("text", "")[:200]
-            self._items.append(
+            self._add(
                 BlackboardItem(
                     label=label,
                     source="prefetch",
                     entity_id=frag_id,
                     parent_id=parent,
-                    findings=snippet,
+                    snippet=snippet,
                 )
             )
 
@@ -73,7 +93,7 @@ class Blackboard:
         for item in self._items:
             if item.label.lower() == description.lower():
                 return json.dumps({"ok": True, "note": "Already tracked"})
-        self._items.append(
+        self._add(
             BlackboardItem(label=description, source="lead", entity_id=entity_id)
         )
         return json.dumps(
@@ -98,7 +118,7 @@ class Blackboard:
 
     def has_entity(self, entity_id: str) -> bool:
         """Check if an entity_id is tracked on the blackboard."""
-        return any(item.entity_id == entity_id for item in self._items)
+        return entity_id in self._by_id
 
     def mark_visited(self, entity_ids: set[str]) -> None:
         """Mark items as done when tool results reference any of their known IDs."""
@@ -113,9 +133,9 @@ class Blackboard:
     ) -> None:
         """Record a fragment discovered by search. Each fragment is its own item."""
         # Skip if already tracked
-        if any(item.entity_id == fragment_id for item in self._items):
+        if fragment_id in self._by_id:
             return
-        self._items.append(
+        self._add(
             BlackboardItem(
                 label=label or fragment_id[:12],
                 source="search",
@@ -128,12 +148,12 @@ class Blackboard:
         self, parent_id: str, fragment_id: str, label: str = ""
     ) -> None:
         """Mark a specific fragment as read (done)."""
-        for item in self._items:
-            if item.entity_id == fragment_id:
-                item.done = True
-                return
+        tracked = self._by_id.get(fragment_id)
+        if tracked is not None:
+            tracked.done = True
+            return
         # Not tracked yet — add as done
-        self._items.append(
+        self._add(
             BlackboardItem(
                 label=label or fragment_id[:12],
                 source="search",
@@ -145,18 +165,20 @@ class Blackboard:
 
     def record_findings(self, entity_id: str, findings: str) -> None:
         """Attach findings to an item by entity_id (called when evicting)."""
-        for item in self._items:
-            if item.entity_id == entity_id and not item.findings:
-                item.findings = findings[:500]
-                item.done = True
-                return
+        item = self._by_id.get(entity_id)
+        if item is None:
+            return
+        # Overwrites: a conclusion drawn from the full text supersedes whatever was
+        # there, which is the entire reason it was extracted.
+        item.findings = findings[:500]
+        item.done = True
 
     def clear_snippet(self, entity_id: str) -> None:
-        """Clear the snippet of a fragment whose content was evicted."""
-        for item in self._items:
-            if item.entity_id == entity_id:
-                item.findings = ""
-                return
+        """Drop the raw snippet of a fragment whose content was evicted. Findings are
+        untouched: they are what replaced it."""
+        item = self._by_id.get(entity_id)
+        if item is not None:
+            item.snippet = ""
 
     # ── Properties ────────────────────────────────────────────────────────
 
@@ -185,11 +207,10 @@ class Blackboard:
 
     def mark_lead_retry(self, entity_id: str) -> None:
         """Reset a previously-complete item to pending for DAG retry."""
-        for item in self._items:
-            if item.entity_id == entity_id and item.done:
-                item.done = False
-                item.findings = ""
-                return
+        item = self._by_id.get(entity_id)
+        if item is not None and item.done:
+            item.done = False
+            item.findings = ""
 
     # ── Tool call tracking ─────────────────────────────────────────────────
 
@@ -212,6 +233,29 @@ class Blackboard:
             set(item.parent_id for item in self._items if item.done and item.parent_id)
         )
 
+    def coverage_summary(self) -> str:
+        """Coverage only: what was checked, what was not, nothing operational.
+
+        `render()` is for an agent that is still working — it carries the tool calls
+        already made and the instruction not to repeat them. That belongs in an agent's
+        context and not in the material a synthesiser turns into the user's answer.
+        """
+        if not self._items:
+            return ""
+        pending = [item.label for item in self._items if not item.done]
+        lines = [
+            f"## Investigation coverage: {self.done_count}/{self.total_count} items checked"
+        ]
+        if pending:
+            lines.append(
+                "NOT checked (say so if the answer depends on them): "
+                + "; ".join(pending[:20])
+                + (f" ... and {len(pending) - 20} more" if len(pending) > 20 else "")
+            )
+        if self._findings:
+            lines.append(f"Findings recorded: {len(self._findings)}")
+        return "\n".join(lines)
+
     def render(self) -> str:
         """Render blackboard state for injection into LLM context."""
         if not self._items:
@@ -221,8 +265,9 @@ class Blackboard:
         ]
         for item in self._items:
             if item.done:
-                findings = f" \u2014 {item.findings}" if item.findings else ""
-                lines.append(f"  [\u2713] {item.label}{findings}")
+                detail = item.display()
+                suffix = f" \u2014 {detail}" if detail else ""
+                lines.append(f"  [\u2713] {item.label}{suffix}")
             else:
                 lines.append(f"  [ ] {item.label}")
 

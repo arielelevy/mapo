@@ -5,7 +5,6 @@ Uses ONE msearch to fetch doc metadata (label, size, language) for classificatio
 
 import json
 import logging
-from typing import Any, Dict, List, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
@@ -15,16 +14,20 @@ logger = logging.getLogger(__name__)
 
 
 async def build_document_metadata(
-    doc_ids: List[str],
-    user_query: str,
+    doc_ids: list[str],
     config: RunnableConfig | None = None,
-) -> Tuple[Dict[str, str], Dict[str, str], List[str]]:
+) -> tuple[dict[str, str], dict[str, str], list[str]]:
     """Batch-fetch doc metadata for classification in ONE msearch request.
 
     Fetches label, fragment_count, and language per doc — no BM25 scoring.
     Returns: (previews, doc_labels, document_languages)
+
+    The old signature took a `user_query` it never read, and returned nothing when that
+    argument was empty: the document metadata — labels, page counts, languages, all of
+    it independent of the question — disappeared because of a parameter the function
+    did not use.
     """
-    if not doc_ids or not user_query:
+    if not doc_ids:
         return {}, {}, []
 
     msearch_lines = []
@@ -66,9 +69,9 @@ async def build_document_metadata(
         raise RuntimeError(f"build_document_metadata: msearch HTTP {status}: {body}")
     msearch_result = json.loads(resp.content.decode("utf-8"))
 
-    doc_metadata: Dict[str, str] = {}
-    doc_labels: Dict[str, str] = {}
-    document_languages: List[str] = []
+    doc_metadata: dict[str, str] = {}
+    doc_labels: dict[str, str] = {}
+    document_languages: list[str] = []
     responses = msearch_result.get("responses", [])
 
     for i, did in enumerate(doc_ids):
@@ -116,25 +119,3 @@ async def build_document_metadata(
             "build_document_metadata: detected languages: %s", document_languages
         )
     return doc_metadata, doc_labels, document_languages
-
-
-def extract_entities_from_messages(messages: List[Any]) -> List[str]:
-    """Extract entity labels (doc names) from add_entities messages."""
-    doc_names: List[str] = []
-    for msg in messages or []:
-        msg_type = getattr(msg, "type", None) or (
-            msg.get("type") if isinstance(msg, dict) else None
-        )
-        if msg_type != "add_entities":
-            continue
-        content = getattr(msg, "content", None) or (
-            msg.get("content") if isinstance(msg, dict) else None
-        )
-        if not isinstance(content, list):
-            continue
-        for entity in content:
-            if isinstance(entity, dict):
-                label = entity.get("entity_label", "")
-                if label:
-                    doc_names.append(label)
-    return doc_names

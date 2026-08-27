@@ -28,7 +28,7 @@ import httpx
 from .config import Settings
 from .llm import RETRYABLE_STATUS
 from .features import FeatureExtractor, Features
-from .llm import LLMClient, SealedCacheMiss, SeededClient
+from .llm import LLMClient, SealedCacheMiss, SeededClient, Usage
 from .metrics import Observation, Study
 from .paradigms import COST_PRIORS, FALLBACK, REGISTRY, Infeasible
 from .embeddings import EmbeddingClient
@@ -439,6 +439,10 @@ class Runner:
             # connection is the transport's, and scoring it as a wrong answer attributes
             # someone else's quota to a topology.
             infra = _is_infrastructure(exc)
+            # The tokens the paradigm burned before blowing up are gone from its own
+            # Usage (it never returned one), but the client metered them. Recording 0
+            # here would teach the cost model that this paradigm fails cheaply.
+            spent = getattr(client, "spent", None) or Usage()
             return Row(
                 task_id=task["task_id"],
                 cell=task["cell"],
@@ -446,8 +450,8 @@ class Runner:
                 trial=trial,
                 region=features.region(),
                 utility=0.0,
-                cost_tokens=0,
-                calls=0,
+                cost_tokens=spent.total_tokens,
+                calls=spent.calls,
                 wall_seconds=round(time.perf_counter() - started, 3),
                 iterations=0,
                 cross_unit_lookups=0,

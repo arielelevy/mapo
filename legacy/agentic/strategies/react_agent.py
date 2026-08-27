@@ -18,21 +18,19 @@ and what remains.
 
 import json
 import logging
-from typing import Callable
 
-from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
-    BaseMessage,
     HumanMessage,
     SystemMessage,
     ToolMessage,
 )
-from langchain_core.tools import BaseTool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
 
 from ..config import (
+    REFINE_CONTEXT_CAP_CHARS,
+    REFINE_CONTEXT_SHARE,
     TEMP_EXTRACT,
     SCRATCHPAD_THRESHOLD_CHARS,
     SCRATCHPAD_INPUT_CHARS,
@@ -49,7 +47,7 @@ from ..agent_config import (
     SCRATCHPAD_EXTRACT_PROMPT,
 )
 from ..blackboard import Blackboard
-from ..context_guard import ContextGuard
+from ..tool_loop import ToolLoopLimits, run_tool_loop
 from ..tools.agent_tools import build_agent_tools
 from ..tools.retrieval import semantic_retrieval
 from ..utils import scratchpad_compress, emit_ui_event
@@ -68,161 +66,6 @@ AGENT_PROMPT = ChatPromptTemplate.from_messages(
         ),
     ]
 )
-
-
-# ── Tool loop ─────────────────────────────────────────────────────────────────
-
-
-def _extract_entity_ids(raw_result: str) -> set[str]:
-    """Extract entity_ids from tool result JSON."""
-    ids: set[str] = set()
-    try:
-        data = json.loads(raw_result)
-    except (json.JSONDecodeError, TypeError):
-        return ids
-    _collect_ids(ids, data)
-    return ids
-
-
-def _collect_ids(ids: set[str], obj: object) -> None:
-    if isinstance(obj, dict):
-        for key in ("entity_id", "source_entity_uid", "source_file_id"):
-            val = obj.get(key)
-            if isinstance(val, str) and len(val) > 8:
-                ids.add(val)
-        for v in obj.values():
-            _collect_ids(ids, v)
-    elif isinstance(obj, list):
-        for item in obj:
-            _collect_ids(ids, item)
-
-
-async def _run_tool_loop(
-    llm_with_tools: BaseChatModel,
-    tools: list[BaseTool],
-    messages: list[BaseMessage],
-    scratchpad: dict[str, str],
-    extract_fn: Callable,
-    max_iter: int,
-    config: RunnableConfig | None = None,
-    tracker: Blackboard | None = None,
-    query: str = "",
-) -> AIMessage | None:
-    """Execute the ReAct tool-calling loop with blackboard + context guard."""
-    guard = ContextGuard()
-    response = None
-    for _iteration in range(max_iter):
-        # Inject tracker state before each LLM call
-        if tracker and tracker.total_count > 0:
-            tracker.inject_into_messages(messages)
-
-        # Context guard: evict old tool results if context is too large
-        if guard.needs_eviction(messages):
-            await guard.evict(messages, tracker, config, query=query)
-
-        # Log context size before LLM call
-        total_chars = sum(len(str(m.content)) for m in messages)
-        logger.info(
-            "llm_invoke iter=%d | %d messages | %d chars",
-            _iteration,
-            len(messages),
-            total_chars,
-        )
-
-        response = await llm_with_tools.ainvoke(messages)
-        messages.append(response)
-
-        if not response.tool_calls:
-            break
-
-        for tool_call in response.tool_calls:
-            tool_fn = next((t for t in tools if t.name == tool_call["name"]), None)
-            tool_call_id: str = tool_call.get("id") or ""
-            if not tool_fn:
-                messages.append(
-                    ToolMessage(
-                        content=f"Error: unknown tool '{tool_call['name']}'",
-                        tool_call_id=tool_call_id,
-                    )
-                )
-                continue
-
-            args_summary = ", ".join(
-                f"{k}={str(v)[:80]}" for k, v in sorted(tool_call["args"].items())
-            )
-
-            # Dedup: skip if exact same tool+args already executed
-            if tracker and tracker.was_tool_called(tool_call["name"], args_summary):
-                messages.append(
-                    ToolMessage(
-                        content='{"already_executed": true, "next_step": "This exact call was already made. Try different parameters."}',
-                        tool_call_id=tool_call_id,
-                    )
-                )
-                continue
-
-            if tracker:
-                tracker.record_tool_call(tool_call["name"], args_summary)
-
-            await emit_ui_event(
-                config,
-                f"Calling: {tool_call['name']}({args_summary})",
-            )
-
-            logger.info(
-                "tool_call iter=%d | %s(%s)",
-                _iteration,
-                tool_call["name"],
-                args_summary,
-            )
-
-            try:
-                raw_result = str(await tool_fn.ainvoke(tool_call["args"]))
-            except Exception as e:
-                logger.error("tool %s failed: %s", tool_call["name"], e, exc_info=True)
-                messages.append(
-                    ToolMessage(
-                        content=f"Error: tool '{tool_call['name']}' failed: {e}",
-                        tool_call_id=tool_call_id,
-                    )
-                )
-                continue
-
-            # Log tool result details
-            result_len = len(raw_result)
-            result_preview = raw_result[:500].replace("\n", " ")
-            num_results = 0
-            if '"results"' in raw_result[:200]:
-                num_results = raw_result.count('"entity_id"')
-            logger.info(
-                "tool_result iter=%d | %s | %d chars | %d entities | %s",
-                _iteration,
-                tool_call["name"],
-                result_len,
-                num_results,
-                result_preview,
-            )
-
-            # Auto-mark blackboard items visited ONLY for read operations
-            # (not for search results — highlights/summaries are not "reading")
-            if tracker and tool_call["name"] == "read_fragment":
-                touched_ids = _extract_entity_ids(raw_result)
-                tracker.mark_visited(touched_ids)
-
-            scratchpad[tool_call_id] = raw_result
-            extracted = await extract_fn(
-                tool_call["name"], tool_call["args"], raw_result
-            )
-            logger.info(
-                "tool_extracted iter=%d | %s | %d->%d chars",
-                _iteration,
-                tool_call["name"],
-                result_len,
-                len(extracted),
-            )
-            messages.append(ToolMessage(content=extracted, tool_call_id=tool_call_id))
-
-    return response
 
 
 # ── Grounding search ─────────────────────────────────────────────────────────
@@ -265,7 +108,7 @@ async def react_agent(
     state: OrchestratorState, config: RunnableConfig | None = None
 ) -> dict:
     """ReAct agent with investigation tracker and scratchpad."""
-    agent_config = AGENT_CONFIGS.get("react_agent", AGENT_CONFIGS["react_agent"])
+    agent_config = AGENT_CONFIGS["react_agent"]
     llm = await get_chat_model(config, None, 0)
 
     ws = state.get("workspace_id", "")
@@ -303,6 +146,10 @@ async def react_agent(
         key_terms=key_terms,
         config=config,
         investigation_queue=board if board.total_count > 0 else None,
+        # find_recurring_names works from this candidate set. Without it the tool has
+        # nothing to look for and answers "none" to every cross-document question.
+        ner_entities=state.get("doc_ner_entities", {}),
+        entity_types=state.get("entity_types_filter", []),
     )
 
     llm_with_tools = llm.bind_tools(tools)
@@ -446,17 +293,19 @@ async def react_agent(
     max_iterations = agent_config.max_iterations
     if is_exhaustive:
         max_iterations = max_iterations * 2
-    response = await _run_tool_loop(
+    loop_result = await run_tool_loop(
         llm_with_tools,
         tools,
         messages,
-        scratchpad,
-        _extract_relevant,
-        max_iterations,
-        config,
-        board,
+        extract_fn=_extract_relevant,
+        limits=ToolLoopLimits(max_iterations=max_iterations),
+        config=config,
+        board=board,
         query=state["query"],
+        scratchpad=scratchpad,
+        label="react_agent",
     )
+    response = loop_result.response
 
     # Post-loop nudge: in exhaustive mode, nudge even if has_answer
     # (force more searching when items remain), otherwise only if no answer.
@@ -490,17 +339,19 @@ async def react_agent(
                 content=f"<system-instruction>\n{nudge}\n</system-instruction>"
             )
         )
-        response = await _run_tool_loop(
+        loop_result = await run_tool_loop(
             llm_with_tools,
             tools,
             messages,
-            scratchpad,
-            _extract_relevant,
-            min(len(pending) + 2, 5),
-            config,
-            board,
+            extract_fn=_extract_relevant,
+            limits=ToolLoopLimits(max_iterations=min(len(pending) + 2, 5)),
+            config=config,
+            board=board,
             query=state["query"],
+            scratchpad=scratchpad,
+            label="react_agent.nudge",
         )
+        response = loop_result.response
 
     logger.info(
         "react_agent: blackboard %d/%d fragments done, %d docs covered",
@@ -514,9 +365,10 @@ async def react_agent(
         response, ctx_docs, ws, config, scratchpad
     )
 
-    # Final refinement with citations — use GPT-5 for exhaustive to extract all findings
-    refine_model = None
-    refine_llm = await get_chat_model(config, refine_model, 0, streaming=True)
+    # Final refinement with citations, on the request model. A commented intent to use
+    # a bigger model for the exhaustive path lived here as `refine_model = None`, which
+    # is exactly the same as not doing it.
+    refine_llm = await get_chat_model(config, None, 0, streaming=True)
     agent_answer = str(response.content) if response else ""
     if is_exhaustive:
         refine_msg = (
@@ -572,10 +424,10 @@ async def react_agent(
             ai_client = get_ai_client(config)
             model_name = get_request_model(config)
             max_tokens = await ai_client.get_max_context_window(model_name)
-            max_context_chars = int(max_tokens * 4 * 0.6)
+            max_context_chars = int(max_tokens * 4 * REFINE_CONTEXT_SHARE)
         except Exception:
-            max_context_chars = 70_000  # safe default
-        max_context_chars = min(max_context_chars, 70_000)  # hard cap
+            max_context_chars = REFINE_CONTEXT_CAP_CHARS
+        max_context_chars = min(max_context_chars, REFINE_CONTEXT_CAP_CHARS)
 
         if len(context) > max_context_chars and context_parts:
             # Summarize each part to fit within budget
@@ -602,8 +454,14 @@ async def react_agent(
                         ),
                     ]
                 )
-                summarized_parts.append(str(summary_resp.content).strip())
-            context = "\n---\n".join(summarized_parts)
+                # Truncated, not merely requested. The prompt asks the model to
+                # keep under the budget and the model is free to ignore it; a budget
+                # that is only asked for is not a budget (scratchpad_compress cuts for
+                # the same reason).
+                summarized_parts.append(
+                    str(summary_resp.content).strip()[:max_per_part]
+                )
+            context = "\n---\n".join(summarized_parts)[:max_context_chars]
             logger.info(
                 "react_agent: summarized refine context to %dch (budget %dch, %d parts)",
                 len(context),

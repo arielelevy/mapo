@@ -12,7 +12,6 @@ Runs after strategy nodes, before verify_answer.
 
 import logging
 import re
-from typing import cast
 
 from langchain_core.callbacks import adispatch_custom_event
 from langchain_core.runnables import RunnableConfig
@@ -20,7 +19,8 @@ from langchain_core.runnables import RunnableConfig
 from .state import OrchestratorState
 from .tools.opensearch_repository import (
     batch_search_entity_by_label,
-    batch_verify_entity_ids,
+    batch_verify_entity_details,
+    batch_verify_entity_types,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,10 +71,7 @@ async def resolve_entity_links(
     malformed = list(ENTITY_LINK_NO_TYPE_RE.finditer(answer))
     if malformed:
         mal_ids = list({m.group(2) for m in malformed})
-        mal_verified = cast(
-            dict[str, dict[str, str]],
-            await batch_verify_entity_ids(mal_ids, config, include_label=True),
-        )
+        mal_verified = await batch_verify_entity_details(mal_ids, config)
         for match in reversed(malformed):
             label = match.group(1)
             eid = match.group(2)
@@ -105,7 +102,7 @@ async def resolve_entity_links(
     all_links = list(ENTITY_LINK_RE.finditer(answer))
     if all_links:
         unique_ids = list({m.group(2) for m in all_links})
-        verified = await batch_verify_entity_ids(unique_ids, config)
+        verified = await batch_verify_entity_types(unique_ids, config)
 
         for match in reversed(all_links):
             name = match.group(1)

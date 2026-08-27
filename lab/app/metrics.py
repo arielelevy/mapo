@@ -554,7 +554,10 @@ class Study:
             "measured_oracle_gap": round(measured, 5),
             "noise_floor": noise,
             "net_of_noise": round(measured - noise, 5) if noise is not None else None,
-            "credible": (measured > 2 * noise) if noise else None,
+            # `is not None`, not truthiness: a noise floor of exactly 0.0 is what a
+            # deterministic model MEASURES, and reporting it as "not evaluable" threw
+            # away the cleanest case the harness can produce.
+            "credible": (measured > 2 * noise) if noise is not None else None,
             "detail": floor,
         }
 

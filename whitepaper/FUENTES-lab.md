@@ -3,7 +3,7 @@
 Empieza de cero (decisión del autor, 2026-08-27): sin ninguna referencia a marcas
 o productos anteriores. Se escribe SEGUNDO, desde el registro medido del engine.
 
-Fuentes canónicas, todas en `../engine/`:
+Fuentes canónicas, todas en `../legacy/`:
 
 - `README.md` §"The deliverable" — el diseño del producto que el paper valida.
 - `README.md` §"Registered predictions" (P1–P14) y §"Findings so far" — las

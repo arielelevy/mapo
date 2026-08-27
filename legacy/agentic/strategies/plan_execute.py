@@ -12,28 +12,29 @@ comparisons, and exhaustive entity extraction ("list all addresses").
 """
 
 import logging
-import re as _re
 
 from langchain_core.callbacks import adispatch_custom_event
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Send
 from pydantic import BaseModel, Field
 
 from ..blackboard import Blackboard
 from ..context_guard import ContextGuard
+from ..tool_loop import ToolLoopLimits, run_tool_loop
 from ..config import (
+    PE_AGENT_TIMEOUT,
+    PE_MAX_TOTAL_TOOL_CALLS,
     PE_SUB_AGENT_ITERATIONS,
-    PE_CONTEXT_CHAR_LIMIT,
+    PE_CONTEXT_GROWTH_LIMIT,
     PE_KEEP_RECENT_MESSAGES,
     TEMP_PLAN,
     TEMP_AGENT,
     TEMP_EXTRACT,
-    TEMP_FORMAT,
     PE_MAX_SUB_QUERIES,
     PE_CONTEXT_CHARS,
-    PE_TOOL_CONTEXT_CHARS,
-    PE_SUB_ANSWER_CHARS,
+    SYNTHESIS_TOOL_CONTEXT_CHARS,
+    SUB_ANSWER_CHARS,
     SCRATCHPAD_THRESHOLD_CHARS,
     SCRATCHPAD_INPUT_CHARS,
     SCRATCHPAD_TARGET_CHARS,
@@ -49,6 +50,13 @@ from ..agent_config import (
     DOMAIN_INSTRUCTIONS,
 )
 from ..utils import build_aggregate_messages, scratchpad_compress
+from .planning import planner_context
+from .synthesis import (
+    append_coverage,
+    append_scope_warnings,
+    build_sections,
+    final_answer,
+)
 from ..tools.agent_tools import build_agent_tools
 from ..state import OrchestratorState, SubQueryState, get_scoped_doc_ids
 
@@ -87,36 +95,9 @@ async def pe_plan(
     )
     llm = llm.with_structured_output(PlanResult)
 
-    entity_context = state.get("entity_context", "")
-
-    # Extract document names from entity_context for the planner's awareness
-    doc_labels = (
-        _re.findall(r"--- \[(.+?)\] ---", entity_context) if entity_context else []
-    )
-    docs_info = (
-        "\nAvailable documents:\n" + "\n".join(f"- {lbl}" for lbl in doc_labels)
-        if doc_labels
-        else ""
-    )
-
     # NOTE: prefetch is intentionally NOT passed to the planner — it was
     # causing scope expansion (planner saw unrelated topics and generated
     # sub-queries for them).  Sub-query agents already receive prefetch.
-
-    # Domain-specific hints (e.g. legal → extract rulings, forensic → methods)
-    domain = state.get("document_domain", "general")
-    domain_hint = ""
-    if domain != "general":
-        domain_extra = DOMAIN_INSTRUCTIONS.get(domain, "")
-        if domain_extra:
-            domain_hint = f"\n\nDocument domain: {domain}{domain_extra}"
-        doc_languages = state.get("document_languages", [])
-        if doc_languages:
-            domain_hint += f"\nDocument languages: {', '.join(doc_languages)}"
-            domain_hint += (
-                "\nMake sub-queries in the DOCUMENT LANGUAGE for better search results."
-            )
-
     result: PlanResult = await llm.ainvoke(  # type: ignore[assignment]
         [
             SystemMessage(
@@ -125,7 +106,7 @@ async def pe_plan(
                 )
             ),
             HumanMessage(
-                content=f"{docs_info}{domain_hint}\n\nQuery: {state['query']}"
+                content=f"{planner_context(state)}\n\nQuery: {state['query']}"
             ),
         ]
     )
@@ -143,7 +124,9 @@ async def pe_plan(
         cfgable = config.get("configurable", {})
         cfgable["pe_blackboard"] = board
         # Divide context budget evenly across sub-agents
-        cfgable["pe_char_limit"] = PE_CONTEXT_CHAR_LIMIT // max(len(sub_queries), 1)
+        cfgable["pe_growth_limit"] = PE_CONTEXT_GROWTH_LIMIT // max(
+            len(sub_queries), 1
+        )
     logger.info("pe_plan: blackboard seeded with %d items", board.total_count)
 
     return {"pe_sub_queries": sub_queries}
@@ -171,6 +154,9 @@ def pe_fan_out(state: OrchestratorState) -> list[Send] | str:
 
     query_language = state.get("query_language", "English")
     history_text = state.get("history_text", "")
+    ner_entities = state.get("doc_ner_entities", {})
+    entity_types_filter = state.get("entity_types_filter", [])
+    scope_warnings = state.get("scope_warnings", [])
 
     return [
         Send(
@@ -185,6 +171,9 @@ def pe_fan_out(state: OrchestratorState) -> list[Send] | str:
                 "document_domain": domain,
                 "query_language": query_language,
                 "history_text": history_text,
+                "doc_ner_entities": ner_entities,
+                "entity_types_filter": entity_types_filter,
+                "scope_warnings": scope_warnings,
                 "result": "",
             },
         )
@@ -202,9 +191,9 @@ async def pe_execute_subquery(
 ) -> dict:
     """Execute a single sub-query using a mini react_agent with tools.
 
-    Each sub-query agent has the same tools as react_agent (retrieval,
-    full_text_search, semantic_search, etc.) and runs a tool-calling loop
-    capped at MAX_AGENT_ITERATIONS.
+    Same tools as react_agent (retrieval, full_text_search, semantic_search, ...) and
+    the same tool loop, capped at PE_SUB_AGENT_ITERATIONS — the docstring used to name
+    MAX_AGENT_ITERATIONS (20) while the code used 3.
     """
     llm = await get_chat_model(config, None, TEMP_AGENT)
 
@@ -219,7 +208,13 @@ async def pe_execute_subquery(
         config.get("configurable", {}).get("pe_blackboard") if config else None
     )
     all_tools = await build_agent_tools(
-        ws, suite, ctx_docs or None, config=config, investigation_queue=board
+        ws,
+        suite,
+        ctx_docs or None,
+        config=config,
+        investigation_queue=board,
+        ner_entities=state.get("doc_ner_entities", {}),
+        entity_types=state.get("entity_types_filter", []),
     )
     llm_with_tools = llm.bind_tools(all_tools)
 
@@ -241,7 +236,7 @@ async def pe_execute_subquery(
     if domain_extra:
         system_prompt += domain_extra
     system_prompt += (
-        f"\n\nSTRICT LIMIT: your answer MUST be under {PE_SUB_ANSWER_CHARS} characters. "
+        f"\n\nSTRICT LIMIT: your answer MUST be under {SUB_ANSWER_CHARS} characters. "
         "Only include facts. No introductions, no summaries, no filler. "
         "If you have more data, prioritize the most relevant items."
         "\nCITATIONS: use **bold document names** for every fact."
@@ -284,91 +279,42 @@ async def pe_execute_subquery(
         )
 
     # Tool-calling loop with scratchpad compression + shared blackboard
-    char_limit = (
-        config.get("configurable", {}).get("pe_char_limit", PE_CONTEXT_CHAR_LIMIT)
+    growth_limit = (
+        config.get("configurable", {}).get("pe_growth_limit", PE_CONTEXT_GROWTH_LIMIT)
         if config
-        else PE_CONTEXT_CHAR_LIMIT
+        else PE_CONTEXT_GROWTH_LIMIT
     )
     guard = ContextGuard(
-        growth_threshold=char_limit, keep_recent=PE_KEEP_RECENT_MESSAGES
+        growth_threshold=growth_limit, keep_recent=PE_KEEP_RECENT_MESSAGES
     )
-    response = None
-    for iteration in range(PE_SUB_AGENT_ITERATIONS):
-        # Inject latest blackboard state before each LLM call
-        if board and board.total_count > 0:
-            board.inject_into_messages(messages)
-            logger.info(
-                "pe_execute[%s] iter=%d blackboard %d/%d done",
-                sub_query[:30],
-                iteration,
-                board.done_count,
-                board.total_count,
-            )
+    # Same loop as react_agent and dag_execute (agentic/tool_loop.py). Dedup and the
+    # tool ceilings arrive here for the first time: this copy had neither, so a
+    # sub-agent could repeat one search until its iterations ran out.
+    loop_result = await run_tool_loop(
+        llm_with_tools,
+        all_tools,
+        messages,
+        extract_fn=_extract_relevant,
+        limits=ToolLoopLimits(
+            max_iterations=PE_SUB_AGENT_ITERATIONS,
+            max_total_calls=PE_MAX_TOTAL_TOOL_CALLS,
+            timeout_seconds=PE_AGENT_TIMEOUT,
+            emit_progress=False,
+        ),
+        config=config,
+        board=board,
+        guard=guard,
+        query=sub_query,
+        label=f"pe_execute[{sub_query[:30]}]",
+    )
+    response = loop_result.response
 
-        # Evict old tool results if context is too large
-        if guard.needs_eviction(messages):
-            evicted = await guard.evict(messages, board, config, query=sub_query)
-            logger.info("pe_execute[%s] evicted %d messages", sub_query[:30], evicted)
-
-        response = await llm_with_tools.ainvoke(messages)
-        messages.append(response)
-
-        if not response.tool_calls:
-            logger.info(
-                "pe_execute[%s] iter=%d no tool calls, finishing",
-                sub_query[:30],
-                iteration,
-            )
-            break
-
-        for tool_call in response.tool_calls:
-            tool_fn = next((t for t in all_tools if t.name == tool_call["name"]), None)
-            tool_call_id: str = tool_call.get("id") or ""
-
-            if not tool_fn:
-                logger.warning(
-                    "pe_execute[%s] unknown tool: %s",
-                    sub_query[:30],
-                    tool_call["name"],
-                )
-                messages.append(
-                    ToolMessage(
-                        content=f"Error: unknown tool '{tool_call['name']}'",
-                        tool_call_id=tool_call_id,
-                    )
-                )
-                continue
-
-            logger.info(
-                "pe_execute[%s] tool=%s args=%s",
-                sub_query[:30],
-                tool_call["name"],
-                str(tool_call.get("args", {}))[:100],
-            )
-
-            try:
-                raw_result = str(await tool_fn.ainvoke(tool_call["args"]))
-            except Exception as e:
-                logger.error(
-                    "pe_execute: tool %s failed: %s",
-                    tool_call["name"],
-                    e,
-                    exc_info=True,
-                )
-                messages.append(
-                    ToolMessage(
-                        content=f"Error: tool '{tool_call['name']}' failed: {e}",
-                        tool_call_id=tool_call_id,
-                    )
-                )
-                continue
-
-            extracted = await _extract_relevant(
-                tool_call["name"], tool_call["args"], raw_result
-            )
-            messages.append(ToolMessage(content=extracted, tool_call_id=tool_call_id))
-
-    answer = response.content if response else ""
+    answer = loop_result.answer
+    if loop_result.exhausted:
+        answer = (
+            f"{answer}\n\n[TRUNCATED: this sub-answer stopped early "
+            f"({loop_result.stopped_by}) and may be incomplete.]"
+        )
     logger.info("pe_execute: '%s' → %d chars", sub_query[:50], len(answer))
 
     # Mark this sub-query as done on the shared blackboard
@@ -411,47 +357,35 @@ async def pe_aggregate(
     extractions = state.get("extractions", [])
 
     # Collect sub-query results and build tool_context for faithfulness check
-    sub_results = []
-    tool_context_parts = []
-    for ext in extractions:
-        if ext.get("entity_type") == "sub_query_result":
-            ctx = ext.get("context", "")[: int(PE_SUB_ANSWER_CHARS * 1.2)]
-            sub_results.append(f"### {ext['name']}\n{ctx}")
-            tool_context_parts.append(ctx)
+    items = [
+        (ext["name"], ext.get("context", ""))
+        for ext in extractions
+        if ext.get("entity_type") == "sub_query_result"
+    ]
+    combined, tool_context = build_sections(
+        items,
+        per_item_chars=int(SUB_ANSWER_CHARS * 1.2),
+        tool_context_chars=SYNTHESIS_TOOL_CONTEXT_CHARS,
+    )
+    sub_results = items
 
-    combined = "\n\n".join(sub_results)
-    tool_context = "\n---\n".join(tool_context_parts)[:PE_TOOL_CONTEXT_CHARS]
-
-    # Append blackboard coverage summary to the combined results
+    # Coverage, not the operating record (see synthesis.append_coverage).
     board: Blackboard | None = (
         config.get("configurable", {}).get("pe_blackboard") if config else None
     )
-    if board and board.total_count > 0:
-        combined += "\n\n" + board.render()
-        logger.info(
-            "pe_aggregate: blackboard %d/%d done",
-            board.done_count,
-            board.total_count,
-        )
+    combined = append_coverage(combined, board)
+    combined = append_scope_warnings(combined, state)
 
-    # Merge all sub-query results into one answer (streaming)
-    llm = await get_chat_model(
+    response = await final_answer(
+        PLAN_EXECUTE_AGGREGATE_PROMPT
+        + "\n\n"
+        + OUTPUT_FORMAT_PROMPT.format(
+            query_language=state.get("query_language", "English")
+        ),
+        state["query"],
+        state,
+        combined,
         config,
-        temperature=TEMP_FORMAT,
-        streaming=True,
-        mini=False,
-    )
-    response = await llm.ainvoke(
-        build_aggregate_messages(
-            PLAN_EXECUTE_AGGREGATE_PROMPT
-            + "\n\n"
-            + OUTPUT_FORMAT_PROMPT.format(
-                query_language=state.get("query_language", "English")
-            ),
-            state["query"],
-            state,
-            context=combined,
-        )
     )
 
     logger.info(

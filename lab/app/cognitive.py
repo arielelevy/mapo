@@ -244,6 +244,13 @@ def compact_history(
     for units that are actually noted, and the stub names them so the agent can re-read
     if it decides the note was insufficient. Nothing is deleted that has not been
     summarised somewhere the agent can still see.
+
+    That last sentence is the reason this works entry by entry rather than message by
+    message. A batched read puts several units in ONE tool result; replacing the whole
+    message because one of them is noted took the other N-1 with it -- unnoted, unstubbed
+    and unmentioned, so the agent could not even know to re-read them. Only the noted
+    entries are demoted; the rest stay verbatim, and the message is replaced wholesale
+    only when every entry in it was noted.
     """
     if not noted_units:
         return 0
@@ -265,16 +272,36 @@ def compact_history(
             continue
         # Only full-text payloads are worth compacting; summaries and highlights are
         # already small and removing them would lose the map of what exists.
-        ids = [
-            e.get("unit_id") for e in entries
-            if isinstance(e, dict) and "text" in e and e.get("unit_id") in noted_units
-        ]
+        def is_noted_full_text(entry: Any) -> bool:
+            return (
+                isinstance(entry, dict)
+                and "text" in entry
+                and entry.get("unit_id") in noted_units
+            )
+
+        ids = [e.get("unit_id") for e in entries if is_noted_full_text(e)]
         if not ids:
             continue
-        message["content"] = (
-            f"[compacted: full text of {', '.join(ids)} removed; "
-            f"the findings are in notes]"
-        )
+
+        if all(is_noted_full_text(e) for e in entries):
+            message["content"] = (
+                f"[compacted: full text of {', '.join(ids)} removed; "
+                f"the findings are in notes]"
+            )
+        else:
+            rewritten = [
+                {
+                    "unit_id": e.get("unit_id"),
+                    "compacted": "full text removed; the findings are in notes",
+                }
+                if is_noted_full_text(e) else e
+                for e in entries
+            ]
+            if isinstance(payload, list):
+                message["content"] = json.dumps(rewritten, ensure_ascii=False)
+            else:
+                payload["results"] = rewritten
+                message["content"] = json.dumps(payload, ensure_ascii=False)
         compacted += 1
 
     state.compactions += compacted

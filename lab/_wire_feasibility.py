@@ -6,15 +6,44 @@ import sys
 ROOT = pathlib.Path(__file__).parent
 
 
+# Guarda de idempotencia. Esto es una migracion de una sola vez, no una herramienta:
+# sus anclas siguen matcheando el archivo YA parcheado, asi que una segunda corrida
+# duplica el fragmento (y deja el modulo con SyntaxError) antes de abortar en un ancla
+# posterior. Se rechaza de entrada, y ademas se verifican TODAS las anclas antes de
+# escribir cualquier archivo.
+def refuse_if_applied(markers):
+    done = [p for p, m in markers if m in (ROOT / p).read_text(encoding="utf-8")]
+    if done:
+        sys.exit("YA APLICADO en " + ", ".join(done) + ": no se toca nada.")
+
+
+refuse_if_applied([
+    ("app/paradigms/dag.py", "max_board_chars"),
+    ("app/runner.py", "_infeasible_row"),
+    ("app/router.py", "infeasible: dict[str, str] | None = None"),
+])
+
+
+
+STAGED: list[tuple[str, str]] = []
+
+
 def patch(path: str, pairs: list[tuple[str, str]]) -> None:
+    """Stage a patched file: nada llega a disco hasta que TODAS las anclas matchearon."""
     p = ROOT / path
     s = p.read_text(encoding="utf-8")
     for old, new in pairs:
         if old not in s:
             sys.exit(f"FAIL {path}: anchor missing ->\n{old[:170]}")
         s = s.replace(old, new, 1)
-    p.write_text(s, encoding="utf-8")
-    print(f"  patched {path}")
+    STAGED.append((path, s))
+    print(f"  staged {path}")
+
+
+def commit() -> None:
+    for staged_path, text in STAGED:
+        (ROOT / staged_path).write_text(text, encoding="utf-8")
+        print(f"  patched {staged_path}")
 
 
 patch("app/paradigms/dag.py", [
@@ -174,6 +203,7 @@ s = s.replace(
     '        """Turn a rule action into a concrete plan under the assurance profile."""\n'
     "        notes: list[str] = []\n        infeasible = infeasible or {}",
 )
-p.write_text(s, encoding="utf-8")
+STAGED.append(("app/router.py", s))
+commit()
 print("  router prunes infeasible candidates first")
 print("done")

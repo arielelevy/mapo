@@ -70,6 +70,30 @@ from ..config import (
 logger = logging.getLogger(__name__)
 
 
+def _format_entity(
+    entity: Any, max_text_chars: int, include_summary: bool = False
+) -> dict[str, Any]:
+    """One result, as the LLM sees it. Shared by both entry points on purpose: the
+    hybrid path and the standalone KNN path used to build this dict separately, so a
+    field added to one was missing from the other."""
+    entry: dict[str, Any] = {
+        "entity_id": entity.entity_id,
+        "entity_type": entity.entity_type,
+        "document": entity.entity_label or entity.entity_id,
+        "score": round(entity.score, 4),
+        "text": entity.content[:max_text_chars],
+    }
+    if include_summary and entity.summary:
+        entry["summary"] = entity.summary
+    if entity.source_entity_uid:
+        entry["source_file_id"] = entity.source_entity_uid
+        if entity.fragment_page_number is not None:
+            entry["page"] = entity.fragment_page_number
+        if entity.fragment_count is not None:
+            entry["total_pages"] = entity.fragment_count
+    return entry
+
+
 async def semantic_retrieval(
     query: str,
     entity_names: list[str] | None = None,
@@ -109,6 +133,7 @@ async def semantic_retrieval(
     fused: list[RetrievedEntity] = sub_result.get("fused_entities", [])
     entity_matches: list[EntityMatch] = sub_result.get("entity_matches", [])
     provenance = sub_result.get("provenance", "")
+    degraded: list[str] = sub_result.get("degraded", [])
 
     # Score gap detection: scan consecutive scores for the largest drop.
     # If the drop exceeds SCORE_GAP_MIN_FRACTION * max_score, cut there.
@@ -139,25 +164,7 @@ async def semantic_retrieval(
             )
             candidates = candidates[:best_gap_idx]
 
-    results = []
-    for e in candidates:
-        doc_label = e.entity_label or e.entity_id
-        text = e.content[:max_text_chars]
-
-        entry = {
-            "entity_id": e.entity_id,
-            "entity_type": e.entity_type,
-            "document": doc_label,
-            "score": round(e.score, 4),
-            "text": text,
-        }
-        if e.source_entity_uid:
-            entry["source_file_id"] = e.source_entity_uid
-            if e.fragment_page_number is not None:
-                entry["page"] = e.fragment_page_number
-            if e.fragment_count is not None:
-                entry["total_pages"] = e.fragment_count
-        results.append(entry)
+    results = [_format_entity(e, max_text_chars) for e in candidates]
 
     # Entity matches — lightweight pointers, separate from content results
     em_list = [
@@ -184,6 +191,16 @@ async def semantic_retrieval(
         "total_results": len(fused),
         "results": results,
     }
+    if degraded:
+        # Travels with the results, not only into the log: a search that ran without its
+        # vector branch answered a different question than one that had it, and whoever
+        # reads the results -- model or human -- has to be able to tell.
+        output["degraded"] = degraded
+        output["warning"] = (
+            "This search ran with reduced coverage: "
+            + "; ".join(degraded)
+            + ". Treat a negative result as inconclusive."
+        )
     if em_list:
         output["entity_matches"] = em_list
     if include_summaries:
@@ -207,65 +224,36 @@ async def knn_search(
 ) -> dict[str, Any]:
     """Standalone KNN vector search — returns matching chunk text (not full page).
 
-    Embeds the query and runs k-NN on rag:chunks embeddings. Returns the
-    inner_hit chunk text that matched the vector, plus summary and metadata.
+    Delegates to the subgraph's own KNN branch (`knn_entities`). It used to import five
+    private helpers from that module inside the function body and rebuild the query,
+    the min-score filter and the hit parsing by hand: one query with two
+    implementations, each free to drift.
     """
-    from ..subgraphs.semantic_search import (
-        _build_knn_query,
-        _extract_inner_hit_text,
-        os_search,
-        extract_chunks_by_field,
-        KNN_MIN_SCORE,
-    )
+    from ..subgraphs.semantic_search import knn_entities
     from ..utils import get_embedding
 
     query_vector = await get_embedding(query)
     if not query_vector:
-        return {"query": query, "results": [], "error": "no embedding service"}
+        # Named, not silent: without the embedding service this tool cannot answer at
+        # all, and an empty result would read as "nothing matches".
+        return {
+            "query": query,
+            "results": [],
+            "error": "no embedding service: semantic_search is unavailable",
+            "next_step": "Use full_text_search instead; it does not need embeddings.",
+        }
 
-    os_query = _build_knn_query(
+    entities = await knn_entities(
         query_vector,
         context_entity_ids=context_entity_ids,
         workspace_id=workspace_id,
+        config=config,
         size=max_results,
     )
-    raw = await os_search(os_query, config)
-    hits = raw.get("hits", {}).get("hits", [])
-
-    results = []
-    for hit in hits:
-        score = float(hit.get("_score", 0))
-        if score < KNN_MIN_SCORE:
-            continue
-        src = hit.get("_source", {})
-        doc_fields = src.get("document_fields", {})
-
-        # Inner hit = the specific chunk that matched the vector
-        chunk_text = _extract_inner_hit_text(hit)
-        # Fallback to full page text if no inner_hit
-        if not chunk_text:
-            chunk_text, _ = extract_chunks_by_field(hit)
-        if not chunk_text:
-            continue
-
-        _, summary = extract_chunks_by_field(hit, max_chars=0)
-
-        entry: dict[str, Any] = {
-            "entity_id": doc_fields.get("entity_id", ""),
-            "entity_type": doc_fields.get("entity_type", ""),
-            "document": doc_fields.get("entity_label", ""),
-            "score": round(score, 4),
-            "text": chunk_text,
-        }
-        if summary:
-            entry["summary"] = summary
-        if doc_fields.get("source_entity_uid"):
-            entry["source_file_id"] = doc_fields["source_entity_uid"]
-        if doc_fields.get("fragment_page_number") is not None:
-            entry["page"] = doc_fields["fragment_page_number"]
-        if doc_fields.get("fragment_count") is not None:
-            entry["total_pages"] = doc_fields["fragment_count"]
-        results.append(entry)
+    results = [
+        _format_entity(e, MAX_RETRIEVAL_RESULT_CHARS, include_summary=True)
+        for e in entities
+    ]
 
     logger.info("knn_search: %d results for '%s'", len(results), query[:50])
     return {"query": query, "results": results}
