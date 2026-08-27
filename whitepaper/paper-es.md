@@ -663,6 +663,117 @@ respuesta equivocada sino una ausente. Están excluidas de toda cifra de arriba 
 puntuadas como cero, porque un paradigma que nunca ejecutó no debe mezclarse con uno que
 respondió mal.
 
+## 7.4 El estudio de dos regímenes, con réplicas
+
+> Segundo estudio, corrido el 2026-08-26 con las predicciones P1–P5 registradas antes
+> (README del harness). Sets de tareas emparejados sobre `gold_v2` (en ventana, ~18k
+> tokens) y `gold_deep` (fuera de ventana, ~483k), `repeat = 3`, estabilidad por celda.
+> 126 + 158 filas válidas. Dos celdas pesadas fuera de ventana (`react`/`reflection`/
+> `dag` en c2-w48 y c5-w48) perdieron réplicas por rate limits del proveedor, quedaron
+> registradas como fallos de infraestructura, excluidas de toda cifra, y se están
+> re-corriendo; sus medias llevan menos trials y van marcadas †.
+
+Primero el barrido de factibilidad, porque no cuesta nada: a 135k tokens la aritmética
+poda leer-todo en 12 de 32 tareas; a 483k en **24 de 26**; a 1,27M en 24 de 32 — y a esa
+escala la poda alcanza a `map_reduce` en 18–20 tareas, cuyo gasto proyectado excede el
+presupuesto declarado (P1, confirmada). En ventana no se poda nada. El claim de régimen
+es aritmética, no medición.
+
+**En ventana (utilidad media / tokens medios por celda; flips = celdas cuya utilidad
+cambió entre réplicas):**
+
+| paradigma | C2 | C3 | C4 | C5 | flips | costo mediana (rango) |
+|---|---|---|---|---|---|---|
+| `direct` | 0,75 / 13k | **1,00** / 11k | 1,00 / 13k | **1,00** / 11k | **0/6** | **10,5k (1×)** |
+| `react` | 0,75 / 25k | 0,67 / 63k | 1,00 / **3k** | 1,00 / 61k | 3/6 | 23,8k (**70×**) |
+| `map_reduce` | 0,75 / 16k | **0,00** / 14k | 1,00 / 16k | **0,00** / 16k | 0/6 | 15,1k (1×) |
+| `plan_execute` | **0,00** / 27k | **0,00** / 11k | **0,00** / 32k | 0,33 / 29k | 1/6 | 19,0k (12×) |
+| `reflection` | 0,83 / 31k | 0,44 / 40k | 1,00 / 8k | 0,67 / 113k | 3/6 | 21,2k (27×) |
+| `dag_strategy` | 0,75 / 27k | 0,33 / 77k | 1,00 / 6k | 0,67 / 66k | 3/6 | 33,1k (**82×**) |
+
+**Fuera de ventana (misma convención; `direct` infactible salvo en las tareas chicas):**
+
+| paradigma | C2 | C3 | C4 | C5 | flips | costo mediana (rango) |
+|---|---|---|---|---|---|---|
+| `direct` | INFACTIBLE | INFACTIBLE | INFACTIBLE | 1,00 / 23k* | 0/8 | 22,9k (1×) |
+| `react` | 0,97† / 61k | **1,00** / 14k | 1,00 / 18k | 1,00† / 40k | **0/7** | **14,6k** (40×) |
+| `map_reduce` | 0,95 / 107k | **0,00** / 276k | 1,00 / 29k | **0,00** / 23k | 1/8 | 28,7k (15×) |
+| `plan_execute` | 0,62 / 88k | 0,33 / 18k | 0,33 / 80k | 0,33 / 94k | **4/8** | 34,4k (52×) |
+| `reflection` | 1,00† / 106k | 1,00 / 50k | 1,00 / 17k | 1,00† / 89k | 0/7 | 30,0k (47×) |
+| `dag_strategy` | 1,00† / 50k | **0,67** / 86k | 1,00 / 14k | 1,00† / 26k | 1/7 | 21,0k (59×) |
+
+\* sólo en tareas cuya propia evidencia entra: la poda es por tarea, no por corpus.
+
+Tres hallazgos que el primer estudio no podía ver:
+
+**El ranking se invierte con el régimen, según la predicción y más allá de ella.** En
+ventana, los lectores dominan en calidad, costo y estabilidad a la vez. Fuera de ventana
+no existen, y los paradigmas que el primer estudio rankeó últimos — `react`,
+`reflection`, `dag` — ocupan la cima de la tabla. `plan_execute` es la excepción en ambos
+regímenes: sin región ganadora, y fuera de ventana es lo menos estable que se midió
+(4 de 8 celdas dadas vuelta).
+
+**El cero de `map_reduce` en las acopladas es estructural, y ahora está medido a dos
+escalas** (P3, confirmada): 0,00 en ventana y 0,00 fuera, deterministamente — sus fallos
+ni siquiera se dan vuelta. §8.3 carga la mitad de costo de esto.
+
+**La estabilidad vive donde el retrieval no decide.** En ventana, los paradigmas con
+herramientas dieron vuelta 3 de 6 celdas cada uno mientras los lectores ninguna. Fuera de
+ventana, `react` no dio vuelta ninguna de 7 — sin el competidor leer-todo, su búsqueda
+tiene un trabajo que sí puede terminar — y la inestabilidad migró a `plan_execute`. La
+varianza no es propiedad de un paradigma; es propiedad de *a quién se le pide decidir
+cuándo parar*.
+
+## 7.5 La topología elaborada contra el fallback general
+
+La pregunta que este estudio existe para responder en lugar del reporte de campo
+retirado: ¿la topología más elaborada le gana al fallback general? La respuesta medida es
+que la pregunta tiene forma de régimen — y que donde más importa, el diferenciador no es
+la topología.
+
+En ventana, `dag_strategy` es la peor compra medida: el rango de costo más ancho (82×, de
+3,1k a 251k sobre sets idénticos), un 0,33 en las acopladas que `direct` resuelve por
+11k, y 3 de 6 celdas dándose vuelta entre réplicas. Fuera de ventana se transforma:
+utilidad perfecta en C2, C4 y C5 a costos que rivalizan o superan los de `react`†.
+
+Excepto en la cadena acoplada profunda, donde produjo la peor fila individual del
+estudio: **395.960 tokens en 35 iteraciones para un cero**, en una tarea que `react`
+resuelve por 10–14k con utilidad 1,0 en las tres réplicas. Esta corrida usó la superficie
+**basic** — sin señales contables — y la traza muestra el mecanismo de §8.2 a escala: el
+verificador sigue encontrando la respuesta incompleta, el replan sigue ensanchándose, y
+nada en el entorno dice *basta*. §7.3 midió que las señales cortan exactamente ese bucle
+3,05×. Juntos, los dos resultados dicen algo más filoso que "el DAG pierde": **la
+topología elaborada es viable fuera de ventana sólo bajo contabilidad impuesta desde
+afuera — lo que faltaba no era inteligencia del bucle.**
+
+## 7.6 Dos paradigmas entran por predicción registrada — uno sobrevive
+
+Contra las dos raíces de falla de §8 que ningún paradigma existente ataca barato,
+agregamos dos paradigmas con predicciones registradas antes de correr (P6–P7, README del
+harness) y los tamizamos sobre las tareas discriminantes fuera de ventana.
+
+**`rewoo`** — todas las tool calls planificadas en una pasada con placeholders de
+dataflow explícito, ejecutadas sin el modelo en el loop, una llamada de resolución; dos
+llamadas LLM en total, sin reenvío de historial [ReWOO, arXiv:2305.18323]. Las dos
+predicciones registradas se cumplieron, la primera más allá de su cota declarada: calidad
+idéntica a `react` en cobertura independiente (0,88 en C2, 1,00 en C4) al **3–8% del
+costo de react** en las mismas celdas (la predicción decía ≤50%), y utilidad 0,00 en las
+celdas acopladas y de horizonte desconocido — un plan que no puede observar no puede
+descubrir el hop que depende de un resultado previo. Sus utilidades fueron idénticas
+entre réplicas en las cuatro tareas. Un especialista de manual del Teorema 1: G grande
+dentro de una región de borde nítido, fallo total afuera.
+
+**`gist_reader`** — una tabla determinística de gists por unidad en un prompt, después
+lecturas completas dirigidas y batcheadas. **Su predicción principal fue falsificada**:
+se predijo u ≥ 0,75 en tres celdas y se alcanzó en una (C5: 1,00 a 8k donde `react` paga
+20–103k); en cobertura masiva y agregación exacta los gists de 312 caracteres no cargan
+el dato (0,29 en C2, 0,00 en C4) — precisamente el mecanismo de summary-failure que la
+predicción secundaria nombraba. Su cota de cardinalidad también se comportó según lo
+registrado: la tabla de gists queda infactible por aritmética en tareas de 400 unidades,
+registrado gratis. El paradigma queda medido y no promovido. Lo reportamos con el mismo
+largo que el éxito a propósito: la disciplina de predicciones registradas sólo vale la
+pena si una falsificación cuesta un párrafo y no una retractación.
+
 ---
 
 # 8. Mecanismos de falla
@@ -695,7 +806,10 @@ Map-Reduce falla ambas celdas acopladas y lee cero unidades relevantes en las cu
 construcción ve cada unidad aislada. Una cadena y una comparación entre unidades son irresolubles
 así por muchas veces que se las examine.
 
-\1
+El arreglo no es una herramienta mejor sino una negativa: el acoplamiento es una
+propiedad declarada de la tarea, así que la capa de factibilidad puede excluir al
+paradigma antes de gastar un token — lo que es más barato que cualquier cantidad de
+aprendizaje de que pierde.
 
 **Y el precio de esa falla escala con el corpus, la falla no.** El mismo paradigma, sobre la
 misma celda, a dos tamaños de unidad:
@@ -724,22 +838,26 @@ sobre la estructura de control.
 
 # 9. Limitaciones y amenazas a la validez
 
-**Todo entra en un prompt.** El corpus detrás de §7 tiene 16k tokens en su punto más ancho, así
-que leer-todo es correcto y a la vez lo más barato, y el orden es casi tautológico. Hay corpus de
-135k, 483k y 1.272k tokens generados y verificados, y el harness ya registra la infactibilidad
-como distinta del error — pero no se corrieron. **Ésta es la amenaza más grande y la próxima
-medición.**
+**El régimen en-ventana es casi tautológico, y §7.4 es la escapatoria — parcialmente
+recorrida.** El corpus detrás de §7.1–7.3 tiene 16k tokens en su punto más ancho, así que
+leer-todo es correcto y lo más barato ahí. El régimen fuera-de-ventana ya está medido a
+483k con `repeat = 3` (§7.4–7.5), y el claim de régimen a través de 135k/483k/1,27M
+descansa en el barrido de factibilidad a costo cero. Sigue abierto: no hay corrida
+completa a 1,27M (sólo su aritmética de factibilidad), dos celdas pesadas fuera de
+ventana re-corriéndose tras exclusiones por rate limit (marcadas † en §7.4), y un mundo
+held-out con seed nueva, generado y verificado independientemente, cuyo test de
+transferencia está registrado como P8 y no corrió todavía — **hasta que corra, los
+veredictos por celda son afirmaciones sobre mundos seed-7.**
 
-**n=1 por celda, y la varianza ya está parcialmente medida.** Una réplica no planeada
-(§7.3) muestra que la reproducibilidad es por tarea: 10 de 10 valores de calidad idénticos en
-tres celdas, 2 de 4 dados vuelta por una unidad completa en la cuarta y más difícil. El costo
-no fue reproducible en ninguna parte — dispersión media 2,05×, máxima 5,43× a calidad
-idéntica. **Todo efecto de calidad igual o menor a lo que vale una vuelta de moneda en una
-media de cuatro tareas (±0,250) es indistinguible del ruido con n=1**, y por eso arriba se
-retira un efecto reportado y se parte otro por la mitad. No se midió un piso de ruido en
-forma: el harness computa el sesgo de la brecha del oráculo directamente tratando `k`
-réplicas del *mismo* paradigma como `k` paradigmas distintos, y el protocolo exige
-`repeat ≥ 3` con todas las decisiones tomadas contra la brecha neta. Todavía no corrido.
+**Ya existen réplicas, y el ruido es por celda.** La réplica accidental del primer
+estudio (§7.3) y el `repeat = 3` del segundo coinciden: la reproducibilidad es por tarea
+— los lectores no dan vuelta nada, los que usan herramientas dan vuelta las celdas donde
+decide el retrieval, y el costo no fue reproducible en ninguna parte (dispersión media
+2,05×, máxima 5,43× a calidad idéntica en el primer estudio; el mismo patrón de
+concentración en el segundo). Por eso todo delta de calidad se reporta con su conteo de
+flips por celda, nunca como media pelada. El piso de ruido formal por celda y la brecha
+de oráculo neta (`Study.noise_floor`, decisiones contra la brecha neta) se computan en el
+análisis final sobre la grilla completa — pendiente de las celdas en re-corrida.
 
 **Un modelo, y no se lo puede fijar.** `gpt-5-chat` rechaza una temperatura explícita, así que el
 sampleo queda en el default del modelo. Hay un deployment de razonamiento que acepta temperatura 0

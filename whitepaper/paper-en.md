@@ -634,6 +634,114 @@ answer but an absent one. They are excluded from every figure above rather than 
 zero, since a paradigm that never executed must not be pooled with one that answered
 badly. Both belong to the cells marked *sin-correr* in the artefacts.
 
+## 7.4 The two-regime study, with replicates
+
+> Second study, run 2026-08-26 with predictions P1–P5 registered beforehand (harness
+> README). Matched task sets on `gold_v2` (in-window, ~18k tokens) and `gold_deep`
+> (out-of-window, ~483k), `repeat = 3`, per-cell stability tracked. 126 + 158 valid
+> rows. Two heavy out-of-window cells (`react`/`reflection`/`dag` on c2-w48 and c5-w48)
+> lost replicates to provider rate limits, were recorded as infrastructure failures,
+> excluded from every figure, and are being re-run; their means below carry fewer trials
+> and are marked †.
+
+The feasibility sweep, first, because it costs nothing: at 135k tokens the arithmetic
+prunes read-everything on 12 of 32 tasks; at 483k on **24 of 26**; at 1.27M on 24 of 32 —
+and at that scale the pruning reaches `map_reduce` on 18–20 tasks, whose projected spend
+exceeds the declared budget (P1, confirmed). In-window, nothing is pruned. The regime
+claim is arithmetic, not measurement.
+
+**In-window (per-cell mean utility / mean tokens; flips = cells whose utility changed
+across replicates):**
+
+| paradigm | C2 | C3 | C4 | C5 | flips | cost median (spread) |
+|---|---|---|---|---|---|---|
+| `direct` | 0.75 / 13k | **1.00** / 11k | 1.00 / 13k | **1.00** / 11k | **0/6** | **10.5k (1×)** |
+| `react` | 0.75 / 25k | 0.67 / 63k | 1.00 / **3k** | 1.00 / 61k | 3/6 | 23.8k (**70×**) |
+| `map_reduce` | 0.75 / 16k | **0.00** / 14k | 1.00 / 16k | **0.00** / 16k | 0/6 | 15.1k (1×) |
+| `plan_execute` | **0.00** / 27k | **0.00** / 11k | **0.00** / 32k | 0.33 / 29k | 1/6 | 19.0k (12×) |
+| `reflection` | 0.83 / 31k | 0.44 / 40k | 1.00 / 8k | 0.67 / 113k | 3/6 | 21.2k (27×) |
+| `dag_strategy` | 0.75 / 27k | 0.33 / 77k | 1.00 / 6k | 0.67 / 66k | 3/6 | 33.1k (**82×**) |
+
+**Out-of-window (same convention; `direct` infeasible except on the small tasks):**
+
+| paradigm | C2 | C3 | C4 | C5 | flips | cost median (spread) |
+|---|---|---|---|---|---|---|
+| `direct` | INFEASIBLE | INFEASIBLE | INFEASIBLE | 1.00 / 23k* | 0/8 | 22.9k (1×) |
+| `react` | 0.97† / 61k | **1.00** / 14k | 1.00 / 18k | 1.00† / 40k | **0/7** | **14.6k** (40×) |
+| `map_reduce` | 0.95 / 107k | **0.00** / 276k | 1.00 / 29k | **0.00** / 23k | 1/8 | 28.7k (15×) |
+| `plan_execute` | 0.62 / 88k | 0.33 / 18k | 0.33 / 80k | 0.33 / 94k | **4/8** | 34.4k (52×) |
+| `reflection` | 1.00† / 106k | 1.00 / 50k | 1.00 / 17k | 1.00† / 89k | 0/7 | 30.0k (47×) |
+| `dag_strategy` | 1.00† / 50k | **0.67** / 86k | 1.00 / 14k | 1.00† / 26k | 1/7 | 21.0k (59×) |
+
+\* only on tasks whose own evidence fits: pruning is per task, not per corpus.
+
+Three findings the first study could not see:
+
+**The ranking inverts with the regime, per prediction and beyond it.** In-window, the
+readers dominate on quality, cost and stability at once. Out-of-window they do not exist,
+and the paradigms the first study ranked last — `react`, `reflection`, `dag` — hold the
+top of the table. `plan_execute` is the exception in both regimes: no winning region,
+and out-of-window it is the least stable thing measured (4 of 8 cells flipped).
+
+**`map_reduce`'s coupled-cell zero is structural, and now measured at two scales** (P3,
+confirmed): 0.00 in-window and 0.00 out-of-window, deterministically — its failures do
+not even flip. §8.3 carries the cost half of this.
+
+**Stability lives where retrieval does not decide.** In-window, the tool-using paradigms
+flipped 3 of 6 cells each while the readers flipped none. Out-of-window, `react` flipped
+none of 7 — with no read-everything competitor, its search actually has a job it can
+finish — and the instability migrated to `plan_execute`. Variance is not a property of a
+paradigm; it is a property of *who is being asked to decide when to stop*.
+
+## 7.5 The elaborate topology against the general fallback
+
+The question this study exists to answer in place of the withdrawn field report: does the
+most elaborate topology beat the general fallback? The measured answer is that the
+question is regime-shaped — and that where it matters most, the differentiator is not the
+topology.
+
+In-window, `dag_strategy` is the worst purchase measured: the widest cost spread (82×,
+3.1k to 251k on identical task sets), a 0.33 on the coupled cells that `direct` solves
+for 11k, and 3 of 6 cells flipping between replicates. Out-of-window it transforms:
+perfect utility on C2, C4 and C5 at costs that rival or beat `react`'s†.
+
+Except on the deep coupled chain, where it produced the single worst row of the study:
+**395,960 tokens over 35 iterations for a zero**, on a task `react` solves at 10–14k with
+utility 1.0 across all three replicates. This run used the **basic** surface — no
+accounting signals — and the trace shows the §8.2 mechanism at scale: the verifier keeps
+finding the answer incomplete, the replan keeps widening, and nothing in the environment
+says *stop*. §7.3 measured that the signals cut exactly this loop by 3.05×. Together the
+two results say something sharper than "DAG loses": **the elaborate topology is viable
+out-of-window only under externally imposed accounting — the intelligence of the loop is
+not what was missing.**
+
+## 7.6 Two paradigms enter by registered prediction — one survives
+
+Against the two failure roots §8 identifies that no existing paradigm attacks cheaply, we
+added two paradigms with predictions registered before running (P6–P7, harness README)
+and screened them on the out-of-window discriminating tasks.
+
+**`rewoo`** — every tool call planned in one pass with explicit dataflow placeholders,
+executed without the model in the loop, one solving call; two LLM calls total, no history
+resend [ReWOO, arXiv:2305.18323]. Both registered predictions held, the first
+beyond its stated bound: quality identical to `react` on independent coverage (0.88 on
+C2, 1.00 on C4) at **3–8% of react's cost** on the same cells (prediction said ≤50%), and
+utility 0.00 on the coupled and unknown-horizon cells — a plan that cannot observe cannot
+discover the hop that depends on a prior result. Its utilities were identical across
+replicates in all four tasks. A textbook Theorem-1 specialist: large G inside a sharply
+bounded region, total failure outside it.
+
+**`gist_reader`** — a deterministic per-unit gist table in one prompt, then targeted
+batched full reads. **Its headline prediction was falsified**: u ≥ 0.75 was predicted on
+three cells and reached on one (C5: 1.00 at 8k where `react` pays 20–103k); on bulk
+coverage and exact aggregation the 312-character gists do not carry the datum (0.29 on
+C2, 0.00 on C4) — precisely the summary-failure mechanism the secondary prediction named.
+Its cardinality bound also behaved as registered: the gist table goes infeasible by
+arithmetic on 400-unit tasks, recorded free. The paradigm stays measured and
+unpromoted. We report it at the same length as the success on purpose: the registered
+prediction discipline is only worth having if a falsification costs a paragraph rather
+than a retraction.
+
 ---
 
 # 8. Failure mechanisms
@@ -665,7 +773,9 @@ Map-Reduce fails both coupled cells and reads zero relevant units in all four, b
 construction it views each unit in isolation. A chain and a cross-unit comparison are
 unresolvable that way however many times they are examined.
 
-\1
+The fix is not a better tool but a refusal: coupling is a declared property of the task,
+so the feasibility layer can exclude the paradigm before any token is spent — which is
+cheaper than any amount of learning that it loses.
 
 **And the price of that failure scales with the corpus while the failure does not.** The
 same paradigm, on the same cell, at two unit sizes:
@@ -694,21 +804,24 @@ structure.
 
 # 9. Limitations and threats to validity
 
-**Everything fits in one prompt.** The corpus behind §7 is 16k tokens at its widest, so
-read-everything is both correct and cheapest and the ordering is near-tautological. Corpora
-at 135k, 483k and 1.27M tokens are generated and verified, and the harness now records
-infeasibility as distinct from error — but they have not been run. **This is the single
-largest threat and the next measurement.**
+**The in-window regime is near-tautological, and §7.4 is the escape — partially walked.**
+The corpus behind §7.1–7.3 is 16k tokens at its widest, so read-everything is both correct
+and cheapest there. The out-of-window regime is now measured at 483k with `repeat = 3`
+(§7.4–7.5), and the regime claim across 135k/483k/1.27M rests on the zero-cost feasibility
+sweep. Still open: no full run at 1.27M (only its feasibility arithmetic), two heavy
+out-of-window cells re-running after rate-limit exclusions (marked † in §7.4), and a
+held-out world with a fresh seed, generated and independently verified, whose transfer
+test is registered as P8 and not yet run — **until it runs, the per-cell verdicts are
+claims about seed-7 worlds.**
 
-**n=1 per cell, and the variance is now partly measured.** An unplanned replicate (§7.3)
-shows reproducibility is per-task: 10 of 10 quality values identical on three cells, 2 of 4
-flipped by a full unit on the fourth and hardest. Cost was reproducible nowhere — mean
-spread 2.05×, maximum 5.43× at identical quality. **Any quality effect at or below one
-flip's worth of a four-task mean (±0.250) is indistinguishable from noise at n=1**, which
-is why one reported effect is withdrawn above and another is halved. No proper noise floor
-has been measured: the harness computes the oracle-gap bias directly by treating `k`
-replicates of the *same* paradigm as `k` distinct ones, and the protocol requires
-`repeat ≥ 3` with all decisions taken against the net gap. Not yet run.
+**Replicates exist now, and the noise is per-cell.** The first study's accidental
+replicate (§7.3) and the second study's `repeat = 3` agree: reproducibility is per-task —
+readers flip nothing, tool-users flip the cells where retrieval decides, and cost was
+reproducible nowhere (mean spread 2.05×, maximum 5.43× at identical quality in the first
+study; the same concentration pattern in the second). Quality deltas are therefore
+reported with their per-cell flip counts, never as bare means. The formal per-cell noise
+floor and the net oracle gap (`Study.noise_floor`, decisions against the net gap) are
+computed at the final analysis over the completed grid — pending the re-run cells.
 
 **One model, and it cannot be pinned.** `gpt-5-chat` rejects an explicit temperature, so
 sampling is at the model default. A reasoning deployment that accepts temperature 0 is
