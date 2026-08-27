@@ -77,10 +77,12 @@ def score(answer: str, oracle: list[str]) -> float:
         if predicted == {only}:
             return 1.0
         # Substring credit covers 'AR123' inside 'account AR123' without rewarding a
-        # scattergun list: it applies only when the model committed to one item.
+        # scattergun list: it applies only when the model committed to one item, and
+        # only in that direction. The reverse test ('candidate in only') handed 1.0
+        # to every prefix of the right answer — '4' scored perfect against '42'.
         if len(predicted) == 1:
             candidate = next(iter(predicted))
-            return 1.0 if only in candidate or candidate in only else 0.0
+            return 1.0 if only in candidate else 0.0
         return 0.0
 
     hits = len(truth & predicted)

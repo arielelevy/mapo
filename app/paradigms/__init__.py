@@ -231,7 +231,9 @@ def map_reduce(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) ->
             messages=[{"role": "user", "content": prompt}], max_tokens=800
         )
         usage.merge(completion.usage)
-        if "NOTHING" not in completion.text.upper():
+        # Equality, not substring: 'says nothing about X, but names Y as director'
+        # is a real finding, and a substring test silently discarded it.
+        if completion.text.strip().rstrip(".").strip().upper() != "NOTHING":
             partials.append(f"[{unit_id}] {completion.text.strip()}")
 
     reduce_prompt = (
@@ -322,7 +324,9 @@ def reflection(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) ->
     )
     usage.merge(critique.usage)
 
-    if "NO DEFECTS" in critique.text.upper():
+    # Equality, not substring: 'there are no defects of scope, but two omissions'
+    # is a critique, and the substring test took it as approval.
+    if critique.text.strip().rstrip(".").strip().upper() == "NO DEFECTS":
         return _finish(draft, usage, surface, transcript, iterations + 1)
 
     revise_messages = transcript + [

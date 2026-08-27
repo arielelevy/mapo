@@ -22,6 +22,7 @@ from typing import Any
 import httpx
 
 from .config import Settings
+from .fsio import write_atomic
 from .llm import request_with_retry
 
 
@@ -58,9 +59,13 @@ class EmbeddingClient:
 
         path = self._path(key)
         if path.exists():
-            vector = json.loads(path.read_text(encoding="utf-8"))["vector"]
-            self._memo[key] = vector
-            return vector
+            try:
+                vector = json.loads(path.read_text(encoding="utf-8"))["vector"]
+                self._memo[key] = vector
+                return vector
+            except (json.JSONDecodeError, KeyError, OSError):
+                # A truncated entry is a miss, not a poisoned key (see fsio).
+                path.unlink(missing_ok=True)
 
         if self._sealed:
             raise RuntimeError(
@@ -82,9 +87,8 @@ class EmbeddingClient:
         )
         response.raise_for_status()
         vector = response.json()["data"][0]["embedding"]
-        path.write_text(
-            json.dumps({"deployment": self._deployment, "vector": vector}),
-            encoding="utf-8",
+        write_atomic(
+            path, json.dumps({"deployment": self._deployment, "vector": vector})
         )
         self._memo[key] = vector
         return vector

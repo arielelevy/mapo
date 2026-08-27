@@ -27,6 +27,7 @@ from typing import Any
 import httpx
 
 from .config import Settings
+from .fsio import write_atomic
 
 
 # Transient by nature: rate limiting and server-side faults say nothing about the
@@ -306,11 +307,19 @@ class LLMClient:
         path = self._cache_path(key)
         if not path.exists():
             return None
-        return json.loads(path.read_text(encoding="utf-8"))
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            # A truncated entry (crash mid-write, before writes were atomic) must be
+            # a MISS, not a poisoned key: left in place, it turned every future run —
+            # resumed and sealed included — into a paradigm failure at this key.
+            path.unlink(missing_ok=True)
+            return None
 
     def _write_cache(self, key: str, record: dict[str, Any]) -> None:
-        self._cache_path(key).write_text(
-            json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8"
+        write_atomic(
+            self._cache_path(key),
+            json.dumps(record, ensure_ascii=False, indent=2),
         )
 
     # -- completion --------------------------------------------------------

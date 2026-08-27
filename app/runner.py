@@ -464,14 +464,25 @@ class Runner:
 
     # -- analysis ----------------------------------------------------------
 
-    def load_rows(self) -> list[dict[str, Any]]:
+    def load_rows(self, include_infra: bool = False) -> list[dict[str, Any]]:
+        """Rows for analysis. `infra_error` rows are excluded BY DEFAULT.
+
+        They are recorded — the file keeps them — but they are not measurements:
+        a 429 that outlived the retry budget says nothing about the paradigm.
+        Excluding them only in `study()` let them leak into `episodes()` (theta
+        learned that a paradigm "fails" wherever the quota ran dry), `replicates()`
+        (zeros inflating the noise floor) and `consolidate()`. One gate, here.
+        """
         if not self._results_path.exists():
             return []
-        return [
+        rows = [
             json.loads(line)
             for line in self._results_path.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
+        if include_infra:
+            return rows
+        return [r for r in rows if not r.get("infra_error")]
 
     def study(self, lambda_cost: float = 0.0) -> Study:
         """Study over trial-averaged cells.
@@ -572,12 +583,17 @@ class Runner:
 
         # Learn theta from the observed episodes, then evaluate the router it implies.
         # Persisted, not discarded: a theta that only ever existed inside this call
-        # could not be audited, diffed against its successor, or promoted.
+        # could not be audited, diffed against its successor, or promoted. Persisted
+        # in `fitted/`, OUTSIDE the glob that `latest_theta_path()` treats as the
+        # live policy: a report is a reading, and a reading must not install an
+        # unpromoted bundle as production — that path goes through `promote()` only.
         cold = PolicyBundle.cold_start(fallback=FALLBACK, tau=0.3)
         learned = Plasticity.candidate(
             cold, episodes, tau=0.3, notes=f"fitted from {len(episodes)} episodes"
         )
-        learned.save(self.store.policy_dir)
+        fitted_dir = self.store.policy_dir / "fitted"
+        fitted_dir.mkdir(parents=True, exist_ok=True)
+        learned.save(fitted_dir)
         router = Router(learned, COST_PRIORS, FALLBACK)
         profile = PROFILES[assurance]
 

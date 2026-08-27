@@ -103,7 +103,10 @@ def assert_near_misses_rejected() -> None:
                 f"cannot be trusted.\n  line:    {line}\n  matched: {found.groupdict()}"
             )
 ACCOUNT = re.compile(r"Settlement account on file: (?P<account>AR\d+)\.")
-REPORTS = re.compile(r"Reports to (?P<supervisor>[\w'-]+ [\w'-]+) for all authorisations\.")
+# Built from _NAME, not a literal: an earlier literal here lacked the numeric name
+# discriminator that _NAME gained after the 400-people incident, so the verifier
+# rejected valid corpora exactly in the regime the discriminator exists for.
+REPORTS = re.compile(rf"Reports to (?P<supervisor>{_NAME}) for all authorisations\.")
 # The supplementary filing names an ACCOUNT and never the person, so verifying it
 # requires the same two hops the task requires: read the restated domicile, then find
 # who holds that account.
@@ -113,6 +116,13 @@ AMENDED = re.compile(
     re.IGNORECASE,
 )
 TRIGGER = re.compile(r"requires escalation for freezing", re.IGNORECASE)
+# The account the alert flags, and the person a C7 question is about. Both are needed
+# to re-derive the person<->account link: a trigger that flags someone ELSE's account,
+# or an alert whose holder memo is missing from the task's units, makes the positive
+# case unanswerable — and the earlier check, which only counted trigger units, passed
+# exactly that corpus. This is the -alt bug's shape, one cell over.
+FLAGGED = re.compile(r"Settlement account (?P<account>AR\d+) was flagged")
+C7_SUBJECT = re.compile(rf"engagement for (?P<name>{_NAME}) should be escalated")
 
 
 def parse_unit(text: str) -> dict[str, Any] | None:
@@ -137,6 +147,7 @@ class Verifier:
         self.parsed: dict[str, dict[str, Any]] = {}
         self.amendments: dict[str, dict[str, Any]] = {}
         self.triggers: set[str] = set()
+        self.trigger_account: dict[str, str] = {}
 
         for unit_id, text in documents.items():
             claim = parse_unit(text)
@@ -152,6 +163,9 @@ class Verifier:
                 continue
             if TRIGGER.search(text):
                 self.triggers.add(unit_id)
+                flagged = FLAGGED.search(text)
+                if flagged:
+                    self.trigger_account[unit_id] = flagged.group("account")
 
         # Name -> supervisor, taken across the whole corpus, since a chain question
         # may traverse units outside the task's own list.
@@ -281,7 +295,38 @@ class Verifier:
                 return False, (
                     f"a positive case needs exactly one trigger unit, found {len(present)}"
                 )
-            return True, f"ok (trigger in {present[0]}; escalation is correct)"
+            # Counting triggers is not enough: the alert must flag THIS person's
+            # account, and the memo that links the person to that account must be
+            # among the supplied units — otherwise the task is unanswerable from
+            # its own material while the oracle says 'escalate'.
+            trigger = present[0]
+            subject = C7_SUBJECT.search(task["question"])
+            if not subject:
+                return False, "cannot extract the person from the C7 question"
+            person = subject.group("name")
+            account = self.trigger_account.get(trigger)
+            if not account:
+                return False, f"trigger {trigger} names no flagged account"
+            if self.holder_of.get(account) != person:
+                return False, (
+                    f"trigger flags {account}, held by "
+                    f"{self.holder_of.get(account)!r}, but the question is about "
+                    f"{person!r}"
+                )
+            linking = [
+                u for u in task["unit_ids"]
+                if self.parsed.get(u, {}).get("account") == account
+                and self.parsed.get(u, {}).get("name") == person
+            ]
+            if not linking:
+                return False, (
+                    f"no supplied unit links {person} to {account}: the positive "
+                    f"case is unanswerable from its own units"
+                )
+            return True, (
+                f"ok (trigger in {trigger} flags {account}, linked to {person} "
+                f"by {linking[0]}; escalation is correct)"
+            )
 
         if task["oracle"] == ["no escalation"]:
             if present:

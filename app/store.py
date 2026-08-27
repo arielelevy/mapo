@@ -30,11 +30,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
 
 from .beliefs import Calibration, Provenance
+from .fsio import write_atomic
+
+# One writer at a time for the append+head pair. Two concurrent appends that read
+# the same head produce two records with the same `prev` — a forked chain that
+# `verify_chain` reports as tampering forever after. Process-local by design: the
+# FastAPI endpoints run sync-in-threadpool within one process.
+_BELIEF_LOG_LOCK = threading.Lock()
 
 
 @dataclass
@@ -148,28 +157,29 @@ class LearningStore:
         log leaves the head pointing at a hash that no longer appears in it, so even
         removing the last N records is visible.
         """
-        head = self._head()
-        record = {
-            "seq": head["seq"] + 1,
-            "prev": head["chain"],
-            "beliefs": base_dict.get("beliefs", []),
-            "digest": base_dict.get("digest"),
-        }
-        if context:
-            record["context"] = context
+        with _BELIEF_LOG_LOCK:
+            head = self._head()
+            record = {
+                "seq": head["seq"] + 1,
+                "prev": head["chain"],
+                "beliefs": base_dict.get("beliefs", []),
+                "digest": base_dict.get("digest"),
+            }
+            if context:
+                record["context"] = context
 
-        # The link covers the record without its own chain field, so the chain can be
-        # recomputed from the record exactly as stored.
-        payload = json.dumps(record, sort_keys=True, ensure_ascii=False)
-        record["chain"] = self._link(head["chain"], payload)
+            # The link covers the record without its own chain field, so the chain
+            # can be recomputed from the record exactly as stored.
+            payload = json.dumps(record, sort_keys=True, ensure_ascii=False)
+            record["chain"] = self._link(head["chain"], payload)
 
-        with self.belief_log_path.open("a", encoding="utf-8") as sink:
-            sink.write(json.dumps(record, ensure_ascii=False) + "\n")
-        self.belief_head_path.write_text(
-            json.dumps({"seq": record["seq"], "chain": record["chain"]}, indent=2),
-            encoding="utf-8",
-        )
-        return record["chain"]
+            with self.belief_log_path.open("a", encoding="utf-8") as sink:
+                sink.write(json.dumps(record, ensure_ascii=False) + "\n")
+            write_atomic(
+                self.belief_head_path,
+                json.dumps({"seq": record["seq"], "chain": record["chain"]}, indent=2),
+            )
+            return record["chain"]
 
     def verify_chain(self) -> dict[str, Any]:
         """Recompute the whole chain and report the first broken link.
@@ -270,8 +280,8 @@ class LearningStore:
                 c.is_trustworthy() for c in per_prop.values()
             ),
         }
-        self.calibration_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        write_atomic(
+            self.calibration_path, json.dumps(payload, ensure_ascii=False, indent=2)
         )
         return payload
 
@@ -328,13 +338,13 @@ class LearningStore:
             entry.separation_history.append(float(item["separation_validate"]))
             existing[name] = entry
 
-        self.propositions_path.write_text(
+        write_atomic(
+            self.propositions_path,
             json.dumps(
                 {k: v.as_dict() for k, v in sorted(existing.items())},
                 ensure_ascii=False,
                 indent=2,
             ),
-            encoding="utf-8",
         )
         return {
             "total_known": len(existing),
@@ -348,14 +358,19 @@ class LearningStore:
     def save_dream(self, report_dict: dict[str, Any]) -> Path:
         cycle = int(report_dict.get("cycle", 0))
         path = self.dream_path(cycle)
-        path.write_text(
-            json.dumps(report_dict, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        write_atomic(path, json.dumps(report_dict, ensure_ascii=False, indent=2))
         return path
 
     def next_cycle(self) -> int:
-        existing = sorted((self._root / "dreams").glob(f"{self._corpus}_c*.json"))
-        return len(existing) + 1
+        # Max parsed index + 1, not len(glob) + 1: a deleted dream or a numbering
+        # gap must never make the next cycle OVERWRITE an existing one — the record
+        # is evidence, and evidence is append-only.
+        indices = [
+            int(m.group(1))
+            for p in (self._root / "dreams").glob(f"{self._corpus}_c*.json")
+            if (m := re.search(r"_c(\d+)\.json$", p.name))
+        ]
+        return max(indices, default=0) + 1
 
     # -- theta -------------------------------------------------------------
 

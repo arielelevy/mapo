@@ -23,6 +23,7 @@ gap reported by Select-then-Solve IS pi*G for their suite.
 
 from __future__ import annotations
 
+import hashlib
 import math
 from dataclasses import dataclass, asdict
 from typing import Any, Callable, Iterable
@@ -344,10 +345,17 @@ class Study:
         for task in eligible:
             achieved = 0.0
             spent = 0
+            best_seen = 0.0
             for depth, paradigm in enumerate(ladder):
                 obs = self._by_task[task][paradigm]
                 spent += obs.cost_tokens
-                achieved = max(achieved, self.utility(task, paradigm))
+                current = self.utility(task, paradigm)
+                best_seen = max(best_seen, current)
+                # When every failure so far was DETECTED, the system retains the
+                # answers it collected and may return the best of them — that is
+                # the (generous, registered) semantics behind Finding 2's "whole
+                # ladder, 100% of the gap, at 4.4x".
+                achieved = best_seen
 
                 # The success test uses raw QUALITY, not cost-adjusted utility: a
                 # detector checks whether the answer is right, and it cannot see
@@ -355,10 +363,18 @@ class Study:
                 if self.quality(task, paradigm) >= success_threshold:
                     break
 
-                # Failure occurred. Was it detected? Deterministic pseudo-draw.
-                draw = (hash((task, depth)) % 1000) / 1000.0
+                # Failure occurred. Was it detected? Deterministic pseudo-draw —
+                # sha256, not hash(): builtin str hashing is salted per process,
+                # so the same study gave a different figure on every run.
+                digest = hashlib.sha256(f"{task}/{depth}".encode("utf-8")).hexdigest()
+                draw = (int(digest, 16) % 1000) / 1000.0
                 if draw >= detector_sensitivity:
-                    break  # missed failure: cascade stops with a bad answer
+                    # Missed failure: the system BELIEVES this rung succeeded and
+                    # returns THIS answer. Crediting max() here counted a good
+                    # earlier answer the system had already discarded, flattering
+                    # the cascade exactly when the detector is weak.
+                    achieved = current
+                    break
                 if depth < len(ladder) - 1:
                     escalations += 1
 

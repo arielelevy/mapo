@@ -24,6 +24,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from ..fsio import write_atomic
 from ..llm import LLMClient, Usage
 from ..tools import MAX_BATCH_READ, ToolFailure, ToolSurface, _summarise
 from . import ANSWER_CONTRACT, Result, _finish
@@ -198,7 +199,11 @@ def _entity_graph(
     GRAPH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     path = GRAPH_CACHE_DIR / f"{_corpus_digest(surface)}.json"
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            # A truncated index (crash or write race) is rebuilt, not served forever.
+            path.unlink(missing_ok=True)
 
     entity_units: dict[str, list[str]] = defaultdict(list)
     edges: dict[str, list[str]] = defaultdict(list)
@@ -240,7 +245,7 @@ def _entity_graph(
         "entity_units": {k: sorted(set(v)) for k, v in entity_units.items()},
         "edges": {k: sorted(set(v)) for k, v in edges.items()},
     }
-    path.write_text(json.dumps(graph, ensure_ascii=False), encoding="utf-8")
+    write_atomic(path, json.dumps(graph, ensure_ascii=False))
     return graph
 
 
