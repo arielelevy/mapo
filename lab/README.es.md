@@ -3,9 +3,10 @@
 > 🇬🇧 English (documento canónico, incluye protocolo de medición y cómo correr):
 > [README.md](README.md)
 
-Esta página documenta la **solución como producto final** — qué hace el sistema en
-runtime y qué garantiza. No dice nada de cómo se verificaron las afirmaciones ni de lo
-que costaron los experimentos; eso vive en el README en inglés y en el paper.
+Esta página resume la solución. La arquitectura, las decisiones, las deudas comprobadas
+y los diagramas viven en [`DISENO.es.md`](DISENO.es.md). El patrón futuro de
+automejora vive en [`PATRON_REC.es.md`](PATRON_REC.es.md) y está marcado como propuesta
+no implementada.
 
 ## Qué es
 
@@ -47,8 +48,8 @@ request
   │
   ├─ 5. RUTEO SELECTIVO  Π(φ, θ) con abstención: emite un paradigma especializado sólo
   │      router.py         dentro de la región de alta confianza (κ > τ); si no, difiere
-  │      policy.py         al fallback general. θ es una lista de decisión versionada,
-  │                        firmada y legible — no pesos. Mismo φ y θ ⟹ mismo plan.
+  │      policy.py         al fallback general. θ conserva estadísticas por región,
+  │                        versión y digest de integridad. Mismo estado completo ⟹ plan.
   │
   ├─ 6. EJECUCIÓN        el paradigma elegido corre contra la superficie de herramientas,
   │      paradigms/        que carga señales contables determinísticas (estancamiento,
@@ -70,7 +71,7 @@ garantía que SÍ se puede dar cambia de forma:
 
 ```
 NO    "el mismo prompt da la misma respuesta"           (falso, siempre)
-SÍ    "la misma base de creencias da la misma decisión" (verdadero, y auditable)
+SÍ    "el mismo estado completo de decisión da el mismo plan" (auditable)
 ```
 
 El default está en el extremo flexible; la estrictez es un escalamiento que se paga. Un
@@ -78,37 +79,41 @@ nivel acota el espacio de patrones admisibles; la plasticidad permuta libremente
 
 | Nivel | Piso de procedencia | θ aprende online | Sellado | Patrones |
 |---|---|---|---|---|
-| `A0_EXPLORATORY` | `ASSUMED` | **sí** | no | álgebra completa |
+| `A0_EXPLORATORY` | `ASSUMED` | declarado, no implementado | no | álgebra completa |
 | `A1_STANDARD` | `ELICITED` | no | no | catálogo |
 | `A2_ACCOUNTABLE` | `ELICITED`* | no | no | catálogo, profundidad <= 3 |
-| `A3_CERTIFIED` | `OBSERVED` | no | **sí** | subconjunto certificado |
+| `A3_CERTIFIED` | `OBSERVED` | no | declarado, no impuesto completamente | subconjunto certificado |
 
 \* sube a `OBSERVED` automáticamente mientras la calibración no esté ganada.
 
-Un caller que pide `A0` sobre una tarea irreversible obtiene `A3` igual, y el espacio de
-planes cae de 7 patrones a 4 — `dag_strategy`, `plan_execute` y `reflection` quedan
-excluidos, no por ser peores (suelen ser mejores) sino porque su flujo de control no es
-acotado y sus modos de falla no son enumerables. Por eso `A3` es un escalamiento y no un
-default.
+Un caller que pide `A0` sobre una tarea irreversible obtiene `A3` igual. El perfil A3
+restringe el espacio a un subconjunto de control más acotado. El catálogo ejecutable
+actual contiene trece paradigmas, incluidos controles históricos y candidatos
+falsificados; el estado de cada uno está en `app/paradigms/README.es.md`.
 
 ## Cómo aprende sin volverse inauditable
 
-El aprendizaje es **offline y copy-on-write**, nunca adentro de un request. Los episodios
-se consolidan en una política *candidata* θ' — que sigue siendo una lista de decisión
-legible sobre φ, actualizada con estadísticas Hebbianas interpretables (`policy.py`). La
-promoción está custodiada: θ' reemplaza a θ sólo si no regresiona sobre episodios
-reservados, y el registro se parte en tres por tarea (una parte propone, una puntúa, una
-la toca sólo la guarda de promoción), así que una regla descubierta nunca puede ser
-puntuada por los datos que la propusieron. Una θ promovida recibe versión; dos versiones
-se diffean como código. El rollback es trivial porque las políticas viejas son artefactos
-inmutables.
+El aprendizaje está diseñado como **offline y copy-on-write**, nunca adentro de un
+request. Hoy existe construcción de candidatos, estadísticas, pisos aprendidos y una
+guarda de promoción. No obstante, el bucle todavía no justifica llamarse automejora
+segura completa: la consolidación deja que el bloque final influya en theta antes de
+evaluarlo, los trials inflan episodios y el peso Hebbiano almacenado no participa en la
+decisión. Estas deudas y su orden de reparación están documentados en `DISENO.es.md`.
 
 ## Qué garantiza, y qué no
 
 | Garantizado | No garantizado |
 |---|---|
-| Misma base de creencias ⟹ misma decisión, reproducible desde el registro EXPLAIN | Mismo prompt ⟹ misma respuesta (imposible con un LLM, y nunca se reclama) |
+| Misma base, reglas, bundle, candidatos y configuración ⟹ misma decisión | Mismo prompt ⟹ misma respuesta (imposible con un LLM, y nunca se reclama) |
 | Un plan infactible nunca se intenta, y su exclusión queda registrada con la razón | Que el paradigma seleccionado tenga éxito — la selección acota el regret, no los resultados |
 | Las acciones irreversibles se gatean sólo con evidencia computada/observada | Nada sobre tareas fuera de extracción de respuesta exacta sobre documentos |
-| El aprendizaje no puede regresionar la política en silencio (guarda de promoción) | Que θ sea óptima — sólo que es inspeccionable, versionada y no-regresiva |
+| El incumbente se conserva cuando la guarda rechaza una candidata | Que la guarda actual esté libre de leakage estadístico |
 | Los fallos de infraestructura (429) quedan excluidos de toda estadística | — |
+
+## Próxima dirección: REC
+
+La **Reparación Epistémica Contrafactual** propone convertir una explicación fallida en
+una pregunta operativa: qué creencia mínima habría cambiado el plan y qué evidencia
+acotada puede resolverla. El aprendizaje sería offline; runtime ejecutaría solamente
+cláusulas deterministas promovidas con certificado. El diseño completo, sus vecinos de
+literatura y los criterios de falsación están en [`PATRON_REC.es.md`](PATRON_REC.es.md).

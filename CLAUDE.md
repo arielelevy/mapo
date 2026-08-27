@@ -20,12 +20,15 @@ El piso de garantía que aprende de estadísticas de rechazo (paper §6.2) se
 implementó el 2026-08-27 — rechazo tipado en `beliefs.py`, aprendizaje en `assurance.py`,
 transporte en el bundle firmado de `policy.py`, guarda de replicación en
 `consolidation.py`, probado en `tests/test_consolidation.py` §6.
-Deuda actual conocida: **la SONDA no se ejecuta**. `router.plan()` calcula `needs_probe`
-y la regla `probe_before_deciding_on_bulk` existe, pero nada corre una lectura barata de
-una unidad para convertir una creencia ELICITED de coupling en OBSERVED. Consecuencia:
-en cuanto un piso exige OBSERVED —y §6.2 ahora los sube solo— esas reglas son
-insatisfacibles por construcción. Es el patrón §2.2 de PATTERNS (rebanada de
-reconocimiento) y hay que implementarlo o sacar la afirmación.
+Deuda actual conocida: **la SONDA ya se ejecuta**, pero el ciclo epistémico está
+incompleto. Lee siempre la primera unidad, la verificación de referencias necesita
+fortalecerse, el replanning reutiliza la región previa, no conserva una única historia
+pre/post, y el costo no integra la utilidad total. Además P15 fue refutada: θ perdió
+`-0,087` contra el mejor fijo porque el vocabulario de región no representa continuidad
+u horizonte. La dirección aprobada, todavía NO implementada, es Reparación Epistémica
+Contrafactual: diseño en `lab/PATRON_REC.es.md`; arquitectura y deuda en
+`lab/DISENO.es.md`. Nada de eso entra al paper hasta ejecutarse y medirse.
+Handoff exhaustivo para retomar sin el chat: `lab/CIERRE-2026-08-27.es.md`.
 
 ## Orden de prioridad: EL PRODUCTO PRIMERO, EL PAPER DESPUÉS
 

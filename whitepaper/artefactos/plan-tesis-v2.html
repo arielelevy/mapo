@@ -1,0 +1,434 @@
+<title>El precio de la solidez</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  /* La lógica de color es la del propio sistema: la escala de procedencia
+     COMPUTED > OBSERVED > ELICITED > ASSUMED, de tinta plena a desvanecido.
+     El acento es lo medido; el óxido, lo refutado. */
+  :root {
+    --paper:      #F1F4F3;
+    --surface:    #FFFFFF;
+    --surface-2:  #E8EDEB;
+    --ink:        #131A1C;
+    --ink-2:      #38474A;
+    --ink-3:      #6B7B7E;
+    --faded:      #93A2A4;
+    --rule:       #CBD5D3;
+    --rule-soft:  #DDE5E3;
+    --measured:   #0D6B60;
+    --measured-2: #0A544B;
+    --refuted:    #A6472A;
+    --refuted-bg: #F6E7E1;
+    --measured-bg:#DDECE9;
+    --grade-1: var(--ink);
+    --grade-2: var(--measured);
+    --grade-3: var(--ink-3);
+    --grade-4: var(--faded);
+    --serif: "Newsreader", Georgia, "Times New Roman", serif;
+    --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --measure: 68ch;
+    --wide: 1080px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #0F1416;
+      --surface:    #161D20;
+      --surface-2:  #1D2629;
+      --ink:        #E6EDEC;
+      --ink-2:      #B6C4C4;
+      --ink-3:      #879899;
+      --faded:      #5F7073;
+      --rule:       #2A3639;
+      --rule-soft:  #212B2E;
+      --measured:   #4FBFAE;
+      --measured-2: #7AD4C5;
+      --refuted:    #D98A6B;
+      --refuted-bg: #2A1D18;
+      --measured-bg:#122B28;
+      --grade-1: var(--ink);
+      --grade-2: var(--measured);
+      --grade-3: var(--ink-3);
+      --grade-4: var(--faded);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #0F1416;
+    --surface:    #161D20;
+    --surface-2:  #1D2629;
+    --ink:        #E6EDEC;
+    --ink-2:      #B6C4C4;
+    --ink-3:      #879899;
+    --faded:      #5F7073;
+    --rule:       #2A3639;
+    --rule-soft:  #212B2E;
+    --measured:   #4FBFAE;
+    --measured-2: #7AD4C5;
+    --refuted:    #D98A6B;
+    --refuted-bg: #2A1D18;
+    --measured-bg:#122B28;
+    --grade-1: var(--ink);
+    --grade-2: var(--measured);
+    --grade-3: var(--ink-3);
+    --grade-4: var(--faded);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--wide); margin: 0 auto; padding: 0 28px 120px; }
+
+  header { padding: 88px 0 40px; border-bottom: 1px solid var(--rule); margin-bottom: 56px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink-3);
+    display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; margin-bottom: 26px;
+  }
+  .eyebrow span::before { content: "·"; margin-right: 14px; color: var(--rule); }
+  .eyebrow span:first-child::before { content: none; margin: 0; }
+  h1 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: clamp(38px, 6.2vw, 66px); line-height: 1.04; letter-spacing: -0.022em;
+    margin: 0 0 22px; text-wrap: balance; max-width: 20ch;
+  }
+  .standfirst {
+    font-family: var(--serif); font-size: clamp(19px, 2.3vw, 23px); line-height: 1.5;
+    color: var(--ink-2); max-width: 58ch; margin: 0;
+  }
+
+  section { margin-bottom: 76px; }
+  .sec-head {
+    display: grid; grid-template-columns: 4.5rem 1fr; gap: 0 20px;
+    align-items: baseline; margin-bottom: 26px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .sec-num { font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; color: var(--measured); padding-top: 6px; }
+  h2 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: clamp(26px, 3.4vw, 34px); line-height: 1.16; letter-spacing: -0.015em;
+    margin: 0; text-wrap: balance;
+  }
+  .sec-body { padding-left: 0; }
+  @media (min-width: 860px) { .sec-body { padding-left: calc(4.5rem + 20px); } }
+  h3 { font-family: var(--sans); font-weight: 600; font-size: 15px; letter-spacing: 0.02em; margin: 40px 0 12px; color: var(--ink); }
+
+  p { margin: 0 0 18px; max-width: var(--measure); }
+  p.lead { font-size: 18.5px; color: var(--ink-2); }
+  strong { font-weight: 600; }
+  code, .mono { font-family: var(--mono); font-size: 0.88em; }
+  code { background: var(--surface-2); padding: 0.1em 0.36em; border-radius: 2px; color: var(--ink); }
+  a { color: var(--measured); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--measured); outline-offset: 3px; }
+
+  .claim {
+    border-left: 3px solid var(--measured); background: var(--measured-bg);
+    padding: 22px 26px; margin: 28px 0; max-width: var(--measure);
+  }
+  .claim p:last-child { margin-bottom: 0; }
+  .claim .label {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--measured-2); display: block; margin-bottom: 10px;
+  }
+  .boundary {
+    border-left: 3px solid var(--refuted); background: var(--refuted-bg);
+    padding: 22px 26px; margin: 28px 0; max-width: var(--measure);
+  }
+  .boundary p:last-child { margin-bottom: 0; }
+  .boundary .label {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--refuted); display: block; margin-bottom: 10px;
+  }
+
+  .scroll { overflow-x: auto; margin: 26px 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 15px; }
+  th, td { text-align: left; padding: 11px 16px 11px 0; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 500; border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 13.5px; white-space: nowrap; }
+  td.pos { color: var(--measured); }
+  td.neg { color: var(--refuted); }
+  tr:last-child td { border-bottom: none; }
+
+  .verdict-strip {
+    display: flex; flex-wrap: wrap; gap: 10px; margin: 26px 0; max-width: var(--measure);
+  }
+  .v-card {
+    flex: 1 1 200px; background: var(--surface); border-top: 3px solid var(--rule); padding: 16px 18px;
+  }
+  .v-card.ref { border-top-color: var(--refuted); }
+  .v-card.ok { border-top-color: var(--measured); }
+  .v-card.na { border-top-color: var(--faded); }
+  .v-id { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; color: var(--ink-3); display: block; margin-bottom: 6px; }
+  .v-word { font-family: var(--mono); font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px; }
+  .v-card.ref .v-word { color: var(--refuted); }
+  .v-card.ok .v-word { color: var(--measured); }
+  .v-card.na .v-word { color: var(--faded); }
+  .v-desc { font-size: 13.5px; color: var(--ink-2); line-height: 1.45; }
+
+  .phase {
+    display: grid; grid-template-columns: 1fr; gap: 0;
+    border-top: 1px solid var(--rule); padding: 26px 0 4px;
+  }
+  @media (min-width: 860px) { .phase { grid-template-columns: 4.5rem 1fr; gap: 0 20px; } }
+  .phase-id { font-family: var(--mono); font-size: 12px; color: var(--measured); letter-spacing: 0.08em; padding-top: 4px; }
+  .phase h3 { margin-top: 0; font-size: 19px; font-family: var(--serif); font-weight: 600; letter-spacing: -0.01em; }
+  .phase-meta { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 0; }
+  .chip {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+    padding: 4px 9px; border: 1px solid var(--rule); color: var(--ink-3);
+    background: var(--surface); white-space: nowrap;
+  }
+  .chip.run { border-color: var(--measured); color: var(--measured); }
+  .chip.done { border-color: var(--measured); color: var(--measured); background: var(--measured-bg); }
+  .chip.hot { border-color: var(--refuted); color: var(--refuted); }
+
+  figure { margin: 34px 0; max-width: var(--wide); }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { font-size: 13.5px; color: var(--ink-3); margin-top: 12px; max-width: 62ch; line-height: 1.5; }
+  .svg-ink { fill: var(--ink); }
+  .svg-ink2 { fill: var(--ink-2); }
+  .svg-faded { fill: var(--faded); }
+  .svg-acc { fill: var(--measured); }
+  .svg-ref { fill: var(--refuted); }
+  .s-box { fill: var(--surface); stroke: var(--rule); stroke-width: 1.25; }
+  .s-box-acc { fill: var(--measured-bg); stroke: var(--measured); stroke-width: 1.5; }
+  .s-box-ref { fill: var(--refuted-bg); stroke: var(--refuted); stroke-width: 1.5; }
+  .s-line { stroke: var(--rule); stroke-width: 1.25; fill: none; }
+  .s-line-acc { stroke: var(--measured); stroke-width: 1.5; fill: none; }
+  .s-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; }
+  .s-title { font-family: var(--sans); font-size: 12.5px; font-weight: 600; }
+  .s-note { font-family: var(--sans); font-size: 11px; }
+
+  ul, ol { max-width: var(--measure); padding-left: 1.2em; margin: 0 0 18px; }
+  li { margin-bottom: 9px; }
+  li::marker { color: var(--ink-3); }
+
+  .rule-note {
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink-3);
+    border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+    padding: 14px 0; margin: 34px 0; max-width: var(--measure); line-height: 1.55;
+  }
+  footer { border-top: 1px solid var(--rule); padding-top: 26px; font-size: 13.5px; color: var(--ink-3); max-width: var(--measure); }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">
+    <span>MAPO</span><span>plan de tesis · v2</span><span>2026-08-27</span><span>tras P15 y revisión adversarial</span>
+  </div>
+  <h1>El precio de la solidez</h1>
+  <p class="standfirst">El mismo día llegaron dos golpes: el criterio de éxito del proyecto salió refutado en held-out, y una revisión adversarial partió la tesis v1 por el medio. Los dos golpes empujan hacia el mismo lugar — y ese lugar es mejor que donde estábamos.</p>
+</header>
+
+<section>
+  <div class="sec-head"><div class="sec-num">01</div><h2>El número llegó: P15 refutada</h2></div>
+  <div class="sec-body">
+    <p class="lead">Corpus nuevo (seed 47), θ ajustada solo con el registro previo, 390 celdas, 14,07M tokens, cero errores de infraestructura. El ruteo perdió.</p>
+
+    <div class="verdict-strip">
+      <div class="v-card ref"><span class="v-id">P15a · brecha neta</span><span class="v-word">REFUTADA</span><span class="v-desc">−0,087 contra el mejor fijo (dag 0,615 vs ruteo 0,527), más allá del piso de ruido (0,057). Contra siempre-react: +0,035, dentro del piso — vacuo.</span></div>
+      <div class="v-card ref"><span class="v-id">P15b · concentración</span><span class="v-word">REFUTADA</span><span class="v-desc">La ganancia apareció en C2 (+0,121) pero la pérdida se concentró donde se predijo la ganancia: C5 (−0,278). C3 volvió oráculo-cero: vacua, como exigía el addendum.</span></div>
+      <div class="v-card na"><span class="v-id">P15c · abstención</span><span class="v-word">SIN N</span><span class="v-desc">Una sola abstención en 26 tareas. Una observación no es un veredicto.</span></div>
+      <div class="v-card ok"><span class="v-id">P15d · reproducibilidad</span><span class="v-word">CONFIRMADA</span><span class="v-desc">Re-decidir desde la base de creencias registrada reprodujo paradigma y digest en 26/26. La auditabilidad queda en pie.</span></div>
+    </div>
+
+    <h3>El mecanismo es el hallazgo, no el consuelo</h3>
+    <p><strong>1 · El vocabulario de regiones no ve el eje que mata.</strong> Lo que define a C5 — el número de saltos no es conocible de antemano — no tiene eje en el binning de φ (cardinalidad × oráculo × coupling). Verificado contra las filas: las tareas C5 caen en <code>few/oracle/loose</code> y <code>many/oracle/loose</code>, <em>las mismas regiones que C2 y C4</em>. θ ruteó su ganador de C2/C4 (<code>rewoo</code>) a las seis tareas C5 — contra su propio veredicto registrado P6b («rewoo falla horizonte desconocido»), que no pudo aplicar porque la etiqueta de región nunca le dijo que estaba en ese caso.</p>
+    <p><strong>2 · El mejor fijo cambió de mundo.</strong> En el registro previo, <code>dag_strategy</code> nunca le ganó neto a <code>react</code> fuera de ventana (P4); en seed 47 es el mejor fijo. La selección aprendida solo puede rutear hacia lo que su registro dice que gana: un mundo donde el dominado de ayer es el mejor de hoy es un mundo donde arranca de atrás. Eso es una afirmación sobre ruteo aprendido en general.</p>
+    <p><strong>3 · Donde el registro sí traía la señal, la selección funcionó:</strong> C2 dio +0,121 con rewoo sobre el mejor fijo — P6a consistente por tercer corpus consecutivo.</p>
+
+    <div class="claim">
+      <span class="label">El titular honesto</span>
+      <p><strong>La selección sin sensado pierde contra un buen default fijo.</strong> El router perdió exactamente donde su sensado era ciego — y la maquinaria para des-cegarlo (la sonda, la estimación de horizonte) existe desde hoy y no estaba en el camino de decisión. Seguimiento exploratorio, no registrado: repetir el pase de decisión con la sonda aportando coupling/horizonte y medir cuánto de los −0,087 recupera.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><div class="sec-num">02</div><h2>La revisión adversarial: qué mató de la tesis v1</h2></div>
+  <div class="sec-body">
+    <p class="lead">La tesis v1 era «generación acotada por procedencia»: para clases contratadas, la alucinación se vuelve imposible de producir. La revisión la partió en cinco ataques, tres letales.</p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Ataque</th><th>Qué dice</th><th>Qué obliga a hacer</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Mis-binding</strong> (letal)</td><td>La garantía constructiva cubre el <em>token</em>, no la <em>proposición</em>. Un número COMPUTED insertado en la oración equivocada — el total de 2024 en una frase sobre 2025, «excluyendo devoluciones» donde era «incluyendo» — es una afirmación falsa con procedencia impecable. Mientras el binding lo medie el modelo, es detección desplazada, no imposibilidad.</td><td>Semántica formal del contrato + ensamblador cuya salida esté <em>implicada</em> por la base de creencias + protocolo adversarial de mis-binding. Sin eso, «imposible» es falso.</td></tr>
+          <tr><td><strong>Competidores directos</strong> (letal)</td><td>PAL/Program-of-Thoughts ya hace «el cómputo lo hace código». Conformal factuality (Mohri &amp; Hashimoto 2024) ya publica <em>la misma curva riesgo-cobertura sobre contenido</em>, con garantía estadística. Data-to-text con plantillas es de los 90.</td><td>La diferencia defendible es garantía <em>constructiva por afirmación</em> vs <em>distribucional por calibración</em> — y hay que compararse contra ellos en la misma curva, con baselines externos.</td></tr>
+          <tr><td><strong>El puente Hebbiano es decoración</strong> (letal para F6)</td><td>El piso que aprende es <strong>monótono con techo: un ratchet, no plasticidad</strong>. Un ratchet no puede oscilar, así que la cota de varianza del Teorema 10.1 acota algo que el mecanismo no puede hacer de todos modos. Importar el teorema de v1 es pátina, y viola la regla propia: una cota afirmada por analogía es «declarado, no probado».</td><td>Derivar la <strong>cota nativa del ratchet</strong>: pérdida de cobertura por endurecimiento, tasa de falsos endurecimientos bajo la guarda split-half. Si además conecta con MAP, es bonus — la tesis no puede colgar de eso.</td></tr>
+          <tr><td>Validez sintética mono-autor</td><td>Siete corpus del mismo generador, y el «segundo generador» de F7 también sería propio. El verificador es independiente del generador; el generador no es independiente de la hipótesis.</td><td>Al menos un corpus <em>natural</em> reutilizado, con respuestas verificables. Un segundo generador propio reformula la objeción, no la responde.</td></tr>
+          <tr><td>Tesis desacoplada del experimento estrella</td><td>P15 valida ruteo; la tesis v1 era sobre contenido. El experimento de la tesis estaba quinto en la cola.</td><td>El reframe de abajo — donde P15 negativa <em>vive adentro</em> de la tesis en vez de arrastrarla.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><div class="sec-num">03</div><h2>La tesis v2: solidez epistémica, con su precio medido</h2></div>
+  <div class="sec-body">
+    <div class="claim">
+      <span class="label">La tesis</span>
+      <p>Un <strong>sistema de tipos epistémico para sistemas agénticos</strong>: la procedencia como retículo (ASSUMED &lt; ELICITED &lt; OBSERVED &lt; COMPUTED), la verificación como <strong>promoción monótona</strong> (la sonda: el código confirma que una dependencia existe, nunca que no existe — eso es una semántica, y se formaliza), el gobierno como restricción de piso — con <strong>teorema de soundness</strong> (bajo dial A<sub>k</sub>, ninguna decisión ni afirmación emitida excede su piso de procedencia) y con <strong>el costo de la soundness medido</strong> como curva riesgo-cobertura en cada superficie.</p>
+    </div>
+
+    <p>La afirmación unificadora, medible: <strong>la abstención es composicional a través del stack</strong>. El mismo cálculo decide <em>qué corre</em> (factibilidad), <em>cómo corre</em> (θ), y <em>qué se afirma</em> (contratos). Tres superficies, una máquina, una moneda — la misma curva riesgo-cobertura, con la misma base de creencias, en control y en contenido. Eso convierte el problema de «conjunción de piezas conocidas» en «resultado que ninguna parte produce sola».</p>
+
+    <figure>
+      <svg viewBox="0 0 1000 300" role="img" aria-label="Tres superficies de abstención sobre un mismo cálculo epistémico">
+        <rect x="330" y="20" width="340" height="66" class="s-box-acc"/>
+        <text x="352" y="46" class="s-label svg-acc">UN CÁLCULO</text>
+        <text x="352" y="66" class="s-title svg-acc">retículo de procedencia + piso por dial</text>
+        <path d="M420 94 L170 140" class="s-line-acc" marker-end="url(#a2)"/>
+        <path d="M500 94 L500 140" class="s-line-acc" marker-end="url(#a2)"/>
+        <path d="M580 94 L830 140" class="s-line-acc" marker-end="url(#a2)"/>
+        <rect x="20" y="148" width="300" height="88" class="s-box"/>
+        <text x="40" y="174" class="s-label svg-faded">SUPERFICIE 1 · QUÉ CORRE</text>
+        <text x="40" y="196" class="s-title svg-ink">factibilidad aritmética</text>
+        <text x="40" y="214" class="s-note svg-ink2">abstenerse de un paradigma que no entra:</text>
+        <text x="40" y="228" class="s-note svg-ink2">54 celdas podadas gratis en P15</text>
+        <rect x="350" y="148" width="300" height="88" class="s-box"/>
+        <text x="370" y="174" class="s-label svg-faded">SUPERFICIE 2 · CÓMO CORRE</text>
+        <text x="370" y="196" class="s-title svg-ink">ruteo θ con abstención</text>
+        <text x="370" y="214" class="s-note svg-ink2">P15: el precio de decidir ciego en un eje</text>
+        <text x="370" y="228" class="s-note svg-ink2">= −0,087 neto. El dato vive acá.</text>
+        <rect x="680" y="148" width="300" height="88" class="s-box"/>
+        <text x="700" y="174" class="s-label svg-faded">SUPERFICIE 3 · QUÉ SE AFIRMA</text>
+        <text x="700" y="196" class="s-title svg-ink">contratos de afirmación</text>
+        <text x="700" y="214" class="s-note svg-ink2">la generación acotada, degradada de tesis</text>
+        <text x="700" y="228" class="s-note svg-ink2">a corolario de soundness en la salida</text>
+        <text x="330" y="278" class="s-note svg-ink2">Una moneda: la curva riesgo-cobertura — cuánta cobertura cuesta cada nivel de garantía.</text>
+        <defs>
+          <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0 0 L10 5 L0 10 z" class="svg-acc"/>
+          </marker>
+        </defs>
+      </svg>
+      <figcaption>P15 negativa no arrastra esta tesis: es el primer punto medido de la curva en la superficie de control — el precio de la solidez cuando falta sensado en un eje. Los resultados negativos del banco (graph_traverse, pointer_chase, cot, el colapso de react en nano) dejan de ser trivia y pasan a ser la maquinaria de abstención funcionando en la superficie de ruteo.</figcaption>
+    </figure>
+
+    <div class="boundary">
+      <span class="label">Lo que se degrada, dicho sin vueltas</span>
+      <p>«Generación acotada por procedencia» <strong>deja de ser la tesis</strong> y pasa a ser el corolario de soundness en la superficie de salida — con la semántica del contrato formalizada primero y el contraejemplo de mis-binding buscado por nosotros antes de que lo encuentre un revisor. Y «un motor que elimina la alucinación» no se afirma nunca: se afirma <em>solidez por clase contratada, con su costo de cobertura medido y comparado contra los baselines directos</em>.</p>
+    </div>
+
+    <p>El hallazgo de nano — <em>la estructura rescata al modelo barato, los loops abiertos no</em> (P13) — se integra como el caso donde el piso de estructura ES la garantía. Hoy es el resultado empírico más publicable del proyecto y estaba huérfano de tesis.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><div class="sec-num">04</div><h2>El plan v2</h2></div>
+  <div class="sec-body">
+    <div class="rule-note">REGLA QUE ORDENA TODO: primero corre en el lab, después entra al paper. El producto se construye desde lo que el banco pruebe — y P15 acaba de mostrar por qué ese orden no es negociable: sin él, hoy habría un producto construido sobre un ruteo que pierde.</div>
+
+    <div class="phase">
+      <div class="phase-id">F0 ✓</div>
+      <div>
+        <h3>P15 cerrada y registrada</h3>
+        <p>Refutada, con mecanismo verificado y veredicto reproducible (<code>_analyze_p15.py</code> re-deriva todo desde las filas). El registro previo a la corrida hizo que la refutación sea un resultado y no un bochorno.</p>
+        <div class="phase-meta"><span class="chip done">hecho</span><span class="chip">commit eef4096</span></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-id">F1</div>
+      <div>
+        <h3>Cerrar el ciclo del mecanismo: sensar y re-decidir</h3>
+        <p>Exploratorio sobre el mismo corpus (etiquetado así — no es predicción): re-correr el pase de decisión con la sonda aportando coupling y con un eje de horizonte en φ; medir cuánto de los −0,087 recupera. Después, <strong>P16 registrada</strong> en un corpus nuevo (seed nuevo): selección <em>con</em> sensado contra el mejor fijo. Es la réplica limpia de P15 con la variable que el mecanismo señaló.</p>
+        <div class="phase-meta"><span class="chip hot">lo primero</span><span class="chip">sonda ya construida</span><span class="chip">~26 llamadas + corpus nuevo</span></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-id">F2</div>
+      <div>
+        <h3>Los tres routers rivales</h3>
+        <p>Router en prosa (el de producción, tal cual) + router en prosa <em>informado</em> (ve lo que ve φ) + <strong>brazo logístico</strong>: regresión sobre exactamente las features de φ. Si θ le gana a la prosa pero no a una logística de 200 parámetros, la maquinaria determinística es decoración — y hay que saberlo ya. La brecha neta descuenta el costo en tokens del propio gobierno (sonda incluida).</p>
+        <div class="phase-meta"><span class="chip">brazos prosa implementados</span><span class="chip">falta el logístico</span><span class="chip">filas ya pagadas</span></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-id">F3</div>
+      <div>
+        <h3>Retención de contexto y mediación</h3>
+        <p>Instrumentar cuánta evidencia recuperada sobrevive hasta la llamada que responde, y re-analizar el registro entero: ¿la ventaja de un paradigma sobrevive al controlar por recall de evidencia y retención? Si no sobrevive, «la estructura gana» se disuelve en «esta estructura retiene más» — más accionable, no menos.</p>
+        <div class="phase-meta"><span class="chip">sin gastar tokens</span></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-id">F4</div>
+      <div>
+        <h3>Estadística que resista al tribunal</h3>
+        <p>Dieciséis predicciones registradas y cero control de comparaciones múltiples. FDR sobre la familia completa, intervalos de confianza sobre las brechas netas, AURC para la abstención. Análisis puro; y define el alcance por escrito: la reproducibilidad de EXPLAIN es <em>aguas abajo del sensor</em>, dado el estado de creencias — no dado el input.</p>
+        <div class="phase-meta"><span class="chip">sin gastar tokens</span></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-id">F5</div>
+      <div>
+        <h3>La teoría nativa: semántica del contrato + soundness + cota del ratchet</h3>
+        <p>Una página de semántica formal por clase de contrato — qué proposición exacta garantiza cada una — y el contraejemplo de mis-binding buscado por nosotros primero. El teorema de soundness del ensamblador (la salida está implicada por la base de creencias; el LLM propone plantilla, el código instancia y verifica el binding). Y la <strong>cota nativa del ratchet</strong> para el piso que aprende: pérdida de cobertura por endurecimiento, falsos endurecimientos bajo la guarda split-half. MAP queda como inspiración citada, no como teorema prestado. También: definir quién fija el dial y cómo se evalúa marginalizando sobre sus posiciones.</p>
+        <div class="phase-meta"><span class="chip">pizarra</span><span class="chip hot">sin esto, F6 mide algo indefinido</span></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-id">F6</div>
+      <div>
+        <h3>Contratos implementados, contra los baselines directos</h3>
+        <p>Los tres contratos en el lab, y la curva riesgo-cobertura del contenido <strong>contra conformal factuality y contra un detector post-hoc</strong> en la misma curva — más el red-team de mis-binding (referentes, alcance de agregación, negaciones en la prosa conectiva). Si el constructivo no domina al detectivo a igual cobertura, la tesis se cae con honestidad, que es como debe caerse.</p>
+        <div class="phase-meta"><span class="chip">el corolario, medido</span><span class="chip">baselines externos obligatorios</span></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-id">F7</div>
+      <div>
+        <h3>Validez externa de verdad</h3>
+        <p>Un corpus <strong>natural</strong> reutilizado con respuestas verificables (QA numérica sobre documentos largos calza exacto con los contratos) — no un segundo generador propio. Segunda familia de modelos, y la transferencia de θ entre modelos adelantada: el colapso de react en nano sugiere que parte de lo aprendido es del modelo, no de la tarea, y eso condiciona la lectura de todo lo demás.</p>
+        <div class="phase-meta"><span class="chip">la fase más cara</span><span class="chip">habilita el producto</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><div class="sec-num">05</div><h2>Cómo se cae</h2></div>
+  <div class="sec-body">
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Si pasa esto</th><th>La tesis se convierte en</th></tr></thead>
+        <tbody>
+          <tr><td>P15 negativa <em>(ya pasó)</em></td><td class="pos">Absorbida: es el primer punto de la curva de precio de la solidez en la superficie de control, con mecanismo verificado. La tesis v2 la contiene por construcción.</td></tr>
+          <tr><td>F1: sensar no recupera la brecha (P16 también negativa)</td><td>La selección aprendida no paga ni con sensado: el capítulo de ruteo se reporta como resultado negativo robusto — que ningún paper de ruteo publica — y el peso se muda a las superficies 1 y 3.</td></tr>
+          <tr><td>F2: la logística de 200 parámetros empata a θ</td><td>θ se simplifica a la logística y la contribución es el <em>régimen de gobierno</em>, no el estimador. Doloroso y correcto.</td></tr>
+          <tr><td>F5: el contraejemplo de mis-binding no se puede cerrar</td><td>«Imposible» se degrada a «verificado por construcción con residuo de binding declarado» — y el residuo se mide.</td></tr>
+          <tr><td>F6: conformal factuality domina al constructivo a igual cobertura</td><td>La garantía distribucional basta y la constructiva es sobre-ingeniería: se publica la comparación y la tesis queda en el sistema de tipos + el costo medido.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Las fases que pueden cambiar cuál es la tesis — F1 y F2 — siguen siendo las más baratas. Ese sigue siendo el orden.</p>
+  </div>
+</section>
+
+<footer>
+  <p>v2, 2026-08-27 — mismo día que el veredicto de P15 (refutada, mecanismo verificado, commit <span class="mono">eef4096</span>) y la revisión adversarial que degradó «generación acotada» de tesis a corolario. Cada fase termina en algo que corre; el paper documenta lo que sobrevivió.</p>
+</footer>
+
+</div>
