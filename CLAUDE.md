@@ -68,4 +68,5 @@ gold_deep (~483k), gold_xl (~1.272k tokens).
 ## Estado git
 
 Repo git desde 2026-08-27 (primer commit `76c8b8e`, confirmado por el autor;
-.gitignore cubre .env/cache/results). Sin remote todavía. Nunca push sin confirmación.
+.gitignore cubre .env/cache/results). Remote: `origin` = github.com/arielelevy/mapo
+(PRIVADO), rama `main`. Nunca push sin confirmación del autor.
