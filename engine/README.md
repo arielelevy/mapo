@@ -33,14 +33,28 @@ request → features (φ) → factibilidad (aritmética, gratis)
 
 `understand.py` conserva lo que no es ruteo (follow-ups, NER, rewrite, idioma).
 
-## Estado
+## Estado y orden (decisión del autor, 2026-08-26)
 
-- [x] Código de ejecución copiado (2026-08-26) — 26 archivos, sin referencias de origen
-- [ ] Adaptadores por los 5 imports internos de la app original:
-      `get_model_info`, `ChatRequest`, `redis_cache`, `search_helpers`, `search_service`
-- [ ] Reemplazo del clasificador de `understand.py` por la capa de decisión de paperlab
-- [ ] El objetivo medible: corpus gold NUEVO → el motor le gana a todo paradigma fijo
-      del harness (brecha de oráculo neta positiva, held-out)
+**Primero se mide y selecciona; después se implementa.** El motor no se construye hasta
+que el harness termine de medir el catálogo y la selección quede decidida por datos.
+
+1. [x] Código de ejecución copiado (2026-08-26) — 26 archivos, sin referencias de origen
+2. [ ] **EN CURSO — medición y selección de patrones** (harness): held-out P8, superficie
+       managed P9, y los 3 candidatos verificados del informe de patrones —
+       `graph_traverse` (HippoRAG 2405.14831 / GraphReader 2406.14550 / StepChain
+       2510.02827: cadenas como traversal de grafo, costo fijo), `extract_compute`
+       (LOTUS 2407.11418 / CodeAct 2402.01030: agregación exacta por código),
+       `streaming_scan` (Chain-of-Agents 2406.02818: una pasada con estado de arrastre).
+       Cada uno entra con predicción registrada antes de correr. Upgrade barato de
+       `rewoo` disponible: LLMCompiler 2312.04511 (placeholders + 1 replan acotado)
+3. [ ] Adaptadores por los 5 imports internos de la app original:
+       `get_model_info`, `ChatRequest`, `redis_cache`, `search_helpers`, `search_service`
+4. [ ] Reemplazo del clasificador de `understand.py` por la capa de decisión de paperlab
+5. [ ] **Temporal.io como runtime de ejecución** (decisión diferida a esta fase): durable
+       execution, retries, replay determinístico — mapea a la mitad de ejecución del
+       motor; no toca la capa de decisión ni entra jamás al harness (sin frameworks)
+6. [ ] El objetivo medible: corpus gold NUEVO → el motor le gana a todo paradigma fijo
+       del harness (brecha de oráculo neta positiva, held-out)
 
 ## Reglas
 
