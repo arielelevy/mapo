@@ -423,6 +423,43 @@ capture. If that happens, P15b is evaluated on C5 alone and the C3 half is repor
 **vacuous, not as confirmed** — the distinction matters, and it is written down here rather
 than decided once the numbers are in. C3 in nano remains an open region, not a result.
 
+### P15 verdict (2026-08-27, same day, run complete: 390/390 cells, 0 infra, 14.07M tokens vs 9.58M estimated)
+
+| # | Verdict | The number |
+|---|---|---|
+| P15a | **REFUTED** — net gap **−0.087** vs the best fixed (`dag_strategy`, 0.615 vs router 0.527), beyond the noise floor (0.057). Against always-`react` the router is +0.035, **within** the floor: vacuous, not a win | captured fraction of the oracle gap: −0.833 |
+| P15b | **REFUTED** — the gain concentrated where predicted for C2 (+0.121) but the LOSS concentrated exactly where the gain was predicted: C5 (−0.278). C3 came back oracle-zero and is reported **vacuous**, as the pre-registered addendum required | per-cell deltas in `results/nano/p15_verdict.json` |
+| P15c | **INSUFFICIENT n** — one abstention in 26 tasks (it landed badly: 0.000 vs 0.333); one observation is not a verdict in either direction | — |
+| P15d | **CONFIRMED** — re-deciding from the recorded belief base reproduced paradigm AND belief digest on 26/26 tasks | the auditability claim of §6.2 stands |
+
+**Mechanism, verified against the record — this is the finding, not a consolation:**
+
+1. **The region vocabulary cannot see the axis that kills.** C5's defining feature — the
+   number of hops is not knowable in advance — has NO axis in φ's binning
+   (cardinality × oracle × coupling). Verified: C5 tasks land in `few/oracle/loose` and
+   `many/oracle/loose`, the SAME regions as C2 and C4. θ therefore routed its C2/C4
+   winner (`rewoo`) into all six C5 tasks — against its own registered verdict P6b
+   ("rewoo fails unknown-horizon"), which it could not apply because the region label
+   never told it it was in that case. The router lost precisely where its sensing was
+   blind, and the machinery built to un-blind it (the probe, horizon estimation) exists
+   and was not in this decision path.
+2. **The best fixed paradigm flipped across worlds.** On the prior record `dag_strategy`
+   never beat `react` net out-of-window (P4); on seed 47 it is the best fixed (0.615).
+   θ can only route toward what its record says wins, so a world where yesterday's
+   dominated paradigm is today's best is a world where learned selection starts from
+   behind. This is a transfer statement about learned routing as such, not about this
+   implementation.
+3. Where the record DID carry the signal, selection worked: C2 delta +0.121 — `rewoo`
+   over the fixed best, consistent with P6a for the third corpus in a row.
+
+**What this changes.** The product claim as registered — per-request selection beats the
+best fixed paradigm on an unseen world — is false for θ over these features on this
+world, and the honest headline is the mechanism: **selection without sensing loses to a
+strong fixed default**. The result survives as the measured price of deciding blind on
+one axis; the follow-up (exploratory, NOT registered: it is the same corpus) is to rerun
+the decision pass with the probe supplying coupling/horizon and measure how much of the
+−0.087 that recovers.
+
 **Refutation is the point.** P15a failing is publishable and cheap to state: it would mean
 the honest result is a measured catalogue of when each paradigm wins, plus a negative
 result on selection — which is more than the literature currently offers for held-out

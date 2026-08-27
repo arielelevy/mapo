@@ -41,7 +41,11 @@ implementación que lo corra.
   INFACTIBLES bajo presupuesto de producción (decisión del autor: la infactibilidad ES
   el resultado; P11/P12 no-evaluables), pointer_chase FALSIFICADO (P14a; sus frenos
   P14b confirmados). Veredictos y P13a-c en README §Findings + notes/. Región abierta:
-  C3 profundo en nano (grilla completa u=0.000).
+  C3 profundo en nano (grilla completa u=0.000; también oráculo-cero en gold_transfer).
+  **P15 (2026-08-27): REFUTADA** — θ pierde −0.087 neto contra el mejor fijo en el
+  corpus held-out seed 47. Mecanismo verificado: φ no tiene eje de horizonte, C5 cae en
+  las mismas regiones que C2/C4, y θ rutea rewoo contra su propio veredicto P6b. P15d
+  (reproducibilidad) CONFIRMADA 26/26. Detalle en README §Findings.
 
 ## Modelo de medición (decisión del autor, 2026-08-26)
 
