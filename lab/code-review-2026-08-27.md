@@ -1,6 +1,6 @@
-# Code Review Report — paperlab
+# Code Review Report — lab
 
-**Proyecto**: paperlab (MAPO — capa de decisión determinística para agentes LLM)
+**Proyecto**: lab (MAPO — capa de decisión determinística para agentes LLM)
 **Fecha**: 2026-08-27
 **Alcance**: Full Review (estática + arquitectura + concurrencia + corpus/tests + scripts + deps + secretos)
 **Revisado**: `app/` completo (19 módulos), `corpus/generate.py` + `verify.py`, `tests/` (2 suites), 21 scripts `_*.py`, `requirements.txt`, higiene git. 5 auditores paralelos + verificación manual de todos los CRITICAL/HIGH (los marcados ✓ fueron confirmados línea por línea por el revisor principal; el resto viene con evidencia citada del auditor).

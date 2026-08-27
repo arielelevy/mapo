@@ -882,7 +882,7 @@ is in.
 | `ANALYSIS.md` | the failure analysis of §8 in full, per paradigm and per cell |
 | `GATE.md` | eight binary publication criteria and their current verdict |
 | `PLAN.md` | revision history of the thesis, including two superseded framings and why |
-| `D:\Apps\MAPO\paperlab` | the harness: 7 paradigms, 5 retrieval arms, 3 tool surfaces, 4 assurance levels, corpus generator with independent verifier, 63 machine-checked assertions |
+| `D:\Apps\MAPO\lab` | the harness: 7 paradigms, 5 retrieval arms, 3 tool surfaces, 4 assurance levels, corpus generator with independent verifier, 63 machine-checked assertions |
 
 Seven of the fifteen anti-patterns in the catalogue are errors made and measured in the
 course of this work, including two that contradicted our own published predictions.

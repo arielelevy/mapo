@@ -1,4 +1,4 @@
-# CLAUDE.md — MAPO (whitepaper + paperlab)
+# CLAUDE.md — MAPO (whitepaper + lab)
 
 **MAPO empieza de cero: SIN NINGUNA referencia a marcas o productos anteriores en
 documentos activos ni en código.**
@@ -25,10 +25,10 @@ Deuda actual conocida: el piso de garantía que aprende de estadísticas de rech
    - **`engine/agentic/`** — capa de EJECUCIÓN (LangGraph): estrategias dag/react/
      map_reduce/plan_execute, blackboard, semantic_search RRF, tools. Código propio del
      autor, reusado; el sistema del que proviene NO se menciona en ningún lado.
-   - **`paperlab/app/`** — capa de DECISIÓN determinística (factibilidad aritmética →
+   - **`lab/app/`** — capa de DECISIÓN determinística (factibilidad aritmética →
      creencias con procedencia → dial A0–A3 → ruteo selectivo con abstención → EXPLAIN),
      que REEMPLAZA al clasificador LLM en prosa de `engine/agentic/understand.py`.
-   `paperlab/` además es el banco de medición (sin framework, por diseño — no meter
+   `lab/` además es el banco de medición (sin framework, por diseño — no meter
    LangGraph ahí). Ante cualquier decisión de diseño, pensar primero cómo mejora al
    producto; el paper viene después.
 2. **El paper documenta y valida el producto**, no al revés. Vive en `whitepaper/`
@@ -69,7 +69,7 @@ paradigma es el caso medido primero, no el alcance del producto.
 
 ## Decisiones vigentes (actualizado 2026-08-27)
 
-- **MAPO es este repo en `D:\Apps\MAPO`** (whitepaper + engine + paperlab juntos),
+- **MAPO es este repo en `D:\Apps\MAPO`** (whitepaper + engine + lab juntos),
   remote `origin` = github.com/arielelevy/mapo (PRIVADO), rama `main`, con las dos
   historias fusionadas (la del lab y la del paper). El repo viejo de la marca
   anterior queda archivado FUERA, con su v1. NO hacer push sin confirmación.
@@ -77,8 +77,8 @@ paradigma es el caso medido primero, no el alcance del producto.
   **Zenodo con DOI**. §14 del PLAN es histórico.
 - Modelo de medición (2026-08-26): **`gpt-5.4-nano`** en adelante (t=0 + seed,
   determinismo casi al token verificado, cuota propia); la grilla `gpt-5-chat` queda
-  CONGELADA como primer modelo. Detalle completo en `paperlab/CLAUDE.md`.
-- `paperlab` YA vive en `D:\Apps\MAPO\paperlab` (mudado 2026-08-27, corridas
+  CONGELADA como primer modelo. Detalle completo en `lab/CLAUDE.md`.
+- `lab` YA vive en `D:\Apps\MAPO\lab` (mudado 2026-08-27, corridas
   terminadas, conteos verificados). Los veredictos P10–P14 y P13a-c están en
-  `paperlab/README.md` §Findings y `paperlab/notes/`. Auditoría de código completa
-  en `paperlab/code-review-2026-08-27.md` (bloque crítico ya aplicado).
+  `lab/README.md` §Findings y `lab/notes/`. Auditoría de código completa
+  en `lab/code-review-2026-08-27.md` (bloque crítico ya aplicado).

@@ -2,7 +2,7 @@
 ## Criterios duros, binarios, y su veredicto actual
 
 **Fecha de aplicación**: 2026-08-23
-**Objeto evaluado**: `PLAN.md` (831 líneas) + `PATTERNS.md` (759) + `D:\Apps\MAPO\paperlab`
+**Objeto evaluado**: `PLAN.md` (831 líneas) + `PATTERNS.md` (759) + `D:\Apps\MAPO\lab`
 **Fecha de re-aplicación**: 2026-08-23 (tras cerrar G5 y G7)
 **Veredicto global**: ⚠️ **SIN BLOQUEANTES — 2 condicionales** (G2, G3)
 *(G1 cerrado el 2026-08-23; ver §8ter. G5/G7 cerrados antes. El único 🔴 vivo es R12.)*

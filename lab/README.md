@@ -1,4 +1,4 @@
-# paperlab
+# lab
 
 > 🇬🇧 English · [🇪🇸 Español — documentación del entregable](README.es.md)
 
@@ -214,7 +214,7 @@ tests/
 ## Running it
 
 ```powershell
-cd "D:\Apps\paperlab"
+cd "D:\Apps\lab"
 py -m pip install -r requirements.txt
 copy .env.example .env    # then fill AZURE_OPENAI_API_KEY
 

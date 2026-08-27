@@ -21,7 +21,7 @@ engine/
 
 El clasificador de estrategia de `understand.py` es un **router LLM en prosa** — la
 pieza que el estudio (`../whitepaper/`) muestra frágil. En MAPO se reemplaza por la
-**capa de decisión de `../paperlab/app/`**:
+**capa de decisión de `../lab/app/`**:
 
 ```
 request → features (φ) → factibilidad (aritmética, gratis)
@@ -49,7 +49,7 @@ que el harness termine de medir el catálogo y la selección quede decidida por 
        `rewoo` disponible: LLMCompiler 2312.04511 (placeholders + 1 replan acotado)
 3. [ ] Adaptadores por los 5 imports internos de la app original:
        `get_model_info`, `ChatRequest`, `redis_cache`, `search_helpers`, `search_service`
-4. [ ] Reemplazo del clasificador de `understand.py` por la capa de decisión de paperlab
+4. [ ] Reemplazo del clasificador de `understand.py` por la capa de decisión de lab
 5. [ ] **Temporal.io como runtime** (decisión diferida a esta fase), en DOS planos:
        - **Plano de ingesta** (el mejor caso de Temporal): workflow `IngestCollection`
          → fan-out de activities por unidad (parsear → embeber → resumir → extraer

@@ -93,13 +93,13 @@ class Settings:
             embedding_deployment=_require("AZURE_OPENAI_EMBEDDING_DEPLOYMENT"),
             embedding_endpoint=_require("AZURE_OPENAI_EMBEDDING_ENDPOINT").rstrip("/"),
             embedding_api_key=_require("AZURE_OPENAI_EMBEDDING_API_KEY"),
-            temperature=_require_temperature("PAPERLAB_TEMPERATURE"),
-            seed=_require_int("PAPERLAB_SEED"),
-            max_tokens=_require_int("PAPERLAB_MAX_TOKENS"),
-            request_timeout=_require_int("PAPERLAB_REQUEST_TIMEOUT"),
-            cache_dir=_require_dir("PAPERLAB_CACHE_DIR"),
-            results_dir=_require_dir("PAPERLAB_RESULTS_DIR"),
-            corpus_dir=_require_dir("PAPERLAB_CORPUS_DIR"),
+            temperature=_require_temperature("MAPO_TEMPERATURE"),
+            seed=_require_int("MAPO_SEED"),
+            max_tokens=_require_int("MAPO_MAX_TOKENS"),
+            request_timeout=_require_int("MAPO_REQUEST_TIMEOUT"),
+            cache_dir=_require_dir("MAPO_CACHE_DIR"),
+            results_dir=_require_dir("MAPO_RESULTS_DIR"),
+            corpus_dir=_require_dir("MAPO_CORPUS_DIR"),
         )
 
     def fingerprint(self) -> str:

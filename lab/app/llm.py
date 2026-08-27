@@ -48,11 +48,11 @@ MAX_BACKOFF_SECONDS = 60.0
 #
 # Env-overridable (explicitly, never silently): a cell whose spend exceeds the
 # deployment's ENTIRE per-minute quota needs several quota windows to complete, and 420s
-# is not enough for that. A refill run sets PAPERLAB_RETRY_BUDGET_SECONDS for itself;
+# is not enough for that. A refill run sets MAPO_RETRY_BUDGET_SECONDS for itself;
 # absent the variable, the declared constant stands.
 RETRY_BUDGET_SECONDS = (
-    float(os.environ["PAPERLAB_RETRY_BUDGET_SECONDS"])
-    if "PAPERLAB_RETRY_BUDGET_SECONDS" in os.environ
+    float(os.environ["MAPO_RETRY_BUDGET_SECONDS"])
+    if "MAPO_RETRY_BUDGET_SECONDS" in os.environ
     else 420.0
 )
 

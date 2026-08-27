@@ -125,7 +125,7 @@ Imagen: `notes/2026-08-26-ai-memory-diseno.jpg` (original en el Desktop del auto
 - Agent en el medio: usuario ↔ prompt ↔ agent ↔ session; el agent lee OM/OMs pero
   la memoria la gobierna el hub, no el agent.
 
-Resonancia con paperlab: es la misma familia de ideas que `consolidation.py` +
+Resonancia con lab: es la misma familia de ideas que `consolidation.py` +
 `store.py` (beliefs/calibration/dreams/policies/propositions en el LearningStore, el
 ciclo copy-on-write con guarda de promoción = el RFC). La partición Fast LLM/LLM es
 exactamente la decisión que P13a/P13b están midiendo (¿qué regiones puede llevar un

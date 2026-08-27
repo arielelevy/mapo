@@ -1,4 +1,4 @@
-# paperlab — el entregable, en español
+# lab — el entregable, en español
 
 > 🇬🇧 English (documento canónico, incluye protocolo de medición y cómo correr):
 > [README.md](README.md)

@@ -28,8 +28,8 @@ nano_results = base.results_dir / "nano"
 nano_results.mkdir(parents=True, exist_ok=True)
 S = replace(
     base,
-    endpoint=os.environ["PAPERLAB_NANO_ENDPOINT"].rstrip("/"),
-    api_key=os.environ["PAPERLAB_NANO_KEY"],
+    endpoint=os.environ["MAPO_NANO_ENDPOINT"].rstrip("/"),
+    api_key=os.environ["MAPO_NANO_KEY"],
     chat_deployment="gpt-5.4-nano",
     temperature=0.0,
     results_dir=nano_results,

@@ -5,7 +5,7 @@ distribution constructed so the correct value is known by hand. If the identity
 oracle_gap == pi*G ever stops holding, every number in the paper is suspect, and that
 should fail loudly here rather than be discovered by a reviewer.
 
-Run: py -m tests.test_science   (from D:\\Apps\\paperlab)
+Run: py -m tests.test_science   (from D:\\Apps\\lab)
 """
 
 from __future__ import annotations

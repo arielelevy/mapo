@@ -21,7 +21,7 @@ from .policy import Plasticity, PolicyBundle, promote
 from .router import Router
 from .runner import Runner
 
-app = FastAPI(title="paperlab", version="0.1.0")
+app = FastAPI(title="lab", version="0.1.0")
 settings = Settings.from_env()
 
 POLICY_DIR = settings.results_dir / "policies"

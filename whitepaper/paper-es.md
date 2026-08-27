@@ -922,7 +922,7 @@ gane al fallback — que sería un resultado, y se declara publicable **antes** 
 | `ANALYSIS.md` | el análisis de fallas de §8 completo, por paradigma y por celda |
 | `GATE.md` | ocho criterios binarios de publicación y su veredicto actual |
 | `PLAN.md` | historia de revisiones de la tesis, incluidos dos encuadres superados y por qué |
-| `D:\Apps\MAPO\paperlab` | el harness: 7 paradigmas, 5 brazos de recuperación, 3 superficies de herramientas, 4 niveles de garantía, generador de corpus con verificador independiente, 63 aserciones chequeadas por máquina |
+| `D:\Apps\MAPO\lab` | el harness: 7 paradigmas, 5 brazos de recuperación, 3 superficies de herramientas, 4 niveles de garantía, generador de corpus con verificador independiente, 63 aserciones chequeadas por máquina |
 
 Siete de los quince anti-patrones del catálogo son errores cometidos y medidos en el curso de este
 trabajo, incluidos dos que contradijeron nuestras propias predicciones publicadas.

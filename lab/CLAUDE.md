@@ -1,4 +1,4 @@
-# CLAUDE.md — paperlab
+# CLAUDE.md — lab
 
 **Esto es EL PRODUCTO, no el andamiaje de un paper.** Una capa de decisión
 determinística para agentes LLM: factibilidad aritmética → creencias con procedencia

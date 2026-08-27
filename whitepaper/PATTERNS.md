@@ -3,7 +3,7 @@
 
 **Estado**: borrador de vocabulario, v0.1 · 2026-08-22
 **Autor**: Ariel Edgardo Levy
-**Compañero de**: `PLAN.md` (teoría) y `D:\Apps\MAPO\paperlab` (evidencia)
+**Compañero de**: `PLAN.md` (teoría) y `D:\Apps\MAPO\lab` (evidencia)
 
 ---
 
@@ -35,7 +35,7 @@ distintos, y v1 fracasó por mezclar los dos primeros.
 |---|---|---|---|---|
 | **T — Teoría** | Paper (T1, cs.LG) | Académica | Que lo scoopeen | E0 |
 | **V — Vocabulario** | Este catálogo | Practitioners | Que no se adopte | nada ⇒ **ship first** |
-| **M — Motor** | `paperlab` + engine | Ingeniería | Que nadie lo corra | E0 |
+| **M — Motor** | `lab` + engine | Ingeniería | Que nadie lo corra | E0 |
 
 **Regla de secuenciación**: V se publica primero porque no depende de mediciones y
 **no se puede scoopear como se scoopea un teorema** — nombrar bien es acumulativo. T
@@ -933,7 +933,7 @@ no una.
 
 Un catálogo sin mediciones es otro blog de opiniones. Lo que separa este documento de
 eso es que **cada afirmación de "Aplicabilidad" y cada perfil G/L es falsable y se mide
-en un arnés público**: `D:\Apps\MAPO\paperlab`.
+en un arnés público**: `D:\Apps\MAPO\lab`.
 
 Protocolo: para cada tarea del corpus, correr **todos** los patrones; registrar
 `(región de features × patrón → utilidad, costo)`. Esa única tabla es a la vez la Tabla 1
@@ -961,7 +961,7 @@ con **evidencia versionada**, no un PDF con una tabla congelada.
 | 1 | Vocabulario y plantilla | ✅ este documento |
 | 2 | 10 patrones estructurales + patrón de control | ✅ borrador |
 | 3 | 8 anti-patrones con nombre | ✅ borrador |
-| 4 | Arnés de medición | 🔶 en curso (`paperlab`) |
+| 4 | Arnés de medición | 🔶 en curso (`lab`) |
 | 5 | Corpus estratificado por celdas de features | ⬜ pendiente |
 | 6 | Perfiles G/L medidos por patrón × región | ⬜ requiere E0 |
 | 7 | Diagrama por patrón | ⬜ |

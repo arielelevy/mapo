@@ -641,7 +641,7 @@ misma cosa. `credible_oracle_gap` reporta `medida`, `piso` y `neta = medida − 
 ## 10.2 El protocolo, contra el harness que existe
 
 ```powershell
-cd "D:\Apps\MAPO\paperlab"
+cd "D:\Apps\MAPO\lab"
 
 # 1. La capa de medición, antes de gastar un token
 py tests\test_science.py            # 39 checks

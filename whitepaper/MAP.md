@@ -2,7 +2,7 @@
 
 > Extracted 2026-08-26 from the frozen v1 whitepaper (its Chapter 10 and Appendix B.3),
 > the single piece of v1 that MAPO inherits. Recontextualised: in MAPO this is the
-> statistics layer that feeds the policy θ (see `../paperlab/app/policy.py`), with
+> statistics layer that feeds the policy θ (see `../lab/app/policy.py`), with
 > Hebbian weights as the interpretable, auditable substrate of the decision list.
 
 # Capability 10: Plasticity and Continuous Learning (MAP)
