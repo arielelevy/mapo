@@ -33,8 +33,12 @@ implementación que lo corra.
   evidencia entra en ventana — en el régimen de producción eso no pasa. No es un
   candidato del catálogo del motor; es lo que la aritmética elige sola cuando puede.
 - La fila activa de medición: react (fallback), dag_strategy, map_reduce, rewoo,
-  gist_reader (falsificado, no promovido) + los candidatos graph_traverse /
-  extract_compute / streaming_scan + la superficie managed.
+  gist_reader (falsificado, no promovido) + la superficie managed. Candidatos cerrados
+  2026-08-27: graph_traverse FALSIFICADO (P10a), extract_compute / streaming_scan
+  INFACTIBLES bajo presupuesto de producción (decisión del autor: la infactibilidad ES
+  el resultado; P11/P12 no-evaluables), pointer_chase FALSIFICADO (P14a; sus frenos
+  P14b confirmados). Veredictos y P13a-c en README §Findings + notes/. Región abierta:
+  C3 profundo en nano (grilla completa u=0.000).
 
 ## Modelo de medición (decisión del autor, 2026-08-26)
 
@@ -63,5 +67,5 @@ gold_deep (~483k), gold_xl (~1.272k tokens).
 
 ## Estado git
 
-NO es repo git todavía (.gitignore correcto, cubre .env/cache/results). `git init` +
-primer commit pendiente de confirmación del autor. Nunca push sin confirmación.
+Repo git desde 2026-08-27 (primer commit `76c8b8e`, confirmado por el autor;
+.gitignore cubre .env/cache/results). Sin remote todavía. Nunca push sin confirmación.
