@@ -415,6 +415,14 @@ prediction, it is the feasibility layer having run before any token was spent.
 | P15c | Abstention is **not free but is not harmful**: on the tasks where θ's margin is below τ the router defers to the fallback, and on those tasks the fallback lands within the noise floor of the best fixed paradigm | Abstention is costing utility — deferring is worse than committing, and the selective-prediction framing (§2.5) does not transfer to paradigm choice |
 | P15d | The routing decision is **reproducible**: re-deciding from the recorded belief base yields the identical paradigm on 100% of tasks, and the EXPLAIN artifact suffices to re-derive it without re-running the model | Decision stability is not a property of this system, and every claim about auditability in §6.2 goes with it |
 
+**Addendum, recorded BEFORE the run and after re-reading the nano record.** On the deep
+regime the nano grid measured **u=0.000 across the whole of C3** — every paradigm, every
+cell. `gold_transfer` has the same shape as `gold_deep`, so its two C3 tasks are likely to
+come back all-zero, and a cell where the ORACLE is zero offers no gap for anything to
+capture. If that happens, P15b is evaluated on C5 alone and the C3 half is reported as
+**vacuous, not as confirmed** — the distinction matters, and it is written down here rather
+than decided once the numbers are in. C3 in nano remains an open region, not a result.
+
 **Refutation is the point.** P15a failing is publishable and cheap to state: it would mean
 the honest result is a measured catalogue of when each paradigm wins, plus a negative
 result on selection — which is more than the literature currently offers for held-out

@@ -17,7 +17,9 @@ from pydantic import BaseModel, Field
 from .config import Settings
 from .paradigms import COST_PRIORS, FALLBACK, REGISTRY
 from .assurance import Assurance
+from .llm import LLMClient
 from .policy import Plasticity, PolicyBundle, promote
+from .probe import probe_coupling
 from .router import Router
 from .runner import Runner
 
@@ -38,6 +40,9 @@ class DecideRequest(BaseModel):
     corpus: str
     task_id: str
     assurance: Assurance = Assurance.STANDARD
+    # A probe costs one cheap call. Off by default so /decide stays free to call, and
+    # so that whoever pays for it is the one who asked for it.
+    probe: bool = True
 
 
 class PromoteRequest(BaseModel):
@@ -123,7 +128,46 @@ def decide(request: DecideRequest) -> dict[str, Any]:
         coupling_credence=0.8 if features.coupling is not None else 0.0,
         horizon_unknown=features.horizon_unknown,
     )
-    return plan.explain()
+
+    # probe_then_decide, executed rather than merely planned.
+    #
+    # The rule has always been able to demand a probe and the plan has always been able
+    # to report `needs_probe`; nothing ever ran one, so a rule that required OBSERVED
+    # provenance could never be satisfied and the request fell to the fallback for a
+    # reason that had nothing to do with the request. With the assurance floor now
+    # raising itself from rejection statistics (§6.2), that gap closes on its own into
+    # a system that probes-and-never-probes.
+    #
+    # Deciding twice is the point: the first decision is what the system would have done
+    # believing an estimate, the second is what it does having measured. Both are in the
+    # artifact, so the probe's effect on the outcome is visible instead of implied.
+    explained = plan.explain()
+    if plan.needs_probe and request.probe:
+        client = LLMClient(settings)
+        surface = runner.surface_for(task)
+        reading = probe_coupling(client, surface, task)
+        replanned = router.plan(
+            task=task,
+            candidates=sorted(REGISTRY),
+            region=features.region(),
+            requested=request.assurance,
+            coupling=reading.coupling,
+            coupling_provenance=reading.provenance,
+            coupling_credence=reading.credence,
+            horizon_unknown=features.horizon_unknown,
+        )
+        explained = replanned.explain()
+        explained["probe"] = {
+            **reading.as_dict(),
+            "plan_before_probe": {
+                "action": plan.action,
+                "paradigm": plan.paradigm,
+            },
+            "changed_the_decision": (
+                plan.action != replanned.action or plan.paradigm != replanned.paradigm
+            ),
+        }
+    return explained
 
 
 @app.get("/policy")

@@ -6,7 +6,8 @@ determinística para agentes LLM: factibilidad aritmética → creencias con pro
 ruteo selectivo con abstención → circuit breakers contables → artefacto EXPLAIN.
 Diseño completo del entregable: `README.md` §"The deliverable" / `README.es.md`.
 El paper que lo valida vive en `..\whitepaper\` (este mismo repo) y va SEGUNDO en
-prioridad; la capa de EJECUCIÓN (LangGraph) vive en `..\engine\agentic\`. El
+prioridad; la capa de ejecución anterior (LangGraph) quedó CONGELADA en `..\legacy\agentic\`:
+no es el producto y no se evoluciona (decisión del autor, 2026-08-27). El
 whitepaper de la marca anterior quedó FUERA del repo, ya cosechado en `notes/`.
 **MAPO empieza de cero: sin ninguna referencia a marcas o productos anteriores.**
 **Objetivo medible del producto**: que a MAPO le tiren un corpus gold NUEVO y ejecute

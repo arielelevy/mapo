@@ -185,6 +185,29 @@ class Runner:
 
     # -- features ----------------------------------------------------------
 
+    def surface_for(self, task: dict[str, Any]) -> ToolSurface:
+        """The tool surface for one task, built the same way the grid builds it.
+
+        Extracted from `run_cross_product`'s local closure so that anything outside the
+        measurement loop -- the probe, the /decide endpoint -- gets the SAME surface a
+        paradigm would get. A second construction of it elsewhere would be a second
+        definition of what the agent can see.
+        """
+        view = CorpusView(
+            task_id=task["task_id"],
+            documents=self._documents,
+            unit_ids=task["unit_ids"],
+            relevant_units=task.get("relevant_units", []),
+        )
+        return ToolSurface(
+            view=view,
+            hybrid=self._retriever,
+            semantic=self._arms["semantic"],
+            lexical=self._arms["lexical"],
+            variant=self.surface_variant,
+            budget_tokens=int(task["budget_tokens"]),
+        )
+
     def features_for(self, task: dict[str, Any], allow_derived: bool) -> Features:
         payload = {
             "question": task["question"],
@@ -258,20 +281,7 @@ class Runner:
                 # across tasks, or every paradigm would inherit the previous task's
                 # reads and the trace would stop describing what it actually did.
                 def make_surface() -> ToolSurface:
-                    view = CorpusView(
-                        task_id=task["task_id"],
-                        documents=self._documents,
-                        unit_ids=task["unit_ids"],
-                        relevant_units=task.get("relevant_units", []),
-                    )
-                    return ToolSurface(
-                        view=view,
-                        hybrid=self._retriever,
-                        semantic=self._arms["semantic"],
-                        lexical=self._arms["lexical"],
-                        variant=self.surface_variant,
-                        budget_tokens=int(task["budget_tokens"]),
-                    )
+                    return self.surface_for(task)
 
                 # The grid of cells for this task. Tasks stay sequential because each
                 # begins with one feature extraction that the whole grid shares.

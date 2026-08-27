@@ -90,6 +90,105 @@ def check(label: str, condition: bool, detail: str = "") -> bool:
     return condition
 
 
+def check_probe(ok: bool) -> bool:
+    """La rebanada de reconocimiento (PATTERNS 2.2): una lectura barata que convierte
+    una opinion en una observacion -- y que se NIEGA a convertirla cuando no puede."""
+    from dataclasses import dataclass  # noqa: PLC0415
+
+    from app.beliefs import Provenance  # noqa: PLC0415
+    from app.probe import probe_coupling  # noqa: PLC0415
+
+    print("\n16. La sonda: cuando una creencia puede pasar a OBSERVED")
+
+    @dataclass
+    class _Usage:
+        total_tokens: int = 120
+        calls: int = 1
+
+    @dataclass
+    class _Completion:
+        text: str
+        usage: _Usage
+
+    class _Sensor:
+        def __init__(self, text: str) -> None:
+            self._text = text
+
+        def complete(self, messages, **kwargs):
+            return _Completion(self._text, _Usage())
+
+    class _Surface:
+        def __init__(self, units: dict) -> None:
+            self._units = units
+
+        def unit_ids(self):
+            return list(self._units)
+
+        def read_one(self, unit_id: str) -> str:
+            return self._units[unit_id]
+
+    units = {
+        "memo-001": "Settlement account AR9911 is held by the party named in memo-014.",
+        "memo-014": "unrelated content",
+    }
+    task = {"question": "who holds the flagged account?"}
+
+    verified = probe_coupling(
+        _Sensor('{"self_contained": false, "references": ["memo-014"]}'),
+        _Surface(units), task,
+    )
+    ok &= check("un puntero que RESUELVE contra el scope da OBSERVED",
+                verified.provenance is Provenance.OBSERVED
+                and verified.credence == 1.0
+                and verified.coupling >= 0.66,
+                verified.evidence[:70])
+
+    invented = probe_coupling(
+        _Sensor('{"self_contained": false, "references": ["memo-999"]}'),
+        _Surface(units), task,
+    )
+    ok &= check("un puntero INVENTADO no sube la procedencia",
+                invented.provenance is Provenance.ELICITED and invented.credence <= 0.3,
+                "el sensor puede equivocarse; el codigo lo verifica")
+
+    silent = probe_coupling(
+        _Sensor('{"self_contained": true, "references": []}'),
+        _Surface(units), task,
+    )
+    ok &= check("una unidad 'auto-contenida' se queda en ELICITED",
+                silent.provenance is Provenance.ELICITED,
+                "una unidad de silencio no mide a las otras 47")
+
+    broken = probe_coupling(_Sensor("no soy json"), _Surface(units), task)
+    ok &= check("un sensor ilegible es una NO-lectura, no un cero",
+                broken.provenance is Provenance.ASSUMED and broken.credence == 0.0)
+
+    # determinismo: la misma tarea sondea la misma unidad
+    first = probe_coupling(
+        _Sensor('{"self_contained": true, "references": []}'), _Surface(units), task)
+    second = probe_coupling(
+        _Sensor('{"self_contained": true, "references": []}'), _Surface(units), task)
+    ok &= check("la sonda elige la unidad de forma determinista",
+                first.unit_id == second.unit_id == "memo-001",
+                "si sampleara, la decision que alimenta no seria reproducible")
+
+    # y la observacion alcanza el piso que 6.2 puede exigir
+    from app.beliefs import Belief, BeliefBase  # noqa: PLC0415
+
+    base = BeliefBase()
+    base.assert_(Belief(
+        proposition="coupling_tight",
+        value=verified.coupling >= 0.66,
+        credence=verified.credence,
+        provenance=verified.provenance,
+        evidence=verified.evidence,
+    ))
+    ok &= check("lo observado satisface una regla que exige OBSERVED",
+                base.satisfies("coupling_tight", 0.7, Provenance.OBSERVED),
+                "que es lo que un piso aprendido de 6.2 puede llegar a exigir")
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -339,6 +438,8 @@ def main() -> int:
                                  "max_completion_tokens": 100}) == 1100)
     ok &= check("el presupuesto de reintento es tiempo, no intentos",
                 RETRY_BUDGET_SECONDS >= 300, f"{RETRY_BUDGET_SECONDS:.0f}s")
+
+    ok = check_probe(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1
