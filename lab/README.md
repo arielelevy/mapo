@@ -388,6 +388,38 @@ persistence). The grid tests whether that split is systematic:
 | P13b | Paradigms where the MODEL carries control — `react`, `reflection`, `dag_strategy` — degrade materially on nano (Δu ≥ 0.25 on at least half their feasible cells) | Cheap models CAN drive open loops — the persistence failure was task-local, and the cost story changes entirely |
 | P13c | Nano's determinism holds across the grid: replicate pairs identical in utility on ≥ 90% of cells | t=0 + seed does not pin this model either, and the noise-floor machinery stays mandatory |
 
+### Registered prediction — THE PRODUCT CLAIM, on a world it has never seen (2026-08-27, before the run)
+
+Every prediction above is about a PARADIGM. This one is about the ENGINE, and it is the
+criterion the project is built to satisfy: *give MAPO a new gold corpus it has never
+seen, and have it execute better than any fixed paradigm in the harness.*
+
+Corpus `gold_transfer`, **seed 47** — a world neither θ nor any earlier prediction has
+touched (seeds used so far: 7 and 23). Same shape as `gold_deep` so the regime is the one
+where routing can matter at all: 48 people, 72 units, ~515k tokens of content, 26 tasks
+across C1/C2/C3/C4/C5/C7, `--hard`. Verified independently of the generator: 26/26, and
+the near-miss guard passes.
+
+θ is fitted on the EXISTING record only. Nothing from `gold_transfer` enters θ before the
+comparison; the run produces the rows, and the router is scored on rows it did not train on.
+
+**Estimated before spending** (median cost per cell from the deep-regime runs, × repeat 3,
+over the cells feasibility leaves standing): **9.0M tokens, 336 cells**. The arithmetic
+already prunes `map_reduce` on 18 of 26 tasks at zero cost — that pruning is not a
+prediction, it is the feasibility layer having run before any token was spent.
+
+| # | Prediction | If it fails |
+|---|---|---|
+| P15a | **Net positive oracle gap against the best fixed paradigm, including always-`react`**, on the held-out corpus: the utility the router's selective routing achieves exceeds the best single fixed choice by more than the per-cell noise floor | The product claim is false as stated. Per-request selection does not beat a good default on a world it has not seen, and what the harness measured was a catalogue, not an engine |
+| P15b | The gap is **concentrated where a fixed choice is structurally wrong** — the coupled (C3) and unknown-horizon (C5) cells — and is within the noise floor on C1/C2, where everything feasible works | The gain, if any, is diffuse: it comes from averaging rather than from deciding, and the mechanism story in §8 does not explain it |
+| P15c | Abstention is **not free but is not harmful**: on the tasks where θ's margin is below τ the router defers to the fallback, and on those tasks the fallback lands within the noise floor of the best fixed paradigm | Abstention is costing utility — deferring is worse than committing, and the selective-prediction framing (§2.5) does not transfer to paradigm choice |
+| P15d | The routing decision is **reproducible**: re-deciding from the recorded belief base yields the identical paradigm on 100% of tasks, and the EXPLAIN artifact suffices to re-derive it without re-running the model | Decision stability is not a property of this system, and every claim about auditability in §6.2 goes with it |
+
+**Refutation is the point.** P15a failing is publishable and cheap to state: it would mean
+the honest result is a measured catalogue of when each paradigm wins, plus a negative
+result on selection — which is more than the literature currently offers for held-out
+routing, and it would be known before anything was built on top of it.
+
 **Registration note**: P8/P9 were registered under `gpt-5-chat`; the model switch is a
 later decision, recorded here. The chat grid freezes as the first-model study (its †
 cells stand documented); nano results live in `results/nano/` and are never pooled with
