@@ -28,7 +28,7 @@ decision a human was supposed to make.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from . import grading
@@ -201,12 +201,26 @@ def answer(
     reading: ProbeResult | None = None
     if plan.needs_probe and probe:
         reading = probe_coupling(client, surface, task)
+        # The region is REBUILT with what was observed. Replanning under the old
+        # region kept the request in the "unknown coupling" bin the probe had just
+        # left — which is the exact failure P15 measured: the vocabulary not seeing
+        # what the sensing knew.
+        features = replace(features, coupling=reading.coupling)
         plan = plan_with(reading.coupling, reading.provenance, reading.credence)
 
     explain = plan.explain()
     probe_record = reading.as_dict() if reading else None
 
     if plan.gated:
+        gate_usage = Usage()
+        if reading is not None:
+            gate_usage.merge(
+                Usage(
+                    prompt_tokens=reading.cost_tokens,
+                    completion_tokens=0,
+                    calls=reading.calls,
+                )
+            )
         # Nothing runs. The caller asked for something whose consequences a human owns,
         # and returning a plan is the whole answer.
         return Answer(
@@ -214,6 +228,7 @@ def answer(
             text="",
             paradigm=plan.paradigm,
             explain=explain,
+            usage=gate_usage.as_dict(),
             probe=probe_record,
             note=(
                 "This request is gated: it declares an irreversible action or a write to "
@@ -222,6 +237,17 @@ def answer(
         )
 
     usage = Usage()
+    if reading is not None:
+        # Deciding cost tokens too. A probe that never reaches the bill makes the
+        # governed path look exactly as cheap as the blind one, which un-measures
+        # the one trade-off this layer exists to price.
+        usage.merge(
+            Usage(
+                prompt_tokens=reading.cost_tokens,
+                completion_tokens=0,
+                calls=reading.calls,
+            )
+        )
     ladder: list[dict[str, Any]] = []
 
     if plan.ladder and len(plan.ladder) > 1 and request.oracle:

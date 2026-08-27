@@ -443,7 +443,19 @@ def sleep_cycle(
         final_ids = set(task_ids[b:])
 
     # ---- stage 1: prioritised replay
-    ordered = prioritised_replay(episodes, incumbent)
+    #
+    # The candidate is fitted WITHOUT the final block. It used to replay every
+    # episode — final included — and then hand the promotion guard that same final
+    # block as "held-out": a guard validating the candidate on data the candidate
+    # trained on is a guard that cannot fail. With fewer than 6 tasks there is no
+    # final block, fitting uses everything, and promotion is skipped explicitly
+    # (see below), which keeps the two regimes consistent.
+    fitting = (
+        [e for e in episodes if e.task_id not in final_ids]
+        if final_ids
+        else episodes
+    )
+    ordered = prioritised_replay(fitting, incumbent)
     report.replayed = len(ordered)
     candidate = Plasticity.candidate(
         incumbent,

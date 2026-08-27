@@ -560,27 +560,38 @@ class Runner:
         return out
 
     def episodes(self) -> list[Episode]:
-        """Convert rows into learning episodes.
+        """Convert rows into learning episodes: ONE per (task, paradigm) cell.
 
-        `was_best` is computed per task against the whole row, so the reinforcement
-        signal answers 'was this the right paradigm here', not 'did it produce
-        something'. That distinction is what the router actually needs to estimate.
+        Trials are replicates of the same measurement, not independent evidence.
+        Emitting one episode per trial let three repeats of one task count three
+        times (pseudoreplication), and computing `was_best` against raw trials let a
+        single lucky replicate collect the reinforcement its paradigm's MEAN never
+        earned. Aggregating first makes the unit of learning the unit of evidence,
+        and `was_best` answer the question the router actually needs estimated:
+        'was this the right paradigm here, on average'.
         """
-        rows = self.load_rows()
+        cells: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for r in self.load_rows():
+            cells.setdefault((r["task_id"], r["paradigm"]), []).append(r)
+
+        mean_utility = {
+            key: sum(x["utility"] for x in rows) / len(rows)
+            for key, rows in cells.items()
+        }
         best: dict[str, float] = {}
-        for r in rows:
-            best[r["task_id"]] = max(best.get(r["task_id"], 0.0), r["utility"])
+        for (task_id, _), value in mean_utility.items():
+            best[task_id] = max(best.get(task_id, 0.0), value)
 
         return [
             Episode(
-                task_id=r["task_id"],
-                region=r["region"],
-                paradigm=r["paradigm"],
-                utility=r["utility"],
-                cost_tokens=r["cost_tokens"],
-                was_best=(r["utility"] >= best[r["task_id"]] > 0.0),
+                task_id=task_id,
+                region=rows[0]["region"],
+                paradigm=paradigm,
+                utility=mean_utility[(task_id, paradigm)],
+                cost_tokens=int(sum(x["cost_tokens"] for x in rows) / len(rows)),
+                was_best=(mean_utility[(task_id, paradigm)] >= best[task_id] > 0.0),
             )
-            for r in rows
+            for (task_id, paradigm), rows in sorted(cells.items())
         ]
 
     # -- the report --------------------------------------------------------

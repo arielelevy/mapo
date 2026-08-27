@@ -452,6 +452,12 @@ than decided once the numbers are in. C3 in nano remains an open region, not a r
 3. Where the record DID carry the signal, selection worked: C2 delta +0.121 — `rewoo`
    over the fixed best, consistent with P6a for the third corpus in a row.
 
+**Sensitivity (exploratory, post-registration, 2026-08-27 same day).** After the
+learning-validity repair (episodes aggregated per (task, paradigm) cell — 275
+pseudoreplicated trials became 140 cell episodes — and the candidate no longer fitted on
+the final block), the verdict is **unchanged: −0.0874**. The refutation is not an
+artifact of pseudoreplication; the missing-axis mechanism dominates.
+
 **What this changes.** The product claim as registered — per-request selection beats the
 best fixed paradigm on an unseen world — is false for θ over these features on this
 world, and the honest headline is the mechanism: **selection without sensing loses to a

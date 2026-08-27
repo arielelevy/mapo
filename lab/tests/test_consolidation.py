@@ -227,6 +227,39 @@ def check_assurance_floor_learns(ok: bool) -> bool:
     return ok
 
 
+def check_learning_validity(ok: bool) -> bool:
+    """Fase 0 del saneamiento: la unidad de aprendizaje es la CELDA (task, paradigm),
+    no el trial; y la candidata jamas ve el bloque final que la va a juzgar."""
+    from app.runner import Runner  # noqa: PLC0415
+
+    print("\n7. Validez del aprendizaje (Fase 0)")
+
+    # --- episodes() agrega replicas: un episodio por celda, con la MEDIA
+    runner = Runner.__new__(Runner)  # sin __init__: solo se prueba episodes()
+    rows = []
+    # paradigma A: una replica afortunada (1.0) entre dos fracasos -> media 0.333
+    # paradigma B: constante 0.8 -> media 0.8
+    for trial, u in enumerate([1.0, 0.0, 0.0]):
+        rows.append({"task_id": "t1", "paradigm": "A", "region": "R",
+                     "utility": u, "cost_tokens": 100, "trial": trial})
+    for trial in range(3):
+        rows.append({"task_id": "t1", "paradigm": "B", "region": "R",
+                     "utility": 0.8, "cost_tokens": 100, "trial": trial})
+    runner.load_rows = lambda include_infra=False: rows
+
+    episodes = runner.episodes()
+    ok &= check("un episodio por celda, no por trial",
+                len(episodes) == 2, f"{len(episodes)} episodios de 6 filas")
+    by_p = {e.paradigm: e for e in episodes}
+    ok &= check("la utilidad del episodio es la MEDIA de las replicas",
+                abs(by_p["A"].utility - 1/3) < 1e-9
+                and abs(by_p["B"].utility - 0.8) < 1e-9)
+    ok &= check("la replica afortunada NO se lleva el refuerzo",
+                not by_p["A"].was_best and by_p["B"].was_best,
+                "was_best se decide sobre medias: B (0.8) > A (0.33)")
+    return ok
+
+
 def main() -> int:
     ok = True
 
@@ -384,6 +417,12 @@ def main() -> int:
             or incumbent.floors.get("REPLICA") is None
         ),
     )
+    total_tasks = sorted({r["task_id"] for r in rows})
+    final_tasks = set(total_tasks[int(len(total_tasks) * 0.75):])
+    episodes_outside_final = sum(1 for e in episodes if e.task_id not in final_tasks)
+    ok &= check("la candidata se ajusta SIN el bloque final",
+                report.replayed == episodes_outside_final,
+                f"replayed={report.replayed}, fuera del final={episodes_outside_final}")
     ok &= check("incumbent was not mutated",
                 incumbent.signature == signature_before
                 and incumbent.version == version_before)
@@ -402,6 +441,7 @@ def main() -> int:
         print(f"    - {note[:96]}")
 
     ok = check_assurance_floor_learns(ok)
+    ok = check_learning_validity(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1
