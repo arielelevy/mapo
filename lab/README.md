@@ -551,6 +551,51 @@ two-step rule). Only the first is an artifact; the second is the layer working; 
 is the one to fix, and it costs a model call per task — which is precisely the governance
 cost the thesis says should be priced rather than assumed away.
 
+### P16 verdict (2026-08-27, run complete: 390 rows / 130 cells, 0 infra, 13.95M tokens)
+
+The verdict script was committed BEFORE the run, so nothing about the valuation was
+chosen after seeing numbers.
+
+| prediction | verdict | number |
+|---|---|---|
+| **P16a** net oracle gap on the routing cohort, lambda=0.05 | **REFUTED** | -1.2888 vs best fixed (`rewoo`), noise floor 0.0339 |
+| **P16b** price of the gate (irreversible cohort) | as designed | -1.0956, a deliberate deficit: the gate runs the fallback |
+| **P16c** lambda sweep | **the decisive one** | see below |
+| **P16d** reproducibility | **CONFIRMED** | identical paradigm + digest on 26/26 |
+
+**P16c is the result of the whole programme, and it says exactly what was pre-registered
+it would say if it went this way.**
+
+| lambda | net vs best fixed | net vs always-`react` |
+|---:|---:|---:|
+| **0.00** | **+0.1211** | +0.1765 |
+| 0.02 | -0.4043 | +0.0001 |
+| 0.05 | -1.2888 | -0.2646 |
+| 0.10 | -2.7631 | -0.7058 |
+| 0.40 | -11.6089 | -3.3527 |
+
+**With cost not charged at all, routing captures +0.121. Charging any realistic price
+erases it — by lambda=0.02 the advantage is already inside the noise.** The honest
+sentence, written before the numbers existed: *"la seleccion compra calidad solo cuando
+los tokens son gratis"*. That is now measured, not feared.
+
+**And the mechanism is the one already diagnosed, confirmed a third time.** Of the 22
+routing-cohort tasks, **20 fire the cascade**, 1 defers, 1 asks for a probe. So P16 --
+like P15 -- measured the CASCADE, not selection. That was written here before the run:
+*"P16 is running under `regions/2`, so it will measure that same regime."* It did.
+
+Per cell: C1 +0.9324 and C4 +0.2002 positive; C2 -0.2704, C5 -2.0838, and **C3 -3.7804**
+-- the oracle-zero region, where every paradigm scores 0.000 and the lambda penalty turns
+an expensive route into a deep loss. Routing into a dead region pays the whole price and
+buys nothing, which is the clearest single argument for abstention this record contains.
+
+**What this settles and what it does not.** It settles that **the routing claim, as
+posed, fails on two independent held-out corpora** (seed 47 and seed 61). That is a
+robust negative result and it is publishable as one. It does **not** settle whether
+selection pays, because on neither corpus could the selection rule fire: gradeability
+implied a detector, the cascade pre-empted at priority 90, and the bench took one step of
+a two-step rule. **P17 is the first corpus where the question can even be asked.**
+
 ### The Hebbian weight cannot be a better selector, and that is a proof, not a measurement (2026-08-27, `_analyze_hebbian.py`, zero tokens)
 
 `policy.py` updates `w ← (1−DECAY)·w + LEARNING_RATE·δ` with δ = +0.5 if the paradigm was

@@ -12,12 +12,12 @@
 
 ## Resumen — todo de un vistazo
 
-`[x]` hecho · `[~]` empezado · `[ ]` no empezado · **🔒** espera a que P16 cierre
+`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **P16 cerró el 2026-08-27, ya no hay nada bloqueado por ella**
 
 **Bloqueantes**
-- [~] **B1** · veredicto de P16 — *corriendo, 105/390 celdas, 0 infra*
-- [ ] **B2** 🔒 · aplicar detectores honestos (`features.py:214` + `rules.py:248`)
-- [ ] **B3** 🔒 · correr P17 — la primera medición honesta de selección
+- [x] **B1** · veredicto de P16 — **P16a REFUTADA** (−1,2888), **P16c decisiva**: +0,1211 con λ=0 y adentro del ruido en λ=0,02 · P16d 26/26 · 0 infra · 13,95M tokens
+- [ ] **B2** · aplicar detectores honestos (`features.py:214` + `rules.py:248`)
+- [ ] **B3** · correr P17 — la primera medición honesta de selección
 
 **Mediciones**
 - [ ] M-1 · brazo en PROSA (E1) — implementado, sin correr
@@ -25,6 +25,12 @@
 - [ ] M-3 · transferencia de θ entre familias de modelos
 - [ ] M-4 · corpus natural + segunda familia
 - [ ] M-5 · C3 profundo en nano
+
+**El catálogo confunde dimensiones ortogonales**
+- [ ] **F-1** · sacar `Blackboard` de `dag.py` a su propio módulo *(refactor, gratis)*
+- [ ] **F-2** · medir `{blackboard, sin}` × `{react, dag}` en C2/C4 — **descontamina «el efecto dag_strategy»**
+- [ ] **F-3** · HyDE como factor de pre-proceso — *decidido: se usa*
+- [ ] **F-4** · escribir qué dimensión define un patrón y cuál es un factor *(gratis)*
 
 **«Anti-RAG» — la máquina existe (REC), le falta una pieza**
 - [ ] **AR-0** · medirlo como **factor** `{con, sin} × {patrones}`, no plegado en cada patrón
@@ -85,13 +91,13 @@
 - [x] **M11** · ECE sobre la credencia declarada, no el centro del bin
 - [x] **M17** · `cot` fuera del default (`RETIRED`)
 - [x] **M18** · un solo escritor por archivo de resultados
-- [ ] M8 🔒 · constante de supresión de sonda
-- [ ] M10 🔒 · `GIST_CHARS` inflado ⇒ sobre-rechazo
-- [ ] M1 🔒 · args del modelo ⇒ `ToolFailure`
-- [ ] M13 🔒 · accesos fuera del `try` en dag/modern
-- [ ] M14 🔒 · extractor JSON duplicado ×9
+- [ ] M8 · constante de supresión de sonda
+- [ ] M10 · `GIST_CHARS` inflado ⇒ sobre-rechazo
+- [ ] M1 · args del modelo ⇒ `ToolFailure`
+- [ ] M13 · accesos fuera del `try` en dag/modern
+- [ ] M14 · extractor JSON duplicado ×9
 - [ ] M15 · loop de calibración duplicado y ya divergido
-- [ ] M16 🔒 · `float(r[attribute])` sin filtro en los splits
+- [ ] M16 · `float(r[attribute])` sin filtro en los splits
 - [ ] pip-audit nunca corrido
 
 **Teoría — pizarra, bloquea a F6**
@@ -103,7 +109,7 @@
 - [ ] T-6 · vecinos leídos — **arXiv 2603.18043 tiene prioridad alta**
 
 **Paper**
-- [ ] W-1 🔒 · re-encuadrar §5.1 vs §5.2
+- [ ] W-1 · re-encuadrar §5.1 vs §5.2
 - [ ] W-2 · toda edición va a los DOS archivos
 - [ ] W-3 · integrar el hallazgo de nano (P13)
 - [ ] W-4 · endorser de arXiv, o Zenodo con DOI
@@ -292,6 +298,50 @@ mismo tiempo, no después.
 
 ---
 
+## 1d. El catálogo confunde dimensiones que son ortogonales
+
+**La observación** (del autor, 2026-08-27): el blackboard está sólo en `dag_strategy`.
+¿No hay separación de responsabilidades? Un patrón, una estrategia y unas herramientas
+deberían poder combinarse.
+
+**Verificado**: `class Blackboard` está definida **adentro** de `app/paradigms/dag.py` y
+no la usa ningún otro paradigma. Y no es el único caso — el catálogo mezcla cuatro cosas
+que son independientes:
+
+| Dimensión | Hoy | ¿Es factor? |
+|---|---|---|
+| **Estructura de control** | react loop · olas de DAG · map-reduce · plan-execute | es *el* eje del catálogo |
+| **Estado compartido** | blackboard **soldado dentro de `dag_strategy`**; el resto usa historial de mensajes | **no** |
+| **Superficie de herramientas** | `basic` · `accounting` · `cognitive` · `managed` | **sí**, y funciona |
+| **Pre-proceso de recuperación** | ninguno. `dag.py:31` registra como desvío explícito: *«NO PRE-FETCH, HyDE OR ENTITY RESOLUTION»* | **no** |
+
+Una de cuatro es factor. Las otras tres están soldadas, y por eso hay preguntas legítimas
+que el catálogo **estructuralmente impide hacer**: ¿`react` mejora con un blackboard?
+¿`map_reduce` mejora con HyDE? Hoy no se pueden ni formular.
+
+**Y esto no es sólo deuda de diseño futuro: contamina un hallazgo que ya está en el
+registro.** `dag_strategy` es el mejor fijo en `gold_transfer` — el brazo contra el que
+el ruteo perdió en P15. Pero `dag_strategy` es *la única* estructura que tiene blackboard.
+Así que **lo que el registro llama «el efecto dag_strategy» es la conjunción de dos cosas
+—la topología de olas y el estado compartido— y nada en el registro las separa.** Es la
+misma falla que §4.14 nombra desde el otro lado: atribuirle a una pieza un efecto que no
+se midió por separado.
+
+**El costo de arreglarlo, dicho antes de proponerlo.** Factorizar multiplica la grilla, y
+el tamaño de grilla es la restricción que manda: P16 sola son 390 celdas y ~14M tokens.
+Un factor de dos la duplica. Así que **no se factoriza el catálogo entero**: se introduce
+**un factor por vez**, con predicción registrada, y sobre un subconjunto de celdas elegido
+por donde el mecanismo debería actuar — no sobre la grilla completa.
+
+| # | Qué | Costo |
+|---|---|---|
+| **F-1** | Sacar `Blackboard` de `dag.py` a un módulo propio, sin cambiarle el comportamiento | refactor, gratis, verificable con las suites |
+| **F-2** | **`{blackboard, sin blackboard} × {react, dag_strategy}`** sobre C2/C4, donde la descomposición importa. Es el factor más barato y el que descontamina el hallazgo de arriba | grilla chica |
+| **F-3** | HyDE como factor de pre-proceso, **decidido por el autor: se usa** (ver A-2b) | corrida |
+| **F-4** | Escribir la regla: qué dimensión define un patrón y cuál es un factor. Hoy la regla dice «los patrones se distinguen por estructura de control de flujo» — que ya implica que estado y superficie **no** son patrones, y sin embargo el blackboard vive adentro de uno | pizarra, gratis |
+
+---
+
 ## 2. Producto — deuda de la capa de decisión
 
 | # | Qué | Por qué importa |
@@ -439,7 +489,7 @@ que **REC va después de P17, no en paralelo** — y esa dependencia no estaba e
 | # | Qué | Por qué importa |
 |---|---|---|
 | **A-1** | **Arrancar el producto: el motor nuevo no existe** | Es el objetivo declarado del repo — «el producto es el motor MAPO, y todavía no existe como tal; se construye a partir de lo que el banco pruebe». Todo lo demás de esta lista lo sirve, y sin embargo el ítem no estaba. Espera a que el registro esté maduro, que hoy significa: P16 cerrado, P17 corrido, y una decisión sobre si la selección paga |
-| **A-2b** | **Cosecha de `legacy/`, con la reserva de cada una** | **`context_guard.py` — el mejor candidato.** Vigila el crecimiento del contexto entre iteraciones y, al cruzar un umbral, **desaloja** el `ToolMessage` viejo más grande y lo reemplaza por un hallazgo enfocado en la consulta. Tiene la forma correcta —**incondicional, desde el entorno**, o sea `managed` y no `cognitive`— y ataca justo la variable dominante: es un mecanismo que decide **qué evidencia sobrevive** hasta la llamada que responde, que es literalmente M-2. **La reserva**: `GROWTH_GAP_THRESHOLD = 20_000` y `KEEP_RECENT_MESSAGES = 6` son Constant Soup, y son exactamente la clase de constante que D-5 dice que hay que **aprender por dominio** en vez de copiar. Se porta el mecanismo, no los números.<br><br>**`hyde.py` — con una reserva que antes no dije.** Su valor depende de un recuperador real sobre un índice real. En este banco la recuperación está **simulada a recall y precisión medidos**, así que la brecha semántica que HyDE tiende puede sencillamente no existir acá — y medirla igual sería repetir §4.14, *medir la herramienta fuera del régimen donde el problema que resuelve existe*. Portarla al **producto** es defendible; **medirla en el banco** puede no significar nada.<br><br>**`blackboard.py`** — ya está reimplementado en `dag_strategy`; no hay nada que portar.<br><br>**El prompt `proved`/`insufficient`/`hypothetical` (`agent_config.py:392`) — NO.** El modelo como juez de su propia suficiencia. |
+| **A-2b** | **Cosecha de `legacy/`, con la reserva de cada una** | **`context_guard.py` — el mejor candidato.** Vigila el crecimiento del contexto entre iteraciones y, al cruzar un umbral, **desaloja** el `ToolMessage` viejo más grande y lo reemplaza por un hallazgo enfocado en la consulta. Tiene la forma correcta —**incondicional, desde el entorno**, o sea `managed` y no `cognitive`— y ataca justo la variable dominante: es un mecanismo que decide **qué evidencia sobrevive** hasta la llamada que responde, que es literalmente M-2. **La reserva**: `GROWTH_GAP_THRESHOLD = 20_000` y `KEEP_RECENT_MESSAGES = 6` son Constant Soup, y son exactamente la clase de constante que D-5 dice que hay que **aprender por dominio** en vez de copiar. Se porta el mecanismo, no los números.<br><br>**`hyde.py` — SE USA (decisión del autor, 2026-08-27).** Con una reserva que no cambia la decisión y sí cambia qué se puede afirmar: Su valor depende de un recuperador real sobre un índice real. En este banco la recuperación está **simulada a recall y precisión medidos**, así que la brecha semántica que HyDE tiende puede sencillamente no existir acá — y medirla igual sería repetir §4.14, *medir la herramienta fuera del régimen donde el problema que resuelve existe*. Portarla al **producto** es defendible; **medirla en el banco** puede no significar nada.<br><br>**`blackboard.py`** — ya está reimplementado en `dag_strategy`; no hay nada que portar.<br><br>**El prompt `proved`/`insufficient`/`hypothetical` (`agent_config.py:392`) — NO.** El modelo como juez de su propia suficiencia. |
 | **A-2** | **Decidir qué se porta de `legacy/`** | La capa congelada resolvió cuatro cosas que el banco nunca tuvo que modelar: búsqueda sobre índice real, scoping por permisos, citas verificadas contra el índice, y streaming. `legacy/README.md` es lectura obligatoria antes de portar cualquier pieza, pero **no hay una decisión escrita de qué entra y qué no**. **Primeras dos entradas de esa decisión (2026-08-27)**: `hyde.py` **sí** — alucina en el canal de la consulta, donde una alucinación no puede volverse afirmación, y es el complemento del anti-RAG; el prompt de `agent_config.py:392` que le pide al modelo declarar el contexto `insufficient` **no** — es el modelo como juez de su propia suficiencia |
 | **A-3** | **Separar producto de banco antes de portar, no después** | Es P-11 mirado desde el otro lado: si el motor nuevo arranca copiando `lab/app/` tal como está, se lleva el banco adentro y la mezcla vuelve el día uno |
 
