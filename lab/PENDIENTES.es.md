@@ -56,6 +56,13 @@
 - [ ] AR-3 · predicción falsable antes de correr
 - [ ] AR-4 · baseline honesto: contra HyDE y RAG plano, no contra nada
 
+**La fase de entendimiento — la mitad que S-3 declaró faltante**
+- [ ] **U-1** · fase que emite **demandas tipadas** del request (`requires_exhaustive`, `needs_decomposition`, …), no un float de conclusión
+- [ ] **U-2** · que **la regla** combine demanda × material — resuelve los 4 falsos positivos de C4 sin heurísticas nuevas
+- [ ] **U-3** · entran como `ELICITED`: el modelo lee la pregunta, no puede superar ese rango
+- [ ] **U-4** · `requires_exhaustive` se **verifica** con C-COMPLETE — el único camino a promoverla
+- [ ] **U-5** · medirla contra λ: cuesta una llamada por request
+
 **REC — implementado, sin registrar y sin medir**
 - [ ] **REC-1** · preregistrar las seis hipótesis de `PATRON_REC.es.md` §11 *(gratis)*
 - [ ] **REC-2** · congelar política, presupuesto, umbrales y regla ANTES del mundo final
@@ -509,6 +516,44 @@ la misma forma que los pisos ya validados.
 consultarlas) → instrumentar la secuencia de tools (D-2/P-2c) → D-4 como candidato nuevo
 → D-3 → P-2e (componer el patrón), que es el techo y arrastra las dos tensiones de A2/A3
 y del banco.
+
+---
+
+## 1a. La fase de entendimiento: la mitad que falta (idea del autor, 2026-08-28)
+
+**El diagnóstico que la pide.** S-3 midió que el acoplamiento es propiedad de
+**(pregunta × material)** y que todos los ejes computables son función del material solo.
+Falta la mitad de la información, y la mitad que falta es **qué exige la pregunta**.
+
+**Y la calidad depende de eso, no sólo de la respuesta.** Que conteste **TODAS** las
+direcciones y **TODOS** los nombres es un requisito real y medible — pero *no siempre es
+necesario*. Hoy nada en el request lo declara, así que la cobertura se persigue igual en
+tareas que no la piden y se paga sin comprarse nada.
+
+**Lo que el producto tiene hoy es del tamaño equivocado.** `FeatureExtractor._derive` le
+pide al modelo **un solo float**, `coupling`. Eso es pedirle una **conclusión** —«¿está
+acoplada?»— cuando lo que el modelo está en posición de reportar es una **observación
+sobre la pregunta**. La conclusión le toca a la regla, que es la que además tiene los ejes
+del material.
+
+**La capa congelada ya tenía la forma correcta.** `legacy/agentic/understand.py` emite un
+`UnderstandResult` con campos **tipados de vocabulario cerrado**: `followup_type:
+Literal["standalone","drill_down","expansive"]`, `complexity: Literal["simple","moderate",
+"complex"]`, `needs_decomposition: bool`, `key_terms`, `entity_types_filter`. Nada de prosa
+libre — enumeraciones declaradas, que es la única forma admisible bajo las reglas de este
+repo.
+
+| # | Qué | Por qué |
+|---|---|---|
+| **U-1** | **Fase de entendimiento que emite DEMANDAS tipadas**, no conclusiones: `requires_exhaustive`, `needs_decomposition`, `followup_type`, y las que el registro justifique | Es la mitad que S-3 declaró faltante. El modelo lee la pregunta; eso es lo único que puede aportar y ningún eje del material lo suple |
+| **U-2** | Que **la regla** combine demanda × material | Hoy se le pide la conclusión al modelo. Con U-1, `requires_exhaustive` + cardinalidad alta ⇒ **cobertura**; puente verificado + no autocontenida ⇒ **acoplamiento**. Eso resuelve los 4 falsos positivos de C4 sin heurísticas nuevas |
+| **U-3** | Entran como **`ELICITED`**, y eso no se negocia | El modelo lee la pregunta: no puede superar ese rango. Por lo tanto **no pueden gatear una acción irreversible**, que es correcto |
+| **U-4** | Pero algunas se **verifican después** | `requires_exhaustive` es exactamente lo que C-COMPLETE verifica contra la respuesta (`CONTRATOS.es.md` §2). Una demanda declarada y después verificada es el único camino por el que podría promoverse |
+| **U-5** | **Medirla contra λ**, como todo | Cuesta una llamada por request. P16c y P17c midieron que el costo es lo que mata: una fase siempre-encendida entra al registro por esa puerta |
+
+**Y cierra un círculo que estaba abierto**: la celda C4 no necesita acoplamiento sino
+**cobertura**, y con U-1 eso deja de ser una excepción cableada a mano para pasar a ser
+**una demanda que el request declara**.
 
 ---
 
