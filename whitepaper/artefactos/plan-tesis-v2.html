@@ -233,10 +233,10 @@
 
 <header>
   <div class="eyebrow">
-    <span>MAPO</span><span>plan de tesis · v2.1</span><span>2026-08-27</span><span>estado vivo — se actualiza con cada avance</span>
+    <span>MAPO</span><span>plan de tesis · v2.3</span><span>2026-08-27</span><span>estado vivo — P16 corriendo</span>
   </div>
   <h1>El precio de la solidez</h1>
-  <p class="standfirst">El mismo día llegaron dos golpes: el criterio de éxito del proyecto salió refutado en held-out, y una revisión adversarial partió la tesis v1 por el medio. Los dos golpes empujan hacia el mismo lugar — y ese lugar es mejor que donde estábamos.</p>
+  <p class="standfirst">Tres golpes el mismo día: el criterio de éxito refutado en held-out, una revisión adversarial que partió la tesis v1, y una regresión de 72 parámetros que ruteó mejor que toda la maquinaria. Los tres empujan al mismo lugar — y ese lugar es mejor que donde estábamos.</p>
 </header>
 
 <section>
@@ -333,6 +333,27 @@ ruteo 0.00 · fijo 1.00</title></rect>
   </svg>
   <figcaption>Brecha neta del ruteo contra el mejor fijo bajo tres valuaciones. El eje de continuidad solo no mueve nada (necesario, no suficiente); puntuar la <strong>acción real</strong> — la cascada escala cuando el oráculo rechaza — lleva la brecha adentro del piso de ruido. Sin descontar el costo de escalar: eso es lo que P16 prerregistra.</figcaption>
 </figure>
+  
+    <h3>E2 — la regresión de 72 parámetros, y lo que reveló</h3>
+    <p>El ataque más barato de la revisión adversarial: <em>si a una regresión trivial sobre el mismo φ le va igual, la maquinaria es decoración cara.</em> Contestado sin gastar un token — ridge por paradigma, forma cerrada, entrenada en las mismas 140 celdas, viendo exactamente lo que ve θ.</p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Ruteo</th><th>Puntuado como P15</th><th>Envuelto en la maquinaria</th></tr></thead>
+        <tbody>
+          <tr><td>θ (factibilidad + creencias + dial + reglas + política firmada)</td><td class="num neg">−0,0874</td><td class="num">−0,0112</td></tr>
+          <tr><td>ridge, 72 parámetros sobre el mismo φ</td><td class="num pos">−0,0473</td><td class="num">−0,0112</td></tr>
+          <tr><td colspan="3" style="color:var(--ink-3)">coinciden en <strong>0 de 26</strong> tareas</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="boundary">
+      <span class="label">El resultado incómodo, y es el bueno</span>
+      <p>La regresión trivial <strong>rutea mejor que θ</strong> cuando se las puntúa igual. Pero envueltas en la misma maquinaria de acción las dos dan <strong>exactamente el mismo número</strong> — discrepando en todas las tareas. Mecanismo verificado: <strong>21 de 26 tareas disparan la cascada</strong>, y una cascada con oráculo sube la escalera entera, así que el peldaño del que <em>arranca</em> no puede cambiar la calidad (9 de esas 21 agotan la escalera sin acierto; el resto encuentra al mismo ganador desde cualquier arranque). Dos routers que discrepan en todo producen la misma utilidad porque, donde la cascada dispara, <strong>la elección no es lo que produce el valor: la estructura de la acción lo es</strong>.</p>
+    </div>
+
+    <p>Dos consecuencias, ninguna cómoda. <strong>(1)</strong> El claim de ruteo, en esta familia de corpus, es en buena medida un claim sobre la <em>cascada</em> y no sobre la selección: el resultado de dominancia de cascada está haciendo el trabajo que se le acreditaba al teorema de selección. <strong>(2)</strong> La única superficie donde la selección todavía puede pagar es el <strong>costo</strong> — arrancar en el peldaño correcto y frenar antes. Medido: subir desde el más barato cuesta 2,24M tokens contra 2,49M de siempre-<code>dag_strategy</code>; la cascada ya sale ~10% más barata que el mejor fijo. Eso convierte al <strong>barrido de λ de P16 en la medición decisiva del programa entero</strong>, no en un chequeo de robustez.</p>
   </div>
 </section>
 
@@ -355,6 +376,9 @@ ruteo 0.00 · fijo 1.00</title></rect>
           <tr><td>Fase 0: validez del aprendizaje</td><td>episodios por celda (no por trial), was_best sobre medias, la candidata no ve el bloque final. <strong>Sensibilidad: P15 no se mueve (−0,0874 idéntico)</strong> — la refutación no era un artefacto</td><td class="num">369edb0</td></tr>
           <tr><td>REC F1: integridad epistémica</td><td>una sola historia de creencias por request (pre/post sonda en UNA base, digest sobre toda la historia), supersesión por recencia en empates, reconstrucción desde el registro</td><td class="num">hoy</td></tr>
           <tr><td>REC F3: el solver contrafactual</td><td>qué cambio mínimo en una creencia admitida habría alterado el plan — replay puro desde el registro (sin modelo, sin corpus), la hipótesis jamás toca la base factual (digest byte-idéntico), el requisito de procedencia sigue al piso; cláusulas de adquisición serializables (borrador ≠ promovida: sin certificado no ejecutan) y el verificador de recurrencia de clave con spans + hashes; el diagnóstico viaja en el EXPLAIN de /answer</td><td class="num">hoy</td></tr>
+          <tr><td>E2: el brazo aprendido trivial</td><td>ridge de 72 parámetros sobre el mismo φ; rutea mejor que θ puntuado como P15 (−0,047 vs −0,087) e idéntico envuelto (−0,0112), coincidiendo en 0/26. Mecanismo: 21/26 disparan cascada y la escalera cubre todo — la elección no cambia la calidad, solo el costo</td><td class="num">497a874</td></tr>
+          <tr><td>El eje de continuidad</td><td>recurrencia de clave entre unidades como función pura del material (COMPUTED); separa C5 6/6 en los cuatro corpus, cero falsos positivos; región de 4 segmentos, vocabulario versionado</td><td class="num">c71d9e4</td></tr>
+          <tr><td>P16 registrada y CORRIENDO</td><td>seed 61, verificado 26/26. Lo decisivo: el <strong>código del veredicto quedó commiteado antes de la corrida</strong> — no queda margen para elegir la valuación después de ver los números. Cobra la escalera completa (λ=0,05 primario, barrido publicado) y separa el cohorte de ruteo del precio del gate</td><td class="num">a595b64</td></tr>
           <tr><td>REC F4: el loop offline y el certificado</td><td>el camino único de borrador a cláusula promovida: tres mundos con manifiestos inmutables y solapamiento rechazado por identidad de tarea; el que propone no decide; validate decide si el final se consulta; el <strong>final se GASTA una sola vez</strong> (ledger: el segundo claim falla, y si validate rechaza el final ni se mira); el certificado liga incumbente + cláusula + esquema + fingerprint + los tres manifiestos + criterio prerregistrado + números, sin fecha en el digest; la instalación es fail-closed sobre el payload FIRMADO del bundle — editar una cláusula instalada invalida la firma</td><td class="num">hoy</td></tr>
           <tr><td>Hebbiano: medido, no opinado</td><td>seleccionar por peso Hebbiano, por utilidad media o por tasa de victorias elige IDÉNTICO en gold_transfer (0,5263 los tres): el peso es registro, no política — la plasticidad que gobierna es el decay de θ y el ratchet de §6.2</td><td class="num">gratis</td></tr>
           <tr><td>REC F2: evidencia</td><td>span literal obligatorio (un id en scope que el texto no contiene NO resuelve; auto-puntero tampoco), unidad elegida por recuperación léxica determinista, costo de sonda en la factura, <strong>fail-closed</strong>: necesidad de sonda sin resolver ⟹ se difiere, jamás se ejecuta el placeholder</td><td class="num">hoy</td></tr>
@@ -367,9 +391,9 @@ ruteo 0.00 · fijo 1.00</title></rect>
       <table>
         <thead><tr><th>Qué</th><th>Por qué importa</th><th>Costo</th></tr></thead>
         <tbody>
-          <tr><td><strong>Eje de horizonte en φ y en las regiones — el bloqueante real de P16</strong></td><td>las tareas C5 de P15 cayeron en regiones <code>*/oracle/loose</code>: su coupling ya estaba etiquetado y lo que las distingue es el HORIZONTE, que no tiene eje ni en φ ni en las reglas. Una P16 "con sensado" que solo mida coupling repetiría P15 con otro nombre. Requiere: eje en φ, señal de continuidad vía <code>verify_key_recurrence</code> gobernada por cláusula promovida (la maquinaria F3+F4 ya está), y θ re-ajustada porque las regiones cambian</td><td>código + análisis</td></tr>
-          <tr><td><strong>P16 registrada</strong> (REC F5)</td><td>recién después del eje de horizonte: selección <em>con</em> sensado contra el mejor fijo, seed nuevo, predicción antes de gastar</td><td>~10M tokens</td></tr>
-          <tr><td>Brazo logístico</td><td>si θ no le gana a una regresión de 200 parámetros sobre φ, la maquinaria es decoración — implementados ya los dos brazos de prosa</td><td>análisis</td></tr>
+          <tr><td><strong>El veredicto de P16</strong></td><td>corriendo. El barrido de λ es ahora la medición decisiva: si la ventaja no sobrevive a cobrar el costo de escalar, la afirmación honesta pasa a ser «la selección compra calidad solo cuando los tokens son gratis»</td><td>en curso</td></tr>
+          <tr><td><strong>Re-encuadrar §5.1 vs §5.2 en el paper</strong></td><td>E2 muestra que la dominancia de cascada está haciendo el trabajo que se le acredita al teorema de selección. El paper tiene que decir cuál de los dos resultados sostiene el claim — con el número de E2 sobre la mesa</td><td>escritura, tras P16</td></tr>
+          <tr><td>Brazo en PROSA (E1)</td><td>los dos brazos están implementados y sin correr: el clasificador de producción tal cual, y el router en prosa más fuerte construible. Cuesta una llamada mini por tarea — se corre cuando P16 libere la cuota</td><td>~26 llamadas</td></tr>
           <tr><td>Retención de contexto</td><td>la variable mediadora: ¿la ventaja topológica sobrevive al control?</td><td>re-análisis, gratis</td></tr>
           <tr><td>FDR + IC + AURC</td><td>16 predicciones sin control de comparaciones múltiples</td><td>análisis, gratis</td></tr>
           <tr><td>Semántica del contrato + mis-binding</td><td>sin esto, F6 (contratos) mide algo indefinido; buscar nuestro propio contraejemplo primero</td><td>pizarra</td></tr>
@@ -555,7 +579,7 @@ ruteo 0.00 · fijo 1.00</title></rect>
 </section>
 
 <footer>
-  <p>v2.1, 2026-08-27 — la sección «Estado vivo» es la fuente de verdad de avance. Mismo día que el veredicto de P15 (refutada, mecanismo verificado, commit <span class="mono">eef4096</span>) y la revisión adversarial que degradó «generación acotada» de tesis a corolario. Cada fase termina en algo que corre; el paper documenta lo que sobrevivió.</p>
+  <p>v2.3, 2026-08-27 — la sección «Estado vivo» es la fuente de verdad de avance. Mismo día que el veredicto de P15 (refutada, mecanismo verificado, commit <span class="mono">eef4096</span>) y la revisión adversarial que degradó «generación acotada» de tesis a corolario. Cada fase termina en algo que corre; el paper documenta lo que sobrevivió.</p>
 </footer>
 
 </div>
