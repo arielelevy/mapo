@@ -88,6 +88,14 @@ class Settings:
     cache_dir: Path
     results_dir: Path
     corpus_dir: Path
+    # DEPLOYMENTS DEL CATALOGO, por nombre LOGICO (`fast`, `deep`). Vacio significa un
+    # solo modelo —el de `chat_deployment`— que es el regimen en el que se midio todo.
+    #
+    # POR QUE LA INDIRECCION. El catalogo (`app/models.py`) declara CAPACIDAD y ARANCEL,
+    # que son propiedades del modelo; el deployment es DONDE esta desplegado, que es
+    # infraestructura. Fundirlas obligaria a tocar la capa de decision cada vez que
+    # alguien redespliega, y la capa de decision es lo que no se toca.
+    model_deployments: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -96,6 +104,10 @@ class Settings:
             api_key=_require("AZURE_OPENAI_API_KEY"),
             api_version=_require("AZURE_OPENAI_API_VERSION"),
             chat_deployment=_require("AZURE_OPENAI_CHAT_DEPLOYMENT"),
+            # `MAPO_MODEL_DEPLOYMENTS="fast=gpt-5.4-nano,deep=gpt-5.6-terra"`. Opcional a
+            # proposito: sin ella el sistema corre con un modelo, que es como se midio
+            # todo hasta hoy, y eso NO es un default silencioso — es el regimen medido.
+            model_deployments=_optional_deployments("MAPO_MODEL_DEPLOYMENTS"),
             embedding_deployment=_require("AZURE_OPENAI_EMBEDDING_DEPLOYMENT"),
             embedding_endpoint=_require("AZURE_OPENAI_EMBEDDING_ENDPOINT").rstrip("/"),
             embedding_api_key=_require("AZURE_OPENAI_EMBEDDING_API_KEY"),
@@ -127,6 +139,38 @@ class Settings:
             f"{self.chat_deployment}|{self.api_version}"
             f"|t={temp}|seed={self.seed}|max={self.max_tokens}"
         )
+
+
+def _optional_deployments(name: str) -> dict[str, str]:
+    """`fast=deployment,deep=otro`. Vacio si la variable no esta.
+
+    SE PARSEA CON VOCABULARIO CERRADO. Las claves tienen que estar en el catalogo de
+    modelos, asi que esto no es leer prosa: es leer pares de una lista enumerada. Una
+    clave que no esta levanta en `ModelPool`, no aca — un solo lugar que decide que es un
+    modelo valido.
+    """
+    crudo = os.environ.get(name, "").strip()
+    if not crudo:
+        return {}
+    out: dict[str, str] = {}
+    for par in crudo.split(","):
+        if "=" not in par:
+            raise ValueError(
+                f"{name}: {par!r} no tiene la forma `logico=deployment`. Se levanta en "
+                f"vez de ignorarlo: un deployment que se pierde en el parseo hace que el "
+                f"sistema corra con menos modelos de los que alguien configuro."
+            )
+        logico, deployment = par.split("=", 1)
+        logico, deployment = logico.strip(), deployment.strip()
+        if not logico or not deployment:
+            raise ValueError(f"{name}: {par!r} tiene una mitad vacia.")
+        if logico in out:
+            raise ValueError(
+                f"{name}: {logico!r} aparece dos veces. Quedarse con el ultimo elegiria "
+                f"un modelo por orden de escritura, que nadie decidio."
+            )
+        out[logico] = deployment
+    return out
 
 
 def _account_tag(endpoint: str) -> str:

@@ -22,7 +22,7 @@ blind one — which un-measures the only trade-off the whole layer exists to pri
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, Sequence
 
 from .features import Features, measure_continuation
 from .llm import Usage
@@ -101,6 +101,7 @@ def decide(
     client: Any = None,
     surface: Any = None,
     probe: bool = True,
+    models: "Sequence[Any] | None" = None,
 ) -> Decision:
     """Plan; if the plan asks for a probe and one can be run, probe and plan again.
 

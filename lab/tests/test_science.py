@@ -1944,6 +1944,95 @@ def check_handoff_authorisation(ok: bool) -> bool:
     return ok
 
 
+def check_model_pool(ok: bool) -> bool:
+    """§52: un cliente POR MODELO, y una huella del conjunto.
+
+    POR QUE NO UN CLIENTE QUE CAMBIA DE DEPLOYMENT. La huella es la IDENTIDAD DE
+    DECODIFICACION y va adentro de la clave de cache y de cada fila. Un solo cliente
+    alternando deployment tendria UNA huella y DOS identidades atras: dos respuestas de
+    modelos distintos compartirian clave de cache, y el registro no podria decir cual
+    corrio. Un cliente por modelo hace la correspondencia 1:1 por construccion.
+
+    Y POR QUE EL POOL TIENE HUELLA PROPIA. `load_rows` se niega a leer un archivo que
+    mezcla decodificaciones, y esta bien. Pero una corrida RUTEADA usa dos modelos a
+    proposito — esa es su tesis— asi que sus filas tendrian dos huellas y la guarda las
+    rechazaria. La salida no es debilitar la guarda: la UNIDAD DE ANALISIS cambio. En una
+    grilla fija se mide un paradigma y el modelo es constante; en una ruteada se mide el
+    ROUTER. Dos experimentos, dos archivos, y la huella del conjunto hace al ruteado
+    internamente coherente y aun asi incomparable con el fijo.
+    """
+    from dataclasses import replace
+    from app.config import Settings, _optional_deployments
+    from app.pool import ModelPool
+
+    print("\n--- 52. un cliente por modelo, una huella del conjunto ---")
+
+    try:
+        base = Settings.from_env()
+    except Exception:
+        ok &= check("sin entorno no se puede construir un pool — SIN N, y se dice", True)
+        return ok
+
+    s = replace(base, model_deployments={"fast": "d-fast", "deep": "d-deep"},
+                temperature=0.0)
+    pool = ModelPool(s, s.model_deployments)
+    solo = ModelPool(s, {"fast": "d-fast"})
+
+    ok &= check("el catalogo efectivo son los que TIENEN deployment, no el catalogo entero",
+                [m.name for m in pool.models] == ["fast", "deep"])
+    ok &= check("y viene ordenado de menor capacidad a mayor: el empate cae del lado "
+                "barato sin una regla extra",
+                pool.models[0].capability < pool.models[1].capability)
+    ok &= check("cada modelo tiene SU cliente, y son distintos objetos",
+                pool.client_for("fast") is not pool.client_for("deep"))
+    ok &= check("y su propia huella: la correspondencia huella-modelo es 1:1",
+                len({m["fingerprint"] for m in pool.describe()["members"].values()}) == 2)
+    ok &= check("la huella del POOL no es la de ninguno de sus miembros",
+                pool.fingerprint() not in {
+                    m["fingerprint"] for m in pool.describe()["members"].values()})
+    ok &= check("un pool distinto da huella distinta — un archivo ruteado sigue siendo "
+                "incomparable con uno de un solo modelo",
+                pool.fingerprint() != solo.fingerprint())
+    ok &= check("y no depende del orden de configuracion",
+                ModelPool(s, {"deep": "d-deep", "fast": "d-fast"}).fingerprint()
+                == pool.fingerprint())
+
+    try:
+        pool.client_for("gigante")
+        ok &= check("un modelo sin deployment levanta", False)
+    except ValueError as exc:
+        ok &= check("un modelo sin deployment LEVANTA: un plan que dice `deep` y corre "
+                    "en `fast` es un registro que miente", "miente" in str(exc))
+    try:
+        ModelPool(s, {"turbo": "x"})
+        ok &= check("un nombre fuera del catalogo levanta", False)
+    except ValueError:
+        ok &= check("un nombre fuera del catalogo levanta: sin capacidad ni arancel la "
+                    "decision no lo puede podar ni gatear", True)
+    try:
+        ModelPool(s, {})
+        ok &= check("un pool vacio levanta", False)
+    except ValueError:
+        ok &= check("un pool vacio levanta, no cae al modelo de la base", True)
+
+    # El parseo de la variable es sobre pares enumerados, no sobre prosa, y falla fuerte.
+    import os
+    for malo in ("fast", "fast=,deep=x", "fast=a,fast=b"):
+        os.environ["_MAPO_TEST_DEP"] = malo
+        try:
+            _optional_deployments("_MAPO_TEST_DEP")
+            ok &= check(f"{malo!r} deberia levantar", False)
+        except ValueError:
+            pass
+    os.environ.pop("_MAPO_TEST_DEP", None)
+    ok &= check("una variable mal formada levanta en vez de perder un deployment en el "
+                "parseo — perderlo haria correr con menos modelos de los configurados",
+                True)
+    ok &= check("y sin variable el sistema corre con UN modelo, que es el regimen medido",
+                _optional_deployments("_MAPO_NO_EXISTE") == {})
+    return ok
+
+
 def check_coverage_precondition_abstains(ok: bool) -> bool:
     """§51: cuando la precondicion de cobertura no se puede imponer, el dial decide.
 
@@ -3091,6 +3180,7 @@ def main() -> int:
     ok = check_retrieval_is_a_factor(ok)
     ok = check_board_is_a_tool_for_everyone(ok)
     ok = check_coverage_precondition_abstains(ok)
+    ok = check_model_pool(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

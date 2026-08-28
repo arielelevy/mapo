@@ -37,6 +37,7 @@ from .config import Settings
 from .features import FeatureExtractor, measure_continuation, payload_for
 from .llm import LLMClient, Usage
 from .paradigms import COST_PRIORS, FALLBACK, REGISTRY
+from .pool import ModelPool
 from .policy import no_online_learning
 from .policy import PolicyBundle
 from .beliefs import Provenance
@@ -258,7 +259,16 @@ def _answer(
     probe: bool,
 ) -> Answer:
     task = request.as_task()
-    client = LLMClient(settings)
+    # EL POOL SOLO EXISTE SI HAY CATALOGO. Con un solo modelo el sistema corre como
+    # siempre y el plan dice `model=""` — que es distinto de mentir un nombre por omision.
+    pool = ModelPool(settings, settings.model_deployments) if (
+        len(settings.model_deployments) > 1
+    ) else None
+    # El cliente de PLANIFICACION es el barato: sondear y sensar no son la respuesta, y
+    # pagarlos al precio del caro compraria precision donde no decide nada.
+    client = (
+        pool.client_for(pool.models[0].name) if pool else LLMClient(settings)
+    )
     surface = _surface(request, settings)
     # La confianza en credencia elicitada va ADENTRO del bundle firmado, no como
     # parametro: un parametro se puede olvidar en un sitio de construccion.
@@ -288,10 +298,18 @@ def _answer(
         client=client,
         surface=surface,
         probe=probe,
+        models=pool.models if pool else None,
     )
     plan = decision.plan
     features = decision.features
     reading = decision.probe
+
+    # EL MODELO ES PARTE DE LA ACCION, asi que la EJECUCION cambia de cliente. Planificar
+    # barato y ejecutar con el que el plan eligio es la unica lectura coherente de «el
+    # modelo se elige»: si se planificara con uno y se ejecutara con otro sin decirlo, el
+    # EXPLAIN registraria una decision que no ocurrio.
+    if pool and plan.model:
+        client = pool.client_for(plan.model)
 
     explain = plan.explain()
     probe_record = reading.as_dict() if reading else None
