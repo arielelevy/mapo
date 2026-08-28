@@ -183,10 +183,60 @@ ACCOUNTING_VARIANTS = ("accounting", "cognitive")
 SEARCH_TOOLS = ("search", "keyword_search", "semantic_search")
 
 
+# DESCRIPCIONES CORTAS: un FACTOR, no una limpieza.
+#
+# Las descripciones son 1.167 de los 2.135 caracteres de la spec — el 55% del payload.
+# Acortarlas parece ahorro gratis y NO LO ES: es lo unico que el modelo lee para decidir
+# QUE herramienta usar, asi que cambiarlas puede cambiar la eleccion. Entra cruzado, con
+# prediccion registrada, y con la guarda de siempre: si baja la utilidad mas que el piso
+# de ruido, ahorrar tokens eligiendo peor no es ahorrar.
+#
+# QUE SE CONSERVA Y QUE SE VA. Se conserva lo que DISCRIMINA —que devuelve cada una, y en
+# que caso una gana a la otra— porque eso es la decision. Se va la prosa que instruye
+# sobre como usarla bien, que es andamiaje por prompt, y este repo ya midio que el
+# andamiaje por prompt no compra nada.
+TERSE_DESCRIPTIONS: dict[str, str] = {
+    "search": (
+        "Hybrid search. Returns SUMMARIES, not full text. Use read for full content."
+    ),
+    "keyword_search": (
+        "BM25. Finds EXACT terms: identifiers, numbers, proper names. Returns "
+        "HIGHLIGHTS marked << >>."
+    ),
+    "semantic_search": (
+        "Vector search. Finds by MEANING when wording differs. Returns FULL TEXT, so "
+        "it costs like reading."
+    ),
+    "read": (
+        "Full text of units by id. Pass MULTIPLE ids comma-separated, up to 10. Only "
+        "ids returned by a search."
+    ),
+}
+
+
+def _terse(specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Las mismas specs con la descripcion corta, donde haya una declarada.
+
+    Sin declarar, la spec pasa INTACTA. Recortar una descripcion que nadie escribio corta
+    a ciegas justo el texto que discrimina, y eso no es el factor: es otro.
+    """
+    out = []
+    for spec in specs:
+        nombre = spec["function"]["name"]
+        if nombre not in TERSE_DESCRIPTIONS:
+            out.append(spec)
+            continue
+        copia = json.loads(json.dumps(spec))
+        copia["function"]["description"] = TERSE_DESCRIPTIONS[nombre]
+        out.append(copia)
+    return out
+
+
 def specs_for(
     variant: str,
     offer_read_all: bool = False,
     drop: tuple[str, ...] = (),
+    terse: bool = False,
 ) -> list[dict[str, Any]]:
     """The tool list for a surface variant.
 
@@ -212,7 +262,8 @@ def specs_for(
     # de quitar el desperdicio — y eso deja el flujo de control donde estaba, que es lo
     # que el invariante prohibe. Quitar la decision es NO OFRECER LA ACCION.
     def _keep(specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        return [t for t in specs if t["function"]["name"] not in drop]
+        kept = [t for t in specs if t["function"]["name"] not in drop]
+        return _terse(kept) if terse else kept
 
     read_all_spec = [
         t for t in ACCOUNTING_TOOL_SPECS if t["function"]["name"] == "read_all"
@@ -344,6 +395,9 @@ class ToolSurface:
     stop_on_barren: int = 0
     # Factor: ofrecer `read_all` donde no vive. Ver `specs_for`.
     offer_read_all: bool = False
+    # FACTOR: descripciones cortas. Cambia el payload que el modelo lee para decidir QUE
+    # herramienta usar, asi que puede cambiar la eleccion — no es una limpieza.
+    terse_tools: bool = False
     calls: dict[str, int] = field(default_factory=dict)
     units_read: set[str] = field(default_factory=set)
     hallucinated: int = 0
@@ -650,7 +704,7 @@ class ToolSurface:
         if not available(name, self.variant, self.offer_read_all):
             raise ToolFailure(
                 f"{name} no esta disponible en la superficie {self.variant}. "
-                f"Disponibles: {sorted(t['function']['name'] for t in specs_for(self.variant, self.offer_read_all))}"
+                f"Disponibles: {sorted(t['function']['name'] for t in specs_for(self.variant, self.offer_read_all, terse=self.terse_tools))}"
             )
 
         if name == "coverage":

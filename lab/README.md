@@ -422,6 +422,33 @@ capture. If that happens, P15b is evaluated on C5 alone and the C3 half is repor
 **vacuous, not as confirmed** — the distinction matters, and it is written down here rather
 than decided once the numbers are in. C3 in nano remains an open region, not a result.
 
+### Registered predictions — P24, terse tool descriptions as a FACTOR (2026-08-28, before running)
+
+Tool descriptions are **1,167 of the 2,135 characters** of the spec payload — 55%. Cutting
+them looks like free savings and is not: the description is the ONLY thing the model reads
+to decide WHICH tool to call, so shortening it can change the choice. It enters crossed,
+`{terse, verbose} × {paradigms}`, never folded into a paradigm.
+
+The terse form keeps what **discriminates** — what each tool returns, and when one beats
+another — and drops the prose that instructs on good usage. That prose is prompt
+scaffolding, and this harness already measured that prompt scaffolding buys nothing.
+
+| | prediction | falsified if |
+|---|---|---|
+| **P24a** | the spec payload shrinks **≥30%** | it shrinks less; measured before running: **38.4%** |
+| **P24b** | total prompt tokens fall **<4%** | they fall more, which would mean the spec was a bigger share than the 6.7% measured |
+| **P24c** | utility does **not** drop more than the per-cell noise floor | it does — and then saving tokens by choosing worse is not saving |
+| **P24d** | the **distribution of tool choices** shifts measurably (`keyword_search` vs `semantic_search`) | it does not, which would mean the discriminating text was never what decided |
+
+**And a decision about the run itself, made before spending.** At 2.57% of the prompt,
+P24b's saving sits **below the per-cell noise floor of almost every cell measured**. A
+dedicated run would pay to measure something it cannot separate from its own noise. So the
+factor is implemented to **ride along** with a run commissioned for something else — never
+to commission one. What that N *can* resolve is P24c and P24d, the risk side, and that is
+the number the factor exists for.
+
+---
+
 ### Registered prediction — P16, the clean replication (2026-08-27, before the run)
 
 P15 refuted the product claim and said why. Both causes are fixed and their effect was

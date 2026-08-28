@@ -301,6 +301,7 @@ class Runner:
         surface_variant: str = "basic",
         stop_on_barren: int = 0,
         offer_read_all: bool = False,
+        terse_tools: bool = False,
     ) -> None:
         # Hybrid is the default because it is what a real deployment has. The degraded
         # arms exist to test whether the conclusion depends on retrieval quality, not to
@@ -327,6 +328,13 @@ class Runner:
         # Mismo razonamiento: cambia lo que el paradigma PUEDE hacer, asi que es
         # factor, apagado por defecto, y sus filas van a otro archivo.
         self.offer_read_all = offer_read_all
+        # TERCER FACTOR, y el mas barato de todos: 38,4% de la spec, 2,57% del prompt.
+        # Se implementa para que pueda VIAJAR CON otra corrida, no para encargarle una:
+        # 2,57% esta por debajo del piso de ruido de casi toda celda, asi que una corrida
+        # dedicada gastaria para medir algo que no puede separar de su propio ruido. Lo
+        # que si es medible con ese N es el RIESGO —si el modelo elige peor herramienta—
+        # y ese es el numero por el que el factor existe.
+        self.terse_tools = terse_tools
         self._retriever = arms[retriever_arm]
         # Kept so the surface can expose lexical and dense SEPARATELY alongside the
         # fused entry point. Offering only the fused view took the choice of modality
@@ -356,6 +364,8 @@ class Runner:
             suffix += f"_stop{stop_on_barren}"
         if offer_read_all:
             suffix += "_readall"
+        if terse_tools:
+            suffix += "_terse"
         self._results_path = (
             settings.results_dir / f"{corpus_name}{suffix}_rows.jsonl"
         )
@@ -426,6 +436,7 @@ class Runner:
             budget_tokens=int(task["budget_tokens"]),
             stop_on_barren=self.stop_on_barren,
             offer_read_all=self.offer_read_all,
+            terse_tools=self.terse_tools,
         )
 
     def features_for(self, task: dict[str, Any], allow_derived: bool) -> Features:
