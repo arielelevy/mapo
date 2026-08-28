@@ -260,10 +260,16 @@ Un auditor debe poder responder sin invocar al modelo:
 
 ## 11. Hipótesis falsables futuras
 
-Estas hipótesis **no están preregistradas todavía**; son el diseño del próximo
-registro. Registrarlas con fecha es gratis y es la condición para que el resultado
-cuente — el patrón está implementado (`rec.py`, `certify.py`) y **sin medir**, que por
-las reglas del repo es deuda.
+**PREREGISTRADAS el 2026-08-28 como `P22a`–`P22f`** (`README.md`), antes de que REC
+corra. La tabla de abajo se conserva porque es la forma en que se pensaron; lo que vale
+es la versión registrada, y la diferencia entre las dos es el punto:
+
+> **La prosa no es un preregistro.** «La mejora no supera costo y piso de ruido» **no
+> tiene un número adentro**, y una afirmación sin número se lee después en la dirección
+> en que hayan ido los datos. Cada una quedó reenunciada con la cifra exacta que la
+> refuta, y con dos disciplinas que este registro ya pagó: el baseline es el router de
+> **P17** y no el de P15 —uno cuya selección nunca dispara— y toda diferencia se decide
+> sobre un **intervalo bootstrap pareado**, nunca sobre un punto.
 
 | Hipótesis | Evidencia que la refuta |
 |---|---|

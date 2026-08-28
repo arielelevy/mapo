@@ -11,6 +11,13 @@
 > **Un defecto de construcción puede ser una tarea acá, nunca un hallazgo.** Un bug, un
 > lock roto, un límite de tasa: se arreglan y se registran como trabajo. No entran a
 > `LECCIONES.es.md` ni a los papers, y no son premisa de ninguna conclusión.
+>
+> **Y una regla que estaba mal puesta como pendiente**: toda edición del paper va a
+> `paper-en.md` **y** a `paper-es.md`, en la **misma posición** de cada uno. No es una tarea
+> que se pueda terminar — es una disciplina, y tenerla en la lista con una casilla que nunca
+> se marca la vuelve ruido. Está acá porque ya se rompió: un bloque quedó antes del párrafo
+> de verificación en un archivo y después en el otro. **Dos archivos que dicen lo mismo en
+> distinto lugar empiezan a decir cosas distintas.**
 
 ---
 
@@ -127,7 +134,7 @@
 - [ ] AR-4 · baseline honesto: contra HyDE y RAG plano, no contra nada
 
 **El agujero aguas arriba de todo**
-- [ ] **G-1** · **la ingesta no se mide**, y es **asíncrona, de una sola vez, e independiente del patrón**. Por eso **no contamina la comparación entre brazos** — pero sí fija el espacio: `n_units`, la región, el denominador de cobertura, cuánto ve la sonda. Y su economía es otra: se amortiza sobre todas las consultas futuras, así que el resultado de λ —que el costo por request borra la ventaja— **no le aplica**
+- [ ] **G-1** · **la ingesta no se mide** — y de las tres cosas que este renglón afirmaba, **una es falsa**: «independiente del patrón» quedó **refutado** por `G-3`, porque `graph_traverse` construye y persiste su índice **adentro del request**. Sigue en pie que es asíncrona y de una sola vez, y que por eso no contamina la comparación entre brazos — verificado sobre el registro. Lo que fija el espacio sigue sin medirse: `n_units`, la región, el denominador de cobertura, cuánto ve la sonda. Y su economía es otra: se amortiza sobre todas las consultas futuras, así que el resultado de λ **no le aplica**
 - [x] **G-3** · **medido, y la preocupacion quedo refutada por el registro.** El mecanismo es real —`graph_traverse` construye y persiste su indice adentro del request, leyendo cada unidad con la llamada que REGISTRA lecturas, asi que la fila que lo paga carga `fraction_read` del corpus entero—. Pero **ninguna fila del registro lo ejercio**: las 6 filas del brazo tienen `fraction_read = 0,000` y costo 188-268 tokens porque el indice ya estaba en disco. La leccion 8.6 da `-0,241` con todas y `-0,242` sin el brazo. Nada que corregir; queda la regla `G-4`
 - [ ] **G-4** · **regla de producto, ahora con la medicion que la respalda** (leccion 3.5): si la ingesta es asincrona, de una vez y compartida, **ningun paradigma deberia construir estado derivado propio adentro de un request**. Dos razones separadas: **economica** —el costo del indice cae sobre una fila arbitraria y promediar el brazo mezcla amortizar con responder— y **de instrumentacion** —construir lee, y leer se registra—. Falta implementarlo: levantar el indice de `graph_traverse` a la etapa de ingesta, que es tambien la condicion (b) de su revival en `K-5`
 - [ ] **G-2** · `ARQUITECTURA.es.md` propone la pila entera (Docling, sensor de OCR, procedencia página+bbox) y **ninguna pieza está ejecutada ni medida**
@@ -139,7 +146,7 @@
 - [ ] **O-2** · **B2 ausencia y negación** — el de peor relación daño/atención: afirmar una ausencia desde una muestra produce una respuesta que *parece normal*. La asimetría ya existe en la sonda, pero sólo del lado del material
 - [ ] **O-3** · **D1 presuposición** — el más fácil y no está: una presuposición ya tiene forma de proposición, así que el mecanismo para verificarla existe entero. Falta extraerla
 - [x] **O-4** · **MEDIDO, y dos de tres predicciones cayeron** (`_analyze_demands.py` + `_analyze_demands2.py`, 1.214 filas de 5 corpus). La cardinalidad **no implica** la cobertura: C5 y C8 son singulares y exigen lectura total, asi que el tipo es el par `(answer_cardinality, coverage_demanded)`, declarado por celda en `REQUEST_DEMANDS` con vocabulario cerrado. **(a)** Leer mas ayuda donde la cobertura NO se exige (`+0,259` contra `+0,018`, `p=0,028` controlado dentro de tarea) — **la exhaustividad no se compra leyendo mas**. **(b)** Ninguno de los dos ejes reordena el ranking de paradigmas mas que su propio null (`p=1,000` / `p=0,447`). **(c)** Pero **5 de 22 regiones mezclan** clases de cobertura: es informacion que la region no tiene
-- [ ] **O-5** · cuatro ejes bloqueados **por el generador y no por el diseño** — B3 entidades, C1 conversación, A2 precisión, D2 subjetividad. Enumerados **antes** de pagar el cuarto caso
+- [x] **O-5** · **enumerados, que era lo que pedía** (`ONTOLOGIA_PREGUNTAS.es.md`): B3 entidades, C1 conversación, A2 precisión, D2 subjetividad — cuatro ejes bloqueados **por el generador y no por el diseño**, listados *antes* de pagar el cuarto caso. Desbloquearlos **no es este pendiente**: vive en `K-6` (entidades) y `M-4` (corpus independiente). Dejarlo abierto acá contaba el mismo trabajo dos veces
 
 **La fase de entendimiento — la mitad que S-3 declaró faltante**
 - [x] **U-1** · **tipado y declarado** (`REQUEST_DEMANDS` en `corpus/generate.py`, campos `answer_cardinality` / `coverage_demanded` en `Task`, falla cerrado si una celda no declara). Son DOS ejes, no uno, y el corpus tenia el contraejemplo adentro
@@ -151,12 +158,11 @@
 - [x] **U-5** · **sin objeto**: medirla contra λ presupone un efecto de ruteo que O-4b midio que no existe, asi que el costo de la llamada no compite contra nada. Vuelve a tener sentido cuando `C-COMPLETE` este cableado (`U-7`)
 
 **REC — implementado, sin registrar y sin medir**
-- [ ] **REC-1** · preregistrar las seis hipótesis de `PATRON_REC.es.md` §11 *(gratis)*
+- [x] **REC-1** · **preregistradas como `P22a`–`P22f`** en `README.md`, con fecha y con **numero**. La version en prosa no era un preregistro: «no supera costo y piso de ruido» no tiene una cifra adentro, y una afirmacion sin cifra se lee despues en la direccion en que hayan ido los datos. Con dos disciplinas que este registro ya pago: baseline el router de **P17** —no el de P15, cuya seleccion nunca dispara— y toda diferencia sobre **intervalo bootstrap pareado**. `P22f` (reproducibilidad) es la mas barata y va primero: si falla, ninguna de las otras cinco significa nada
 - [ ] **REC-2** · congelar política, presupuesto, umbrales y regla ANTES del mundo final
 - [ ] **REC-3** · generar el mundo final — `gold_transfer` está reservado a diagnóstico
 - [ ] **REC-4** · correr los siete brazos *(caro; compite con P17 por cuota)*
-- [ ] **REC-5** · corpus independiente del generador *(= M-4)*
-- [ ] **REC-0** · **arreglar el baseline**: «router P15 congelado» es un router cuya selección nunca dispara ⇒ el baseline tiene que ser el de P17, y **REC va después de P17**
+- [x] **REC-0** · **desbloqueado: P17 cerró.** El diagnóstico era correcto —«router P15 congelado» es un router cuya selección **nunca dispara**, así que servía de baseline sólo para medir la cascada— y la condición que ponía ya se cumple: el baseline de REC es el de P17, con detectores honestos y cascada 2/26. **REC deja de estar bloqueado**; lo que queda de REC es correrlo (`REC-4`)
 
 **Producto — capa de decisión**
 - [ ] P-1 · que la sonda sense **recuperabilidad** (hoy sensa acoplamiento)
@@ -187,7 +193,7 @@
 - [x] **X-1** · un solo constructor `payload_for(task)` en `features.py` — los tres sitios lo usan
 - [x] **X-3** · **cableado y medido: CERO.** El contador vive en la superficie (`malformed_json` y `dropped_items`, separados porque piden arreglos distintos) y lo anota `parsing.py`. Sobre el registro completo de `gold_p17` replayado sellado — **336 filas, cinco brazos** — no hay una sola malformacion. **Ningun paradigma pierde utilidad por el formato**; la pierde por la tarea. Y el cero significa cero: `test_science.py` §26 verifica que el contador se dispare y que **todo** sitio que parsea JSON pase la superficie
 - [x] **X-4** · **cerrado.** El sobrecosto real es **6,7%** —`dag_strategy` 8,0%, `react` 4,5%, `rewoo` 0,0%— y no distorsiona la comparacion: `X-4d` lo verifico descontandolo y ningun veredicto se movio. La primera estimacion, por `calls`, era falsa: de 27 sitios que llaman al modelo **uno** pasa `tools`, y el absurdo lo delato —en 7 celdas daba mas declaracion que prompt entero
-- [ ] **X-4a** · **lo lazy NO aplica acá, y conviene decirlo antes de intentarlo.** El patrón de 2026 —diferir las definiciones detrás de una tool de búsqueda— reporta ahorros de 80-95% y mejoras de acierto (49%→74%), pero **sobre catálogos de 100+ tools**; la regla publicada es que **por debajo de ~10 tools el sobrecosto de la búsqueda no se paga**. MAPO tiene **4** en `basic` y **10** en `cognitive`. Y el gateo por variante **ya es** divulgación progresiva: `basic` no ofrece las seis de contabilidad. Fuentes en `notes/`
+- [x] **X-4a** · **contestado: lo lazy NO aplica acá.** El patrón de 2026 —diferir las definiciones detrás de una tool de búsqueda— reporta 80-95% de ahorro y mejoras de acierto (49%→74%), **sobre catálogos de 100+ tools**; la regla publicada es que por debajo de ~10 el sobrecosto de la búsqueda no se paga. MAPO tiene **4** en `basic` y **10** en `cognitive`, y el gateo por variante **ya es** divulgación progresiva. Aplicarlo acá agregaría una llamada por request para ahorrar 528 tokens
 - [ ] **X-4b** · **caché de prompt del proveedor, y hoy no se usa.** `llm.py` no manda ninguna directiva. Pero con el sobrecosto real en **6,7%** —y concentrado en un solo brazo— el premio es chico, así que primero hay que **verificar** si el caché del endpoint cubre el campo `tools`; si no lo cubre, esta vía no existe y se dice
 - [ ] **X-4c** · **acortar las descripciones es un FACTOR, no una limpieza.** Cambia el payload que el modelo lee, así que puede cambiar qué tool elige. Entra cruzado, con predicción registrada, y con la guarda de siempre: si baja la utilidad más que el piso de ruido, ahorrar tokens eligiendo peor no es ahorrar
 - [x] **X-4d** · **medido con el sobrecosto real: no se mueve NADA.** Sobre `gold_p17` replayado sellado, descontando por `tooled_calls`, el mejor fijo es el mismo en los cuatro lambda y la brecha de oraculo es **identica a cuatro decimales** (0,3333 · 0,1750 · 0,0000 · 0,0000). La razon es concreta: `rewoo` es el **piso de costo** y carga **cero** declaracion, asi que descontar no mueve el piso y los ratios casi no cambian. **Ningun resultado publicado esta en riesgo**, y con eso el resto de X-4 —cache de prompt, acortar descripciones— es **optimizacion y no correccion**: baja su urgencia, no su valor
@@ -234,7 +240,6 @@
 
 **Paper**
 - [x] **W-1** · **re-encuadrado en los dos archivos.** El punto no era el orden de las secciones: era que **el Teorema 1 es una IDENTIDAD** —una descomposicion algebraica exacta, verdadera por construccion— y **ninguna medicion puede falsarla**. Lo empirico es solo si sus terminos satisfacen la desigualdad, que es una pregunta sobre un ruteador. Y los terminos **nunca se separaron**: el margen fue 0 en todas las tareas, asi que `alpha` y `beta` no se distinguen de siempre-fallback y la identidad se cumple **vacuamente**. El AURC degenerado (0,000 contra techo +0,400) es la misma cosa vista desde la curva. Queda dicho que el trabajo que un lector le acreditaria a §5.1 lo hace §5.2
-- [ ] W-2 · toda edición va a los DOS archivos
 - [ ] W-3 · integrar el hallazgo de nano (P13)
 - [ ] W-4 · endorser de arXiv, o Zenodo con DOI
 

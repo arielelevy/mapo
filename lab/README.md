@@ -640,6 +640,44 @@ Ground truth is re-derived independently by `corpus/verify.py::_c8`, which also 
 task whose superseded value is absent from the material — without it, a wrong answer would
 only mean "not found", which the other cells already measure.
 
+### P22 registered (2026-08-28, before REC has run) — the six REC hypotheses
+
+`PATRON_REC.es.md` §11 stated six hypotheses in prose. Prose is not a preregistration: *"the
+improvement does not beat cost and the noise floor"* has no number in it, and a claim with no
+number is one that gets read after the fact in whichever direction the data went. Each is
+restated below with the exact figure that refutes it.
+
+**Two disciplines apply to all six**, and both come from results this record already paid
+for:
+
+- **The baseline is P17's router, not P15's.** A frozen P15 router is one whose selection
+  rule *never fires* — pre-empted three times over — so a win against it would mean "REC
+  beats a router that was never allowed to select", which is a much smaller result and one
+  that reads badly. This is why REC runs **after** P17 and not in parallel.
+- **Every difference is decided on a paired-bootstrap interval, not a point.** 1,000
+  resamples, 95%, fixed seed. Comparing two point estimates is not a guard: on a small
+  holdout a candidate that wins by 0.001 wins by noise half the time, and once promoted it
+  becomes the incumbent the next cycle has to beat — the error is inherited.
+
+| # | Prediction | Refuted when |
+|---|---|---|
+| **P22a** | REC captures **net positive** utility against P17's router | the lower bound of the paired difference does not clear **0** at λ = 0.02 |
+| **P22b** | REC beats the best feasible fixed paradigm on a **fresh final world** | the lower bound does not clear the per-cell noise floor of that world |
+| **P22c** | The gain **concentrates** on evidence-sensitive decisions | tasks REC did not trigger on gain as much as the triggered ones, or more |
+| **P22d** | The verified probe has **high precision** | more than **1 in 10** accepted references do not correspond to a relation present in the material |
+| **P22e** | The controller **removes** unnecessary probes | it probes on at least as many tasks as the fixed-probe arm while the counterfactuals produce the same plan |
+| **P22f** | The explanation is **reproducible** | any sealed replay fails to reproduce decision and digest on any task |
+
+**P22b is the one that can kill the pattern**, and it is deliberately the hardest: a gain
+that exists only on the world REC was tuned against is not a gain. The final world is
+**single-use** — a held-out set consulted twice is validation with marketing.
+
+**P22f is the cheapest and should run first.** It costs nothing —sealed replay— and if it
+fails, none of the other five means anything: a result that cannot be reproduced is not a
+result.
+
+**Cost.** Seven arms over a final world, not yet generated. Not estimated, not launched.
+
 ### P21 registered (2026-08-28, before a single row exists) — `read_all` as a factor
 
 **What was true and nobody decided.** `read_all` lives in the accounting tool specs, so on
