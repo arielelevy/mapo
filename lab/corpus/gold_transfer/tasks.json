@@ -137,7 +137,7 @@
       "memo-001",
       "memo-002"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 48,
@@ -164,7 +164,7 @@
       "memo-002",
       "memo-003"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 5,
@@ -189,7 +189,7 @@
     "relevant_units": [
       "memo-003"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 5,
@@ -215,7 +215,7 @@
       "amend-002-w004",
       "memo-002"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 5,
@@ -259,7 +259,7 @@
       "memo-003",
       "memo-010"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 20,
@@ -299,7 +299,7 @@
     "relevant_units": [
       "memo-003"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 20,
@@ -337,7 +337,7 @@
       "amend-005-w016",
       "memo-005"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 17,
@@ -437,7 +437,7 @@
       "memo-042",
       "memo-047"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 60,
@@ -522,7 +522,7 @@
       "memo-029",
       "memo-043"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 60,
@@ -592,7 +592,7 @@
       "amend-013-w048",
       "memo-013"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 49,
@@ -738,7 +738,7 @@
       "memo-009",
       "memo-011"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 48,
@@ -759,7 +759,7 @@
     ],
     "budget_tokens": 60000,
     "relevant_units": [],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 5,
@@ -782,7 +782,7 @@
     ],
     "budget_tokens": 60000,
     "relevant_units": [],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 5,
@@ -808,7 +808,7 @@
       "amend-003-w004",
       "memo-003"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 5,
@@ -850,7 +850,7 @@
       "memo-007",
       "memo-014"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 20,
@@ -888,7 +888,7 @@
     ],
     "budget_tokens": 60000,
     "relevant_units": [],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 20,
@@ -926,7 +926,7 @@
       "amend-002-w016",
       "memo-002"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 17,
@@ -1020,7 +1020,7 @@
       "memo-035",
       "memo-040"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 60,
@@ -1103,7 +1103,7 @@
       "memo-032",
       "memo-038"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 60,
@@ -1173,7 +1173,7 @@
       "amend-026-w048",
       "memo-026"
     ],
-    "has_oracle": true,
+    "has_oracle": false,
     "irreversible": false,
     "shared_writes": false,
     "truth_n_units": 49,

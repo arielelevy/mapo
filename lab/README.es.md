@@ -5,7 +5,8 @@
 
 Esta página resume la solución. La arquitectura, las decisiones, las deudas comprobadas
 y los diagramas viven en [`DISENO.es.md`](DISENO.es.md); **la lista completa de lo que
-falta, en un solo lugar, está en [`PENDIENTES.es.md`](PENDIENTES.es.md)**. El patrón de autorreparación
+falta, en un solo lugar, está en [`PENDIENTES.es.md`](PENDIENTES.es.md)**, y **lo que el
+banco probó —con el número que lo sostiene— en [`LECCIONES.es.md`](LECCIONES.es.md)**. El patrón de autorreparación
 vive en [`PATRON_REC.es.md`](PATRON_REC.es.md).
 
 > **Regla del repo**: nada se describe acá sin implementación que lo corra. Si una
