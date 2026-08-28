@@ -20,8 +20,9 @@
 - [x] **B3** · **P17 cerrada**: P17a CONFIRMADA (cascada 2/26), **P17b REFUTADA (0 de 14: la sonda corrió, costó 83k tokens y no resolvió ninguna)**, P17c REFUTADA (−1,0425), P17d 26/26. El cuello de botella es **la sonda**
 
 **La cuarta pre-empción — lo único que queda entre el registro y una respuesta**
-- [ ] **S-1** · **que la sonda resuelva**: corrió en 14/14 y resolvió 0. La evidencia que trae no llega al piso de procedencia que la regla exige. Sin esto, ningún patrón nuevo se mide en un mundo donde el router decide
-- [ ] **S-2** · decidir si el piso es correcto o la sonda es débil — son arreglos opuestos y hay que separarlos antes de tocar nada
+- [~] **S-1** · **la sonda resuelve**: de 0/14 a **9/14** contra la verdad declarada. El verificador exigía ids de unidad y los documentos se referencian por **nombre de persona** — el prompt pedía bien y el verificador rechazaba lecturas correctas. Ahora resuelve cualquier puente **literal** entre dos unidades, con guarda de especificidad, y exige **además** que el sensor diga «no autocontenida»
+- [ ] **S-3** · **el residuo, y es estructural**: las 4 tareas C4 dan falso positivo. «Esta unidad no alcanza» tiene dos causas —la respuesta está en OTRO lado (cadena) o en TODOS (cobertura)— y desde una sola unidad se ven igual. La sonda debe reportar lo observado y **la regla** combinarlo con la cardinalidad, que φ ya tiene gratis
+- [x] **S-2** · resuelto: **no era el piso**. Era que el prompt y el verificador no pedían lo mismo
 
 **Catálogo — la misma vara que a los candidatos nuevos**
 - [x] K-3 · **la falsación de `graph_traverse` (P10a) sobrevive a su objeción más seria**: el índice está 100% anclado en el texto y las dos cadenas C3 están conectadas — la travesía tenía las aristas y aun así dio u=0,000. Riesgo de diseño registrado aparte: el índice **no exige** anclaje, así que otro corpus podría envenenarlo en silencio

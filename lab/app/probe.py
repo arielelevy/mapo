@@ -108,32 +108,81 @@ def _extract_json(raw: str) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+# Un puente tiene que ser especifico. Una cadena que aparece en casi todas las unidades
+# —un encabezado, un apellido compartido por medio corpus— conecta cualquier cosa con
+# cualquier cosa, asi que conectar deja de significar nada. Misma disciplina que
+# `measure_continuation` usa para excluir boilerplate, y por la misma razon.
+MIN_BRIDGE_CHARS = 4
+MAX_BRIDGE_SHARE = 0.5
+
+
 def _resolve(
-    references: list[str], scope: list[str], unit_text: str, source: str
+    references: list[str],
+    scope: list[str],
+    unit_text: str,
+    source: str,
+    documents: dict[str, str] | None = None,
 ) -> list[tuple[str, int]]:
     """Which named references verify: (target, span offset) pairs, checked by code.
 
-    Three conditions, all required — this used to accept any in-scope id even when the
-    unit never mentioned it, which let the model promote its own guess to OBSERVED by
-    naming a unit it knew existed:
-      - the reference is a unit id in scope,
-      - it is NOT the unit being held (a unit pointing at itself is not a dependency),
-      - it appears LITERALLY in the unit's text — the span offset is recorded, so an
-        auditor can find the exact characters the observation rests on.
+    QUE CAMBIO, Y POR QUE ESTABA MAL. Esto exigia que la referencia fuera un ID DE UNIDAD
+    en alcance. Medido en P17: la sonda corrio en las 14 tareas que la pedian y resolvio
+    CERO — «the sensor named 2 reference(s), none of which resolve to a unit in scope».
+
+    El motivo no era el piso de procedencia: era que el prompt y el verificador no pedian
+    lo mismo. El prompt invita —correctamente— a nombrar «an account number, a memo id, a
+    person named as the holder of something described elsewhere», y los documentos SE
+    REFERENCIAN ASI. La cadena de `c3-000-h1` es `memo-002` diciendo «Reports to Ignacio
+    Arrieta» y `memo-001` diciendo «Ignacio Arrieta serves as director»: el puente es un
+    NOMBRE, y no hay ningun id de unidad escrito en el texto. El verificador rechazaba
+    lecturas correctas del sensor y las puntuaba como punteros inventados.
+
+    LO QUE NO CAMBIA, PORQUE ES LO QUE HACE QUE ESTO VALGA. Sigue verificando por codigo y
+    sigue guardando el span. Una referencia resuelve cuando es un PUENTE LITERAL:
+
+      - aparece literalmente en la unidad que se esta sosteniendo (con su offset), y
+      - aparece literalmente en al menos otra unidad EN ALCANCE — eso es la dependencia:
+        esta unidad nombra algo que vive en otra, y el codigo puede ir a verlo, y
+      - es lo bastante especifica: ni una cadena de tres caracteres ni algo que aparece en
+        mas de la mitad del alcance, porque un puente que conecta todo no conecta nada.
+
+    Sin `documents` se conserva la conducta vieja —solo ids de unidad—, que es lo correcto
+    para un llamador que no puede ofrecer el material: no se puede verificar un puente
+    contra un corpus que no se tiene.
     """
     in_scope = set(scope)
     resolved: dict[str, int] = {}
+    others = [u for u in scope if u != source]
+    limit = max(1, int(len(scope) * MAX_BRIDGE_SHARE))
+
     for reference in references:
         if not isinstance(reference, str):
             continue
         candidate = reference.strip()
-        if not candidate or candidate == source or candidate not in in_scope:
+        if not candidate or candidate == source:
             continue
         offset = unit_text.find(candidate)
         if offset < 0:
+            # No esta escrito en la unidad que el modelo dice estar leyendo. Eso es el
+            # caso que esta funcion existia para atrapar y se sigue atrapando.
             continue
-        if candidate not in resolved:
-            resolved[candidate] = offset
+
+        if candidate in in_scope:
+            resolved.setdefault(candidate, offset)
+            continue
+
+        if documents is None or len(candidate) < MIN_BRIDGE_CHARS:
+            continue
+
+        needle = candidate.lower()
+        elsewhere = [
+            u for u in others if needle in (documents.get(u) or "").lower()
+        ]
+        if elsewhere and len(elsewhere) <= limit:
+            # El objetivo es la unidad puente: la que tambien lo nombra. Se toma la
+            # primera en orden de alcance para que la lectura sea determinista.
+            resolved.setdefault(elsewhere[0], offset)
+
     return sorted(resolved.items())
 
 
@@ -215,19 +264,42 @@ def probe_coupling(
 
     claimed = payload.get("references") or []
     claimed = [r for r in claimed if isinstance(r, str)]
-    resolved_spans = _resolve(claimed, scope, unit_text, source=target)
+    # El material CRUDO de la vista, no `surface.read_one`: leer por la superficie
+    # incrementaria `units_read` y la traza diria que la sonda leyo el corpus entero,
+    # cuando lo unico que hace el codigo es buscar una subcadena. La contabilidad tiene
+    # que describir lo que el MODELO vio, no lo que el verificador miro.
+    view = getattr(surface, "view", None)
+    material = getattr(view, "documents", None) if view is not None else None
+    resolved_spans = _resolve(
+        claimed, scope, unit_text, source=target, documents=material
+    )
     resolved = [name for name, _ in resolved_spans]
 
-    if resolved:
-        # Verified by code against the scope: the unit names something that is really
-        # somewhere else. This is the only branch that earns OBSERVED.
+    self_contained = bool(payload.get("self_contained"))
+
+    if resolved and not self_contained:
+        # DOS CONDICIONES, Y HACEN FALTA LAS DOS. El codigo verifico que el puente existe
+        # —la unidad nombra literalmente algo que vive en otra, con su offset— y el sensor
+        # dijo que esta unidad NO alcanza para contestar. La primera sola no sirve: en un
+        # corpus de memos sobre personas que se repiten, casi toda unidad nombra algo que
+        # esta en otra, asi que "hay puente" seria verdadero en todos lados y no
+        # discriminaria nada.
+        #
+        # Medido: con la sola verificacion del puente, la sonda daba COUPLED en tareas
+        # cuya `truth_coupling` declarada es 0,00 y 0,20 — 2 falsos positivos sobre 6
+        # revisadas. El puente prueba que el VINCULO EXISTE; que la PREGUNTA lo necesite
+        # es un juicio sobre la tarea, y ese lo aporta el sensor.
+        #
+        # Es la division de trabajo del producto aplicada adentro de la sonda: el modelo
+        # propone —"esto no se contesta solo"— y el codigo verifica —"y ese puente es
+        # real, aca esta el span"—. Ninguna de las dos gobierna sola.
         return ProbeResult(
             coupling=COUPLED,
             provenance=Provenance.OBSERVED,
             credence=1.0,
             evidence=(
-                f"unit {target} names {len(resolved)} identifier(s) that resolve to "
-                "other units in scope ("
+                f"unit {target} is not self-contained and names {len(resolved)} "
+                "identifier(s) that resolve elsewhere in scope ("
                 + ", ".join(f"{n}@{off}" for n, off in resolved_spans[:3])
                 + "): dependency verified at those literal spans, not asserted"
             ),
@@ -238,7 +310,27 @@ def probe_coupling(
             calls=usage.calls,
         )
 
-    self_contained = bool(payload.get("self_contained"))
+    if resolved and self_contained:
+        # El puente es real y el sensor dice que igual no hace falta seguirlo. Eso NO es
+        # "sin acoplamiento": es una unidad que basta para esta pregunta y ademas menciona
+        # a otras. Se registra como desacoplado, pero ELICITED — la parte que decide es un
+        # juicio del modelo, y no puede viajar como observacion.
+        return ProbeResult(
+            coupling=UNCOUPLED,
+            provenance=Provenance.ELICITED,
+            credence=0.6,
+            evidence=(
+                f"unit {target} names {len(resolved)} identifier(s) that resolve "
+                "elsewhere, but the sensor reports the unit answers the question on its "
+                "own: the link exists and the question does not need it"
+            ),
+            unit_id=target,
+            resolved=resolved,
+            claimed=claimed,
+            cost_tokens=usage.total_tokens,
+            calls=usage.calls,
+        )
+
     if claimed and not resolved:
         # The sensor named pointers and none of them exist. That is not evidence of
         # coupling and it is not evidence of independence either -- it is a sensor

@@ -441,6 +441,36 @@ Errar hacia «tomado» cuesta un borrado manual; errar hacia «libre» corrompe 
 
 ---
 
+### 8.4 «Esta unidad no alcanza» tiene dos causas y una sonda de una unidad no las separa · `MEDIDO`
+
+La sonda quedó arreglada —de resolver **0 de 14** a acertar **9 de 14** contra la verdad
+declarada— y los cinco fallos que quedan no son ruido: **cuatro son las cuatro tareas C4**,
+donde `truth_coupling` es 0,20 y la sonda dice 0,85.
+
+El sensor tiene razón en lo que observa: la unidad **no** se basta para contestar. El
+código tiene razón en lo que verifica: hay un puente literal a otra unidad. Y la conclusión
+igual es falsa, porque **«no me alcanza» tiene dos causas distintas**:
+
+| causa | qué hace falta | celda |
+|---|---|---|
+| la respuesta está **en otro lado** | seguir un vínculo | C3, C5 — acoplamiento |
+| la respuesta está **en todos lados** | leerlo todo | C4 — cobertura |
+
+**Desde adentro de una sola unidad, las dos se ven igual.** No es un bug del prompt ni del
+verificador: es lo que una unidad puede decir. Un memo que participa de un agregado nombra
+gente que aparece en otros memos exactamente como lo hace un eslabón de cadena.
+
+> Una sonda no puede reportar una propiedad **del conjunto** desde un elemento. Lo que
+> observa es local; «hay que encadenar» y «hay que barrer» son globales, y distinguirlas
+> exige un dato que la sonda no tiene — **la cardinalidad, que φ sí tiene desde el
+> principio y gratis**.
+
+La consecuencia de diseño: la sonda debe reportar lo que vio —no autocontenida, puente
+verificado— y **la regla** combinar eso con la cardinalidad, en vez de que la sonda emita
+un veredicto de acoplamiento que no está en posición de emitir.
+
+---
+
 ## 9. Lo que este registro NO estableció
 
 Se escribe acá para que no se lo confunda con lo de arriba.
