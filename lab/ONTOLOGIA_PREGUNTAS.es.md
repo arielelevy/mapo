@@ -134,6 +134,27 @@ respeta la supersesión?** Un memo viejo y su enmienda dicen cosas distintas sob
 hecho, así que un paradigma que lee ambos y devuelve el viejo está fallando de una manera
 que el F1 castiga sin explicar.
 
+**Verificado el 2026-08-28 (`_analyze_supersession.py`), y el resultado es más fuerte que
+la propuesta.** Las enmiendas parsean limpio —cinco cuentas con su domicilio vigente,
+`Rosario` y `Mendoza`— y sin embargo:
+
+| | |
+|---|---|
+| preguntas que mencionan domicilio o residencia | **0** |
+| golds que son un valor enmendado | **0** |
+
+> **La supersesión está en el material y ninguna pregunta la interroga.** Las enmiendas
+> existen sólo como distractor: cuestan tokens, ensucian la recuperación, y **no miden
+> nada.**
+
+Peor que no medir: pueden estar **deprimiendo** utilidades sin que nadie sepa qué prueban.
+Un paradigma que lee la enmienda y se confunde pierde puntos por un eje que el registro no
+declara estar midiendo.
+
+**Y por eso es el pendiente más barato del proyecto entero**: el generador ya produce el
+material, la precedencia ya está escrita en forma fija, y el gold de una pregunta de
+vigencia es el valor de la enmienda. Falta la pregunta.
+
 ### B5 · Autoridad de fuente
 
 | | |

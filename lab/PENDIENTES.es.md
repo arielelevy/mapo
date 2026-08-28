@@ -57,7 +57,8 @@
 - [ ] AR-4 · baseline honesto: contra HyDE y RAG plano, no contra nada
 
 **Ontología de la pregunta** (`ONTOLOGIA_PREGUNTAS.es.md`, pizarra)
-- [ ] **O-1** · **B4/B5 vigencia y autoridad — el pendiente más barato del documento**: el corpus YA trae 6 enmiendas con supersesión escrita («*this filing supersedes any earlier domicile*»), verificable por código, y **ninguna predicción registrada la usa**
+- [~] **O-1** · **medido: la supersesión está en el material y NINGUNA pregunta la interroga** (`_analyze_supersession.py`). 5 cuentas enmendadas, 0 preguntas sobre domicilio, 0 golds en un valor vigente. Las enmiendas son **sólo distractor**: cuestan tokens y no miden nada — y pueden estar deprimiendo utilidades por un eje que el registro no declara medir
+- [ ] **O-1b** · **agregar preguntas de vigencia al generador** — el material ya está, la precedencia ya está escrita en forma fija, y el gold es el valor de la enmienda. Con predicción registrada: *un paradigma que lee TODAS las unidades respeta la supersesión; uno que corta en el primer acierto devuelve el valor superado* — y eso separa por fin «no encontró» de «encontró el viejo», que el F1 castiga igual
 - [ ] **O-2** · **B2 ausencia y negación** — el de peor relación daño/atención: afirmar una ausencia desde una muestra produce una respuesta que *parece normal*. La asimetría ya existe en la sonda, pero sólo del lado del material
 - [ ] **O-3** · **D1 presuposición** — el más fácil y no está: una presuposición ya tiene forma de proposición, así que el mecanismo para verificarla existe entero. Falta extraerla
 - [ ] **O-4** · **A1 cardinalidad de respuesta**: medible hoy (C1 singular, C2 enumerativa, C4 agregada) y **no medido**
