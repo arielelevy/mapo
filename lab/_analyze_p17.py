@@ -54,6 +54,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 from _regions import continuation_segment, rederived_episodes
 from app.config import Settings
 from app.decide import decide
+from app.llm import SeededClient
 from app.features import Features, has_runtime_detector
 from app.metrics import Study
 from app.paradigms import COST_PRIORS, FALLBACK
@@ -93,7 +94,10 @@ print(f"corpus: {CORPUS} (seed 73, nunca visto por theta)")
 print(f"theta: {len(episodes)} episodios re-derivados de {', '.join(TRAIN)}")
 
 # --- la decision, con los DOS pasos ---------------------------------------------------
-client = target.make_seeded_client() if hasattr(target, "make_seeded_client") else None
+# FALLA RUIDOSA, a proposito. Si no se puede construir el cliente, la sonda no corre,
+# P17b mide cero `specialise` y quedaria REFUTADA por la razon equivocada — el peor
+# modo de falla posible para un veredicto congelado. Antes que eso, romper.
+client = SeededClient(target._client, settings.seed)  # noqa: SLF001
 decisions: dict[str, object] = {}
 probe_tokens = 0
 
@@ -116,8 +120,8 @@ def decision_for(task_id: str):
             candidates=sorted(rows_by_task[task_id]),
             documents=documents,
             client=client,
-            surface=target.surface_for(task) if client else None,
-            probe=client is not None,
+            surface=target.surface_for(task),
+            probe=True,
         )
         probe_tokens += d.usage.total_tokens
         decisions[task_id] = d
@@ -192,7 +196,15 @@ full_study = target.study()
 all_tasks = sorted(full_study.complete_tasks)
 gated = [t for t in all_tasks if tasks_by_id[t].get("irreversible")]
 routing = [t for t in all_tasks if t not in set(gated)]
-noise = full_study.noise_floor() if hasattr(full_study, "noise_floor") else None
+# Piso de ruido por replicas, igual que P16: la variabilidad entre corridas de la MISMA
+# celda es la unica escala contra la cual una diferencia significa algo.
+reps: dict[tuple[str, str], list[float]] = defaultdict(list)
+for r in target.load_rows():
+    if r.get("infra_error") or r.get("infeasible"):
+        continue
+    reps[(r["task_id"], r["paradigm"])].append(r["utility"])
+floor_info = Study.noise_floor({f"{t}|{p}": u for (t, p), u in reps.items()})
+noise = float(floor_info["noise_oracle_gap"])
 print(f"tareas: {len(all_tasks)} | cohorte de ruteo: {len(routing)} | gateadas: {len(gated)}")
 
 # --- P17a ------------------------------------------------------------------------------
@@ -263,7 +275,7 @@ print(f"  P17d: {'CONFIRMADA' if same == len(all_tasks) else 'REFUTADA'}")
 out = settings.results_dir / "p17_verdict.json"
 out.write_text(json.dumps({
     "corpus": CORPUS, "train_corpora": list(TRAIN), "cell_episodes": len(episodes),
-    "lambda_primary": LAMBDA_PRIMARY, "noise_floor": noise,
+    "lambda_primary": LAMBDA_PRIMARY, "noise_floor": floor_info,
     "p17a": {"cascades": cascades, "of": len(all_tasks),
              "verdict": "CONFIRMADA" if cascades <= 6 else "REFUTADA"},
     "p17b": {"probed": len(probed), "specialised": len(specialised),
