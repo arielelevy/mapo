@@ -1736,6 +1736,61 @@ Cuánta falla atrapan los contratos es lo único que falta para decidir, y no es
 
 ---
 
+### 5.19 `dag_strategy` compra +0,030 de utilidad a 11,5× la latencia · `MEDIDO`
+
+La latencia estaba en las **2.369 filas** del registro y **ningún analizador la leía**
+(`wall_seconds`). Tercera vez el mismo patrón —después de `REGION_VOCABULARY` y de
+`mean_cost`—: el número se guarda, se puede imprimir, y no informa nada. Leerlo costó cero.
+
+| brazo | p50 s | p95 s | s/llamada | llamadas | u |
+|---|---:|---:|---:|---:|---:|
+| **`rewoo`** | **2,6** | 13,1 | 3,02 | 2,0 | **0,565** |
+| `direct` | 2,6 | — | — | 1,0 | 0,543 |
+| `react` | 5,7 | 17,6 | 2,19 | 3,3 | 0,464 |
+| `map_reduce` | 12,2 | 113,5 | 2,00 | 9,9 | 0,521 |
+| **`dag_strategy`** | **30** | — | — | 16,1 | **0,595** |
+| `plan_execute` | 54,8 | 66,5 | 3,27 | 15,9 | 0,246 |
+
+**`dag_strategy` tiene la utilidad más alta y es 11,5× más lento que `rewoo`**, que queda a
+**0,030** de distancia. Sumado a lo que ya se sabía —35× los tokens— el intercambio es:
+tres centésimas de utilidad contra un orden de magnitud en tiempo **y** en plata.
+
+> Y la latencia **no es una función del costo**. Un brazo de dos llamadas grandes y uno de
+> veinte chicas pueden gastar lo mismo y tardar muy distinto, porque hay un componente
+> **fijo por llamada** que los tokens no expresan. `map_reduce` es el más barato **por
+> llamada** (2,00 s) y el cuarto más lento **por celda**, porque hace 9,9. Por eso las dos
+> columnas van separadas: distinguen «tarda porque gasta» de «tarda porque llama mucho».
+
+**Se reporta p50 y p95, no la media.** La latencia tiene cola larga —un reintento por rate
+limit multiplica una celda— y la media de una distribución con cola describe un caso que
+casi nunca ocurre. `map_reduce` lo muestra entero: **p50 de 12,2 y p95 de 113,5**.
+
+**Y una advertencia que va arriba y no al pie:** el banco corre con concurrencia y comparte
+cuota consigo mismo, así que estos números **incluyen espera por rate limit**. Sirven para
+comparar brazos entre sí —todos sufren lo mismo— y **no** como cota de lo que un request
+solo tardaría.
+
+---
+
+### 5.20 El tiempo al primer token no se puede medir, y no es un olvido · `MÉTODO`
+
+Es el número que un usuario percibe con una interfaz que streamea, y es el que
+`ARQUITECTURA.es.md` necesita para su SSE. **No existe en ninguna fila, y no puede existir:**
+`llm.py` hace un POST y espera la respuesta entera. **Sin streaming no hay evento de primer
+token que cronometrar.**
+
+Eso no se arregla analizando: se arregla pidiendo `stream=true` y cronometrando el primer
+chunk. Es trabajo de implementación, cambia el cliente que produce **todo** el registro, y
+por eso se registra en vez de improvisarse.
+
+> Y hay una consecuencia que conviene ver antes de hacerlo: el caché es
+> content-addressed sobre la respuesta completa. Una respuesta servida del caché tiene
+> TTFT **cero**, que no es el TTFT de nada. La medición de latencia tendrá que separar
+> aciertos de caché o correr sin él — igual que `wall_seconds` ya hace, poniendo 0,0 en un
+> acierto para no atribuirle al modelo una latencia que no pagó.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una
