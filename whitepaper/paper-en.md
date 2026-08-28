@@ -401,6 +401,39 @@ production system needs to decline instead of failing.
 
 # 5. Theory
 
+**Neighbouring work read on 2026-08-28, and what it takes from the claim.** Four papers
+were outstanding. Three of them occupy, individually, mechanisms this paper had been
+treating as its own.
+
+| work | what it occupies |
+|---|---|
+| **EnvProbe** — *Ask the World Before Acting: Budgeted Environment Probing for World-Model Calibration* (arXiv 2606.31422) | a **budgeted probing operator whose only purpose is to repair a structured belief table**. That is our probe, mechanism for mechanism |
+| **Kintsugi** — *Learning Policies by Repairing Executable Knowledge Bases* (arXiv 2605.09487) | **verifier-gated edits to a typed executable artefact**, with failures diagnosed and localised into candidate edits. That is our consolidation plus its promotion guard |
+| **ProvenanceGuard** — *Safeguarding LLM Agents from Misalignment through Provenance Analysis* (arXiv 2607.01236) | misalignment as **whether a proposed tool call is supported by traceable evidence in context**. That is our provenance floor on actions |
+
+And the area is populated enough to have been surveyed: *From Agent Traces to Trust: A
+Survey of Evidence Tracing and Execution Provenance in LLM Agents* (arXiv 2606.04990).
+
+**So the honest position is narrower than we had it.** Budgeted probing into a typed belief
+state, verifier-gated policy edits, and provenance floors on actions are each established.
+None of the three is ours to claim, and saying so costs less than being told.
+
+What remains is a **conjunction**, stated by what it excludes: a decision layer that (a)
+chooses **which control-flow topology to run**, per request, from a catalog of them — none
+of the three routes among *paradigms*; (b) can **abstain**, with the risk–coverage curve
+reported rather than the utility of what it chose to answer; and (c) prunes by **arithmetic
+on the declared budget before any inference**. Remove any one and the remainder is covered
+by the work above.
+
+**And one of the four supports us, from a place we cannot reach.** *Trace2Policy: From
+Expert Behavior Traces to Self-Evolving Decision Agents* (arXiv 2606.10457) reports a
+22-day production deployment over 3,349 resolved cases and finds that **across five model
+scales, the variance attributable to rule version exceeds that attributable to model
+choice**. Independent, at production scale, and the closest thing to external corroboration
+this line of work has: the structure decides more than the model does.
+
+---
+
 ## 5.1 The Selection Value Theorem
 
 Let `p⋆` be the fallback and `p_s` a specialist. Let `S = {t : u(t,p_s) > u(t,p⋆)}` with

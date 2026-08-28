@@ -427,6 +427,41 @@ en producción necesita para declinar en lugar de fallar.
 
 # 5. Teoría
 
+**Vecinos leídos el 2026-08-28, y lo que le sacan a la afirmación.** Quedaban cuatro
+papers. **Tres ocupan, cada uno por su lado, mecanismos que este paper venía tratando como
+propios.**
+
+| trabajo | qué ocupa |
+|---|---|
+| **EnvProbe** — *Ask the World Before Acting: Budgeted Environment Probing for World-Model Calibration* (arXiv 2606.31422) | un **operador de sondeo con presupuesto cuyo único propósito es reparar una tabla de creencias estructurada**. Es nuestra sonda, mecanismo por mecanismo |
+| **Kintsugi** — *Learning Policies by Repairing Executable Knowledge Bases* (arXiv 2605.09487) | **ediciones a un artefacto ejecutable tipado, gateadas por un verificador**, con las fallas diagnosticadas y localizadas en ediciones candidatas. Es nuestra consolidación con su guarda de promoción |
+| **ProvenanceGuard** — *Safeguarding LLM Agents from Misalignment through Provenance Analysis* (arXiv 2607.01236) | la desalineación como **si una llamada propuesta está sostenida por evidencia trazable en el contexto**. Es nuestro piso de procedencia sobre las acciones |
+
+Y el área está lo bastante poblada como para tener **survey**: *From Agent Traces to Trust:
+A Survey of Evidence Tracing and Execution Provenance in LLM Agents* (arXiv 2606.04990).
+
+**Así que la posición honesta es más angosta de lo que la teníamos.** Sondeo con presupuesto
+sobre un estado de creencias tipado, ediciones de política gateadas por verificador, y pisos
+de procedencia sobre acciones están **cada uno establecido**. Ninguno de los tres es nuestro
+para reclamar, y decirlo cuesta menos que que nos lo digan.
+
+Lo que queda es una **conjunción**, enunciada por lo que excluye: una capa de decisión que
+(a) elige **qué topología de control de flujo correr**, por request, de un catálogo de ellas
+— ninguno de los tres rutea entre *paradigmas*; (b) puede **abstenerse**, con la curva
+riesgo–cobertura reportada en vez de la utilidad de lo que eligió contestar; y (c) poda por
+**aritmética sobre el presupuesto declarado antes de cualquier inferencia**. Sacando
+cualquiera de las tres, el resto queda cubierto por el trabajo de arriba.
+
+**Y uno de los cuatro nos apoya, desde un lugar al que no llegamos.** *Trace2Policy: From
+Expert Behavior Traces to Self-Evolving Decision Agents* (arXiv 2606.10457) reporta un
+despliegue en producción de 22 días sobre 3.349 casos resueltos, y encuentra que **a lo
+largo de cinco escalas de modelo, la varianza atribuible a la versión de la regla supera a
+la atribuible a la elección de modelo**. Independiente, a escala de producción, y lo más
+parecido a corroboración externa que tiene esta línea: **la estructura decide más que el
+modelo**.
+
+---
+
 ## 5.1 El Teorema del Valor de Selección
 
 Sea `p⋆` el fallback y `p_s` un especialista. Sea `S = {t : u(t,p_s) > u(t,p⋆)}` con
