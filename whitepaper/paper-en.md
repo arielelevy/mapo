@@ -206,6 +206,33 @@ library globally; and **measured** calibration (EMRE learns confidence but never
 it — no ECE, no reliability diagrams). Paradigm selection, abstention and deferral are
 outside HADD's scope entirely.
 
+**Delegation contracts and attested identity.** The nearest neighbour on the routing side
+is the *provenance paradox* in multi-agent routing [arXiv:2603.18043], and it is close
+enough that the overlap has to be stated rather than left for a reviewer. Its result is
+that routing on **self-reported** quality selects the worst delegates and performs worse
+than random (0.55 against 0.68), and its remedy is deterministic governance: delegation
+contracts that bound authority through explicit objectives, budgets and failure policies,
+plus a **claimed-versus-attested** identity model so routing consumes verified metrics
+instead of claims. It is empirical, with simulated delegates and real models, and the
+attested arm reaches near-optimal routing.
+
+Two things follow, and one of them narrows what we may claim.
+
+*It corroborates the sensor discipline from an adversarial direction.* Our reason for
+refusing the model's self-assessment as an admissible input is epistemic — an assertion
+about its own sufficiency has no provenance above `ELICITED`. Theirs is adversarial — a
+delegate has an incentive to inflate. The two arrive at the same prohibition, and
+`claimed`/`attested` is close to `ELICITED`/`OBSERVED` restricted to one proposition.
+
+*It occupies "provenance + routing + contracts" as a phrase, so the conjunction must be
+stated by what it excludes.* Their provenance is a property of a **delegate's quality
+claim**; ours is an ordering over **evidence types**, and the ordering is what a rule
+reads. They report no lattice, no floor on irreversible actions, and no risk-coverage
+curve — they measure routing accuracy. What remains ours is the conjunction of: a
+provenance **lattice over evidence**, a **floor that gates irreversible actions** on it,
+abstention priced as a **measured risk-coverage curve**, and the same calculus applied
+across feasibility, control and content. Any single term of that has prior art.
+
 ## 2.5 Selective prediction and learning to defer
 
 Our theory is an application of an established framework. Chow's rule gives optimal

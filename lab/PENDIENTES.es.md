@@ -113,7 +113,7 @@
 - [ ] T-3 · teorema de soundness del ensamblador
 - [ ] T-4 · cota nativa del ratchet
 - [ ] T-5 · quién fija el dial
-- [ ] T-6 · vecinos leídos — **arXiv 2603.18043 tiene prioridad alta**
+- [~] **T-6** · **arXiv 2603.18043 leído** y ubicado en §2.4 de los dos papers: corrobora la disciplina del sensor desde el ángulo adversarial, y **ocupa «procedencia + ruteo + contratos» como frase** — la conjunción queda enunciada por lo que excluye. Faltan EnvProbe, Kintsugi, SHARP, Trace2Policy
 
 **Paper**
 - [ ] W-1 · re-encuadrar §5.1 vs §5.2

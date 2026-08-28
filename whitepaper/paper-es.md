@@ -224,6 +224,35 @@ acotado por nivel** — HADD acota su librería de planes globalmente; y la cali
 confiabilidad). La selección de paradigma, la abstención y el deferral quedan enteramente
 fuera de su alcance.
 
+**Contratos de delegación e identidad atestiguada.** El vecino más cercano del lado del
+ruteo es la *paradoja de la procedencia* en ruteo multi-agente [arXiv:2603.18043], y está
+lo bastante cerca como para que la superposición se diga en vez de dejársela a un revisor.
+Su resultado es que rutear sobre calidad **auto-reportada** selecciona a los peores
+delegados y rinde peor que al azar (0,55 contra 0,68), y su remedio es gobernanza
+determinista: contratos de delegación que acotan la autoridad con objetivos, presupuestos y
+políticas de falla explícitos, más un modelo de identidad **reclamada contra atestiguada**
+para que el ruteo consuma métricas verificadas y no reclamos. Es empírico, con delegados
+simulados y modelos reales, y el brazo atestiguado llega a ruteo casi óptimo.
+
+De ahí salen dos cosas, y una de ellas achica lo que podemos afirmar.
+
+*Corrobora la disciplina del sensor desde una dirección adversarial.* Nuestra razón para
+rechazar la auto-evaluación del modelo como entrada admisible es epistémica — una
+afirmación sobre su propia suficiencia no tiene procedencia por encima de `ELICITED`. La de
+ellos es adversarial: un delegado tiene incentivo a inflar. Las dos llegan a la misma
+prohibición, y `reclamada`/`atestiguada` se parece a `ELICITED`/`OBSERVED` restringido a
+una sola proposición.
+
+*Ocupa «procedencia + ruteo + contratos» como frase, así que la conjunción hay que
+enunciarla por lo que excluye.* Su procedencia es una propiedad del **reclamo de calidad de
+un delegado**; la nuestra es un orden sobre **tipos de evidencia**, y ese orden es lo que
+una regla lee. No reportan retículo, ni piso sobre acciones irreversibles, ni curva
+riesgo-cobertura — miden exactitud de ruteo. Lo que queda nuestro es la conjunción de: un
+**retículo de procedencia sobre evidencia**, un **piso que gatea acciones irreversibles**
+con él, la abstención tasada como **curva riesgo-cobertura medida**, y el mismo cálculo
+aplicado a factibilidad, control y contenido. Cualquier término suelto de eso tiene
+antecedentes.
+
 ## 2.5 Predicción selectiva y aprender a diferir
 
 Nuestra teoría es una aplicación de un marco establecido. La regla de Chow da el rechazo
