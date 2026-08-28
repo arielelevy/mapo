@@ -108,7 +108,7 @@
 - [ ] pip-audit nunca corrido
 
 **Teoría — pizarra, bloquea a F6**
-- [ ] T-1 · semántica formal del contrato
+- [~] **T-1** · **semántica escrita** (`CONTRATOS.es.md`): tres clases con su proposición exacta, y el residuo formalizado como `⟦o⟧ ∖ π_C(o)` — que es donde vive el mis-binding. Falta implementar `π_C` para al menos una clase
 - [ ] T-2 · red-team de mis-binding
 - [ ] T-3 · teorema de soundness del ensamblador
 - [~] **T-4** · **cota nativa derivada y verificada** (`COTA_RATCHET.es.md`, test §22): daño total ≤ 2 subidas por región **para siempre**; la replicación es fuerte lejos del umbral (1 en 39.613) y **débil cerca** (1 en 3,7). Falta medir la pérdida de cobertura por endurecimiento (Parte 3)
