@@ -505,6 +505,41 @@ so its argmax coincides. The plasticity that GOVERNS is elsewhere — θ's reinf
 the §6.2 assurance ratchet; the weight column is record, not policy, and the operational
 story should stop implying otherwise (handoff Fase 0, item 5).
 
+**The full chain of pre-emption, measured (2026-08-27).** Separating the runtime
+detector from the grading gold — the fix `CIERRE` §3.8.2 asks for — was measured for free
+by passing the decision a task whose `oracle` is empty wherever **verifying is not cheaper
+than solving**: a single fact can be checked by looking (C1), a trigger is present or not
+(C7), but verifying that a list is COMPLETE (C2/C4), that a chain ended right (C3), or
+when to stop (C5) *is* doing the task. Result on the held-out corpus:
+
+| configuration | cascade | probe | defer | gate | **specialise** |
+|---|---:|---:|---:|---:|---:|
+| as P16 runs it | 21 | 0 | 1 | 4 | **0** |
+| + hierarchical + backoff | 21 | 0 | 1 | 4 | **0** |
+| + honest runtime detector | 2 | **14** | 6 | 4 | **0** |
+
+Removing the oracle does not hand the decision to selection — it hands it to
+`probe_before_deciding_on_bulk` at priority 80, which also outranks specialise at 70. And
+`probe_then_decide` is by construction a TWO-step action: probe, *then* decide. **The
+bench takes a single `plan()` call and never takes the second step**, so on those 14 tasks
+it measures a placeholder rather than a decision. That two-step cycle exists — it is what
+`serve.answer()` does, and what `/decide` does — but only on the product path, never in
+`report()`.
+
+So selection is pre-empted three times over, and each is a different kind of problem:
+**by the oracle** (a corpus-design artifact: gradeability implies a detector), **by the
+probe** (correct behaviour: do not specialise on unmeasured coupling), and **by the bench
+never resolving the probe** (a measurement gap: the harness evaluates one step of a
+two-step rule). Only the first is an artifact; the second is the layer working; the third
+is the one to fix, and it costs a model call per task — which is precisely the governance
+cost the thesis says should be priced rather than assumed away.
+
+**What P17 needs, now fully specified**: honest runtime detectors per cell, the probe
+executed and the plan re-derived inside the bench's decision path (as `serve.answer()`
+already does), the probe's cost charged, and only then a registered prediction about
+selection. Anything short of that measures the machinery around the claim instead of the
+claim.
+
 **The bench cannot measure selection, and the reason is structural (measured,
 2026-08-27).** Chasing why θ never specialises produced a second, independent cause, and
 this one is not a tuning problem:
