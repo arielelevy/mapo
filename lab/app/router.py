@@ -316,9 +316,16 @@ class Router:
                 cobertura_excluidos = [p for p in candidates if p not in recorren]
                 candidates = recorren
             else:
-                # NINGUNO RECORRE. No se poda a cero y se sigue con todos, porque podar a
-                # cero convertiria una precondicion en una abstencion universal. Se DICE,
-                # y el EXPLAIN lleva que la garantia no se pudo imponer.
+                # NINGUNO RECORRE, y lo que se hace con eso DEPENDE DEL DIAL — no es una
+                # sola respuesta. Podar a cero seria una abstencion universal; seguir y
+                # anotarlo seria contestar igual con una nota que nadie lee.
+                #
+                # A0/A1: se sigue. Una respuesta desde una muestra es aceptable ahi, y el
+                #        registro dice que la precondicion no se pudo imponer.
+                # A2/A3: se GATEA. No se puede sostener una afirmacion sobre un dominio
+                #        entero sin ninguna topologia capaz de recorrerlo, y a esos
+                #        niveles lo que se afirma hay que poder defenderlo. Abstenerse ES
+                #        el producto: la curva riesgo-cobertura se reporta, no se esconde.
                 cobertura_no_impuesta = (
                     "cobertura exhaustiva exigida sobre material masivo y ningun "
                     "candidato recorre el alcance por construccion: la precondicion NO "
@@ -367,7 +374,7 @@ class Router:
         return self._materialise(
             verdict, decision, profile, admissible, excluded, best, infeasible,
             region=region, models=models, pairs=modelos_por_paradigma,
-            extra_notes=avisos,
+            extra_notes=avisos, coverage_unenforceable=bool(cobertura_no_impuesta),
         )
 
     def _cost_key(self, region: str, paradigm: str) -> float:
@@ -395,6 +402,7 @@ class Router:
         models: "Sequence[Model] | None" = None,
         pairs: dict[str, list[str]] | None = None,
         extra_notes: list[str] | None = None,
+        coverage_unenforceable: bool = False,
     ) -> Plan:
         """Turn a rule action into a concrete plan under the assurance profile."""
         notes: list[str] = list(extra_notes or [])
@@ -447,6 +455,19 @@ class Router:
             paradigm, plan_ladder, gated, probe = fallback, [fallback], False, False
         else:
             raise ValueError(f"Unknown rule action: {action}")
+
+        # LA PRECONDICION DE COBERTURA GATEA, y va DESPUES de la regla a proposito: no
+        # compite con ella por prioridad, la corrige. Una precondicion que no se puede
+        # imponer no cambia CUAL paradigma conviene — cambia si se puede contestar.
+        if coverage_unenforceable and decision.level >= Assurance.ACCOUNTABLE:
+            gated = True
+            notes.append(
+                f"GATEADO por {decision.level.label}: la pregunta exige cobertura total "
+                f"sobre material masivo y ninguna topologia admisible recorre el alcance "
+                f"por construccion. A este nivel lo que se afirma hay que poder "
+                f"defenderlo, y una afirmacion sobre un dominio que nadie recorrio no se "
+                f"puede. Abstenerse es la respuesta, no un fallo"
+            )
 
         if infeasible:
             notes.append(

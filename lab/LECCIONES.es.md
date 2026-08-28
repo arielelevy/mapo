@@ -1696,6 +1696,46 @@ tareas del corpus estaba a una línea de distancia.
 
 ---
 
+### 5.18 Auto-escalar al modelo caro no sirve porque fallar no es raro · `MEDIDO`
+
+El planteo: nano por defecto y un modelo poderoso **sólo cuando hace falta**, quizá
+auto-escalando al detectar una falla. Medido sobre el registro:
+
+| | |
+|---|---:|
+| celdas con `u < 1` | **72,0%** (144 de 200) |
+| gasto si se escalan esas | **19,0×** el de hoy |
+| escalar el 100% | 26× |
+| λ de indiferencia | **0,0300** |
+
+**Escalar-al-fallar no es selectivo porque fallar no es raro.** Con 72% de fallas,
+«escalar cuando falla» ≈ «escalar siempre», y 19× contra 26× no es una política: es la
+misma política con un rodeo. Y el λ de 0,030 es una **cota optimista** — supone que el
+caro acierta el **100%** de lo que el barato erró, que nadie midió. Con 50% de acierto, se
+parte al medio.
+
+**Y el ejemplo de `C3` es el peor caso, no el mejor.** `HONEST_DETECTORS` dice que ahí
+verificar **es** resolver: comprobar el extremo de una cadena significa recorrerla. En C3 el
+auto-escalado degenera en escalar siempre o no enterarse nunca. **56% de las filas** tienen
+detector barato; el 44% restante no, y ahí «escalar al fallar» no tiene con qué dispararse.
+
+**Lo que sí es sano, y ya está construido: elegir el modelo *ex ante*.** La ventaja del caro
+depende de la **dificultad**, y eso es una propiedad del request que la región ya mide —
+`X-5e` lo midió: **0,81×** los tokens del barato en `gold_deep` y **1,90×** en `gold_v2`.
+Gana donde es difícil. Eso se decide antes de gastar, con aritmética y creencias, que es
+exactamente `X-5b`/`X-5f`.
+
+> **La única señal de runtime que vale no es «falló»: es «el contrato se negó».** `fill()`
+> que no emite, `complete()` que no cubre, `absence()` sin dominio recorrido, la cobertura
+> inimponible. Son hechos **`COMPUTED`** sobre lo que el modelo produjo, no su opinión sobre
+> si le fue bien — y esa diferencia es la que impide que el flujo de control vuelva al
+> sensor. Además son **raras por construcción**: sólo disparan cuando una garantía no se
+> puede sostener, que es la escasez que la economía exige.
+
+Cuánta falla atrapan los contratos es lo único que falta para decidir, y no está medido.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

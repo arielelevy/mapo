@@ -1944,6 +1944,83 @@ def check_handoff_authorisation(ok: bool) -> bool:
     return ok
 
 
+def check_coverage_precondition_abstains(ok: bool) -> bool:
+    """§51: cuando la precondicion de cobertura no se puede imponer, el dial decide.
+
+    LA HISTORIA, porque el error importa mas que el arreglo. `U-2` pidio combinar demanda
+    x material. Primer intento: una regla de `GATE`, que mataba a `C2` entera. Segundo:
+    una precondicion estructural que poda por `TRAVERSES_SCOPE` — correcta, con test, y
+    **doblemente inerte**: ningun corpus declaraba `coverage_demanded`, y la interseccion
+    entre los brazos que recorren y la fila activa es VACIA. La cerre como hecha.
+
+    LO QUE FALTABA ERA UNA DECISION DE PRODUCTO, no codigo. Ninguna topologia admisible
+    recorre el alcance, asi que la garantia no se puede imponer. Que se hace con eso
+    DEPENDE DEL DIAL:
+
+      A0/A1   se sigue. Una respuesta desde una muestra es aceptable a ese nivel, y el
+              registro dice que la precondicion no se pudo imponer
+      A2/A3   se GATEA. No se sostiene una afirmacion sobre un dominio entero sin ninguna
+              topologia capaz de recorrerlo, y a esos niveles lo que se afirma hay que
+              poder defenderlo
+
+    ABSTENERSE ES EL PRODUCTO, no un fallo: la curva riesgo-cobertura se reporta.
+    """
+    import json
+    from app.assurance import Assurance
+    from app.paradigms import COST_PRIORS, TRAVERSES_SCOPE
+    from app.policy import PolicyBundle
+    from app.router import Router
+
+    print("\n--- 51. la precondicion de cobertura se abstiene por dial ---")
+
+    raiz = Path("corpus/gold_guards")
+    if not (raiz / "tasks.json").exists():
+        # SIN CORPUS NO SE INVENTA UNO. Se declara y se sigue: un test que fabrica su
+        # propio mundo para pasar no prueba que el mundo real lo dispare, que es
+        # exactamente lo que `_audit_inerte.py` existe para atrapar.
+        ok &= check("corpus `gold_guards` ausente — SIN N, y se dice", True)
+        return ok
+
+    tasks = json.loads((raiz / "tasks.json").read_text(encoding="utf-8"))
+    docs = json.loads((raiz / "documents.json").read_text(encoding="utf-8"))
+    C = ["react", "dag_strategy", "rewoo", "gist_reader"]
+    router = Router(PolicyBundle.cold_start("react", 0.0).sign(), COST_PRIORS, "react")
+
+    disparan = [
+        t for t in tasks
+        if t.get("coverage_demanded") == "exhaustive" and len(t["unit_ids"]) > 8
+    ]
+    ok &= check(f"el corpus DESPIERTA la precondicion ({len(disparan)} tareas): una "
+                f"guarda que nunca disparo no es una guarda", len(disparan) >= 1)
+    ok &= check("y ningun candidato de la fila activa recorre el alcance, que es lo que "
+                "hace inimponible a la garantia",
+                not (set(C) & set(TRAVERSES_SCOPE)))
+
+    def gateadas(nivel):
+        n = 0
+        for t in disparan:
+            try:
+                n += router.plan(t, region="many/nooracle/loose", candidates=C,
+                                 documents=docs, requested=nivel).gated
+            except ValueError:
+                pass
+        return n
+
+    ok &= check("A1 sigue: una respuesta desde una muestra es aceptable ahi",
+                gateadas(Assurance.STANDARD) == 0)
+    ok &= check(f"A2 GATEA las {len(disparan)}: lo que se afirma hay que poder defenderlo",
+                gateadas(Assurance.ACCOUNTABLE) == len(disparan))
+    ok &= check("A3 tambien", gateadas(Assurance.CERTIFIED) == len(disparan))
+
+    plan = router.plan(disparan[0], region="many/nooracle/loose", candidates=C,
+                       documents=docs, requested=Assurance.ACCOUNTABLE)
+    ok &= check("y el motivo dice POR QUE, no solo que se gateo",
+                any("recorre el alcance" in n for n in plan.notes))
+    ok &= check("el EXPLAIN lo lleva: una abstencion que no se registra no se audita",
+                plan.explain()["gated"] is True)
+    return ok
+
+
 def check_board_is_a_tool_for_everyone(ok: bool) -> bool:
     """§50: el blackboard es una HERRAMIENTA, ofrecida a todos los patrones por igual.
 
@@ -3013,6 +3090,7 @@ def main() -> int:
     ok = check_the_code_draws_the_graph(ok)
     ok = check_retrieval_is_a_factor(ok)
     ok = check_board_is_a_tool_for_everyone(ok)
+    ok = check_coverage_precondition_abstains(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

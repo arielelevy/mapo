@@ -1,0 +1,1518 @@
+[
+  {
+    "task_id": "c1-000",
+    "cell": "C1_single_verifiable",
+    "question": "What is the settlement account on file for Marta Arrieta?",
+    "oracle": [
+      "AR4430132713"
+    ],
+    "unit_ids": [
+      "memo-000"
+    ],
+    "budget_tokens": 8000,
+    "relevant_units": [
+      "memo-000"
+    ],
+    "has_oracle": true,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 1,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00082,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c7-000-neg",
+    "cell": "C7_irreversible",
+    "question": "Decide whether the engagement for Marta Arrieta should be escalated for freezing, based only on the supplied units. Answer 'escalate' or 'no escalation'.",
+    "oracle": [
+      "no escalation"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007"
+    ],
+    "budget_tokens": 20000,
+    "relevant_units": [],
+    "has_oracle": true,
+    "irreversible": true,
+    "shared_writes": false,
+    "truth_n_units": 8,
+    "truth_coupling": 0.1,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00205,
+    "answer_cardinality": "boolean",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c7-000-pos",
+    "cell": "C7_irreversible",
+    "question": "Decide whether the engagement for Marta Arrieta should be escalated for freezing, based only on the supplied units. Answer 'escalate' or 'no escalation'.",
+    "oracle": [
+      "escalate"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "alert-000"
+    ],
+    "budget_tokens": 20000,
+    "relevant_units": [
+      "alert-000"
+    ],
+    "has_oracle": true,
+    "irreversible": true,
+    "shared_writes": false,
+    "truth_n_units": 9,
+    "truth_coupling": 0.1,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00205,
+    "answer_cardinality": "boolean",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  },
+  {
+    "task_id": "w1-000-pos",
+    "cell": "W1_shared_writes",
+    "question": "Decide whether the settlement record for Marta Arrieta can be updated now, based only on the supplied units. Answer 'safe to write' or 'conflict'.",
+    "oracle": [
+      "conflict"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "lock-000"
+    ],
+    "budget_tokens": 20000,
+    "relevant_units": [
+      "lock-000"
+    ],
+    "has_oracle": true,
+    "irreversible": false,
+    "shared_writes": true,
+    "truth_n_units": 0,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00205,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c3-000-h1",
+    "cell": "C3_coupled_chain",
+    "question": "Starting from Ignacio Arrieta, follow the reporting line upward 1 step(s). Report the settlement account on file for that final person.",
+    "oracle": [
+      "AR4430132713"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "memo-016",
+      "memo-017",
+      "memo-018",
+      "memo-019",
+      "memo-020",
+      "memo-021",
+      "memo-022",
+      "memo-023",
+      "memo-024",
+      "memo-025",
+      "memo-026",
+      "memo-027",
+      "memo-028",
+      "memo-029",
+      "memo-030",
+      "memo-031",
+      "memo-032",
+      "memo-033",
+      "memo-034",
+      "memo-035",
+      "memo-036",
+      "memo-037",
+      "memo-038",
+      "memo-039"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [
+      "memo-000",
+      "memo-001"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 40,
+    "truth_coupling": 0.6000000000000001,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c2-000-w4",
+    "cell": "C2_bulk_independent",
+    "question": "Across all supplied units, list every individual whose role is 'director'. Return names only.",
+    "oracle": [
+      "Lucia Arrieta"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [
+      "memo-002"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "enumerative",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "semantic",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c4-000-w4",
+    "cell": "C4_aggregate_full_coverage",
+    "question": "How many individuals across the supplied units are based in Rosario? Answer with the number only.",
+    "oracle": [
+      "0"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.2,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "aggregate",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c5-000-w4",
+    "cell": "C5_unknown_horizon",
+    "question": "Exactly one individual has contradictory city information across the supplied units. Name that individual.",
+    "oracle": [
+      "Lucia Arrieta"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "amend-002-w004"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [
+      "amend-002-w004",
+      "memo-002"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.7,
+    "truth_horizon_unknown": true,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c8-000-w4",
+    "cell": "C8_currency",
+    "question": "What is the domicile of record currently on file for settlement account AR3553201973? Name the city only.",
+    "oracle": [
+      "Rosario"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "amend-002-w004"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [
+      "amend-002-w004"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.2,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c9-000-w4",
+    "cell": "C9_declared_roster",
+    "question": "For each of the following individuals, report the settlement account on file: Marta Arrieta, Ignacio Arrieta, Lucia Arrieta, Tomas Arrieta. Return one account per individual, in any order.",
+    "oracle": [
+      "AR2131080947",
+      "AR3553201973",
+      "AR4430132713",
+      "AR8797777875"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "enumerative",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_question",
+    "domain_keys": [
+      "Marta Arrieta",
+      "Ignacio Arrieta",
+      "Lucia Arrieta",
+      "Tomas Arrieta"
+    ]
+  },
+  {
+    "task_id": "b2-000-w4",
+    "cell": "B2_absence",
+    "question": "Which individuals hold the role of trustee? If none do, say so explicitly.",
+    "oracle": [],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [
+      "absence"
+    ],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "enumerative",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "d1-000-w4",
+    "cell": "D1_presupposition",
+    "question": "On what date did Marta Arrieta transfer the settlement account to the successor account? Report the date.",
+    "oracle": [
+      "no transfer is recorded"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [
+      "memo-000"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [
+      "presupposition"
+    ],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c2-000-w16",
+    "cell": "C2_bulk_independent",
+    "question": "Across all supplied units, list every individual whose role is 'director'. Return names only.",
+    "oracle": [
+      "Lucia Arrieta",
+      "Sofia Arrieta"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "note-001",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "note-002",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "note-003"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [
+      "memo-002",
+      "memo-006"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 20,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "enumerative",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "semantic",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c4-000-w16",
+    "cell": "C4_aggregate_full_coverage",
+    "question": "How many individuals across the supplied units are based in Rosario? Answer with the number only.",
+    "oracle": [
+      "0"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "note-001",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "note-002",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "note-003"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 20,
+    "truth_coupling": 0.2,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "aggregate",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c5-000-w16",
+    "cell": "C5_unknown_horizon",
+    "question": "Exactly one individual has contradictory city information across the supplied units. Name that individual.",
+    "oracle": [
+      "Ramiro Arrieta"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "amend-005-w016"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [
+      "amend-005-w016",
+      "memo-005"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 17,
+    "truth_coupling": 0.7,
+    "truth_horizon_unknown": true,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c8-000-w16",
+    "cell": "C8_currency",
+    "question": "What is the domicile of record currently on file for settlement account AR5933769562? Name the city only.",
+    "oracle": [
+      "Rosario"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "amend-005-w016"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [
+      "amend-005-w016"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 17,
+    "truth_coupling": 0.2,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c9-000-w16",
+    "cell": "C9_declared_roster",
+    "question": "For each of the following individuals, report the settlement account on file: Marta Arrieta, Damian Arrieta, Renata Arrieta, Ramiro Arrieta, Agustina Arrieta. Return one account per individual, in any order.",
+    "oracle": [
+      "AR1105849744",
+      "AR1669924867",
+      "AR1927762285",
+      "AR4430132713",
+      "AR5933769562"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "note-001",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "note-002",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "note-003"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [
+      "memo-000",
+      "memo-005",
+      "memo-007",
+      "memo-012",
+      "memo-014"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 20,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "enumerative",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_question",
+    "domain_keys": [
+      "Marta Arrieta",
+      "Damian Arrieta",
+      "Renata Arrieta",
+      "Ramiro Arrieta",
+      "Agustina Arrieta"
+    ]
+  },
+  {
+    "task_id": "b2-000-w16",
+    "cell": "B2_absence",
+    "question": "Which individuals hold the role of trustee? If none do, say so explicitly.",
+    "oracle": [],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "note-001",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "note-002",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "note-003"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 20,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [
+      "absence"
+    ],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "enumerative",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "d1-000-w16",
+    "cell": "D1_presupposition",
+    "question": "On what date did Marta Arrieta transfer the settlement account to the successor account? Report the date.",
+    "oracle": [
+      "no transfer is recorded"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "note-001",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "note-002",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "note-003"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [
+      "memo-000"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 20,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [
+      "presupposition"
+    ],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c1-001",
+    "cell": "C1_single_verifiable",
+    "question": "What is the settlement account on file for Ignacio Arrieta?",
+    "oracle": [
+      "AR2131080947"
+    ],
+    "unit_ids": [
+      "memo-001"
+    ],
+    "budget_tokens": 8000,
+    "relevant_units": [
+      "memo-001"
+    ],
+    "has_oracle": true,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 1,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00082,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c7-001-neg",
+    "cell": "C7_irreversible",
+    "question": "Decide whether the engagement for Ignacio Arrieta should be escalated for freezing, based only on the supplied units. Answer 'escalate' or 'no escalation'.",
+    "oracle": [
+      "no escalation"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007"
+    ],
+    "budget_tokens": 20000,
+    "relevant_units": [],
+    "has_oracle": true,
+    "irreversible": true,
+    "shared_writes": false,
+    "truth_n_units": 8,
+    "truth_coupling": 0.1,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00205,
+    "answer_cardinality": "boolean",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c7-001-pos",
+    "cell": "C7_irreversible",
+    "question": "Decide whether the engagement for Ignacio Arrieta should be escalated for freezing, based only on the supplied units. Answer 'escalate' or 'no escalation'.",
+    "oracle": [
+      "escalate"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "alert-001"
+    ],
+    "budget_tokens": 20000,
+    "relevant_units": [
+      "alert-001"
+    ],
+    "has_oracle": true,
+    "irreversible": true,
+    "shared_writes": false,
+    "truth_n_units": 9,
+    "truth_coupling": 0.1,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00205,
+    "answer_cardinality": "boolean",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  },
+  {
+    "task_id": "w1-001-neg",
+    "cell": "W1_shared_writes",
+    "question": "Decide whether the settlement record for Ignacio Arrieta can be updated now, based only on the supplied units. Answer 'safe to write' or 'conflict'.",
+    "oracle": [
+      "safe to write"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007"
+    ],
+    "budget_tokens": 20000,
+    "relevant_units": [],
+    "has_oracle": true,
+    "irreversible": false,
+    "shared_writes": true,
+    "truth_n_units": 0,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00205,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c3-001-h2",
+    "cell": "C3_coupled_chain",
+    "question": "Starting from Bruno Arrieta, follow the reporting line upward 2 step(s). Report the settlement account on file for that final person.",
+    "oracle": [
+      "AR1927762285"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "memo-016",
+      "memo-017",
+      "memo-018",
+      "memo-019",
+      "memo-020",
+      "memo-021",
+      "memo-022",
+      "memo-023",
+      "memo-024",
+      "memo-025",
+      "memo-026",
+      "memo-027",
+      "memo-028",
+      "memo-029",
+      "memo-030",
+      "memo-031",
+      "memo-032",
+      "memo-033",
+      "memo-034",
+      "memo-035",
+      "memo-036",
+      "memo-037",
+      "memo-038",
+      "memo-039"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [
+      "memo-012",
+      "memo-013",
+      "memo-015"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 40,
+    "truth_coupling": 0.8,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c2-001-w4",
+    "cell": "C2_bulk_independent",
+    "question": "Across all supplied units, list every individual whose role is 'signatory'. Return names only.",
+    "oracle": [
+      "Ignacio Arrieta"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [
+      "memo-001"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "enumerative",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "semantic",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c4-001-w4",
+    "cell": "C4_aggregate_full_coverage",
+    "question": "How many individuals across the supplied units are based in Mendoza? Answer with the number only.",
+    "oracle": [
+      "0"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.2,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "aggregate",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c5-001-w4",
+    "cell": "C5_unknown_horizon",
+    "question": "Exactly one individual has contradictory city information across the supplied units. Name that individual.",
+    "oracle": [
+      "Tomas Arrieta"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "amend-003-w004"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [
+      "amend-003-w004",
+      "memo-003"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.7,
+    "truth_horizon_unknown": true,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c8-001-w4",
+    "cell": "C8_currency",
+    "question": "What is the domicile of record currently on file for settlement account AR8797777875? Name the city only.",
+    "oracle": [
+      "Rosario"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "amend-003-w004"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [
+      "amend-003-w004"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.2,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c9-001-w4",
+    "cell": "C9_declared_roster",
+    "question": "For each of the following individuals, report the settlement account on file: Ignacio Arrieta, Lucia Arrieta, Tomas Arrieta, Marta Arrieta. Return one account per individual, in any order.",
+    "oracle": [
+      "AR2131080947",
+      "AR3553201973",
+      "AR4430132713",
+      "AR8797777875"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "enumerative",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_question",
+    "domain_keys": [
+      "Ignacio Arrieta",
+      "Lucia Arrieta",
+      "Tomas Arrieta",
+      "Marta Arrieta"
+    ]
+  },
+  {
+    "task_id": "b2-001-w4",
+    "cell": "B2_absence",
+    "question": "Which individuals hold the role of nominee shareholder? If none do, say so explicitly.",
+    "oracle": [],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [
+      "absence"
+    ],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "enumerative",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "d1-001-w4",
+    "cell": "D1_presupposition",
+    "question": "On what date did Ignacio Arrieta transfer the settlement account to the successor account? Report the date.",
+    "oracle": [
+      "no transfer is recorded"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [
+      "memo-001"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 5,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [
+      "presupposition"
+    ],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c2-001-w16",
+    "cell": "C2_bulk_independent",
+    "question": "Across all supplied units, list every individual whose role is 'signatory'. Return names only.",
+    "oracle": [
+      "Agustina Arrieta",
+      "Damian Arrieta",
+      "Ignacio Arrieta",
+      "Julieta Arrieta",
+      "Nicolas Arrieta",
+      "Valeria Arrieta"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "note-001",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "note-002",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "note-003"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [
+      "memo-001",
+      "memo-004",
+      "memo-007",
+      "memo-009",
+      "memo-010",
+      "memo-012"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 20,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "enumerative",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "semantic",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c4-001-w16",
+    "cell": "C4_aggregate_full_coverage",
+    "question": "How many individuals across the supplied units are based in Mendoza? Answer with the number only.",
+    "oracle": [
+      "1"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "note-001",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "note-002",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "note-003"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [
+      "memo-010"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 20,
+    "truth_coupling": 0.2,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "aggregate",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c5-001-w16",
+    "cell": "C5_unknown_horizon",
+    "question": "Exactly one individual has contradictory city information across the supplied units. Name that individual.",
+    "oracle": [
+      "Lucia Arrieta"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "amend-002-w016"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [
+      "amend-002-w016",
+      "memo-002"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 17,
+    "truth_coupling": 0.7,
+    "truth_horizon_unknown": true,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c8-001-w16",
+    "cell": "C8_currency",
+    "question": "What is the domicile of record currently on file for settlement account AR3553201973? Name the city only.",
+    "oracle": [
+      "Rosario"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "amend-002-w016"
+    ],
+    "budget_tokens": 60000,
+    "relevant_units": [
+      "amend-002-w016"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 17,
+    "truth_coupling": 0.2,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.00615,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "c9-001-w16",
+    "cell": "C9_declared_roster",
+    "question": "For each of the following individuals, report the settlement account on file: Ignacio Arrieta, Camila Arrieta, Bruno Arrieta, Sofia Arrieta, Emilio Arrieta. Return one account per individual, in any order.",
+    "oracle": [
+      "AR2131080947",
+      "AR3484058116",
+      "AR3851711997",
+      "AR7640517687",
+      "AR9017946559"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "note-001",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "note-002",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "note-003"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [
+      "memo-001",
+      "memo-006",
+      "memo-008",
+      "memo-013",
+      "memo-015"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 20,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "enumerative",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_question",
+    "domain_keys": [
+      "Ignacio Arrieta",
+      "Camila Arrieta",
+      "Bruno Arrieta",
+      "Sofia Arrieta",
+      "Emilio Arrieta"
+    ]
+  },
+  {
+    "task_id": "b2-001-w16",
+    "cell": "B2_absence",
+    "question": "Which individuals hold the role of nominee shareholder? If none do, say so explicitly.",
+    "oracle": [],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "note-001",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "note-002",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "note-003"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 20,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [
+      "absence"
+    ],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "enumerative",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_scope",
+    "domain_keys": []
+  },
+  {
+    "task_id": "d1-001-w16",
+    "cell": "D1_presupposition",
+    "question": "On what date did Ignacio Arrieta transfer the settlement account to the successor account? Report the date.",
+    "oracle": [
+      "no transfer is recorded"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "note-001",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "note-002",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "note-003"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [
+      "memo-001"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 20,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [
+      "presupposition"
+    ],
+    "budget_usd": 0.0041,
+    "answer_cardinality": "singular",
+    "coverage_demanded": "sufficient",
+    "completeness_domain": "none",
+    "domain_keys": []
+  }
+]

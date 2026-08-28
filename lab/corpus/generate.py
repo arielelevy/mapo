@@ -1044,6 +1044,53 @@ REQUEST_DEMANDS: dict[str, tuple[str, str, str]] = {
 }
 
 
+# MEZCLA DE SALIDA PROYECTADA, para convertir un presupuesto de tokens en uno de plata.
+# Es una COTA ALTA y no la media medida (0,3% a 9,9% segun el brazo): sub-proyectar la
+# salida agranda el presupuesto en plata, y un presupuesto inflado no poda lo que no
+# entraba. La factibilidad no puede admitir planes que no entran.
+PROJECTED_COMPLETION_SHARE = 0.15
+
+# HOLGURA sobre el presupuesto derivado. `1.0` es exacto: la plata alcanza para
+# exactamente los tokens declarados al arancel de referencia, ni uno mas.
+#
+# POR QUE EXACTO Y NO GENEROSO. Con holgura, la cota de plata nunca poda nada y vuelve a
+# ser una guarda que no dispara — que es el problema que esta linea existe para arreglar.
+# Con holgura exacta, el modelo BARATO entra y el CARO no, y eso no es un truco: es
+# literalmente lo que significa presupuestar en plata en vez de en tokens.
+MONEY_BUDGET_SLACK = 1.0
+
+
+def apply_money_budget(tasks: list[Task], prompt_per_mtok: float,
+                       completion_per_mtok: float) -> list[Task]:
+    """Declarar `budget_usd` derivado del presupuesto de tokens al arancel de referencia.
+
+    POR QUE DERIVADO Y NO INDEPENDIENTE. Un despliegue no inventa dos presupuestos: tiene
+    uno, y lo expresa en la unidad que le cobran. Derivarlo dice exactamente eso — «esta
+    plata corresponde a estos tokens al precio que pago»— y NO agrega informacion nueva
+    sobre la tarea, que es la propiedad que lo hace honesto.
+
+    LO QUE SI AGREGA es una cota que los tokens no pueden expresar: **el modelo**. Un
+    presupuesto dimensionado para el barato no alcanza para el caro, y eso es invisible
+    contando tokens porque los dos gastan los mismos. Es `X-5b` hecho dato.
+
+    EL ARANCEL ES REFERENCIA, no medicion (ver `app/tariffs.py`): ninguna conclusion puede
+    depender de su valor exacto. Lo que se puede afirmar es lo invariante — que existe un
+    presupuesto donde un modelo entra y otro no— y eso vale a cualquier precio con la
+    misma forma.
+    """
+    if prompt_per_mtok < 0 or completion_per_mtok < 0:
+        raise ValueError("Un precio de referencia no puede ser negativo.")
+    for task in tasks:
+        salida = task.budget_tokens * PROJECTED_COMPLETION_SHARE
+        entrada = task.budget_tokens - salida
+        task.budget_usd = round(
+            (entrada * prompt_per_mtok + salida * completion_per_mtok)
+            / 1_000_000 * MONEY_BUDGET_SLACK,
+            6,
+        )
+    return tasks
+
+
 def apply_request_demands(tasks: list[Task]) -> list[Task]:
     """Declarar el par (cardinalidad, cobertura) por celda. Falla si falta la celda."""
     for task in tasks:
@@ -1097,6 +1144,19 @@ def main() -> None:
              "             solving, instead of True everywhere. The gold oracle is\n"
              "             untouched: only what the DECISION is told changes.",
     )
+    # EL ARANCEL DE REFERENCIA, explicito y sin default oculto. Se piden los dos precios
+    # por separado porque entrada y salida no valen lo mismo, y los paradigmas se
+    # diferencian justo en esa proporcion: un solo numero promediaria dos precios.
+    parser.add_argument(
+        "--ref-prompt-per-mtok", type=float, default=0.05,
+        help="Precio de REFERENCIA de entrada por millon de tokens, para derivar\n"
+             "             `budget_usd`. Referencia, no medicion: ninguna conclusion\n"
+             "             puede depender de su valor exacto.",
+    )
+    parser.add_argument(
+        "--ref-completion-per-mtok", type=float, default=0.40,
+        help="Idem para la salida. Tipicamente varias veces la entrada.",
+    )
     parser.add_argument(
         "--hard", action="store_true",
         help="Varied phrasing, near-miss distractors and padding. Removes the\n             lexical shortcut that made every fact findable with one search.",
@@ -1119,6 +1179,14 @@ def main() -> None:
     # capa de decision recibe — se registran como se registra `truth_n_units`, para que
     # el estudio pueda preguntar si el eje importa ANTES de pagar por elicitarlo.
     tasks = apply_request_demands(tasks)
+    # SIEMPRE, y por la misma razon que las demandas: un corpus donde ninguna tarea
+    # declara presupuesto en plata deja dormida la cota de `check_pair`, y una guarda que
+    # nunca disparo no es una guarda — es una intencion (`_audit_inerte.py`).
+    tasks = apply_money_budget(
+        tasks,
+        prompt_per_mtok=args.ref_prompt_per_mtok,
+        completion_per_mtok=args.ref_completion_per_mtok,
+    )
 
     max_width = max(widths)
     if max_width > args.people:
