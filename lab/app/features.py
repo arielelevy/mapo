@@ -193,6 +193,36 @@ horizon_unknown = true if the number of steps required cannot be known in advanc
 No prose. No markdown fences. JSON only."""
 
 
+def has_runtime_detector(task: dict[str, Any]) -> bool:
+    """Si existe un detector barato EN RUNTIME — no si el banco tiene clave de respuestas.
+
+    POR QUE ES UNA FUNCION Y NO DOS LINEAS. Esto se leia en dos lugares —el segmento de
+    region, aca; y la creencia `has_oracle`, en `rules.py`— y los dos derivaban el valor
+    de `bool(task["oracle"])`, o sea del GOLD. Eran la misma idea escrita dos veces, que
+    es como empiezan a separarse: una simulacion que piso solo la region reporto CERO
+    cambio, porque reetiquetar una region no cambia lo que una regla cree. Ahora hay un
+    solo lugar donde vive la definicion.
+
+    POR QUE IMPORTA. Mientras el detector se derivara del gold, toda tarea corregible
+    tenia detector — 25 de 26 en cada corpus del registro. Con detector en todas, la
+    regla de cascada dispara en prioridad 90 y la de seleccion, en 70, no se evalua
+    nunca. El banco no podia medir seleccion porque SER CORREGIBLE IMPLICABA TENER
+    DETECTOR. Medido sobre `gold_p17`: leer el campo declarado hace caer la cascada de
+    22 a 2 de 26.
+
+    FALLA CERRADA. Una tarea sin el campo declarado levanta excepcion en vez de asumir
+    `True`, porque el default era el bug entero.
+    """
+    if "has_oracle" not in task:
+        raise KeyError(
+            f"La tarea {task.get('task_id', '?')!r} no declara `has_oracle`. Es la "
+            "capacidad de verificacion en RUNTIME, y no se deriva del gold: derivarla "
+            "era lo que impedia medir seleccion. Regenerar el corpus con "
+            "`--honest-detectors`."
+        )
+    return bool(task["has_oracle"])
+
+
 class FeatureExtractor:
     """Builds phi from a task record.
 
@@ -211,7 +241,7 @@ class FeatureExtractor:
         units = task.get("units") or []
         base = Features(
             n_units=len(units) if units else 1,
-            has_oracle=bool(task.get("oracle")),
+            has_oracle=has_runtime_detector(task),
             irreversible=bool(task.get("irreversible", False)),
             shared_writes=bool(task.get("shared_writes", False)),
             budget_tokens=int(task["budget_tokens"]),

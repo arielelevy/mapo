@@ -261,7 +261,8 @@ def check_product_path(ok: bool) -> bool:
 
     features, _ = FeatureExtractor().extract(
         {"question": request.question, "units": task["unit_ids"],
-         "oracle": task["oracle"], "irreversible": False, "shared_writes": False,
+         "oracle": task["oracle"], "has_oracle": task["has_oracle"],
+         "irreversible": False, "shared_writes": False,
          "budget_tokens": request.budget_tokens},
         allow_derived=False,
     )
@@ -276,6 +277,7 @@ def check_product_path(ok: bool) -> bool:
     it = irreversible.as_task()
     fi, _ = FeatureExtractor().extract(
         {"question": it["question"], "units": it["unit_ids"], "oracle": [],
+         "has_oracle": False,
          "irreversible": True, "shared_writes": False, "budget_tokens": 60_000},
         allow_derived=False,
     )
@@ -345,7 +347,7 @@ def check_rec_solver(ok: bool) -> bool:
 
     task = {"task_id": "t", "question": "q",
             "unit_ids": [f"u{i}" for i in range(20)],
-            "budget_tokens": 60_000, "oracle": []}
+            "budget_tokens": 60_000, "oracle": [], "has_oracle": False}
 
     # --- el caso con la forma de P15: bulk sin coupling medido -> probe_then_decide
     policy = BeliefPolicy(derived_floor=Provenance.OBSERVED, tau=0.3)
@@ -379,7 +381,7 @@ def check_rec_solver(ok: bool) -> bool:
 
     # --- una decision que ninguna creencia admitida cambia: sin deficits
     small = {"task_id": "s", "question": "q", "unit_ids": ["u1"],
-             "budget_tokens": 60_000, "oracle": ["x"]}
+             "budget_tokens": 60_000, "oracle": ["x"], "has_oracle": True}
     base_small = sense(small, policy)
     d_small = diagnose(base_small.as_dict()["beliefs"], policy, fallback="react")
     ok &= check("una decision insensible a creencias adquiribles reporta 0 deficits",
@@ -509,7 +511,8 @@ def check_decision_cycle(ok: bool) -> bool:
     units["u00"] = "la cuenta AR9911 figura en u07"
     units["u07"] = "AR9911 pertenece a alguien"
     task = {"task_id": "t", "question": "quien es el titular de AR9911?",
-            "unit_ids": sorted(units), "budget_tokens": 60_000, "oracle": []}
+            "unit_ids": sorted(units), "budget_tokens": 60_000, "oracle": [],
+            "has_oracle": False}
 
     bundle = PolicyBundle.cold_start(fallback=FALLBACK, tau=0.3)
     router = Router(bundle, COST_PRIORS, FALLBACK)

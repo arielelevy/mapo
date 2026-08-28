@@ -16,7 +16,7 @@
 
 **Bloqueantes**
 - [x] **B1** · veredicto de P16 — **P16a REFUTADA** (−1,2888), **P16c decisiva**: +0,1211 con λ=0 y adentro del ruido en λ=0,02 · P16d 26/26 · 0 infra · 13,95M tokens
-- [ ] **B2** · aplicar detectores honestos (`features.py:214` + `rules.py:248`)
+- [x] **B2** · detectores honestos aplicados — una sola función `has_runtime_detector`, falla cerrada; **P17a confirmada con el código real: cascada 2/26**
 - [ ] **B3** · correr P17 — la primera medición honesta de selección
 
 **Mediciones**
@@ -77,7 +77,7 @@
 - [~] **R-1** · verificar el replay sellado — *intentado y **no concluyente**: el replay de secuencias da 93/112 misses, pero es mucho más probable que sea el replay y no el caché. Hace falta un test que replaye una celda por el MISMO camino que el runner*
 - [ ] R-2 · celdas † de la grilla congelada `gpt-5-chat`
 - [ ] R-3 · barrer el paper por «declarado, no medido»
-- [ ] R-4 · `lab/ui/index.html` sin explicar — adoptarlo o sacarlo
+- [x] R-4 · `lab/ui/index.html` — **es la UI de prueba del autor**; se adopta
 - [ ] R-5 · 11 commits locales sin pushear
 
 **Decisiones dinámicas que hoy no gobierna nadie**

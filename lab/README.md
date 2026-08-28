@@ -596,6 +596,29 @@ selection pays, because on neither corpus could the selection rule fire: gradeab
 implied a detector, the cascade pre-empted at priority 90, and the bench took one step of
 a two-step rule. **P17 is the first corpus where the question can even be asked.**
 
+### The ordering was not caution, it was necessary — and here is the proof (2026-08-27)
+
+B2 (the honest-detector prerequisite) was deliberately held until P16's frozen verdict
+had been computed and recorded. After applying it, the analyzer was re-run against the
+same rows purely to check whether that discipline had bought anything:
+
+| | frozen verdict (before B2) | same rows, after B2 |
+|---|---:|---:|
+| routing utility | −0.8464 | **−1.2506** |
+| net vs best fixed | **−1.2888** | −1.6931 |
+| actions | cascade 20 · probe 1 · defer 1 | **cascade 22** |
+| C2 per cell | −0.2704 | **−1.7525** |
+
+`gold_p16` was generated before `--honest-detectors` existed, so it declares a detector
+on all 26 tasks while two C2 tasks carry an EMPTY gold list. Under the old rule those two
+read as "no detector"; under the new one they read as "detector". Both flip into the
+cascade, and the pre-registered number moves by 0.40.
+
+So the verdict that stands is the one in `p16_verdict.json` — computed under the rule
+that was in force when the prediction was registered. The re-run was reverted. Had the
+order been the other way round, **a pre-registered result would have been read through a
+rule that changed underneath it**, and nothing in the output would have said so.
+
 ### The Hebbian weight cannot be a better selector, and that is a proof, not a measurement (2026-08-27, `_analyze_hebbian.py`, zero tokens)
 
 `policy.py` updates `w ← (1−DECAY)·w + LEARNING_RATE·δ` with δ = +0.5 if the paradigm was

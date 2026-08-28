@@ -292,7 +292,8 @@ def check_clause_certification(ok: bool) -> bool:
             tid = f"t{i:03d}"
             tasks[tid] = {"task_id": tid, "question": "q",
                           "unit_ids": [f"u{j}" for j in range(20)],
-                          "budget_tokens": 60_000, "oracle": []}
+                          "budget_tokens": 60_000, "oracle": [],
+                          "has_oracle": False}
             regions[tid] = "many/no_oracle/unknown"
             utilities[tid] = {"react": 0.4, "rewoo": 0.4 + gain, "dag_strategy": 0.3}
         return World(corpus=corpus, tasks=tasks, regions=regions, utilities=utilities)

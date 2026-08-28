@@ -29,6 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .features import has_runtime_detector
 from .beliefs import (
     Belief,
     BeliefBase,
@@ -243,12 +244,15 @@ def sense(
         provenance=Provenance.COMPUTED,
         evidence=f"n_units={n_units} vs threshold {BULK_THRESHOLD}",
     ))
+    # ESTA es la que la cascada lee. La del segmento de region es la otra mitad, y las
+    # dos salen de la misma funcion a proposito: eran la misma idea escrita dos veces.
+    detector = has_runtime_detector(task)
     base.assert_(Belief(
         proposition="has_oracle",
-        value=bool(task.get("oracle")),
+        value=detector,
         credence=1.0,
         provenance=Provenance.COMPUTED,
-        evidence="task carries an exact-match oracle" if task.get("oracle")
+        evidence="a cheap runtime detector is declared for this task" if detector
                  else "no cheap failure detector available",
     ))
     base.assert_(Belief(

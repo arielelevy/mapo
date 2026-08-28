@@ -424,6 +424,10 @@ def _task_from_region(region: str) -> dict[str, Any]:
     n_units = {"single": 1, "few": 4, "many": 32, "bulk": 128}[card]
     return {
         "unit_ids": [f"u{i}" for i in range(n_units)],
+        # La region YA codifica el detector en su segundo segmento, asi que la
+        # reconstruccion lo lee de ahi en vez de inferirlo del gold. `oracle` queda por
+        # compatibilidad de forma: ningun camino de decision lo consulta.
+        "has_oracle": oracle == "oracle",
         "oracle": ["x"] if oracle == "oracle" else [],
         "irreversible": False,
         "shared_writes": False,
