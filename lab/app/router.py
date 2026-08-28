@@ -375,7 +375,8 @@ def _task_from_region(region: str) -> dict[str, Any]:
     recovers a representative point rather than the original task. Adequate for
     offline valuation, which only ever consults the region.
     """
-    card, oracle, _coupling = region.split("/")
+    parts = region.split("/")
+    card, oracle = parts[0], parts[1]
     n_units = {"single": 1, "few": 4, "many": 32, "bulk": 128}[card]
     return {
         "unit_ids": [f"u{i}" for i in range(n_units)],

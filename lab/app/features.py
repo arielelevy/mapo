@@ -24,6 +24,8 @@ prose-prompt routers lose. Cardinality is counted, never inferred from phrasing.
 from __future__ import annotations
 
 import json
+import re
+
 from dataclasses import dataclass, asdict
 from enum import Enum
 from typing import Any
@@ -54,6 +56,43 @@ DERIVED_FEATURES = tuple(
 )
 
 
+# Version of the region vocabulary. Bumped when an axis is added or a bucket changes:
+# a theta fitted under one vocabulary must never consume regions from another, and the
+# EXPLAIN records which one the decision spoke.
+REGION_VOCABULARY = "regions/2-continuation"
+
+
+def measure_continuation(
+    documents: dict[str, str], unit_ids: list[str]
+) -> bool | None:
+    """Does any identifier-like literal recur across DISTINCT units of this task?
+
+    Pure arithmetic over the declared material — the same epistemic class as counting
+    units. The token vocabulary is TYPED and closed: account-style identifiers
+    (letters+digits, e.g. AR9911) and unit-style identifiers (word-digits, e.g.
+    memo-014). This is not prose parsing: it is literal recurrence of a closed token
+    shape, verified by containment.
+
+    A key that appears in (almost) every unit is boilerplate, not a chain: recurrence
+    counts only between 2 units and half the scope. Returns None when the material is
+    not available to measure — absence of measurement, never a negative.
+    """
+    ids = [u for u in unit_ids if u in documents]
+    if len(ids) < 2:
+        return False if ids else None
+
+    token_shape = re.compile(r"\b[A-Z]{2,}\d{2,}\b|\b[a-z]+-\d{2,}\b")
+    seen: dict[str, set[str]] = {}
+    for unit_id in ids:
+        for token in set(token_shape.findall(documents[unit_id])):
+            if token == unit_id:
+                continue  # a unit naming itself is identity, not continuation
+            seen.setdefault(token, set()).add(unit_id)
+
+    ceiling = max(2, len(ids) // 2)
+    return any(2 <= len(units) <= ceiling for units in seen.values())
+
+
 @dataclass(frozen=True)
 class Features:
     """The phi vector.
@@ -72,6 +111,14 @@ class Features:
     # -- derived -----------------------------------------------------------
     coupling: float | None = None
     horizon_unknown: bool | None = None
+
+    # -- computed from the material, when the material is available ---------
+    # Whether an identifier literally RECURS across distinct units: the observable
+    # stand-in for "this material is chained" (PATRON_REC §5). None means the
+    # documents were not available to measure — never that the answer is no. This is
+    # the axis P15 showed missing: C5 fell into the same regions as C2/C4 because
+    # nothing in φ could tell chained material from independent material.
+    continuation: bool | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -120,7 +167,12 @@ class Features:
         else:
             coup = "tight"
 
-        return f"{card}/{oracle}/{coup}"
+        if self.continuation is None:
+            chain = "c?"
+        else:
+            chain = "chain" if self.continuation else "flat"
+
+        return f"{card}/{oracle}/{coup}/{chain}"
 
 
 COUPLING_PROMPT = """You estimate two structural properties of a task. Answer with JSON only.

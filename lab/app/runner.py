@@ -28,7 +28,10 @@ import httpx
 from .config import Settings
 from .llm import RETRYABLE_STATUS
 from .features import FeatureExtractor, Features
+from dataclasses import replace as dc_replace
+
 from .beliefs import Provenance
+from .features import measure_continuation
 from .llm import LLMClient, SealedCacheMiss, SeededClient, Usage
 from .metrics import Observation, Study
 from .paradigms import COST_PRIORS, FALLBACK, REGISTRY, Infeasible
@@ -218,7 +221,12 @@ class Runner:
             "budget_tokens": task["budget_tokens"],
         }
         features, _ = self._extractor.extract(payload, allow_derived=allow_derived)
-        return features
+        # Continuation is measured from the material itself — free, deterministic,
+        # COMPUTED. This is the axis whose absence P15 paid for.
+        return dc_replace(
+            features,
+            continuation=measure_continuation(self._documents, task["unit_ids"]),
+        )
 
     # -- execution ---------------------------------------------------------
 

@@ -34,7 +34,7 @@ from typing import Any
 from . import grading
 from .assurance import Assurance
 from .config import Settings
-from .features import FeatureExtractor
+from .features import FeatureExtractor, measure_continuation
 from .llm import LLMClient, Usage
 from .paradigms import COST_PRIORS, FALLBACK, REGISTRY
 from .policy import PolicyBundle
@@ -180,6 +180,10 @@ def answer(
             "budget_tokens": request.budget_tokens,
         },
         allow_derived=False,
+    )
+    features = replace(
+        features,
+        continuation=measure_continuation(request.documents, task["unit_ids"]),
     )
 
     def plan_with(coupling=None, provenance=None, credence=0.0, prior=None):

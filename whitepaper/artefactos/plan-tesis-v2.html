@@ -31,6 +31,8 @@
     --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
     --measure: 68ch;
     --wide: 1080px;
+    --ch-router: #0A8A76;
+    --ch-fixed:  #B0512F;
   }
 
   @media (prefers-color-scheme: dark) {
@@ -49,6 +51,8 @@
       --refuted:    #D98A6B;
       --refuted-bg: #2A1D18;
       --measured-bg:#122B28;
+      --ch-router: #3FA893;
+      --ch-fixed:  #C97B5B;
       --grade-1: var(--ink);
       --grade-2: var(--measured);
       --grade-3: var(--ink-3);
@@ -70,6 +74,8 @@
     --refuted:    #D98A6B;
     --refuted-bg: #2A1D18;
     --measured-bg:#122B28;
+      --ch-router: #3FA893;
+      --ch-fixed:  #C97B5B;
     --grade-1: var(--ink);
     --grade-2: var(--measured);
     --grade-3: var(--ink-3);
@@ -254,6 +260,79 @@
       <span class="label">El titular honesto</span>
       <p><strong>La selección sin sensado pierde contra un buen default fijo.</strong> El router perdió exactamente donde su sensado era ciego — y la maquinaria para des-cegarlo (la sonda, la estimación de horizonte) existe desde hoy y no estaba en el camino de decisión. Seguimiento exploratorio, no registrado: repetir el pase de decisión con la sonda aportando coupling/horizonte y medir cuánto de los −0,087 recupera.</p>
     </div>
+  
+    <h3>La descomposición del −0,087 (exploratorio, post-registro, mismo corpus)</h3>
+    <p>Tres mecanismos, verificados gratis sobre las filas ya pagadas: el <strong>eje de continuidad</strong> — recurrencia de clave entre unidades, función pura del material, COMPUTED — separa C5 perfecto en los tres corpus (6/6, sin falsos positivos en C1/C2/C4), pero solo no mueve el neto; el confound de régimen tampoco era; lo que lo mueve es <strong>puntuar la acción real</strong>: C5 tiene oráculo, la regla de cascada dispara, y la valuación puntuaba solo el primer peldaño cuando el producto escala al fallar (hallazgo 3.9.1 del handoff). El residuo es TODO C7: <strong>el precio del gate</strong>, que es deliberado.</p>
+
+<figure>
+  <svg viewBox="0 0 960 330" role="img" aria-label="Utilidad acumulada sobre las 26 tareas held-out: ruteo por acción real contra el mejor paradigma fijo">
+    <style>
+      .cg { stroke: var(--rule-soft); stroke-width: 1; }
+      .cg.h { stroke-dasharray: 2 4; }
+      .cl { font-family: var(--mono); font-size: 10.5px; fill: var(--ink-3); }
+      .s-router { color: var(--ch-router); }
+      .s-fixed  { color: var(--ch-fixed); }
+    </style>
+    <line x1="64" y1="209.0" x2="936" y2="209.0" class="cg h"/><text x="56" y="213.0" text-anchor="end" class="cl">4</text><line x1="64" y1="150.0" x2="936" y2="150.0" class="cg h"/><text x="56" y="154.0" text-anchor="end" class="cl">8</text><line x1="64" y1="91.0" x2="936" y2="91.0" class="cg h"/><text x="56" y="95.0" text-anchor="end" class="cl">12</text><line x1="64" y1="32.0" x2="936" y2="32.0" class="cg h"/><text x="56" y="36.0" text-anchor="end" class="cl">16</text><line x1="133.3" y1="18" x2="133.3" y2="268" class="cg"/><line x1="342.5" y1="18" x2="342.5" y2="268" class="cg"/><line x1="412.3" y1="18" x2="412.3" y2="268" class="cg"/><line x1="621.6" y1="18" x2="621.6" y2="268" class="cg"/><line x1="830.9" y1="18" x2="830.9" y2="268" class="cg"/>
+    <rect x="831.4" y="18" width="104.6" height="250" fill="var(--ch-fixed)" opacity="0.07"/>
+    <text x="883.7" y="32" text-anchor="middle" class="cl">zona del gate</text>
+    <g class="s-fixed">
+      <path d="M 64.0 253.2 L 98.9 238.5 L 133.8 223.7 L 168.6 209.0 L 203.5 196.8 L 238.4 191.5 L 273.3 186.6 L 308.2 179.7 L 343.0 179.7 L 377.9 179.7 L 412.8 164.9 L 447.7 150.2 L 482.6 150.2 L 517.4 135.4 L 552.3 120.7 L 587.2 115.8 L 622.1 115.8 L 657.0 105.9 L 691.8 105.9 L 726.7 105.9 L 761.6 91.2 L 796.5 91.2 L 831.4 76.4 L 866.2 61.7 L 901.1 46.9 L 936.0 32.2 L 936.0 268 L 64.0 268 Z" fill="currentColor" opacity="0.13"/>
+      <path d="M 64.0 253.2 L 98.9 238.5 L 133.8 223.7 L 168.6 209.0 L 203.5 196.8 L 238.4 191.5 L 273.3 186.6 L 308.2 179.7 L 343.0 179.7 L 377.9 179.7 L 412.8 164.9 L 447.7 150.2 L 482.6 150.2 L 517.4 135.4 L 552.3 120.7 L 587.2 115.8 L 622.1 115.8 L 657.0 105.9 L 691.8 105.9 L 726.7 105.9 L 761.6 91.2 L 796.5 91.2 L 831.4 76.4 L 866.2 61.7 L 901.1 46.9 L 936.0 32.2" fill="none" stroke="currentColor" stroke-width="2"/>
+    </g>
+    <g class="s-router">
+      <path d="M 64.0 253.2 L 98.9 238.5 L 133.8 223.7 L 168.6 209.0 L 203.5 194.2 L 238.4 188.9 L 273.3 188.9 L 308.2 174.1 L 343.0 174.1 L 377.9 174.1 L 412.8 159.4 L 447.7 144.6 L 482.6 144.6 L 517.4 129.9 L 552.3 115.1 L 587.2 100.4 L 622.1 100.4 L 657.0 90.5 L 691.8 90.5 L 726.7 90.5 L 761.6 75.8 L 796.5 75.8 L 831.4 61.0 L 866.2 51.2 L 901.1 36.4 L 936.0 36.4 L 936.0 268 L 64.0 268 Z" fill="currentColor" opacity="0.16"/>
+      <path d="M 64.0 253.2 L 98.9 238.5 L 133.8 223.7 L 168.6 209.0 L 203.5 194.2 L 238.4 188.9 L 273.3 188.9 L 308.2 174.1 L 343.0 174.1 L 377.9 174.1 L 412.8 159.4 L 447.7 144.6 L 482.6 144.6 L 517.4 129.9 L 552.3 115.1 L 587.2 100.4 L 622.1 100.4 L 657.0 90.5 L 691.8 90.5 L 726.7 90.5 L 761.6 75.8 L 796.5 75.8 L 831.4 61.0 L 866.2 51.2 L 901.1 36.4 L 936.0 36.4" fill="none" stroke="currentColor" stroke-width="2"/>
+    </g>
+    <circle cx="936.0" cy="36.4" r="3.5" fill="var(--ch-router)" stroke="var(--paper)" stroke-width="2"/>
+    <circle cx="936.0" cy="32.2" r="3.5" fill="var(--ch-fixed)" stroke="var(--paper)" stroke-width="2"/>
+    <text x="938" y="49.4" class="cl" fill="var(--ch-router)" text-anchor="end">ruteo 15.7</text>
+    <text x="938" y="25.2" class="cl" fill="var(--ch-fixed)" text-anchor="end">fijo 16.0</text>
+    <line x1="64" y1="268" x2="936" y2="268" stroke="var(--rule)" stroke-width="1"/>
+    <rect x="64.0" y="18" width="17.4" height="250" fill="transparent"><title>c1-000 (C1, cascade)
+ruteo 1.00 · fijo 1.00</title></rect><rect x="81.4" y="18" width="34.9" height="250" fill="transparent"><title>c1-001 (C1, cascade)
+ruteo 1.00 · fijo 1.00</title></rect><rect x="116.3" y="18" width="34.9" height="250" fill="transparent"><title>c2-000-w16 (C2, cascade)
+ruteo 1.00 · fijo 1.00</title></rect><rect x="151.2" y="18" width="34.9" height="250" fill="transparent"><title>c2-000-w4 (C2, cascade)
+ruteo 1.00 · fijo 1.00</title></rect><rect x="186.1" y="18" width="34.9" height="250" fill="transparent"><title>c2-000-w48 (C2, cascade)
+ruteo 1.00 · fijo 0.82</title></rect><rect x="221.0" y="18" width="34.9" height="250" fill="transparent"><title>c2-001-w16 (C2, cascade)
+ruteo 0.36 · fijo 0.36 · escalones 5</title></rect><rect x="255.8" y="18" width="34.9" height="250" fill="transparent"><title>c2-001-w4 (C2, defer_to_fallback)
+ruteo 0.00 · fijo 0.33</title></rect><rect x="290.7" y="18" width="34.9" height="250" fill="transparent"><title>c2-001-w48 (C2, cascade)
+ruteo 1.00 · fijo 0.47</title></rect><rect x="325.6" y="18" width="34.9" height="250" fill="transparent"><title>c3-000-h1 (C3, cascade)
+ruteo 0.00 · fijo 0.00 · escalones 5</title></rect><rect x="360.5" y="18" width="34.9" height="250" fill="transparent"><title>c3-001-h2 (C3, cascade)
+ruteo 0.00 · fijo 0.00 · escalones 5</title></rect><rect x="395.4" y="18" width="34.9" height="250" fill="transparent"><title>c4-000-w16 (C4, cascade)
+ruteo 1.00 · fijo 1.00</title></rect><rect x="430.2" y="18" width="34.9" height="250" fill="transparent"><title>c4-000-w4 (C4, cascade)
+ruteo 1.00 · fijo 1.00</title></rect><rect x="465.1" y="18" width="34.9" height="250" fill="transparent"><title>c4-000-w48 (C4, cascade)
+ruteo 0.00 · fijo 0.00 · escalones 5</title></rect><rect x="500.0" y="18" width="34.9" height="250" fill="transparent"><title>c4-001-w16 (C4, cascade)
+ruteo 1.00 · fijo 1.00</title></rect><rect x="534.9" y="18" width="34.9" height="250" fill="transparent"><title>c4-001-w4 (C4, cascade)
+ruteo 1.00 · fijo 1.00</title></rect><rect x="569.8" y="18" width="34.9" height="250" fill="transparent"><title>c4-001-w48 (C4, cascade)
+ruteo 1.00 · fijo 0.33 · escalones 3</title></rect><rect x="604.6" y="18" width="34.9" height="250" fill="transparent"><title>c5-000-w16 (C5, cascade)
+ruteo 0.00 · fijo 0.00 · escalones 5</title></rect><rect x="639.5" y="18" width="34.9" height="250" fill="transparent"><title>c5-000-w4 (C5, cascade)
+ruteo 0.67 · fijo 0.67 · escalones 5</title></rect><rect x="674.4" y="18" width="34.9" height="250" fill="transparent"><title>c5-000-w48 (C5, cascade)
+ruteo 0.00 · fijo 0.00 · escalones 5</title></rect><rect x="709.3" y="18" width="34.9" height="250" fill="transparent"><title>c5-001-w16 (C5, cascade)
+ruteo 0.00 · fijo 0.00 · escalones 5</title></rect><rect x="744.2" y="18" width="34.9" height="250" fill="transparent"><title>c5-001-w4 (C5, cascade)
+ruteo 1.00 · fijo 1.00 · escalones 2</title></rect><rect x="779.0" y="18" width="34.9" height="250" fill="transparent"><title>c5-001-w48 (C5, cascade)
+ruteo 0.00 · fijo 0.00 · escalones 5</title></rect><rect x="813.9" y="18" width="34.9" height="250" fill="transparent"><title>c7-000-neg (C7, gate_then_fallback)
+ruteo 1.00 · fijo 1.00</title></rect><rect x="848.8" y="18" width="34.9" height="250" fill="transparent"><title>c7-000-pos (C7, gate_then_fallback)
+ruteo 0.67 · fijo 1.00</title></rect><rect x="883.7" y="18" width="34.9" height="250" fill="transparent"><title>c7-001-neg (C7, gate_then_fallback)
+ruteo 1.00 · fijo 1.00</title></rect><rect x="918.6" y="18" width="17.4" height="250" fill="transparent"><title>c7-001-pos (C7, gate_then_fallback)
+ruteo 0.00 · fijo 1.00</title></rect>
+  </svg>
+  <figcaption><span style="color:var(--ch-router)">■</span> ruteo (acción real: la cascada escala con el oráculo) &nbsp;·&nbsp; <span style="color:var(--ch-fixed)">■</span> mejor fijo (dag_strategy) — utilidad acumulada sobre las 26 tareas de <code>gold_transfer</code>, en orden de celda. Las curvas van pegadas hasta la zona del gate: <strong>todo el déficit restante es C7</strong>, donde el gate corre el fallback porque la tarea es irreversible. Análisis exploratorio, post-registro.</figcaption>
+</figure>
+
+<figure>
+  <svg viewBox="0 0 960 268" role="img" aria-label="Brecha neta contra el mejor fijo, bajo tres valuaciones, contra la banda del piso de ruido">
+    <style>
+      .cl { font-family: var(--mono); font-size: 10.5px; fill: var(--ink-3); }
+    </style>
+    <rect x="64" y="28.3" width="872" height="110.8" fill="var(--ink-3)" opacity="0.10"/>
+    <text x="930" y="41.3" text-anchor="end" class="cl">piso de ruido ±0.057</text>
+    <line x1="64" y1="83.7" x2="936" y2="83.7" stroke="var(--rule)" stroke-width="1"/>
+    <text x="56" y="87.7" text-anchor="end" class="cl">0</text>
+    <rect x="129.0" y="83.7" width="150" height="84.5" rx="3" fill="var(--ch-router)"><title>P15 registrada: -0.0874</title></rect><text x="204" y="184.2" text-anchor="middle" class="cl" style="font-weight:600; fill: var(--ink)">-0.0874</text><text x="204" y="210" text-anchor="middle" class="cl">P15 registrada</text><rect x="399.0" y="83.7" width="150" height="84.5" rx="3" fill="var(--ch-router)"><title>+ eje de continuidad: -0.0874</title></rect><text x="474" y="184.2" text-anchor="middle" class="cl" style="font-weight:600; fill: var(--ink)">-0.0874</text><text x="474" y="210" text-anchor="middle" class="cl">+ eje de continuidad</text><rect x="669.0" y="83.7" width="150" height="10.8" rx="3" fill="var(--ch-router)"><title>por acción real: -0.0112</title></rect><text x="744" y="110.5" text-anchor="middle" class="cl" style="font-weight:600; fill: var(--ink)">-0.0112</text><text x="744" y="210" text-anchor="middle" class="cl">por acción real</text>
+  </svg>
+  <figcaption>Brecha neta del ruteo contra el mejor fijo bajo tres valuaciones. El eje de continuidad solo no mueve nada (necesario, no suficiente); puntuar la <strong>acción real</strong> — la cascada escala cuando el oráculo rechaza — lleva la brecha adentro del piso de ruido. Sin descontar el costo de escalar: eso es lo que P16 prerregistra.</figcaption>
+</figure>
   </div>
 </section>
 

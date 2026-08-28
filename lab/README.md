@@ -465,6 +465,24 @@ so its argmax coincides. The plasticity that GOVERNS is elsewhere — θ's reinf
 the §6.2 assurance ratchet; the weight column is record, not policy, and the operational
 story should stop implying otherwise (handoff Fase 0, item 5).
 
+**Decomposition of the −0.087 (exploratory, post-registration, same corpus —
+`_analyze_p15_decomposition.py` re-derives all of it).** Three mechanisms, in order:
+(1) the **continuation axis** — literal key recurrence across distinct units, a pure
+function of the material, COMPUTED — separates C5 perfectly in all three corpora (6/6,
+zero false positives on C1/C2/C4) and is now the 4th region segment
+(`REGION_VOCABULARY = regions/2-continuation`); alone it moves nothing (−0.0874
+unchanged): necessary, not sufficient. (2) The regime confound (mixing in-window gold_v2
+into training) is NOT the cause: out-of-window-only training gives the same number.
+(3) What moves it is **scoring the real action** (handoff finding 3.9.1): C5 carries an
+oracle, so the cascade rule fires, and `plan.paradigm` scores only the FIRST rung of a
+ladder the product would climb. Action-aware scoring: net **−0.0112, inside the noise
+floor**, with C5 at parity and C2/C4 positive. The residual is ENTIRELY C7 (−0.333):
+irreversible tasks where the gate runs the fallback by design — the remaining deficit is
+the priced cost of governance, not a routing error. Caveat P16 must close: this scoring
+does not yet charge the cost of climbing (the full ladder measured 4.4× in the cascade
+study) nor detector sensitivity < 1.0 (catastrophic in that same study); P16
+preregisters action-aware valuation WITH cost.
+
 **What this changes.** The product claim as registered — per-request selection beats the
 best fixed paradigm on an unseen world — is false for θ over these features on this
 world, and the honest headline is the mechanism: **selection without sensing loses to a

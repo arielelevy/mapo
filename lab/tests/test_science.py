@@ -430,6 +430,50 @@ def check_rec_solver(ok: bool) -> bool:
     return ok
 
 
+def check_continuation_axis(ok: bool) -> bool:
+    """El eje que P15 senalo: continuidad como funcion PURA del material."""
+    from app.features import (  # noqa: PLC0415
+        Features,
+        REGION_VOCABULARY,
+        measure_continuation,
+    )
+
+    print("\n20. El eje de continuidad (regions/2)")
+
+    chained = {
+        "filing-01": "Settlement account AR9911 was flagged.",
+        "memo-14": "Account AR9911 is held by V. Simoni.",
+        "memo-99": "unrelated",
+    }
+    ok &= check("una clave que recurre entre unidades distintas = encadenado",
+                measure_continuation(chained, list(chained)) is True)
+    flat = {"a": "uno solo", "b": "otro distinto", "c": "tercero"}
+    ok &= check("sin recurrencia = plano",
+                measure_continuation(flat, list(flat)) is False)
+    ok &= check("sin material = None, nunca un no",
+                measure_continuation({}, ["a", "b"]) is None)
+    boiler = {f"u{i}": f"HEADER XX99 unidad {i}" for i in range(8)}
+    ok &= check("una clave en TODAS las unidades es boilerplate, no cadena",
+                measure_continuation(boiler, list(boiler)) is False,
+                "recurrencia cuenta entre 2 y la mitad del scope")
+    ok &= check("una unidad que se nombra a si misma no encadena",
+                measure_continuation(
+                    {"memo-01": "esto es memo-01", "b": "nada"}, ["memo-01", "b"]
+                ) is False)
+
+    f = Features(n_units=20, has_oracle=True, irreversible=False,
+                 shared_writes=False, budget_tokens=60_000,
+                 coupling=0.2, continuation=True)
+    ok &= check("la region habla el vocabulario nuevo, con 4 segmentos",
+                f.region() == "many/oracle/loose/chain"
+                and REGION_VOCABULARY == "regions/2-continuation")
+    ok &= check("continuidad sin medir queda visible en la region",
+                Features(n_units=2, has_oracle=False, irreversible=False,
+                         shared_writes=False,
+                         budget_tokens=1000).region().endswith("/c?"))
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -684,6 +728,7 @@ def main() -> int:
     ok = check_product_path(ok)
     ok = check_belief_history(ok)
     ok = check_rec_solver(ok)
+    ok = check_continuation_axis(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1
