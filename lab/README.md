@@ -173,7 +173,6 @@ immutable artifacts.
 | An infeasible plan is never attempted, and its exclusion is recorded with the reason | That the selected paradigm succeeds — selection bounds regret, not outcomes |
 | Irreversible actions gated on computed/observed evidence only | Anything about tasks outside exact-answer extraction over documents |
 | Learning cannot silently regress the policy (promotion guard) | That θ is optimal — only that it is inspectable, versioned and non-regressing |
-| Infrastructure failures (429s) are excluded from every statistic | — |
 
 ---
 
@@ -552,11 +551,99 @@ two-step rule). Only the first is an artifact; the second is the layer working; 
 is the one to fix, and it costs a model call per task — which is precisely the governance
 cost the thesis says should be priced rather than assumed away.
 
-**What P17 needs, now fully specified**: honest runtime detectors per cell, the probe
-executed and the plan re-derived inside the bench's decision path (as `serve.answer()`
-already does), the probe's cost charged, and only then a registered prediction about
-selection. Anything short of that measures the machinery around the claim instead of the
-claim.
+### P17 registered (2026-08-27, before any number exists)
+
+The three pieces P17 needed are built. Two are code and are done; the third is the
+corpus, and it now exists.
+
+**The corpus: `gold_p17`, seed 73, `--honest-detectors`.** 26 tasks, verified
+independently from the documents (`corpus/verify.py`: PASS on all six cells). Gold is
+present on all 26 — grading is untouched, and must be: a corpus the bench cannot grade
+measures nothing. What changed is what the DECISION is told. `has_oracle` stopped being
+a synonym for "the bench holds an answer key" and became the claim it was always named
+for: **a cheap runtime detector exists here.** That is true only where verifying is
+cheaper than solving:
+
+| cell | detector | why |
+|---|---|---|
+| C1 single verifiable | yes | one fact: look at it and you know |
+| C7 irreversible | yes | a trigger is present or it is not |
+| C2 bulk independent | **no** | "list every X": verifying completeness IS the task |
+| C3 coupled chain | **no** | checking the endpoint means walking the chain |
+| C4 aggregate | **no** | verifying the count requires the count |
+| C5 unknown horizon | **no** | knowing when to stop is the question |
+
+Result: **6 of 26 tasks carry a detector, 20 do not.** Under the old regime it was 25 of
+26 on every corpus in the record. The table is a claim about the world, not a knob: a
+deployment that can cheaply check a list is a deployment with an index nobody has, and
+declaring one anyway puts the cascade in front of every decision and calls the result a
+routing measurement. A cell with no declared detector raises rather than defaulting to
+`True` — the default was the whole bug.
+
+**The prerequisite is TWO sites, not one — and finding that out is why it was
+simulated before it was paid for.** The obvious one is `features.py:214`, which builds
+the region segment. The load-bearing one is `rules.py:248`, which builds the belief
+`oracle_available` — and the belief is what the cascade rule actually reads. A first
+simulation overrode only the region and reported *no change whatsoever*, which was the
+correct answer to the wrong question: relabelling a region does not change what a rule
+believes. Both derive from `bool(task["oracle"])`, so both change together.
+
+Neither is applied yet. Applying them mid-run would change what P16's frozen analyzer
+computes on 2 of its 26 tasks (the empty-oracle C2 tasks, where the corpus declares a
+detector and the gold list is empty), and re-reading a pre-registered verdict through a
+rule that changed underneath it dissolves the only thing pre-registration buys. They
+land the moment P16's verdict is recorded, and P17 runs after.
+
+**P17a: CONFIRMED offline, zero tokens (`_analyze_p17_mechanism.py`).** The question
+"which rule decides" is fixed by priority and features, not by the model, so it is
+answerable before spending anything — and worth answering first: a corpus that does not
+change which rule fires cannot measure what P17 says it measures.
+
+| regime | cascade | gate→fallback | probe→decide | defer→fallback |
+|---|---:|---:|---:|---:|
+| `gold_p17` as P16 runs it | **22** | 4 | 0 | 0 |
+| `gold_p17` honest | **2** | 4 | **14** | 6 |
+| `gold_p16` (either) | 20 | 4 | 1 | 1 |
+
+Cascade falls from 22 to 2, well inside the ≤ 6 predicted — tighter than predicted,
+because C7's four irreversible tasks are taken at priority 100 by the gate before the
+cascade at 90 ever looks. So C1's two tasks are the entire cascade, which is exactly the
+claim the detector table makes: those are the two cells where verifying is cheaper than
+solving.
+
+That also sharpens P17b into a real gamble rather than a formality. **14 tasks now wait
+on the probe** and are the only place selection can come from; the 6 that defer are
+already decided (θ has no confidence there, which is abstention working). So P17b needs
+at least 7 of those 14 to come back `specialise` after the probe resolves. It can fail,
+and the way it fails is informative: margin 0 for want of episodes is the
+distribution-shift story below, while margin 0 with episodes present is a statement
+about the signal itself.
+
+**Predictions, registered 2026-08-27 before the run.**
+
+- **P17a (mechanism, computable offline). CONFIRMED — 2 of 26, table above.** On
+  `gold_p17` with the prerequisite applied, the cascade rule fires on at most 6 of 26
+  tasks — only the declared-detector cells — against 22 of 26 on the same corpus under
+  P16's regime. Falsified if it fires on more than 6.
+- **P17b (the claim).** With the probe resolved and its cost charged, the selection rule
+  `specialise_when_theta_is_confident` DECIDES on at least 7 of the 20 no-detector tasks.
+  Today it decides on 0 of 26, and has for the entire investigation. Falsified below 7.
+- **P17c (the product claim).** The net oracle gap of the routed ACTION against the best
+  fixed paradigm is positive and outside the per-cell noise floor. This is the registered
+  criterion P15a failed; P17 is its first honest re-test, because P15a was scored in a
+  regime where the rule under test could not fire.
+- **P17d (reproducibility).** Replicate utility identical on 26/26 tasks, as P15d and
+  P16d were.
+
+**A risk that belongs in the record, not in a footnote.** θ is fitted on corpora whose
+regions were computed under the old rule, so the `oracle`/`no_oracle` segment of a
+region means something different in the training record than it will at decision time
+on `gold_p17`. That is a genuine distribution shift and it cuts against P17b: θ may have
+no statistics at all in the regions the honest corpus lands in, which is abstention, not
+selection. If P17b fails that way — margin 0 for want of episodes rather than for want
+of a signal — the honest reading is that the corpora must be REBUILT under the honest
+rule before selection can be measured at all, and that is a cost to state now rather
+than discover afterwards.
 
 **The bench cannot measure selection, and the reason is structural (measured,
 2026-08-27).** Chasing why θ never specialises produced a second, independent cause, and

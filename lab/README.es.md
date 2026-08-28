@@ -4,9 +4,11 @@
 > [README.md](README.md)
 
 Esta página resume la solución. La arquitectura, las decisiones, las deudas comprobadas
-y los diagramas viven en [`DISENO.es.md`](DISENO.es.md). El patrón futuro de
-automejora vive en [`PATRON_REC.es.md`](PATRON_REC.es.md) y está marcado como propuesta
-no implementada.
+y los diagramas viven en [`DISENO.es.md`](DISENO.es.md). El patrón de autorreparación
+vive en [`PATRON_REC.es.md`](PATRON_REC.es.md).
+
+> **Regla del repo**: nada se describe acá sin implementación que lo corra. Si una
+> afirmación de esta página no tiene módulo detrás, es deuda y se saca.
 
 ## Qué es
 
@@ -44,12 +46,28 @@ request
   │
   ├─ 4. GARANTÍA         el dial por solicitud A0–A3 (tabla abajo)
   │      assurance.py      el piso se deriva de creencias sobre el propio request;
-  │                        quien llama puede pedir más, nunca menos
+  │                        quien llama puede pedir más, nunca menos. El piso además
+  │                        APRENDE: una región donde el gate viene rechazando por
+  │                        procedencia arranca más arriba, porque la estadística de
+  │                        rechazos ya dijo que ahí la evidencia barata no alcanza
   │
+
   ├─ 5. RUTEO SELECTIVO  Π(φ, θ) con abstención: emite un paradigma especializado sólo
   │      router.py         dentro de la región de alta confianza (κ > τ); si no, difiere
   │      policy.py         al fallback general. θ conserva estadísticas por región,
   │                        versión y digest de integridad. Mismo estado completo ⟹ plan.
+  │
+  ├─ 5b. SONDA Y RE-PLAN si el plan pide evidencia que nadie produjo, se corre una
+  │      probe.py          sonda de reconocimiento sobre UNA unidad y se vuelve a
+  │      decide.py         planificar CONTINUANDO la misma historia de creencias, así
+  │                        la observación supersede a la estimación en un solo linaje
+  │                        de digest. `probe_then_decide` nombra dos pasos y el ciclo
+  │                        vive una sola vez, compartido por el producto y el banco:
+  │                        dos implementaciones de una decisión se separan solas.
+  │                        Un plan que sigue sin resolver es un APLAZAMIENTO, nunca
+  │                        una elección — ejecutarlo sería actuar sobre evidencia que
+  │                        el gate acaba de declarar insuficiente. Lo que cuesta
+  │                        decidir se devuelve en la cuenta, no se absorbe
   │
   ├─ 6. EJECUCIÓN        el paradigma elegido corre contra la superficie de herramientas,
   │      paradigms/        que carga señales contables determinísticas (estancamiento,
@@ -93,12 +111,22 @@ falsificados; el estado de cada uno está en `app/paradigms/README.es.md`.
 
 ## Cómo aprende sin volverse inauditable
 
-El aprendizaje está diseñado como **offline y copy-on-write**, nunca adentro de un
-request. Hoy existe construcción de candidatos, estadísticas, pisos aprendidos y una
-guarda de promoción. No obstante, el bucle todavía no justifica llamarse automejora
-segura completa: la consolidación deja que el bloque final influya en theta antes de
-evaluarlo, los trials inflan episodios y el peso Hebbiano almacenado no participa en la
-decisión. Estas deudas y su orden de reparación están documentados en `DISENO.es.md`.
+El aprendizaje es **offline y copy-on-write**, nunca adentro de un request. Hay
+construcción de candidatos, estadísticas por región, pisos de garantía aprendidos y una
+guarda de promoción, con partición por tarea en tres bloques: `search` propone,
+`validate` puntúa, y `final` lo toca únicamente la guarda de promoción.
+
+Dos deudas que esta página declaraba ya están cerradas, y conviene decir por qué eran
+deudas: **la candidata se ajusta SIN el bloque final** (antes se ajustaba con todo y
+después se le entregaba ese mismo bloque a la guarda, que es marcarse el propio examen),
+y **un episodio es una celda `(tarea, paradigma)` con utilidad media**, no un trial
+(antes tres réplicas de una tarea contaban como tres evidencias, y una réplica con
+suerte cobraba el refuerzo que la media de su paradigma nunca ganó).
+
+Sigue abierta una: **el peso Hebbiano se almacena pero no participa en la decisión** —
+`policy.py` lo actualiza, `router.py` no lo lee ni una vez. Es la herencia de v1 y hoy
+es un número que se guarda, no una señal que decide. Está en `DISENO.es.md` con su
+orden de reparación.
 
 ## Qué garantiza, y qué no
 
@@ -108,12 +136,27 @@ decisión. Estas deudas y su orden de reparación están documentados en `DISENO
 | Un plan infactible nunca se intenta, y su exclusión queda registrada con la razón | Que el paradigma seleccionado tenga éxito — la selección acota el regret, no los resultados |
 | Las acciones irreversibles se gatean sólo con evidencia computada/observada | Nada sobre tareas fuera de extracción de respuesta exacta sobre documentos |
 | El incumbente se conserva cuando la guarda rechaza una candidata | Que la guarda actual esté libre de leakage estadístico |
-| Los fallos de infraestructura (429) quedan excluidos de toda estadística | — |
 
-## Próxima dirección: REC
+## REC: convertir una abstención en una pregunta
 
-La **Reparación Epistémica Contrafactual** propone convertir una explicación fallida en
-una pregunta operativa: qué creencia mínima habría cambiado el plan y qué evidencia
-acotada puede resolverla. El aprendizaje sería offline; runtime ejecutaría solamente
-cláusulas deterministas promovidas con certificado. El diseño completo, sus vecinos de
-literatura y los criterios de falsación están en [`PATRON_REC.es.md`](PATRON_REC.es.md).
+La **Reparación Epistémica Contrafactual** convierte una explicación fallida en una
+pregunta operativa: qué creencia mínima habría cambiado el plan, y qué evidencia acotada
+puede resolverla. Está implementada en dos piezas.
+
+`rec.py` — **el diagnóstico**. Busca el déficit contrafactual mínimo bajo un orden
+explícito: menos proposiciones primero, después la más barata, después la procedencia
+suficiente MÁS DÉBIL, y desempate lexicográfico para que dos corridas den la misma
+respuesta. El esquema de intervenciones es cerrado y firmado: sólo se pueden proponer
+las hipótesis declaradas, porque un solucionador que puede inventar la evidencia que le
+conviene siempre encuentra una reparación. El complemento se recalcula contra el piso de
+la política, igual que en la decisión original — evaluarlo contra una clausura estática
+dejaba que una hipótesis `ELICITED` apagara una regla que exige `OBSERVED`.
+
+`certify.py` — **la certificación**, con la separación que le da sentido: el mundo de
+proponer no decide nada, el de validar decide si se consulta el final, y el final es de
+**un solo uso** y se gasta ANTES de responder. Una cláusula nace en borrador y no entra
+al bundle firmado sin certificado; el certificado no entra en su propio digest, y la
+instalación es fail-closed.
+
+Los vecinos de literatura y los criterios de falsación están en
+[`PATRON_REC.es.md`](PATRON_REC.es.md).

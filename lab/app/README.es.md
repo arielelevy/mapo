@@ -6,28 +6,54 @@ algunos módulos del banco que todavía deben separarse. La arquitectura normati
 
 ## Mapa de módulos
 
+Cada módulo lleva su propio docstring con el PORQUÉ de sus decisiones; esta tabla es
+el índice, no el sustituto. Cuando el código y la tabla discrepan, gana el código y la
+tabla es el bug.
+
+### Decisión
+
 | Módulo | Responsabilidad | Estado relevante |
 |---|---|---|
-| `features.py` | Features estructurales y región. | Ejecutado; la región no incluye horizonte y queda obsoleta tras la sonda. |
+| `features.py` | Features estructurales y región. | Ejecutado. La región tiene cuatro segmentos (`cardinalidad/oráculo/acoplamiento/continuación`) y está versionada. **Deuda viva (línea 214)**: deriva `has_oracle` de `bool(task["oracle"])`, o sea del gold. |
 | `feasibility.py` | Poda aritmética previa. | Ejecutado. |
-| `beliefs.py` | Creencias, procedencia, reglas, trazas y calibración. | Ejecutado; falta conservar la historia pre/post sonda. |
-| `rules.py` | Vocabulario y reglas estándar como datos. | Ejecutado. |
-| `assurance.py` | Dial A0-A3 y pisos aprendidos. | Parcial: varios flags son declarativos. |
-| `probe.py` | Sonda de acoplamiento. | Ejecutado; selección y verificación requieren fortalecimiento. |
-| `router.py` | Integra factibilidad, garantía, theta y reglas. | Ejecutado; recibe una región externa y estática. |
-| `policy.py` | Bundle, estadísticas y promoción. | Parcial; el peso Hebbiano no gobierna decisiones. |
-| `consolidation.py` | Replay, particiones, pisos, auditoría y promoción. | Parcial; existe fuga del conjunto final. |
-| `store.py` | Estado persistido del aprendizaje. | Ejecutado parcialmente; falta el registro productivo integral. |
+| `beliefs.py` | Creencias, procedencia, reglas, trazas y calibración. | Ejecutado. El rechazo es tipado (`ABSENT`/`PROVENANCE`/`CREDENCE`/`VALUE`/`MAGNITUDE`), que es lo que hace posible aprender pisos; la historia pre/post sonda se conserva en un solo linaje. |
+| `rules.py` | Vocabulario y reglas estándar como datos. | Ejecutado. Prioridades: gate 100 > cascada 90 > sonda 80 > especializar 70 > especializar-por-acoplamiento 60. **Deuda viva (línea 248)**: la creencia `oracle_available` también sale de `bool(task["oracle"])`, y ESTA es la que la cascada lee — cambiar sólo la región no cambia nada. Las dos esperan a que P16 cierre. |
+| `assurance.py` | Dial A0-A3 y pisos aprendidos de estadísticas de rechazo. | Ejecutado. El piso aprendido nunca llega a `CERTIFIED`: ese nivel restringe los patrones admisibles, y subirlo solo porque una región rechaza mucho sería castigar a la región recortándole el catálogo. Varios flags del dial siguen siendo declarativos. |
+| `probe.py` | Sonda de reconocimiento sobre UNA unidad. | Ejecutado. La asimetría es el diseño: un puntero que resuelve vale `OBSERVED` 1.0; uno inventado, `ELICITED` 0.2; "autocontenido", `ELICITED` 0.6 — **una unidad de silencio no es una medición de las otras 47**. |
+| `decide.py` | El ciclo de decisión de dos pasos. | Ejecutado. `probe_then_decide` nombra dos pasos; vive una sola vez y lo comparten el producto y el banco. Devuelve lo que costó decidir en vez de absorberlo. |
+| `router.py` | Integra factibilidad, garantía, theta y reglas. | Ejecutado. Recibe la región desde afuera; `decide.py` la recalcula tras observar. `region_backoff` es opt-in y devuelve QUÉ nivel contestó. |
+| `policy.py` | Bundle, estadísticas y promoción. | Parcial; el peso Hebbiano se actualiza acá y `router.py` no lo lee nunca. |
+| `consolidation.py` | Replay, particiones, pisos, auditoría y promoción. | Ejecutado. La candidata se ajusta SIN el bloque final; la fuga está cerrada. |
+| `rec.py` | Diagnóstico contrafactual mínimo. | Ejecutado. Esquema de intervenciones cerrado y firmado. |
+| `certify.py` | Mundos separados, ledger de un solo uso, certificado. | Ejecutado. El mundo final se gasta ANTES de responder. |
+| `store.py` | Estado persistido del aprendizaje. | Parcial; falta el registro productivo integral. |
 | `serve.py` | Request real, decisión y ejecución. | Ejecutado; todavía importa grading del banco. |
 | `paradigms/` | Estructuras de control ejecutables. | Ver `paradigms/README.es.md`. |
-| `llm.py` | Cliente, caché, retry y throttle. | Infraestructura de producto. |
-| `retrieval.py` | Scope y brazos de recuperación. | Infraestructura de producto. |
-| `tools.py` | Herramientas y señales contables. | Infraestructura de producto. |
-| `runner.py` | Producto cruzado experimental. | Banco; debe salir de la capa de producto. |
-| `metrics.py` | Métricas del estudio. | Banco. |
+
+### Infraestructura de producto
+
+| Módulo | Responsabilidad | Estado relevante |
+|---|---|---|
+| `llm.py` | Cliente, caché direccionado por contenido, retry y throttle. | Caché con namespace por cuenta. |
+| `retrieval.py` | Scope y brazos de recuperación. | Ejecutado. |
+| `embeddings.py` | Embeddings (configuración separada del modelo de medición). | Ejecutado. |
+| `tools.py` | Herramientas y señales contables. | Ejecutado. |
+| `cognitive.py` | Señales contables de estancamiento y cobertura. | Ejecutado. |
+| `config.py` | Configuración sin defaults: env faltante = raise en import. | Ejecutado. |
+| `fsio.py` | Escritura atómica. | Ejecutado. |
+
+### Banco (debe salir de la capa de producto)
+
+| Módulo | Responsabilidad | Estado relevante |
+|---|---|---|
+| `runner.py` | Producto cruzado experimental. | Un episodio es una celda `(tarea, paradigma)`, no un trial. |
+| `metrics.py` | Métricas del estudio, riesgo-cobertura. | Banco. |
 | `grading.py` | F1 exacto contra gold. | Banco. |
 | `baselines.py` | Router textual de comparación. | Banco. |
 | `main.py` | API que compone endpoints de ambos lados. | Frontera mixta temporal. |
+
+La regla de la separación pendiente: **el banco importa al producto; el producto jamás
+sabe que el banco existe.**
 
 ## Dependencias deseadas
 
@@ -66,8 +92,9 @@ La garantía correcta requiere fijar más que la base de creencias:
 Con esos elementos fijados, el plan debe reproducirse sin invocar al modelo. El texto de
 respuesta puede seguir variando y no integra esta garantía.
 
-## Dirección REC
+## REC
 
-[`../PATRON_REC.es.md`](../PATRON_REC.es.md) propone usar la traza del router para
-identificar déficits epistémicos y adquirir solo evidencia capaz de cambiar una decisión.
-No existe todavía un módulo REC en este directorio.
+`rec.py` y `certify.py` usan la traza del router para identificar el déficit epistémico
+mínimo y adquirir sólo la evidencia capaz de cambiar una decisión. El patrón, sus
+vecinos de literatura y sus criterios de falsación están en
+[`../PATRON_REC.es.md`](../PATRON_REC.es.md).

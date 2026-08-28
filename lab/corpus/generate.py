@@ -160,6 +160,12 @@ class Task:
     # distractor for this question. Declared so retrieval quality can be simulated at a
     # measured recall and precision rather than asserted.
     relevant_units: list[str] = field(default_factory=list)
+    # Whether a cheap RUNTIME detector exists — NOT whether the bench holds gold. The
+    # two were the same field carrying the same value (True, always), which made them
+    # the same concept, and the conflation is measurable: with a detector on every task
+    # the cascade rule fires at priority 90 and the selection rule at 70 is never even
+    # evaluated. The bench could not measure selection because being gradeable implied
+    # having a detector. `oracle` is untouched: it is the answer key, and it grades.
     has_oracle: bool = True
     irreversible: bool = False
     shared_writes: bool = False
@@ -600,6 +606,42 @@ class Generator:
         return tasks
 
 
+# A runtime detector exists only where VERIFYING is cheaper than SOLVING.
+#
+#   C1  one fact: look at it and you know.                             detector
+#   C7  a trigger is present or it is not.                             detector
+#   C2  "list every X": verifying completeness IS the task.            none
+#   C3  a chain endpoint: checking it means walking the chain.         none
+#   C4  an aggregate: verifying the count requires the count.          none
+#   C5  unknown horizon: knowing when to stop is the question.         none
+#
+# This is a claim about the WORLD, not a knob. A deployment that can cheaply check a
+# list is a deployment with an index nobody has; declaring one anyway puts the cascade
+# in front of every decision and calls the result a routing measurement.
+HONEST_DETECTORS = {
+    "C1": True,
+    "C7": True,
+    "C2": False,
+    "C3": False,
+    "C4": False,
+    "C5": False,
+}
+
+
+def apply_honest_detectors(tasks: list[Task]) -> list[Task]:
+    """Declare `has_oracle` per cell by whether verifying is cheaper than solving."""
+    for task in tasks:
+        prefix = task.cell.split("_")[0]
+        if prefix not in HONEST_DETECTORS:
+            raise ValueError(
+                f"Cell {task.cell!r} has no declared detector. A cell whose detector "
+                f"nobody decided defaults to True, which is the conflation this flag "
+                f"exists to remove — so it fails instead."
+            )
+        task.has_oracle = HONEST_DETECTORS[prefix]
+    return tasks
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate the stratified corpus.")
     parser.add_argument("--seed", type=int, required=True)
@@ -613,6 +655,12 @@ def main() -> None:
     parser.add_argument(
         "--unit-tokens", type=int, default=0,
         help="Pad each unit to roughly this many tokens. 0 leaves the natural\n             size. Large values create the regime where reading everything is\n             not an option, which is the regime the comparison is about.",
+    )
+    parser.add_argument(
+        "--honest-detectors", action="store_true",
+        help="Declare has_oracle per cell by whether verifying is cheaper than\n"
+             "             solving, instead of True everywhere. The gold oracle is\n"
+             "             untouched: only what the DECISION is told changes.",
     )
     parser.add_argument(
         "--hard", action="store_true",
@@ -630,6 +678,8 @@ def main() -> None:
     if args.unit_tokens:
         generator.inflate_units(args.unit_tokens)
     tasks = generator.build_tasks(per_cell=args.per_cell, widths=widths)
+    if args.honest_detectors:
+        tasks = apply_honest_detectors(tasks)
 
     max_width = max(widths)
     if max_width > args.people:
@@ -658,6 +708,7 @@ def main() -> None:
                 "generator_version": GENERATOR_VERSION,
                 "seed": args.seed,
                 "hard": args.hard,
+                "honest_detectors": args.honest_detectors,
                 "unit_tokens": args.unit_tokens,
                 "people": args.people,
                 "per_cell": args.per_cell,

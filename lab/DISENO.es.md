@@ -194,19 +194,35 @@ flowchart LR
 - log de creencias encadenado y auditoría de calibración;
 - copy-on-write: el incumbente no se muta durante una propuesta.
 
-### Lo que impide llamarlo automejora segura completa
+### Cerrado (2026-08-27), y por qué era deuda
 
-1. La consolidación construye theta con todos los episodios antes de evaluar el bloque
-   final; el holdout influye en el candidato.
-2. Las repeticiones crudas cuentan como episodios independientes y pueden inflar la
-   confianza.
-3. Repetir una consolidación reaplica historia ya absorbida por el incumbente.
-4. Las particiones descubiertas se persisten pero no gobiernan el router.
-5. Algunas particiones usan truth de evaluación o variables posteriores a la ejecución.
-6. La calibración persistida no se inyecta en el router de producto.
-7. El producto no persiste de manera completa resultados y creencias para cerrar el
+- **La candidata se ajusta SIN el bloque final** (`consolidation.py`). Antes se ajustaba
+  con todos los episodios y después se le entregaba ese mismo bloque a la guarda de
+  promoción: la guarda evaluaba contra datos que ya habían formado a la candidata, que
+  es marcarse el propio examen. Hoy `final` lo toca la guarda y nadie más.
+- **Un episodio es una celda `(tarea, paradigma)` con utilidad media** (`runner.py`).
+  Antes cada trial era un episodio, así que tres réplicas de una tarea contaban como
+  tres evidencias independientes — pseudorreplicación — y `was_best` calculado sobre
+  trials crudos dejaba que una réplica con suerte cobrara el refuerzo que la MEDIA de
+  su paradigma nunca ganó.
+- **Una sola historia de creencias por solicitud** (`decide.py`). El re-plan posterior
+  a la sonda continúa la base de la primera decisión en lugar de abrir una nueva, así
+  la observación supersede a la estimación dentro de un único linaje de digest.
+- **La región se recalcula después de observar** (`decide.py`). Replanificar bajo la
+  región vieja dejaba el request en el bin de "acoplamiento desconocido" que la sonda
+  acababa de abandonar.
+
+### Lo que todavía impide llamarlo automejora segura completa
+
+1. Repetir una consolidación reaplica historia ya absorbida por el incumbente.
+2. Las particiones descubiertas se persisten pero no gobiernan el router.
+3. Algunas particiones usan truth de evaluación o variables posteriores a la ejecución.
+4. La calibración persistida no se inyecta en el router de producto.
+5. El producto no persiste de manera completa resultados y creencias para cerrar el
    bucle.
-8. La promoción usa puntos estimados, sin incertidumbre ni certificado autenticado.
+6. La promoción usa puntos estimados, sin incertidumbre ni certificado autenticado.
+7. El peso Hebbiano se actualiza en `policy.py` y `router.py` no lo lee nunca: hoy es
+   un número que se guarda, no una señal que decide.
 
 ## 6. Decisiones de diseño
 
@@ -221,31 +237,59 @@ flowchart LR
 | Copy-on-write | Toda propuesta debe poder rechazarse sin alterar producción. | Rollback ambiguo y mutación parcial. | Editar el incumbente in place. |
 | Reglas como datos | Deben poder serializarse, compararse y auditarse. | Política escondida en ramas de código. | `if/elif` como fuente normativa. |
 | Sin LLM judge | El sesgo del juez está alineado con verbosidad y costo. | Premiar paradigmas caros por estilo. | Evaluación generativa subjetiva. |
-| Infraestructura fuera de estadística | Un 429 no informa calidad del paradigma. | Enseñar que una cuota agotada es un fallo cognitivo. | Puntuar `infra_error` como cero. |
 | Producto y banco separados | La medición debe observar exactamente lo servido. | Que producción conozca gold o que el banco mida otro sistema. | Dos caminos de decisión. |
 
 ## 7. Dirección aprobada
 
-La próxima evolución es **Reparación Epistémica Contrafactual (REC)**. No agrega otro
-paradigma de respuestas: utiliza la explicación determinista de una decisión fallida
-para identificar qué creencia o procedencia faltante habría cambiado el plan, aprende
-offline cómo resolver ese déficit mediante evidencia acotada y promueve la reparación
-como una cláusula ejecutable certificada.
+**Reparación Epistémica Contrafactual (REC)**. No agrega otro paradigma de respuestas:
+usa la explicación determinista de una decisión fallida para identificar qué creencia o
+procedencia faltante habría cambiado el plan, aprende offline cómo resolver ese déficit
+con evidencia acotada, y promueve la reparación como cláusula ejecutable certificada.
 
-El diseño completo vive en [`PATRON_REC.es.md`](PATRON_REC.es.md). Su estado es
-**propuesta no implementada**.
+**Estado: implementada**, en dos módulos, con las guardas que le dan sentido.
+
+`rec.py` — el diagnóstico. Orden de minimalidad explícito (menos proposiciones, después
+la más barata, después la procedencia suficiente MÁS DÉBIL, y desempate lexicográfico
+para que dos corridas coincidan). El esquema de intervenciones es cerrado y firmado:
+sólo se proponen las hipótesis declaradas, porque un solucionador que puede inventar la
+evidencia que le conviene siempre encuentra una reparación. El complemento se recalcula
+contra el piso de la política igual que en la decisión original — evaluarlo contra una
+clausura estática dejaba que una hipótesis `ELICITED` apagara una regla que exige
+`OBSERVED`.
+
+`certify.py` — la certificación. Tres mundos con roles distintos: proponer no decide
+nada, validar decide si se consulta el final, y el final es de **un solo uso** y se
+gasta ANTES de responder (un segundo reclamo levanta `PermissionError`). La cláusula
+nace en borrador y no entra al bundle firmado sin certificado; el certificado no entra
+en su propio digest; la instalación es fail-closed.
+
+Los vecinos de literatura y los criterios de falsación siguen en
+[`PATRON_REC.es.md`](PATRON_REC.es.md).
 
 ## 8. Orden de implementación
 
-1. Separar gold de evaluación y capacidad de verificación en runtime.
-2. Agregar por tarea antes de aprender y eliminar la fuga del bloque final.
-3. Retirar del camino activo las afirmaciones Hebbianas que no gobiernan decisiones.
-4. Conservar una sola historia de creencias por solicitud.
-5. Fortalecer verificadores de evidencia y contabilizar todo costo.
-6. Recalcular región después de cada observación.
-7. Implementar el diagnóstico contrafactual mínimo y el controlador REC.
-8. Persistir manifiestos, sesiones y certificados.
-9. Congelar diseño, registrar predicciones y recién entonces generar un mundo final.
+| # | Paso | Estado |
+|---|---|---|
+| 1 | Separar gold de evaluación y capacidad de verificación en runtime | **parcial** — el corpus ya declara `has_oracle` por celda (`--honest-detectors`); falta que lo LEAN los dos sitios que hoy miran el gold: `features.py:214` (la región) y `rules.py:248` (la creencia `oracle_available`, que es la que la cascada lee) |
+| 2 | Agregar por tarea antes de aprender y eliminar la fuga del bloque final | **hecho** |
+| 3 | Retirar del camino activo las afirmaciones Hebbianas que no gobiernan decisiones | abierto |
+| 4 | Conservar una sola historia de creencias por solicitud | **hecho** (`decide.py`) |
+| 5 | Fortalecer verificadores de evidencia y contabilizar todo costo | **parcial** — la sonda exige span literal, fuente ≠ destino y unidad en alcance; lo que cuesta decidir se devuelve en `Decision.usage` |
+| 6 | Recalcular región después de cada observación | **hecho** (`decide.py`) |
+| 7 | Implementar el diagnóstico contrafactual mínimo y el controlador REC | **hecho** (`rec.py`, `certify.py`) |
+| 8 | Persistir manifiestos, sesiones y certificados | **parcial** — certificados y ledger final persisten; el producto todavía no cierra el bucle de resultados y creencias (deuda 5 de §5) |
+| 9 | Congelar diseño, registrar predicciones y recién entonces generar un mundo final | en curso |
+
+El paso 1 es el que gobierna la medición pendiente: mientras `has_oracle` se derive de
+`bool(task["oracle"])`, toda tarea corregible tiene detector, la regla de cascada dispara
+con prioridad 90 y la de selección — prioridad 70 — no se evalúa nunca. Ser corregible
+implicaba tener detector, y por eso el banco no podía medir selección.
+
+Medido sin gastar un token (`_analyze_p17_mechanism.py`): sobre `gold_p17`, aplicar los
+dos sitios hace caer la cascada de **22 a 2** de 26, y deja **14 tareas esperando la
+sonda** — que es el único lugar de donde la selección puede salir. El cambio está listo
+pero espera a que P16 cierre su veredicto congelado: tocarlo con una corrida a mitad de
+camino disolvería la única garantía que hace que registrar una predicción valga algo.
 
 ## 9. Mapa documental
 
@@ -253,7 +297,7 @@ El diseño completo vive en [`PATRON_REC.es.md`](PATRON_REC.es.md). Su estado es
 |---|---|
 | `DISENO.es.md` | Arquitectura lógica, decisiones, garantías y deuda. |
 | `ARQUITECTURA.es.md` | Arquitectura de plataforma: orquestación, ingesta, persistencia y backend. **Propuesta.** |
-| `PATRON_REC.es.md` | Patrón propuesto y protocolo de investigación. |
+| `PATRON_REC.es.md` | Patrón implementado (`rec.py`, `certify.py`) y protocolo de investigación. |
 | `app/README.es.md` | Mapa de módulos del producto. |
 | `app/paradigms/README.es.md` | Catálogo y estado de paradigmas. |
 | `BENCHMARK.es.md` | Protocolo del banco y validez científica. |
