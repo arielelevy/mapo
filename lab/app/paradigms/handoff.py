@@ -1,0 +1,227 @@
+"""Agentes con alcance propio y transferencia AUTORIZADA POR CODIGO.
+
+QUE LO HACE UN PATRON Y NO FRASEO. Las cuatro preguntas de `PATRON_O_FACTOR.es.md`:
+
+  cuantas llamadas y quien las decide   acotadas por la cantidad de alcances, las fija el
+                                        codigo — no un bucle que el modelo corta
+  quien elige la proxima accion         el CODIGO decide si hay transferencia
+  estado compartido y quien lo escribe  el CONTRATO, escrito por el codigo desde una
+                                        proposicion tipada del agente
+  un paso puede cambiar el plan         si, acotado: una transferencia re-alcanza
+
+Difiere de `dag_strategy` —ahi el MODELO dibuja el grafo proponiendo sub-preguntas— y de
+un fan-out fijo, que no tiene transferencia. Es otro grafo de control, no otro prompt.
+
+Y DIFIERE DEL HANDOFF DE LA INDUSTRIA EN LO QUE IMPORTA. Los tres frameworks consultados
+—Microsoft Agent Framework, OpenAI Agents SDK, Google ADK— hacen lo mismo: **el handoff ES
+una herramienta que el modelo llama**, `transfer_to_<agente>()`. O sea, flujo de control
+decidido por el modelo, que es exactamente lo que el invariante de este producto prohibe.
+
+Aca el modelo puede PROPONER la transferencia como proposicion tipada; la autoriza una
+regla determinista sobre lo que el agente declaro. Tres consecuencias medibles y no
+retoricas:
+
+  reproducible  misma base de creencias => mismo handoff. Con `transfer_to_agent()` la
+                transferencia hereda toda la varianza del modelo
+  gateable      un handoff hacia capacidad irreversible puede exigir procedencia; una
+                llamada a herramienta no puede exigirsela a si misma
+  auditable     la transferencia entra al registro como cualquier otra decision
+
+Y HAY UNA LECCION DE HOY ADENTRO. `P20` midio que rechazar una llamada NO le quita la
+decision al modelo: la re-emite con otras palabras el 69% de las veces. Por eso aca el
+agente **no tiene** una herramienta de transferencia que se le pueda rechazar. La accion
+no existe: el agente termina su turno declarando lo que le falta, y quien transfiere es el
+codigo. Quitar la decision es no ofrecer la accion.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from ..beliefs import Belief, BeliefBase, Provenance
+from ..llm import LLMClient, Usage
+from ..retrieval import CorpusView
+from ..tools import ToolSurface
+from . import ANSWER_CONTRACT, Result, _run_tool_loop, parse_answer
+from .parsing import extract_json
+
+# Cuantos alcances. Dos es el minimo que tiene transferencia; mas alcances multiplican el
+# costo fijo sin cambiar la estructura, y la estructura es lo que se mide.
+SCOPES = 2
+
+# Vueltas por agente. Acotado por el codigo, no por el modelo.
+MAX_TURNS_PER_AGENT = 6
+
+# Piso para autorizar la transferencia. El agente la PROPONE —eso es su opinion, asi que
+# ELICITED— y la regla exige que lo que pide exista LITERAL en otro alcance, que es un
+# hecho computable sobre el material. Sin eso, un agente podria pedir transferencia
+# indefinidamente y el patron degeneraria en un bucle con otro nombre.
+HANDOFF_FLOOR = Provenance.COMPUTED
+
+AGENT_CONTRACT = """You own ONLY the units listed below. You cannot see any others.
+
+Work your units. Then answer with JSON only:
+{"status": "resolved", "answer": "<your answer>"}
+  — you can answer from your units alone; or
+{"status": "needs", "missing": "<the exact literal string you could not resolve>",
+ "partial": "<what you did establish>"}
+  — your units mention something they do not define.
+
+`missing` must be a string that appears VERBATIM in your units. Do not paraphrase it and
+do not invent one: it is looked up literally in the other scopes, and a paraphrase finds
+nothing."""
+
+
+def _scopes(unit_ids: list[str], n: int) -> list[list[str]]:
+    """Reparto deterministico por indice. El mismo request da el mismo reparto.
+
+    Con paso y no en bloques contiguos, por la misma razon que el roster de `C9`: un
+    bloque contiguo agrupa unidades vecinas del corpus, y ahi el reparto mediria
+    localidad del indice en vez de alcance.
+    """
+    return [sorted(unit_ids[i::n]) for i in range(n)] if unit_ids else []
+
+
+def _sub_surface(surface: ToolSurface, unit_ids: list[str]) -> ToolSurface:
+    """La misma superficie, restringida a un alcance. Comparte los contadores.
+
+    El alcance es una propiedad de la VISTA, no una instruccion en el prompt: un agente
+    no puede leer fuera de su alcance porque las unidades no estan, no porque se le haya
+    pedido que no lo haga.
+    """
+    view = CorpusView(
+        task_id=surface.view.task_id,
+        documents=surface.view.documents,
+        unit_ids=list(unit_ids),
+        relevant_units=[u for u in surface.view.relevant_units if u in set(unit_ids)],
+    )
+    sub = ToolSurface(
+        view=view,
+        hybrid=surface.hybrid,
+        semantic=surface.semantic,
+        lexical=surface.lexical,
+        variant=surface.variant,
+        budget_tokens=surface.budget_tokens,
+        stop_on_barren=surface.stop_on_barren,
+        offer_read_all=surface.offer_read_all,
+    )
+    # Los contadores del padre siguen siendo los que se registran: lo que se mide es lo
+    # que la TAREA consumio, no lo que consumio cada agente por separado.
+    sub.calls = surface.calls
+    sub.sequence = surface.sequence
+    sub.units_read = surface.units_read
+    return sub
+
+
+def _authorises(base: BeliefBase, missing: str, scope: list[str],
+                documents: dict[str, str]) -> bool:
+    """La regla. El agente propone; esto decide.
+
+    DOS CONDICIONES, y la segunda es la que hace determinista al patron:
+
+      el agente declaro que le falta algo   proposicion `ELICITED` — es su lectura
+      y ese algo esta LITERAL en otro       hecho `COMPUTED` sobre el material
+
+    La segunda no es parseo de prosa: es contencion de una cadena que el agente ya
+    enuncio, contra un texto. La direccion importa — buscar una cadena conocida adentro
+    de un documento es finito; extraer del documento que cadenas hay es lo otro.
+    """
+    if not base.satisfies("handoff_requested", 0.0, Provenance.ELICITED):
+        return False
+    needle = " ".join(missing.lower().split())
+    if len(needle) < 4:
+        # Guarda de especificidad, la misma que la sonda: una cadena de tres caracteres
+        # aparece en cualquier lado y autorizaria siempre.
+        return False
+    return any(needle in " ".join(documents[u].lower().split()) for u in scope)
+
+
+def handoff(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
+    """Alcances independientes, y una transferencia que autoriza el codigo."""
+    usage = Usage()
+    base = BeliefBase()
+    units = surface.unit_ids()
+    scopes = _scopes(units, SCOPES)
+    transcript: list[dict[str, Any]] = []
+    iterations = 0
+
+    if len(scopes) < 2:
+        # Un solo alcance no tiene transferencia que autorizar: el patron degenera en
+        # una sola pasada, y se dice en vez de fingir que hubo handoff.
+        scopes = [units]
+
+    partials: list[str] = []
+    handed: dict[str, Any] | None = None
+
+    for index, scope in enumerate(scopes):
+        if not scope:
+            continue
+        contract = AGENT_CONTRACT + "\n\nYour units: " + ", ".join(scope)
+        if handed is not None:
+            # EL CONTRATO QUE VIAJA. No es "contexto que se arrastra": es lo que el
+            # agente anterior DECLARO que le faltaba, mas lo que si establecio.
+            contract += (
+                f"\n\nA previous agent handed this to you.\n"
+                f"It could not resolve: {handed['missing']!r}\n"
+                f"It did establish: {handed['partial']}"
+            )
+        messages = [{
+            "role": "user",
+            "content": f"Task: {task['question']}\n\n{contract}\n\n{ANSWER_CONTRACT}",
+        }]
+
+        completion, sub_usage, sub_transcript, turns = _run_tool_loop(
+            client, _sub_surface(surface, scope), messages,
+            max_iterations=MAX_TURNS_PER_AGENT,
+        )
+        usage.merge(sub_usage)
+        transcript.extend(sub_transcript)
+        iterations += turns
+
+        payload = extract_json(completion.text if completion else "", default={},
+                               sink=surface)
+        status = payload.get("status") if isinstance(payload, dict) else None
+        partial = str(payload.get("partial") or payload.get("answer") or "")
+        if partial:
+            partials.append(partial)
+
+        if status == "resolved":
+            handed = None
+            continue
+
+        missing = str(payload.get("missing") or "")
+        if not missing:
+            continue
+
+        # EL AGENTE PROPONE. Entra como su lectura, no como un hecho.
+        base.assert_(Belief(
+            proposition="handoff_requested",
+            value=missing,
+            credence=0.8,
+            provenance=Provenance.ELICITED,
+            evidence=f"el agente {index} declaro que no puede resolver {missing!r}",
+        ))
+
+        # EL CODIGO DECIDE. Se autoriza contra los alcances que TODAVIA no corrieron:
+        # transferir hacia atras seria un bucle, no un handoff.
+        adelante = [u for s in scopes[index + 1:] for u in s]
+        if adelante and _authorises(base, missing, adelante, surface.view.documents):
+            handed = {"missing": missing, "partial": partial}
+            base.assert_(Belief(
+                proposition="handoff_authorised",
+                value=True,
+                credence=1.0,
+                provenance=Provenance.COMPUTED,
+                evidence=f"{missing!r} aparece literal en un alcance posterior",
+            ))
+        else:
+            handed = None
+
+    answer = parse_answer(completion.text if completion else "") or " ".join(partials)
+    return Result(
+        answer=answer,
+        usage=usage,
+        transcript=transcript,
+        iterations=iterations,
+        tool_usage=surface.usage(),
+    )

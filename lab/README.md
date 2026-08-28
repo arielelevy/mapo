@@ -640,6 +640,54 @@ Ground truth is re-derived independently by `corpus/verify.py::_c8`, which also 
 task whose superseded value is absent from the material — without it, a wrong answer would
 only mean "not found", which the other cells already measure.
 
+### P23 registered (2026-08-28, before `handoff` has run) — the handoff, authorised by code
+
+**What it is.** Agents with independent scopes and a transfer the **code** authorises. The
+three frameworks surveyed — Microsoft Agent Framework, OpenAI Agents SDK, Google ADK — all
+do the same thing: the handoff **is a tool the model calls**, `transfer_to_<agent>()`. That
+is control flow decided by the model, which is what this product's invariant forbids.
+
+Here the agent **proposes** —a typed proposition, `ELICITED`, because it is its reading—
+and a deterministic rule authorises: the string it says it cannot resolve must appear
+**verbatim** in a scope that has not run yet. That second half is `COMPUTED` over the
+material, and it is what makes the transfer reproducible.
+
+**And a lesson from `P20` is built in.** Refusing a call does not take the decision away
+from the model — it re-issues with different words 69% of the time. So the agent has **no
+transfer tool that could be refused**. The action does not exist.
+
+**Why it qualifies as a pattern and not as prompting**, by the four questions in
+`PATRON_O_FACTOR.es.md`: calls bounded by the number of scopes and fixed by code; the
+**code** chooses whether to transfer; the shared state is a **contract** written by code
+from a typed proposal; and a step can re-scope. That is a different control graph, not a
+different prompt.
+
+**Registered predictions.**
+
+- **P23a (it must beat the arm it replaces).** On the coupled cells — `C3`, `C5` — `handoff`
+  reaches strictly higher utility than a fixed fan-out with no transfer. Falsified if it
+  does not: independent scopes without a working transfer are just a partition, and a
+  partition already lost those cells.
+- **P23b (the transfer has to fire, and rarely).** The rule authorises on **at least one and
+  at most half** of the coupled cells. Falsified at zero — the pattern degenerates into two
+  isolated agents — and falsified above half, which would mean the literal-bridge rule is
+  authorising on noise rather than on a real reference.
+- **P23c (determinism, and this is the differentiating claim).** Across replicates of the
+  same cell, the set of authorised transfers is **identical**. Falsified by a single cell
+  where two replicates transfer differently: that would mean the transfer inherited the
+  model's variance, which is exactly what `transfer_to_agent()` does and what this pattern
+  exists not to do.
+- **P23d (it is not free).** Cost per cell exceeds a fixed fan-out's. Falsified if it does
+  not — that would mean the second agent is not actually running, and `P23a` would be
+  measuring something else.
+
+**`P23c` is the one worth running even if the others fail.** Utility is a property of this
+corpus; reproducibility of the transfer is a property of the mechanism, and it is the only
+one of the four that no prompt-based handoff can match.
+
+**Not yet run.** `map_reduce` was moved to standby by the author on the same day, so the
+fixed-fan-out comparison uses its existing record rather than new spend.
+
 ### P8 verdict (2026-08-28) — the transfer test, registered 2026-08-26 and never scored
 
 **Why this sat unevaluated.** The five predictions were registered before running, the

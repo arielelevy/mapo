@@ -1824,6 +1824,84 @@ def check_coverage_trigger(ok: bool) -> bool:
     return ok
 
 
+# --- 39. el handoff, y quien autoriza la transferencia -----------------------------------
+#
+# LOS TRES FRAMEWORKS CONSULTADOS HACEN LO MISMO: el handoff ES una herramienta que el
+# modelo llama, `transfer_to_<agente>()`. O sea, flujo de control decidido por el modelo,
+# que es exactamente lo que el invariante de este producto prohibe.
+#
+# Aca el agente PROPONE y una regla determinista AUTORIZA. Y hay una leccion de P20 adentro:
+# rechazar una llamada no le quita la decision al modelo —la re-emite con otras palabras el
+# 69% de las veces—, asi que el agente NO TIENE una herramienta de transferencia que se le
+# pueda rechazar. La accion no existe.
+def check_handoff_authorisation(ok: bool) -> bool:
+    from app.beliefs import Belief, BeliefBase, Provenance
+    from app.paradigms import CATALOG, COST_PRIORS, REGISTRY
+    from app.paradigms.handoff import SCOPES, _authorises, _scopes, _sub_surface
+    from app.retrieval import CorpusView, LexicalRetriever
+    from app.tools import ToolFailure, ToolSurface
+
+    print("\n--- 39. el handoff ---")
+
+    ok &= check("esta en el catalogo y en el registry, con prior de costo",
+                "handoff" in REGISTRY and "handoff" in CATALOG
+                and "handoff" in COST_PRIORS)
+
+    docs = {
+        f"u-{i}": ("el puente Marta Arrieta vive aca" if i == 5 else f"relleno {i}")
+        for i in range(8)
+    }
+    view = CorpusView(task_id="t", documents=docs, unit_ids=sorted(docs),
+                      relevant_units=[])
+    lex = LexicalRetriever()
+    surface = ToolSurface(view=view, hybrid=lex, semantic=lex, lexical=lex,
+                          variant="basic", budget_tokens=60_000)
+
+    scopes = _scopes(sorted(docs), SCOPES)
+    ok &= check("el reparto es con PASO, no en bloques contiguos - un bloque agrupa "
+                "unidades vecinas y mediria localidad del indice, no alcance",
+                scopes[0] == ["u-0", "u-2", "u-4", "u-6"], str(scopes[0]))
+
+    # EL ALCANCE ES DE LA VISTA, NO DEL PROMPT. Un agente no puede leer afuera porque las
+    # unidades NO ESTAN, no porque se le haya pedido que no lo haga.
+    sub = _sub_surface(surface, scopes[0])
+    ok &= check("el agente ve solo su alcance", sub.unit_ids() == scopes[0])
+    try:
+        sub.dispatch("read", {"unit_ids": scopes[1][0]})
+        blocked = False
+    except ToolFailure:
+        blocked = True
+    ok &= check("y NO PUEDE leer fuera de el - el alcance es de la vista, no una "
+                "instruccion en el prompt", blocked)
+
+    # LA REGLA. Dos condiciones, y ninguna alcanza sola.
+    base = BeliefBase()
+    ok &= check("sin que el agente lo pida, no hay transferencia - el codigo no la "
+                "inventa", not _authorises(base, "Marta Arrieta", scopes[1], docs))
+
+    base.assert_(Belief("handoff_requested", "Marta Arrieta", 0.8, Provenance.ELICITED))
+    ok &= check("pedido Y presente literal en un alcance posterior: AUTORIZA",
+                _authorises(base, "Marta Arrieta", scopes[1], docs))
+    ok &= check("pedido pero NO presente: no autoriza - la propuesta del agente es su "
+                "lectura, no un hecho",
+                not _authorises(base, "Pedro Gomez", scopes[1], docs))
+    ok &= check("una cadena demasiado corta no autoriza - misma guarda de especificidad "
+                "que la sonda: tres caracteres aparecen en cualquier lado",
+                not _authorises(base, "de", scopes[1], docs))
+
+    # Y lo que lo separa de los frameworks: no hay tool de transferencia que ofrecer.
+    import inspect
+
+    from app.paradigms import handoff as mod
+
+    src = inspect.getsource(mod)
+    ok &= check("no existe una herramienta de transferencia que el modelo pueda llamar - "
+                "quitar la decision es no ofrecer la accion, no rechazarla",
+                "transfer_to" not in src)
+
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -2097,6 +2175,7 @@ def main() -> int:
     ok = check_contract_names_its_deficit(ok)
     ok = check_scope_is_a_second_axis(ok)
     ok = check_coverage_trigger(ok)
+    ok = check_handoff_authorisation(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

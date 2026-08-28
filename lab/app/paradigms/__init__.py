@@ -403,11 +403,26 @@ CATALOG: dict[str, CatalogEntry] = {
     "rewoo": CatalogEntry(Status.ACTIVE, "unico mejor en 10, y el mas barato al empatar en 46"),
     "gist_reader": CatalogEntry(Status.ACTIVE, "unico mejor en 9"),
     "map_reduce": CatalogEntry(
-        Status.ACTIVE,
-        "gana una celda de 33 en las que compite; infactible en 180 filas de 270, "
-        "pero eso lo decide la aritmetica y no una lista",
+        Status.STANDBY,
+        "DESPRIORIZADO por decision del autor (2026-08-28): no se le gasta mas cuota de "
+        "medicion. La evidencia lo acompana — gana UNA celda de 33 en las que compite, y "
+        "la aritmetica de factibilidad lo poda en 180 filas de 270, asi que la mayor "
+        "parte de lo que se pagaria por el ya se sabe que no va a correr. Y en P20 su "
+        "reduccion fue 0,0%: su fan-out lo fija el codigo, asi que no tiene nada que "
+        "ahorrar donde el resto ahorra",
+        revives_when="una celda donde sea unico mejor Y factible bajo presupuesto de "
+                     "produccion; su dato historico se replaya igual",
     ),
     "reflection": CatalogEntry(Status.ACTIVE, "unico mejor en 1 de 14: delgado, no dominado"),
+    "handoff": CatalogEntry(
+        Status.ACTIVE,
+        "CANDIDATO NUEVO (2026-08-28), sin medir. Alcances independientes y transferencia "
+        "AUTORIZADA POR CODIGO, no por una herramienta que el modelo llama — que es como "
+        "lo hacen los tres frameworks consultados y es flujo de control decidido por el "
+        "modelo. Entra con prediccion falsable registrada antes de correr, como todos",
+        revives_when="no aplica: esta activo y sin medir. Si P23 lo refuta, pasa a "
+                     "retirado con el veredicto adentro",
+    ),
     "direct": CatalogEntry(
         Status.ACTIVE,
         "caso degenerado que la factibilidad elige sola cuando la evidencia entra en "
@@ -493,6 +508,15 @@ FALLBACK = "react"
 from .dag import dag_strategy  # noqa: E402
 
 REGISTRY["dag_strategy"] = dag_strategy
+
+# Mismo motivo que `dag.py`: `handoff.py` necesita `_run_tool_loop` y `parse_answer` de
+# aca, asi que se importa desde abajo.
+from .handoff import handoff  # noqa: E402
+
+REGISTRY["handoff"] = handoff
+# Costo: SCOPES agentes, cada uno con su bucle acotado. Mas caro que un fan-out fijo
+# —hay dos bucles— y mas barato que `dag_strategy`, que ademas replanifica.
+COST_PRIORS["handoff"] = 5.0
 # Costliest by a distance: plan + waves + verify + up to 3 replans + synthesise. The
 # prior puts it last on any cascade ladder, which is where its measured cost belongs.
 COST_PRIORS["dag_strategy"] = 12.0
