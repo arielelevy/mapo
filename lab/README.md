@@ -505,6 +505,53 @@ so its argmax coincides. The plasticity that GOVERNS is elsewhere — θ's reinf
 the §6.2 assurance ratchet; the weight column is record, not policy, and the operational
 story should stop implying otherwise (handoff Fase 0, item 5).
 
+**The bench cannot measure selection, and the reason is structural (measured,
+2026-08-27).** Chasing why θ never specialises produced a second, independent cause, and
+this one is not a tuning problem:
+
+| rule | priority | fires when |
+|---|---:|---|
+| `irreversible_requires_gate` | 100 | the task declares an irreversible action |
+| `verifiability_partition` (cascade) | **90** | **a cheap oracle exists** |
+| `probe_before_deciding_on_bulk` | 80 | many units, coupling unmeasured |
+| `specialise_when_theta_is_confident` | **70** | θ has a margin above τ |
+
+And every corpus in the bench carries an oracle on ~96% of its tasks — `gold_transfer`
+25/26, `gold_deep` 25/26, `gold_v2` 38/39, `gold_p16` 24/26 — because a task without gold
+cannot be graded by exact match, which is what makes the bench judge-free in the first
+place.
+
+So on 96% of every corpus, the cascade rule fires at priority 90 and
+`specialise_when_theta_is_confident` is **never even evaluated**. The mechanism under
+study cannot run on the bench that was built to study it. **The property that makes a
+task measurable — a cheap oracle — is the same property that makes escalation the right
+call, and it pre-empts selection by design.**
+
+This is the same conflation the handoff flagged from the other end (`CIERRE` §3.8.2:
+evaluation gold and the runtime cheap verifier are one field, `oracle`), and here is its
+measured consequence: they must be separated not for tidiness but because their conflation
+makes selection untestable.
+
+It reframes everything above rather than replacing it. P15 did not measure "learned
+routing loses to a fixed default"; it measured the cascade and the gate, with selection
+switched off by rule priority on 25 of 26 tasks. E2's identical results have the same
+explanation: neither router was routing. The three findings — margin zero, region
+fragmentation, oracle pre-emption — are three views of one fact.
+
+**Fixed and measured, opt-in (the router is NOT touched for P16, which is mid-run):**
+hierarchical accumulation (`Plasticity.candidate(hierarchical=True)`, each episode also
+indexed into its ancestor regions) plus region backoff
+(`Router(region_backoff=True)`, a thin region defers to its parent and **returns which
+level answered**, because an assertion from a coarser bin is a weaker claim). Effect on
+the held-out record: **tasks with margin > 0 goes from 0/26 to 16/26** (levels: 6 answered
+at 4 segments, 12 at 3, 5 at 2, 1 at 1, 2 at none). Utility is unchanged at −0.0112 —
+because of the priority pre-emption above, which no amount of confidence can get past.
+
+What P17 needs, and it is now specific: **a cohort of tasks with gold for grading but no
+runtime oracle**, so the cascade cannot fire and selection has to carry the decision.
+Until that exists, no run on this corpus family can confirm or refute the selection claim,
+and the honest record says so instead of reporting a number that measures something else.
+
 **Statistics (free, `_analyze_statistics.py`, paired bootstrap over TASKS, 10k
 resamples, fixed seed) — and it corrects a reading.**
 

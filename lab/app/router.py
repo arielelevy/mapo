@@ -93,10 +93,16 @@ class Router:
         paradigm_costs: dict[str, float],
         fallback: str,
         calibration: Calibration | None = None,
+        region_backoff: bool = False,
     ) -> None:
         if not bundle.verify():
             raise ValueError("Refusing to route with an unverified policy bundle.")
         self._theta = bundle
+        # OFF by default, and deliberately: P16 is running against a frozen verdict
+        # script, and changing what the router asserts mid-run would dissolve the one
+        # guarantee that makes a preregistration worth anything. It is opt-in until a
+        # prediction registered under it says otherwise.
+        self._region_backoff = region_backoff
         # Relative priors only: they order a cascade ladder cheapest-first before any
         # episodes exist, and measured mean_cost supersedes them once theta has data.
         self._costs = paradigm_costs
@@ -108,35 +114,73 @@ class Router:
     def theta_assertions(
         self, region: str, candidates: list[str]
     ) -> tuple[str | None, float]:
-        """What theta asserts about this region: the best paradigm and its margin.
+        """What theta asserts about this region: the best paradigm and its margin."""
+        best, margin, _ = self.theta_assertions_at(region, candidates)
+        return best, margin
+
+    def theta_assertions_at(
+        self, region: str, candidates: list[str]
+    ) -> tuple[str | None, float, str]:
+        """As above, plus WHICH region level actually answered.
 
         The margin saturates on evidence, so eight episodes is not eighty. A region
-        below the episode floor asserts nothing, which is the correct behaviour for a
-        bundle that has not learned anything here yet: it leaves the rules with no
-        reason to specialise and the request falls to the fallback.
+        below the episode floor asserts a name with no confidence, which leaves the
+        rules no reason to specialise and drops the request to the fallback.
+
+        With `region_backoff`, a region too thin to clear the floor defers to its
+        parent — `many/oracle/loose/chain` to `many/oracle/loose`, and so on up — and
+        the level that answered is RETURNED rather than hidden. An assertion drawn
+        from a coarser bin is a weaker claim than one drawn from the exact bin, and a
+        belief that does not say which bin it came from is claiming a specificity it
+        does not have.
+
+        Why it exists, measured: adding a fourth segment to the vocabulary split the
+        regions below MIN_EPISODES_FOR_CONFIDENCE and theta went from asserting on 12
+        of 26 held-out tasks to asserting on none. A more expressive vocabulary costs
+        statistical power; backoff keeps the axis where the evidence supports it and
+        keeps the power where it does not.
         """
-        peers = {
-            p: s for p, s in self._theta.paradigms_for(region).items()
-            if p in candidates
-        }
-        if len(peers) < 2:
-            return None, 0.0
+        thin: tuple[str | None, float, str] | None = None
 
-        best = max(peers, key=lambda p: peers[p].mean_utility)
-        stat = peers[best]
-        if stat.episodes < MIN_EPISODES_FOR_CONFIDENCE:
-            return best, 0.0
+        for level in self._region_levels(region):
+            peers = {
+                p: s for p, s in self._theta.paradigms_for(level).items()
+                if p in candidates
+            }
+            if len(peers) < 2:
+                continue
 
-        runner_up = max(
-            (s.mean_utility for p, s in peers.items() if p != best), default=0.0
-        )
-        gap = stat.mean_utility - runner_up
-        if gap <= 0.0:
-            return best, 0.0
+            best = max(peers, key=lambda p: peers[p].mean_utility)
+            stat = peers[best]
+            if stat.episodes < MIN_EPISODES_FOR_CONFIDENCE:
+                # Remember the most specific thin answer: if no ancestor has enough
+                # evidence either, this is still what theta believes — just without
+                # the confidence to act on it.
+                if thin is None:
+                    thin = (best, 0.0, level)
+                continue
 
-        evidence = min(1.0, stat.episodes / (4.0 * MIN_EPISODES_FOR_CONFIDENCE))
-        margin = stat.win_rate * evidence * min(1.0, gap * 4.0)
-        return best, max(0.0, min(1.0, margin))
+            runner_up = max(
+                (s.mean_utility for p, s in peers.items() if p != best), default=0.0
+            )
+            gap = stat.mean_utility - runner_up
+            if gap <= 0.0:
+                if thin is None:
+                    thin = (best, 0.0, level)
+                continue
+
+            evidence = min(1.0, stat.episodes / (4.0 * MIN_EPISODES_FOR_CONFIDENCE))
+            margin = stat.win_rate * evidence * min(1.0, gap * 4.0)
+            return best, max(0.0, min(1.0, margin)), level
+
+        return thin if thin is not None else (None, 0.0, "")
+
+    def _region_levels(self, region: str) -> list[str]:
+        """The exact region, then its ancestors, most specific first."""
+        if not self._region_backoff:
+            return [region]
+        parts = region.split("/")
+        return ["/".join(parts[:k]) for k in range(len(parts), 0, -1)]
 
     # -- the decision ------------------------------------------------------
 

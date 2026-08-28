@@ -296,8 +296,36 @@ class Plasticity:
         return 0.5 if episode.was_best else -0.3
 
     @classmethod
-    def apply(cls, stats: dict[str, dict[str, Stat]], episode: Episode) -> None:
-        region = stats.setdefault(episode.region, {})
+    def apply(
+        cls, stats: dict[str, dict[str, Stat]], episode: Episode,
+        hierarchical: bool = False,
+    ) -> None:
+        """Accumulate one episode. With `hierarchical`, into its ANCESTOR regions too.
+
+        A region label is a path — `many/oracle/loose/chain` — and its prefixes are
+        real, coarser questions about the same request. Indexing only the leaf is what
+        made the fourth segment cost all of theta's confidence: every episode landed in
+        a bin too small to clear the evidence floor, and the bins that DID have evidence
+        (the 3-segment ones) stopped existing the moment the vocabulary grew.
+
+        Off by default. Turning it on changes what a bundle asserts, so it belongs to a
+        prediction registered under it — not to a router already being measured.
+        """
+        for level in cls._levels(episode.region, hierarchical):
+            cls._apply_at(stats, level, episode)
+
+    @staticmethod
+    def _levels(region: str, hierarchical: bool) -> list[str]:
+        if not hierarchical:
+            return [region]
+        parts = region.split("/")
+        return ["/".join(parts[:k]) for k in range(len(parts), 0, -1)]
+
+    @classmethod
+    def _apply_at(
+        cls, stats: dict[str, dict[str, Stat]], region_key: str, episode: Episode
+    ) -> None:
+        region = stats.setdefault(region_key, {})
         stat = region.setdefault(episode.paradigm, Stat())
 
         updated = (1.0 - DECAY) * stat.weight + LEARNING_RATE * cls.delta(episode)
@@ -314,6 +342,7 @@ class Plasticity:
         episodes: list[Episode],
         tau: float,
         notes: str = "",
+        hierarchical: bool = False,
     ) -> PolicyBundle:
         """Build the next bundle by replaying episodes onto a copy of the incumbent."""
         stats = {
@@ -321,7 +350,7 @@ class Plasticity:
             for region, paradigms in incumbent.stats.items()
         }
         for episode in episodes:
-            cls.apply(stats, episode)
+            cls.apply(stats, episode, hierarchical=hierarchical)
 
         return PolicyBundle(
             version=incumbent.version + 1,
