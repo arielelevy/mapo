@@ -505,6 +505,29 @@ so its argmax coincides. The plasticity that GOVERNS is elsewhere — θ's reinf
 the §6.2 assurance ratchet; the weight column is record, not policy, and the operational
 story should stop implying otherwise (handoff Fase 0, item 5).
 
+**E2 — θ against a trivial learned arm on the same φ (exploratory, free,
+`_run_e2_learned.py`).** The reviewer's cheapest attack, answered: a ridge regression
+(72 parameters, closed form, no seed) trained on the same 140 cell episodes and seeing
+exactly what θ sees. Scored the way P15 scored, **the trivial arm routes BETTER than the
+whole deterministic machinery**: −0.047 vs −0.087. But wrapped in the same action
+machinery both land on **exactly −0.0112 — while agreeing on 0 of 26 tasks.**
+
+The mechanism, verified: **21/26 tasks fire the cascade**, and a cascade with an oracle
+climbs the whole ladder, so the rung it STARTS from cannot change quality — 9 of those
+21 exhaust the ladder with no hit, and the rest find the same winner from either start.
+Two routers that disagree on every single task produce identical utility because, where
+the cascade fires, **the choice is not what produces the value; the action structure is.**
+
+Two consequences, and neither is comfortable:
+1. The routing claim, on this corpus family, is largely a claim about the CASCADE, not
+   about selection. §5.2's cascade dominance result is doing the work that §5.1's
+   selection theorem was credited with.
+2. The only surface where selection can still pay is **cost** — start at the right rung,
+   stop earlier. Measured: climbing from cheapest costs 2.24M tokens on those tasks
+   versus 2.49M for always-`dag_strategy`, so the cascade is already ~10% cheaper than
+   the best fixed. That makes P16's λ sweep the decisive measurement of the whole
+   programme, not a robustness check.
+
 **Decomposition of the −0.087 (exploratory, post-registration, same corpus —
 `_analyze_p15_decomposition.py` re-derives all of it).** Three mechanisms, in order:
 (1) the **continuation axis** — literal key recurrence across distinct units, a pure
