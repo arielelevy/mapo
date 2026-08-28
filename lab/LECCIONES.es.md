@@ -134,6 +134,15 @@ hiperparámetro mal puesto: está forzado.**
 > Un estimador **con** memoria sólo puede diferir de uno **sin** memoria cuando lo que
 > estima **se mueve**.
 
+**Y hay que leer la demostración por lo que dice, no por lo que sugiere.** Prueba que el
+peso no puede mejorar **la selección de paradigma**. No prueba que el peso sea inútil, y
+casi lo tiramos por confundir las dos cosas: ya gobierna la **poda** —es el reloj de
+decaimiento con el que una stat sin episodios llega al piso y se elimina— y la propiedad
+que lo vuelve redundante para un argmax (ser marginal y monótono) **no aplica a una
+asociación entre pares**, que es la dirección donde puede servir.
+
+> Una demostración de redundancia acota **un uso**, no una pieza.
+
 ### 4.2 El blanco se mueve · `MEDIDO`
 
 **4 de 5 regiones comparables cambian de ganador entre corpus (80%).** O sea que hay un
