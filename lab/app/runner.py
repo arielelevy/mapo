@@ -43,7 +43,7 @@ from .retrieval import CorpusView, Retriever, build_arms
 from .tools import VARIANTS, ToolSurface
 from .assurance import Assurance
 from .policy import Episode, Plasticity, PolicyBundle, promote
-from .store import LearningStore
+from .store import LearningStore, state_dir_for
 
 
 class _RetiredTaskCorpus:
@@ -226,6 +226,20 @@ def load_rows(
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+    # ES ESTE UN ARCHIVO DE FILAS. La pregunta va PRIMERO porque las otras dos guardas
+    # inspeccionan claves, y sobre un archivo de otra forma no encuentran ninguna y pasan.
+    # `results/` guarda mediciones y `state/` guarda el ledger — eso es layout, y el
+    # layout se rompe con un `mv`. Un ledger de creencias leido como filas no revienta si
+    # comparte claves: se PROMEDIA, callado.
+    sin_id = [i for i, r in enumerate(rows, 1) if "task_id" not in r][:3]
+    if sin_id:
+        raise ValueError(
+            f"{path.name}: las lineas {sin_id} no tienen `task_id`, asi que esto no es un "
+            f"archivo de filas medidas. `results/` es medicion y `state/` es el ledger "
+            f"epistemico; leer uno como el otro promedia un log de creencias como si "
+            f"fueran resultados."
+        )
+
     # DOS COSAS DISTINTAS, y confundirlas fue el primer intento de esta guarda.
     #
     # (1) EL ARCHIVO NO PUEDE MEZCLAR. "Nunca mezclar modelos en un mismo archivo de
@@ -345,7 +359,9 @@ class Runner:
         self._results_path = (
             settings.results_dir / f"{corpus_name}{suffix}_rows.jsonl"
         )
-        self.store = LearningStore(settings.results_dir, corpus_name)
+        # La convencion de layout se aplica ACA, que es donde se conoce la configuracion:
+        # `results/` es medicion y `state/` es el ledger epistemico, y son dos arboles.
+        self.store = LearningStore(state_dir_for(settings.results_dir), corpus_name)
 
     # -- features ----------------------------------------------------------
 

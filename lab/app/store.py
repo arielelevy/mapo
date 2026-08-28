@@ -11,15 +11,28 @@ demand OBSERVED provenance for ever and the probe would fire on every request,
 regardless of how well the model was actually calibrated. And the abstraction stage of
 the sleep cycle would discover propositions and discard them, which is theatre.
 
-Layout, all under the results directory:
+DOS ARBOLES, Y NO SE MEZCLAN. Hasta hoy todo esto vivia adentro de `results/<modelo>/`,
+junto a las filas de ejecucion, y eso es un error de layout con consecuencia real: un
+`rglob("*.jsonl")` sobre `results/` levanta el LEDGER DE CREENCIAS como si fueran filas
+medidas. Ya paso — un analizador de costos se comio 207 lineas de `beliefs/` y reventó al
+buscarles `task_id`. Reventar fue suerte: si el ledger hubiera tenido las mismas claves,
+las habria promediado callado.
 
-    <corpus>_rows.jsonl          execution record (owned by Runner)
-    <corpus>_report.json         metrics report (owned by Runner)
-    policies/theta_vNNNN.json    theta, versioned and signed
-    beliefs/<corpus>.jsonl       belief bases, append-only
-    calibration/<corpus>.json    per-proposition reliability
-    dreams/<corpus>_cNNN.json    one file per consolidation cycle
-    propositions/<corpus>.json   propositions discovered and their evidence so far
+    results/<modelo>/            MEDICION. Evidencia de lo que se corrio, se guarda para
+      <corpus>_rows.jsonl        siempre, y nada de aca se puede recalcular
+      <corpus>_report.json
+
+    state/<modelo>/              ESTADO. Lo que el sistema APRENDIO, y se puede reconstruir
+      policies/theta_vNNNN.json  entero desde `results/` volviendo a consolidar
+      beliefs/<corpus>.jsonl     bases de creencias, append-only
+      calibration/<corpus>.json  confiabilidad por proposicion
+      dreams/<corpus>_cNNN.json  un archivo por ciclo de consolidacion
+      propositions/<corpus>.json proposiciones descubiertas y su evidencia
+
+La distincion no es de prolijidad: es de VIDA UTIL. Una medicion sin su ledger sigue
+siendo una medicion; un ledger sin sus mediciones no se puede auditar. Por eso el ledger
+deriva su ruta del directorio de resultados y no de una variable de entorno propia — si
+alguien mueve los resultados, el estado lo sigue, y no quedan huerfanos.
 
 Append-only wherever the record is evidence. A belief base that could be rewritten is
 not an audit trail, and a calibration figure recomputed from a mutable log cannot be
@@ -44,6 +57,37 @@ from .fsio import write_atomic
 # `verify_chain` reports as tampering forever after. Process-local by design: the
 # FastAPI endpoints run sync-in-threadpool within one process.
 _BELIEF_LOG_LOCK = threading.Lock()
+
+
+def state_dir_for(results_dir: Path) -> Path:
+    """La CONVENCION: que arbol de estado le toca a un arbol de resultados.
+
+    Se usa en un solo lugar —donde se arma el `Runner`— y existe para que la relacion
+    entre los dos arboles este escrita una vez. El store NO la llama: recibe la ruta ya
+    resuelta, asi que un despliegue con otro layout pasa la suya y no pelea.
+
+        lab/results        ->  lab/state
+        lab/results/nano   ->  lab/state/nano
+        /tmp/tmpXXXX       ->  /tmp/tmpXXXX_state
+
+    LA REGLA ES SUSTITUIR EL COMPONENTE, no hacer aritmetica de rutas. `MAPO_RESULTS_DIR`
+    aparece con DOS formas —`lab/results` para la grilla congelada y `lab/results/nano`
+    para el modelo vigente— asi que subir un nivel fijo acierta en una y en la otra se
+    sale de `lab/` y ademas nombra `state/results`.
+
+    Y SIN COMPONENTE `results` NO LEVANTA, que fue el primer intento y estaba mal. Un
+    directorio temporal de test es un caso legitimo y no tiene ledger que perder; negarse
+    ahi confunde «no sigo la convencion» con «me estas por pisar datos». El sufijo cubre
+    ese caso con lo unico que importa: **una ruta determinista, distinta, y fuera del
+    arbol de resultados** — que es la propiedad entera, y ninguna forma la pierde.
+    """
+    partes = list(results_dir.parts)
+    if "results" in partes:
+        # El ULTIMO, no el primero: una ruta con `results` dos veces nombra a la de abajo.
+        i = len(partes) - 1 - partes[::-1].index("results")
+        partes[i] = "state"
+        return Path(*partes)
+    return results_dir.with_name(results_dir.name + "_state")
 
 
 @dataclass
@@ -98,8 +142,13 @@ class DiscoveredProposition:
 class LearningStore:
     """Owns every piece of persisted learning state for one corpus."""
 
-    def __init__(self, results_dir: Path, corpus: str) -> None:
-        self._root = results_dir
+    def __init__(self, state_dir: Path, corpus: str) -> None:
+        # RECIBE SU DIRECTORIO, no lo adivina. La primera version derivaba la ruta del
+        # NOMBRE del arbol de resultados —sustituir el componente `results`— y eso es
+        # inferir layout de una cadena: andaba para las dos formas que hay hoy y levantaba
+        # contra cualquier directorio que no se llamara asi, un temporal de test incluido.
+        # La convencion vive en UN lugar, `state_dir_for()`, y la aplica quien configura.
+        self._root = state_dir
         self._corpus = corpus
         for sub in ("policies", "beliefs", "calibration", "dreams", "propositions"):
             (self._root / sub).mkdir(parents=True, exist_ok=True)

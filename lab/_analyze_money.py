@@ -54,20 +54,13 @@ def main() -> None:
 
     veredictos = []
     for corpus in corpora:
-        rows, ajenos = [], []
+        # Un `.jsonl` bajo `results/` ES un archivo de filas: lo garantiza el layout
+        # —`state/` guarda el ledger— y lo impone `load_rows`, que levanta si no lo es.
+        # Antes esto lo esquivaba aca, y esquivarlo en el analizador deja el problema en
+        # pie para el analizador siguiente.
+        rows = []
         for f in sorted((raiz / corpus).glob("*.jsonl")):
-            leidas = load_rows(f)
-            # UN .jsonl BAJO results/ NO ES UN ARCHIVO DE RESULTADOS. `results/nano/beliefs/`
-            # es el ledger de creencias y tiene otra forma entera. Se declara cual se
-            # descarto y por que: saltearlo callado es como perder un corpus sin enterarse.
-            if leidas and not all("task_id" in r for r in leidas):
-                ajenos.append((f.name, len(leidas)))
-                continue
-            rows.extend(leidas)
-        if ajenos:
-            for nombre, n in ajenos:
-                print(f"\n{corpus}/{nombre}: {n} lineas sin `task_id` — no es un archivo "
-                      f"de resultados, se excluye entero y se dice.")
+            rows.extend(load_rows(f))
         if not rows:
             continue
         obs, sin_split = observaciones(rows)

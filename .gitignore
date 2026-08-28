@@ -4,3 +4,4 @@ __pycache__/
 .venv/
 lab/cache/
 lab/results/
+lab/state/

@@ -1944,6 +1944,53 @@ def check_handoff_authorisation(ok: bool) -> bool:
     return ok
 
 
+def check_measurement_and_state_are_two_trees(ok: bool) -> bool:
+    """§43: `results/` es medicion y `state/` es el ledger, y son dos arboles.
+
+    HASTA HOY ERAN UNO. El ledger de creencias vivia en `results/<modelo>/beliefs/`, junto
+    a las filas de ejecucion, y un `rglob("*.jsonl")` sobre resultados lo levantaba como
+    si fueran mediciones. Ya paso: un analizador de costos se comio 207 lineas del ledger.
+    Revento al buscarles `task_id`, y **reventar fue suerte** — con las mismas claves las
+    habria promediado callado.
+
+    La distincion es de VIDA UTIL, no de prolijidad: una medicion sin su ledger sigue
+    siendo una medicion; el ledger se puede reconstruir entero volviendo a consolidar.
+
+    Y LA GUARDA VA EN EL SEAM. El layout se rompe con un `mv`, asi que `load_rows` verifica
+    la forma antes que nada — antes que las guardas de mezcla, que inspeccionan claves y
+    sobre un archivo de otra forma no encuentran ninguna y pasan.
+    """
+    import json
+    import tempfile
+    from app.runner import load_rows
+    from app.store import LearningStore, state_dir_for
+
+    print("\n--- 43. medicion y estado son dos arboles ---")
+
+    ok &= check("la convencion saca el ledger del arbol de resultados",
+                state_dir_for(Path("lab/results")) == Path("lab/state")
+                and state_dir_for(Path("lab/results/nano")) == Path("lab/state/nano"))
+    ok &= check("sin componente `results` no levanta: da una ruta distinta y determinista",
+                state_dir_for(Path("/tmp/x")) == Path("/tmp/x_state"))
+    ok &= check("con `results` dos veces sustituye el de ABAJO",
+                state_dir_for(Path("a/results/b/results/c")) == Path("a/results/b/state/c"))
+
+    raiz = Path(tempfile.mkdtemp())
+    store = LearningStore(state_dir_for(raiz / "results"), "c")
+    ok &= check("el store recibe su directorio y no lo adivina desde el nombre",
+                (raiz / "results") not in store.belief_log_path.parents)
+
+    ledger = raiz / "ledger.jsonl"
+    ledger.write_text(json.dumps({"seq": 0, "prev": None, "beliefs": []}), encoding="utf-8")
+    try:
+        load_rows(ledger)
+        ok &= check("leer un ledger como filas levanta", False)
+    except ValueError as exc:
+        ok &= check("leer un ledger como filas levanta, y nombra los dos arboles",
+                    "task_id" in str(exc) and "state/" in str(exc))
+    return ok
+
+
 def check_money_is_a_unit_not_a_number(ok: bool) -> bool:
     """§41: convertir la escala de costo a plata, y que la referencia no decida.
 
@@ -2384,6 +2431,7 @@ def main() -> int:
     ok = check_measured_cost_supersedes_prior(ok)
     ok = check_money_is_a_unit_not_a_number(ok)
     ok = check_load_rows_guards_the_analyst(ok)
+    ok = check_measurement_and_state_are_two_trees(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

@@ -1275,18 +1275,48 @@ piso; un techo arbitrario **deja pasar lo que está debajo y levanta contra lo l
 
 Las dos guardas de mezcla —decodificación y vocabulario de región, esta última escrita hace
 tres horas— vivían adentro de `Runner`, **la clase que corre**. Todo analizador lee el
-`.jsonl` con `json.loads` a mano. O sea: **ninguna de las dos protegía a quien analiza**, que
-es exactamente donde promediar dos modelos hace daño.
+`.jsonl` con `json.loads` a mano. O sea: **ninguna protegía a quien analiza**, que es
+justamente donde promediar dos modelos hace daño.
 
-Es la forma que busca el barrido de la lección 7.17, cometida **en la corrección misma**: la
-guarda del vocabulario se escribió hoy para tapar un agujero, y se puso donde no tapa nada.
-`load_rows` pasó a ser función de módulo con `path` explícito, y `Runner.load_rows` delega.
+Es la forma que busca el barrido de la 7.17, cometida **en la corrección misma**: la guarda
+del vocabulario se escribió hoy para tapar un agujero, y se puso donde no tapa nada.
+`load_rows` pasó a ser función de módulo; `Runner` delega.
 
-**Y apenas se aplicó, agarró algo.** El barrido de corpus levantó
-`results/nano/beliefs/gold_p17.jsonl` por extensión: 207 líneas que **no son resultados**,
-son el ledger de creencias, con otra forma entera. Se declara el archivo y se excluye
-completo — saltearlo callado es perder un corpus sin enterarse, que es cómo `X-4` llegó a
-publicar 43,4% de algo que era 0%.
+**Y apenas se aplicó, agarró un problema de otra clase.** El barrido de corpus levantó
+`beliefs/gold_p17.jsonl` por extensión: 207 líneas que no son resultados, son **el ledger
+de creencias**, con otra forma entera.
+
+Mi primer arreglo fue enseñarle al analizador a declararlo y saltearlo. **Era el arreglo
+equivocado**, y el autor lo señaló en una línea: si no es resultados, no va en la carpeta de
+resultados. Enseñarle a cada analizador a esquivar un archivo deja el problema en pie para
+el analizador siguiente.
+
+| | | |
+|---|---|---|
+| `results/<modelo>/` | **medición** | evidencia de lo que se corrió; nada de acá se recalcula |
+| `state/<modelo>/` | **estado** | lo que el sistema aprendió; se reconstruye entero volviendo a consolidar |
+
+La distinción es de **vida útil**, no de prolijidad: una medición sin su ledger sigue siendo
+una medición; un ledger sin sus mediciones no se puede auditar. Un solo escritor
+(`LearningStore`), así que fue un solo cambio, y los 207 registros sobrevivieron la mudanza
+con la cadena íntegra.
+
+> Y **reventar fue suerte**. El analizador se cayó buscando `task_id` en el ledger. Si el
+> ledger hubiera compartido las claves, las habría promediado **callado**.
+
+**Tres intentos hasta que la derivación estuvo bien, y los dos errores son del mismo tipo.**
+Primero `results_dir.parent.parent / "state" / name`, aritmética de rutas: anda para
+`results/nano` y para `results` pelado se sale de `lab/` y nombra `state/results`. Después
+sustituir el componente literal, **pero levantando si no aparece** — y ahí el que levantó
+fue un directorio temporal de test, que es un caso legítimo y no tiene ledger que perder.
+
+> Negarse ahí confunde **«no seguís la convención»** con **«te estoy por pisar datos»**. La
+> propiedad que importa es una sola: *una ruta determinista, distinta, y fuera del árbol de
+> resultados*. Con sufijo `_state` la cumple cualquier ruta, y no hay nada que negar.
+
+Y el store dejó de derivarla: **recibe su directorio**. Inferir layout del nombre de una
+ruta es parsear una cadena para decidir, que es exactamente lo que este repo no hace en
+ningún otro lado.
 
 ---
 
