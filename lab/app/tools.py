@@ -180,7 +180,14 @@ VARIANTS = ("basic", "accounting", "cognitive", "managed")
 ACCOUNTING_VARIANTS = ("accounting", "cognitive")
 
 
-def specs_for(variant: str, offer_read_all: bool = False) -> list[dict[str, Any]]:
+SEARCH_TOOLS = ("search", "keyword_search", "semantic_search")
+
+
+def specs_for(
+    variant: str,
+    offer_read_all: bool = False,
+    drop: tuple[str, ...] = (),
+) -> list[dict[str, Any]]:
     """The tool list for a surface variant.
 
     `offer_read_all` es un FACTOR, apagado por defecto. `read_all` vive en las specs de
@@ -198,16 +205,25 @@ def specs_for(variant: str, offer_read_all: bool = False) -> list[dict[str, Any]
     address different failures and a variant that removed accounting to add notes would
     confound them. Each rung adds; none replaces.
     """
+    # `drop` SACA herramientas de la lista, y esa es la diferencia con rechazarlas.
+    #
+    # P20 midio que rechazar una llamada NO le quita la decision al modelo: la re-emite
+    # con otras palabras el 69% de las veces, asi que la regla le agrego una vuelta en vez
+    # de quitar el desperdicio — y eso deja el flujo de control donde estaba, que es lo
+    # que el invariante prohibe. Quitar la decision es NO OFRECER LA ACCION.
+    def _keep(specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [t for t in specs if t["function"]["name"] not in drop]
+
     read_all_spec = [
         t for t in ACCOUNTING_TOOL_SPECS if t["function"]["name"] == "read_all"
     ] if offer_read_all else []
 
     if variant == "basic":
-        return list(TOOL_SPECS) + read_all_spec
+        return _keep(list(TOOL_SPECS) + read_all_spec)
     if variant == "accounting":
-        return list(TOOL_SPECS) + list(ACCOUNTING_TOOL_SPECS)
+        return _keep(list(TOOL_SPECS) + list(ACCOUNTING_TOOL_SPECS))
     if variant == "cognitive":
-        return (
+        return _keep(
             list(TOOL_SPECS)
             + list(ACCOUNTING_TOOL_SPECS)
             + list(COGNITIVE_TOOL_SPECS)
@@ -217,7 +233,7 @@ def specs_for(variant: str, offer_read_all: bool = False) -> list[dict[str, Any]
         # model CAN call but what the harness DOES to the history. The cognitive arm
         # measured that voluntary self-management does not happen (1 note, 1 compaction,
         # 0 plans in 28 rows); `managed` moves the bookkeeping to the environment.
-        return list(TOOL_SPECS) + read_all_spec
+        return _keep(list(TOOL_SPECS) + read_all_spec)
     raise ValueError(f"Unknown surface variant {variant!r}. Use one of {VARIANTS}.")
 
 
@@ -532,6 +548,23 @@ class ToolSurface:
             raise ToolFailure(
                 f"{tool}: '{key}' tiene que ser un entero, llego {raw!r}."
             ) from None
+
+    def withdrawn(self) -> tuple[str, ...]:
+        """Herramientas que dejan de OFRECERSE, no de aceptarse.
+
+        Es la correccion que P20 obligo. Rechazar la busqueda dejaba al modelo
+        re-emitiendola con otras palabras el 69% de las veces: la regla agregaba una
+        vuelta en vez de quitar el desperdicio, y el flujo de control seguia donde
+        estaba. Sacarlas de la lista de specs es lo unico que se lo quita — el modelo no
+        puede pedir una accion que no existe.
+
+        Leer y responder quedan intactos, que es lo que hace segura la regla: `P20b`
+        midio que cortar la busqueda NO cuesta utilidad (caida 0,0057 contra un piso de
+        ruido de 0,0773).
+        """
+        if self.stop_on_barren and self.barren_searches >= self.stop_on_barren:
+            return SEARCH_TOOLS
+        return ()
 
     def _stopped(self, name: str) -> str | None:
         """El motivo tipado, si la regla de parada cierra la busqueda. `None` si no."""

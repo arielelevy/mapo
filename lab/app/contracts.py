@@ -321,3 +321,39 @@ def verify_coverage(task: dict[str, Any], answer: str) -> dict[str, Any] | None:
             return None
 
     return complete_answer(answer, list(domain)).as_dict()
+
+# Cuantos reintentos dirigidos se PROPONEN. Uno, y acotado por el codigo.
+#
+# POR QUE UNO Y POR QUE PROPUESTO. `P20` midio que una accion que el modelo puede repetir
+# por su cuenta deja de ser control de flujo del codigo: rechazada una busqueda, la
+# re-emitia con otras palabras el 69% de las veces. Un reintento automatico tiene la misma
+# forma — el sistema gastando presupuesto que nadie autorizo, con la posibilidad de volver
+# a fallar igual. Asi que el codigo PROPONE y el llamador decide.
+MAX_DIRECTED_RETRIES = 1
+
+
+def retention(verdict: CompletenessVerdict, retries_left: int = MAX_DIRECTED_RETRIES,
+              contract: str = "C-COMPLETE") -> dict[str, Any] | None:
+    """Que informar y que proponer cuando el contrato retiene una respuesta.
+
+    `None` si emitio: no hay nada que informar.
+
+    LO QUE HACE UTIL A ESTO es que el contrato **nombra** lo que falta. No se informa
+    «algo salio mal»: se informa que falto `Valeria Arrieta`, porque `C-COMPLETE` lo
+    declara sin tener que buscarlo. Un reintento sobre eso es **dirigido** — sabe que
+    pedir— y no re-correr a ciegas.
+
+    Y la accion propuesta depende de si queda margen: sin reintentos, lo honesto es
+    ofrecer aceptar incompleto **sabiendo que esta incompleto**, que es exactamente lo
+    que sin contrato no se podia saber.
+    """
+    if verdict.emitted:
+        return None
+    faltan = list(verdict.missing) + [f"sobra:{k}" for k in verdict.extraneous]
+    return {
+        "contract": contract,
+        "missing": faltan,
+        "reason": verdict.refused or "el contrato retuvo la respuesta",
+        "proposed": "retry" if retries_left > 0 else "accept_incomplete",
+        "retries_left": retries_left,
+    }

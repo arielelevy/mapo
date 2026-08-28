@@ -86,7 +86,14 @@ def _run_tool_loop(
         surface.tooled_calls += 1
         completion = client.complete(
             messages=messages,
-            tools=specs_for(surface.variant, getattr(surface, "offer_read_all", False))
+            tools=specs_for(
+                surface.variant,
+                getattr(surface, "offer_read_all", False),
+                # Lo retirado no se ofrece. Rechazar una llamada no le quita la decision
+                # al modelo — P20 lo midio: la re-emite con otras palabras el 69% de las
+                # veces. No ofrecerla si.
+                drop=surface.withdrawn() if hasattr(surface, "withdrawn") else (),
+            ),
         )
         usage.merge(completion.usage)
 

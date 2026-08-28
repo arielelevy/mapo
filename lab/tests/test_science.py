@@ -1167,6 +1167,25 @@ def check_stopping_rule(ok: bool) -> bool:
     ok &= check("leer sigue disponible despues del rechazo - la regla ahorra, no falla",
                 reads)
 
+    # LA CORRECCION QUE P20 OBLIGO: retirar, no rechazar. Un rechazo lo esquiva el modelo
+    # re-emitiendo con otras palabras —69% de las veces, medido— asi que la regla agregaba
+    # una vuelta en vez de quitar el desperdicio. Quitar la decision es no ofrecer la
+    # accion.
+    from app.tools import SEARCH_TOOLS, specs_for
+
+    fresh = surface(2)
+    antes = {t["function"]["name"] for t in specs_for("basic", drop=fresh.withdrawn())}
+    ok &= check("al empezar, las busquedas se ofrecen",
+                set(SEARCH_TOOLS) <= antes, ", ".join(sorted(antes)))
+    for _ in range(3):
+        fresh.dispatch("search", {"query": "zzzz-inexistente"})
+    despues = {t["function"]["name"] for t in specs_for("basic", drop=fresh.withdrawn())}
+    ok &= check("pasado el limite DEJAN DE OFRECERSE - el modelo no puede pedir una "
+                "accion que no existe", not (set(SEARCH_TOOLS) & despues),
+                ", ".join(sorted(despues)))
+    ok &= check("y leer sigue ofreciendose, que es lo que hace segura la regla - P20b "
+                "midio que cortar la busqueda no cuesta utilidad", "read" in despues)
+
     # Las tres busquedas quedan cubiertas: rechazar solo una deja la fuga abierta.
     for tool in ("keyword_search", "semantic_search"):
         probe = surface(1)
@@ -1812,6 +1831,29 @@ def check_coverage_trigger(ok: bool) -> bool:
                 verify_coverage(
                     task(coverage_demanded="sufficient",
                          completeness_domain="from_question"), "solo Ana") is None)
+
+    # U-7: QUE SE INFORMA Y QUE SE PROPONE cuando el contrato retiene la respuesta.
+    from app.contracts import MAX_DIRECTED_RETRIES, complete_answer, retention
+
+    dominio = ["Ana", "Beto", "Cora"]
+    ok &= check("una respuesta que pasa no informa nada - no hay que retener",
+                retention(complete_answer("Ana, Beto y Cora", dominio)) is None)
+
+    r = retention(complete_answer("Ana y Beto", dominio))
+    ok &= check("una retenida NOMBRA lo que falta - no «algo salio mal», sino que falto "
+                "Cora, porque el contrato lo declara sin buscarlo",
+                r is not None and r["missing"] == ["Cora"], str(r and r["missing"]))
+    ok &= check("y PROPONE reintentar, que es dirigido porque sabe que pedir",
+                r["proposed"] == "retry" and r["retries_left"] == MAX_DIRECTED_RETRIES)
+
+    agotado = retention(complete_answer("Ana y Beto", dominio), retries_left=0)
+    ok &= check("agotados los reintentos propone aceptar incompleto SABIENDO que lo "
+                "esta - que es justo lo que sin contrato no se podia saber",
+                agotado["proposed"] == "accept_incomplete")
+
+    ok &= check("el tope de reintentos lo fija el CODIGO y es uno - un reintento que el "
+                "sistema puede repetir solo deja de ser control de flujo del codigo, que "
+                "es lo que P20 midio", MAX_DIRECTED_RETRIES == 1)
 
     ok &= check("sin dominio declarado no hay nada contra que verificar",
                 verify_coverage({}, "cualquier cosa") is None)
