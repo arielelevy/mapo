@@ -10,6 +10,112 @@
 
 ---
 
+## Resumen — todo de un vistazo
+
+`[x]` hecho · `[~]` empezado · `[ ]` no empezado · **🔒** espera a que P16 cierre
+
+**Bloqueantes**
+- [~] **B1** · veredicto de P16 — *corriendo, 105/390 celdas, 0 infra*
+- [ ] **B2** 🔒 · aplicar detectores honestos (`features.py:214` + `rules.py:248`)
+- [ ] **B3** 🔒 · correr P17 — la primera medición honesta de selección
+
+**Mediciones**
+- [ ] M-1 · brazo en PROSA (E1) — implementado, sin correr
+- [~] M-2 · retención de contexto — *recall medido y predictivo; falta el segundo eslabón*
+- [ ] M-3 · transferencia de θ entre familias de modelos
+- [ ] M-4 · corpus natural + segunda familia
+- [ ] M-5 · C3 profundo en nano
+
+**REC — implementado, sin registrar y sin medir**
+- [ ] **REC-1** · preregistrar las seis hipótesis de `PATRON_REC.es.md` §11 *(gratis)*
+- [ ] **REC-2** · congelar política, presupuesto, umbrales y regla ANTES del mundo final
+- [ ] **REC-3** · generar el mundo final — `gold_transfer` está reservado a diagnóstico
+- [ ] **REC-4** · correr los siete brazos *(caro; compite con P17 por cuota)*
+- [ ] **REC-5** · corpus independiente del generador *(= M-4)*
+- [ ] **REC-0** · **arreglar el baseline**: «router P15 congelado» es un router cuya selección nunca dispara ⇒ el baseline tiene que ser el de P17, y **REC va después de P17**
+
+**Producto — capa de decisión**
+- [ ] P-1 · que la sonda sense **recuperabilidad** (hoy sensa acoplamiento)
+- [ ] P-2 · sacar el peso Hebbiano como selector *(demostrado redundante)*
+- [ ] P-2b · reintroducirlo como **detector de no estacionariedad** *(drift medido: 80%)*
+- [ ] P-2c · **Hebbiano sobre el orden de tools** — bloqueado por instrumentación
+- [ ] P-2d · asociaciones aprendidas como creencias *(necesita un rango bajo OBSERVED)*
+- [ ] P-2e · componer el patrón en vez de elegirlo *(el techo)*
+- [ ] P-3 · calibración por proposición al router activo
+- [ ] P-4 · horizonte con evidencia propia
+- [ ] P-5 · las particiones descubiertas no gobiernan el router
+- [ ] P-6 · particiones que usan truth de evaluación
+- [ ] P-7 · el producto no cierra el bucle
+- [ ] P-8 · promoción sin incertidumbre
+- [ ] P-9 · repetir consolidación reaplica historia
+- [ ] P-10 · flags declarativos del dial A0–A3
+- [ ] P-11 · separar producto de banco (`serve.py` importa `grading`)
+
+**Lo más grande, y no estaba en la lista**
+- [ ] **A-1** · arrancar el producto — *el motor nuevo no existe*
+- [ ] **A-2** · decidir qué se porta de `legacy/`
+- [ ] **A-3** · separar producto de banco ANTES de portar
+
+**Riesgos que nadie estaba mirando**
+- [ ] **R-1** · verificar el replay sellado tras la migración de caché *(barato, y es el único detector)*
+- [ ] R-2 · celdas † de la grilla congelada `gpt-5-chat`
+- [ ] R-3 · barrer el paper por «declarado, no medido»
+- [ ] R-4 · `lab/ui/index.html` sin explicar — adoptarlo o sacarlo
+- [ ] R-5 · 11 commits locales sin pushear
+
+**Decisiones dinámicas que hoy no gobierna nadie**
+- [ ] D-1 · cuándo parar de iterar *(el más barato: las señales ya existen)*
+- [~] D-2 · qué herramienta sigue — *secuencia ya instrumentada; falta el replay y el análisis*
+- [ ] D-3 · la descomposición en DAG
+- [ ] D-4 · challenger multi-agente con handoff por contrato
+- [ ] D-5 · la «Constant Soup» en general
+- [x] investigar cómo resuelven el handoff MAF / OpenAI SDK / Google ADK
+
+**Code review — MEDIUM**
+- [x] M2 · M4 · M5 · M6 · M7 · M9 · M12 · M19 *(antes)*
+- [x] **M3** · throttle bajo el lock y sin contar de más
+- [x] **M11** · ECE sobre la credencia declarada, no el centro del bin
+- [x] **M17** · `cot` fuera del default (`RETIRED`)
+- [x] **M18** · un solo escritor por archivo de resultados
+- [ ] M8 🔒 · constante de supresión de sonda
+- [ ] M10 🔒 · `GIST_CHARS` inflado ⇒ sobre-rechazo
+- [ ] M1 🔒 · args del modelo ⇒ `ToolFailure`
+- [ ] M13 🔒 · accesos fuera del `try` en dag/modern
+- [ ] M14 🔒 · extractor JSON duplicado ×9
+- [ ] M15 · loop de calibración duplicado y ya divergido
+- [ ] M16 🔒 · `float(r[attribute])` sin filtro en los splits
+- [ ] pip-audit nunca corrido
+
+**Teoría — pizarra, bloquea a F6**
+- [ ] T-1 · semántica formal del contrato
+- [ ] T-2 · red-team de mis-binding
+- [ ] T-3 · teorema de soundness del ensamblador
+- [ ] T-4 · cota nativa del ratchet
+- [ ] T-5 · quién fija el dial
+- [ ] T-6 · vecinos leídos — **arXiv 2603.18043 tiene prioridad alta**
+
+**Paper**
+- [ ] W-1 🔒 · re-encuadrar §5.1 vs §5.2
+- [ ] W-2 · toda edición va a los DOS archivos
+- [ ] W-3 · integrar el hallazgo de nano (P13)
+- [ ] W-4 · endorser de arXiv, o Zenodo con DOI
+
+**Plataforma** — `ARQUITECTURA.es.md` es una propuesta entera, **nada implementado**
+- [ ] Docling + `pypdfium2` · [ ] Postgres como ledger · [ ] Weaviate + `live_pointer`
+- [ ] work table → DBOS · [ ] FastAPI con SSE resumible · [ ] on-prem / Docker
+
+**Fases de la tesis**
+- [x] F0 · P15 cerrada y registrada
+- [~] F1 · sensar y re-decidir — *tres pre-empciones diagnosticadas, la selección disparó*
+- [~] F2 · routers rivales — *E2 corrido; falta E1*
+- [~] F3 · retención y mediación — *recall medido; falta instrumentar retención*
+- [x] F4 · estadística que resista al tribunal
+- [ ] F5 · teoría nativa
+- [ ] F6 · contratos contra baselines directos
+- [ ] F7 · validez externa
+
+---
+
 ## 0. Lo que bloquea a todo lo demás
 
 | # | Qué | Por qué manda | Costo |
@@ -141,6 +247,61 @@ la misma forma que los pisos ya validados.
 consultarlas) → instrumentar la secuencia de tools (D-2/P-2c) → D-4 como candidato nuevo
 → D-3 → P-2e (componer el patrón), que es el techo y arrastra las dos tensiones de A2/A3
 y del banco.
+
+---
+
+## 1b. REC — implementado, diseñado, **sin registrar y sin medir**
+
+`rec.py` (F3) y `certify.py` (F4) corren y tienen tests. `PATRON_REC.es.md` §11 deja seis
+hipótesis falsables escritas y dice de ellas, textual, que **«no están preregistradas
+todavía»**. §12 deja el diseño: siete brazos, métricas primarias y secundarias, y la
+condición de datos. Nada de eso se corrió.
+
+O sea: REC está en el estado que las reglas del repo llaman deuda — **existe en el
+ejecutable y no tiene medición**. No es lo mismo que «declarado, no medido» (eso sería
+peor), pero tampoco alcanza para que entre al paper.
+
+| # | Qué falta | Detalle |
+|---|---|---|
+| **REC-1** | Preregistrar las seis hipótesis, con fecha | Están escritas en §11 y explícitamente sin registrar. Registrarlas es gratis y es la condición para que el resultado cuente |
+| **REC-2** | Congelar política, presupuesto, umbrales, candidatos y regla de decisión | §12 lo exige **antes** de generar el mundo final. Congelar después es elegir la valuación viendo los números |
+| **REC-3** | Generar el mundo final, recién entonces | `gold_transfer` queda **reservado para diagnóstico** por decisión del propio diseño. El resultado necesita mundos nuevos |
+| **REC-4** | Correr los siete brazos | mejor fijo factible · siempre-`react` · router P15 congelado · eje nuevo sin REC · sonda fija · REC completa · REC sin costo de sonda (ablación). Es caro, y compite por cuota con P17 |
+| **REC-5** | Corpus independiente del generador actual | §12 lo pide explícitamente para una afirmación doctoral. Es el mismo M-4 |
+
+**Y un problema del diseño que apareció hoy y hay que arreglar antes de correr.** Uno de
+los siete brazos es **«router P15 congelado»**, pensado como el baseline contra el cual
+REC demuestra que repara. Pero ahora está medido que en ese router **la regla de selección
+no dispara nunca** — pre-empatada tres veces, y sólo la tercera era nuestra. Comparar REC
+contra ese brazo no mediría «REC repara lo que la selección no resuelve»: mediría «REC le
+gana a un router al que nunca lo dejaron seleccionar», que es un resultado mucho más
+chico y fácil de malinterpretar como si fuera el grande.
+
+El arreglo es de una línea de diseño y cuesta nada ahora: el baseline tiene que ser **el
+router con detectores honestos y el ciclo de dos pasos**, o sea el de P17. Lo que implica
+que **REC va después de P17, no en paralelo** — y esa dependencia no estaba escrita.
+
+---
+
+## 2c. Lo que faltaba en esta lista (agregado 2026-08-27 al repasarla)
+
+**La más grande, y no estaba escrita en ningún lado como pendiente.**
+
+| # | Qué | Por qué importa |
+|---|---|---|
+| **A-1** | **Arrancar el producto: el motor nuevo no existe** | Es el objetivo declarado del repo — «el producto es el motor MAPO, y todavía no existe como tal; se construye a partir de lo que el banco pruebe». Todo lo demás de esta lista lo sirve, y sin embargo el ítem no estaba. Espera a que el registro esté maduro, que hoy significa: P16 cerrado, P17 corrido, y una decisión sobre si la selección paga |
+| **A-2** | **Decidir qué se porta de `legacy/`** | La capa congelada resolvió cuatro cosas que el banco nunca tuvo que modelar: búsqueda sobre índice real, scoping por permisos, citas verificadas contra el índice, y streaming. `legacy/README.md` es lectura obligatoria antes de portar cualquier pieza, pero **no hay una decisión escrita de qué entra y qué no** |
+| **A-3** | **Separar producto de banco antes de portar, no después** | Es P-11 mirado desde el otro lado: si el motor nuevo arranca copiando `lab/app/` tal como está, se lleva el banco adentro y la mezcla vuelve el día uno |
+
+**Riesgos concretos que nadie estaba mirando.**
+
+| # | Qué | Por qué |
+|---|---|---|
+| **R-1** | **Verificar el replay sellado después de la migración de caché** | M4 mudó el caché a directorios con namespace por cuenta (`7102 → 7102, sin pérdidas`). El modo sellado convierte un miss en **error duro**, así que es el detector natural de que algo se perdió — y no se volvió a correr desde la migración. Es barato y es la única prueba de que la grilla congelada sigue siendo replayable |
+| **R-2** | **Celdas † de la grilla congelada `gpt-5-chat`** | Quedaron documentadas como pendientes cuando se congeló el primer modelo. Si el brazo multi-modelo se usa para algo, esos huecos son parte del argumento |
+| **R-3** | **Barrer el paper por «declarado, no medido»** | Regla propia del repo: lo que esté así **es deuda, y se implementa o se saca**. Nunca se hizo el barrido completo, sólo se corrigió lo que fue apareciendo |
+| **R-4** | **`lab/ui/index.html` sin explicar** | Aparece sin trackear en el árbol y no lo escribí yo. O se adopta con su propósito escrito, o se saca — un archivo huérfano en el repo es una pregunta que alguien va a hacer |
+| **R-5** | **11 commits locales sin pushear** | Por regla no se pushea sin confirmación, y está bien. Pero el estado «hay N commits que sólo existen en esta máquina» es un riesgo real que conviene tener a la vista |
 
 ---
 

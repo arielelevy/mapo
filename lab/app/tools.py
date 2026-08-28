@@ -264,6 +264,13 @@ class ToolSurface:
     # topology needs and never gets: without it, a verify-replan loop reads a systematic
     # failure as bad luck and searches again.
     surfaced: set[str] = field(default_factory=set)
+    # El ORDEN en que se llamo a cada herramienta, no solo cuantas veces. `calls` es un
+    # conteo, y un conteo no distingue "busco, leyo, busco, leyo" de "busco, busco, leyo,
+    # leyo" — que son dos estrategias distintas con el mismo histograma. La secuencia es
+    # lo unico que permite aprender asociaciones (tool_i -> tool_j), que es donde el
+    # aprendizaje Hebbiano tiene contenido propio: una asociacion entre PARES no se
+    # reduce a una estadistica marginal de un brazo.
+    sequence: list[str] = field(default_factory=list)
     barren_searches: int = 0
     stall_warnings: int = 0
     bulk_read_refusals: int = 0
@@ -373,6 +380,10 @@ class ToolSurface:
 
     def dispatch(self, name: str, args: dict[str, Any]) -> str:
         self.calls[name] = self.calls.get(name, 0) + 1
+        # Se registra ANTES de despachar, a proposito: una llamada que falla igual fue
+        # una decision del modelo, y una secuencia que solo guarda los aciertos describe
+        # una politica que nadie ejecuto.
+        self.sequence.append(name)
 
         if name == "coverage":
             if self.variant not in ACCOUNTING_VARIANTS:
@@ -487,6 +498,7 @@ class ToolSurface:
         return {
             "variant": self.variant,
             "calls": dict(sorted(self.calls.items())),
+            "sequence": list(self.sequence),
             "units_read": len(self.units_read),
             "batched_reads": self.batched_reads,
             "hallucinated_units": self.hallucinated,
