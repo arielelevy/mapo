@@ -121,8 +121,8 @@
 
 **«Anti-RAG» — la máquina existe (REC), le falta una pieza**
 - [ ] **AR-0** · medirlo como **factor** `{con, sin} × {patrones}`, no plegado en cada patrón
-- [x] **AR-1** · contratos de completitud — **implementado** como `C-COMPLETE` en `app/contracts.py`. Lo que queda no es escribirlo sino **cablearlo**: ningun paradigma lo invoca todavia, y quien declara el dominio enumerable es una decision de producto (ver `U-4`)
-- [ ] AR-2 · cablear rechazo tipado de contrato → `rec.diagnose` *(chico)*
+- [x] **AR-1** · contratos de completitud — **implementado y cableado**: `C-COMPLETE` corre sobre la respuesta con el dominio declarado por el caller, y cada fila guarda su veredicto aparte de la utilidad. Su limite quedo escrito donde vive: a nivel prosa **no puede ver lo que sobra** —solo busca las claves declaradas— y detectarlo exigiria extraer entidades del texto, que es justo lo que no se acepta como sensor
+- [x] **AR-2** · **cableado, y con una asimetria que lo hace mas que un cable.** `rec.diagnose` **busca** —prueba intervenciones hasta dar con la mas barata que cambie la decision— porque el registro no dice que falto. Un contrato rechazado **ya lo dice**: `C-COMPLETE` nombra las claves ausentes, `C-NUM` la ranura bajo el piso. Buscar donde ya hay respuesta no es redundante, es **peor**: la busqueda esta acotada a un esquema chico, asi que un deficit real fuera del esquema daria «no hay intervencion que lo cambie» cuando la hay. `deficit_from_contract` lo declara con `searched: False`. `test_science.py` §36
 - [ ] AR-3 · predicción falsable antes de correr
 - [ ] AR-4 · baseline honesto: contra HyDE y RAG plano, no contra nada
 

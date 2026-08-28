@@ -1621,6 +1621,90 @@ def check_product_leaves_a_trace(ok: bool) -> bool:
     return ok
 
 
+# --- 36. el deficit que el contrato ya nombra --------------------------------------------
+#
+# LA ASIMETRIA. `rec.diagnose` BUSCA: prueba intervenciones de a una y de a pares hasta dar
+# con la mas barata que cambie la decision, porque el registro no dice que le falto. Un
+# contrato rechazado YA LO DICE — `C-COMPLETE` nombra las claves ausentes y `C-NUM` nombra
+# la ranura cuya proposicion no llego al piso.
+#
+# Y buscar donde ya hay respuesta no es solo redundante: es PEOR. La busqueda esta acotada a
+# un esquema chico —una enumeracion abierta seria una busqueda de historias, y esto es una
+# busqueda de evidencia— asi que un deficit real que no este en el esquema no se
+# encontraria, y el resultado diria «no hay intervencion que lo cambie» cuando la hay y el
+# contrato la nombro.
+def check_contract_names_its_deficit(ok: bool) -> bool:
+    from app.beliefs import Belief, BeliefBase, Provenance
+    from app.contracts import SlotBinding, complete_answer, fill
+    from app.rec import deficit_from_contract
+
+    print("\n--- 36. el deficit que el contrato ya nombra ---")
+
+    domain = ["Marta Arrieta", "Ignacio Arrieta", "Lucia Arrieta"]
+
+    emitted = complete_answer(
+        "Marta Arrieta AR1, Ignacio Arrieta AR2, Lucia Arrieta AR3", domain)
+    ok &= check("un contrato que EMITE no produce deficit - no falta nada",
+                deficit_from_contract(emitted, "C-COMPLETE") is None)
+
+    short = complete_answer("Marta Arrieta AR1, Ignacio Arrieta AR2", domain)
+    deficit = deficit_from_contract(short, "C-COMPLETE")
+    ok &= check("uno que rechaza nombra EXACTAMENTE lo que falta, sin buscar",
+                deficit is not None and deficit.missing == ("Lucia Arrieta",),
+                str(deficit.missing) if deficit else "None")
+    ok &= check("y declara que NO hubo busqueda - distinguirlo importa: un deficit "
+                "buscado puede no existir, uno declarado por el contrato existe",
+                deficit.as_dict()["searched"] is False)
+
+    # LO QUE SOBRA: el nivel de conjunto lo ve, el de prosa NO PUEDE, y la diferencia es
+    # estructural y no un defecto. `complete_answer` busca las claves DECLARADAS adentro
+    # del texto; un nombre que el dominio no contiene nunca entra en `items`, asi que la
+    # pertenencia no es observable desde ahi. `complete`, que recibe el conjunto ya
+    # enumerado, si la ve.
+    from app.contracts import complete
+
+    base_dom = BeliefBase()
+    base_dom.assert_(Belief("dominio", list(domain), 1.0, Provenance.COMPUTED))
+    over = complete(list(domain) + ["Pedro Gomez"], "dominio", base_dom)
+    d_over = deficit_from_contract(over, "C-COMPLETE")
+    ok &= check("a nivel CONJUNTO, lo que sobra se nombra aparte de lo que falta",
+                d_over is not None and any(m.startswith("sobra:") for m in d_over.missing),
+                str(d_over.missing) if d_over else "None")
+
+    prose = complete_answer(
+        "Marta Arrieta, Ignacio Arrieta, Lucia Arrieta y tambien Pedro Gomez", domain)
+    ok &= check("a nivel PROSA no puede verlo, y emite - es estructural: solo busca las "
+                "claves declaradas, asi que un nombre ajeno no es observable",
+                prose.emitted and not prose.extraneous)
+
+    # Y funciona con el otro contrato, que nombra ranuras y no claves.
+    base = BeliefBase()
+    base.assert_(Belief("el total del ejercicio", 1200, 1.0, Provenance.COMPUTED))
+    verdict = fill(
+        "El total fue {total} y el margen {margen}.",
+        [SlotBinding("total", "el total del ejercicio"),
+         SlotBinding("margen", "el margen, que nadie midio")],
+        base,
+    )
+    d_num = deficit_from_contract(verdict, "C-NUM")
+    ok &= check("C-NUM nombra la RANURA que no llego al piso, no la clave",
+                d_num is not None and d_num.missing == ("margen",),
+                str(d_num.missing) if d_num else "None")
+
+    # Un rechazo que no nombra nada NO es un deficit vacio: es un contrato que no puede
+    # decir que le falto, y devolverlo vacio lo haria pasar por «no falta nada».
+    class _Mudo:
+        emitted = False
+        missing: list = []
+        extraneous: list = []
+        refused = "sin detalle"
+
+    ok &= check("un rechazo que no nombra nada NO se reporta como deficit vacio",
+                deficit_from_contract(_Mudo(), "C-COMPLETE") is None)
+
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -1891,6 +1975,7 @@ def main() -> int:
     ok = check_horizon_has_its_own_evidence(ok)
     ok = check_analysis_entrypoints(ok)
     ok = check_product_leaves_a_trace(ok)
+    ok = check_contract_names_its_deficit(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

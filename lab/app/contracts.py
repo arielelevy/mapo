@@ -255,6 +255,12 @@ def addressed(answer: str, domain_keys: list[str]) -> list[str]:
     dominio. NO verifica que lo que dice de cada uno sea correcto — eso es `C-CITE`, y
     necesita el indice. Un enunciado que nombra a los cinco y le erra a cuatro cuentas
     pasa esta verificacion y falla la otra: son contratos distintos a proposito.
+
+    Y NO VE LO QUE SOBRA, que es una asimetria estructural y no una omision. Esta funcion
+    busca las claves DECLARADAS adentro del texto, asi que un nombre que el dominio no
+    contiene nunca entra en `items` y la pertenencia no es observable desde aca. Detectarlo
+    exigiria extraer entidades de la prosa — justo lo que este proyecto no acepta como
+    sensor. `complete()`, que recibe el conjunto ya enumerado, si la ve.
     """
     lowered = " ".join(answer.lower().split())
     return [k for k in domain_keys if " ".join(str(k).lower().split()) in lowered]

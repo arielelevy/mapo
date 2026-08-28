@@ -238,6 +238,81 @@ def _simulate(
     return decide_label(base, policy, fallback)
 
 
+@dataclass(frozen=True)
+class ContractDeficit:
+    """Lo que un contrato rechazado dice que falta, sin buscarlo.
+
+    LA ASIMETRIA QUE HACE QUE ESTO NO SEA `diagnose`. `diagnose` BUSCA: prueba
+    intervenciones de a una y de a pares hasta encontrar la mas barata que cambie la
+    decision, porque el registro no dice que le falto. Un contrato rechazado **ya lo
+    dice** — `C-COMPLETE` nombra las claves ausentes y `C-NUM` nombra la ranura cuya
+    proposicion no llego al piso.
+
+    Buscar donde ya hay respuesta no es redundante: es peor. La busqueda esta acotada a
+    un esquema chico —una enumeracion abierta seria una busqueda de HISTORIAS y esto es
+    una busqueda de EVIDENCIA— asi que un deficit real que no este en el esquema **no se
+    encontraria**, y el resultado diria «no hay intervencion que lo cambie» cuando la
+    hay y el contrato la nombro.
+
+    Por eso el rechazo entra como un hecho, no como una hipotesis.
+    """
+
+    contract: str
+    missing: tuple[str, ...]
+    reason: str
+    # Que procedencia haria falta para que lo que falta CUENTE. El contrato la conoce:
+    # es su propio piso, no una estimacion.
+    required_provenance: Provenance
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "contract": self.contract,
+            "missing": list(self.missing),
+            "reason": self.reason,
+            "required_provenance": self.required_provenance.value,
+            "searched": False,
+        }
+
+
+def deficit_from_contract(
+    verdict: Any,
+    contract: str,
+    floor: Provenance = Provenance.COMPUTED,
+) -> ContractDeficit | None:
+    """El deficit que un veredicto de contrato ya declara. `None` si emitio.
+
+    Acepta los dos veredictos que hoy existen —`CompletenessVerdict` y `NumericVerdict`—
+    por lo que TIENEN, no por lo que son: uno nombra claves ausentes, el otro ranuras
+    rechazadas. Tipar contra las clases ataria esta capa al modulo de contratos en la
+    direccion equivocada.
+    """
+    if getattr(verdict, "emitted", False):
+        return None
+
+    missing: tuple[str, ...] = ()
+    reason = ""
+
+    if hasattr(verdict, "missing"):  # C-COMPLETE
+        extra = tuple(getattr(verdict, "extraneous", ()) or ())
+        missing = tuple(verdict.missing) + tuple(f"sobra:{k}" for k in extra)
+        reason = getattr(verdict, "refused", "") or "cobertura incompleta"
+    elif hasattr(verdict, "refused"):  # C-NUM
+        missing = tuple(slot for slot, _, _ in verdict.refused)
+        reason = "; ".join(f"{slot}: {why}" for slot, _, why in verdict.refused)
+
+    if not missing:
+        # Rechazo sin nada nombrado: eso NO es un deficit, es un contrato que no puede
+        # decir que le falto. Devolverlo vacio lo haria pasar por «no falta nada».
+        return None
+
+    return ContractDeficit(
+        contract=contract,
+        missing=missing,
+        reason=reason,
+        required_provenance=floor,
+    )
+
+
 def diagnose(
     belief_records: list[dict[str, Any]],
     policy: BeliefPolicy,
