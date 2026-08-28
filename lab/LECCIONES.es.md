@@ -1320,6 +1320,78 @@ ningún otro lado.
 
 ---
 
+### 5.9 El modelo es una acción, y el dial no se compra con un descuento · `EJECUTADO`
+
+El planteo del autor: *«el presupuesto en ese caso no es token sino token y calidad del
+modelo»*. Y la respuesta **no** es meter la calidad adentro del costo — eso haría que un
+descuento suficiente comprara permiso para rutear una acción irreversible al modelo más
+barato. Son dos cosas distintas y van en dos lugares distintos:
+
+| | | |
+|---|---|---|
+| **plata** | presupuesto | poda pares por aritmética, antes de inferir |
+| **capacidad** | precondición | piso **ordinal** que impone el dial |
+
+**El espacio de decisión pasa a ser el par `(modelo, paradigma)`.** Elegir `react` sin
+decir en qué modelo no es una decisión completa: el registro no la reproduce y el EXPLAIN
+no la defiende.
+
+> **Y la trampa que se evita ya está medida.** Meter el modelo en el *vocabulario de
+> región* sería el error opuesto: un cuarto segmento le costó a θ toda su confianza —cada
+> episodio cayó en un bin demasiado chico para cruzar el piso de evidencia— y ése fue el
+> mecanismo de **P15**. La región es lo que la tarea **es**; la acción es lo que el motor
+> **hace**. El modelo se elige, no se observa.
+
+**El orden de las cotas es el resultado, no un detalle de implementación.** Dial primero,
+plata después:
+
+```
+A1 + USD 0,02   ->  react/fast    el caro no entra en plata, el barato sí
+A3              ->  react/deep    el dial deja uno solo
+A3 + USD 0,02   ->  SE NIEGA      exige DEEP y DEEP no entra: se ABSTIENE
+```
+
+El último caso es el que importa. **No baja de modelo para que la cuenta cierre**: se
+abstiene. Y no hizo falta mecanismo nuevo — `required_floor` ya elevaba toda acción
+irreversible a A3, así que el piso en A3 **es** el que impide comprarse el permiso.
+
+**Una política mía que saqué antes de dejarla.** Le había puesto piso `DEEP` también a A2
+por el argumento de «rinde cuentas». Es una política sin una sola medición detrás que
+obligaría a pagar 25× en cada request contable. Si el modelo barato alcanza a ese nivel de
+procedencia es una **pregunta empírica**, y quedó registrada como tal. En A3 el argumento
+es estructural y por eso ahí sí.
+
+---
+
+### 5.10 Un número que sólo se imprimía, apenas alguien lo consumió, mintió · `EJECUTADO`
+
+Al poner la cota de plata sobre `projected_tokens` salió esto:
+
+| brazo | llamadas | tokens |
+|---|---:|---:|
+| `direct` | 1 | 30.000 |
+| `map_reduce` | 31 | 31.650 |
+| **`dag_strategy`** | 165 | **0** |
+| **`rewoo`** | 2 | **0** |
+| **`react`** | **0** | 30.000 |
+
+Cada rama de `check()` llena **sólo el eje que mira**. Mientras el número se imprimía en un
+informe, no molestaba. Apenas una cota lo consumió, el `0` se leyó como **gratis** y declaró
+admisible en el modelo caro justo al brazo que mide **59×** los tokens de `direct`.
+
+Lo delató una imposibilidad: *`deep/dag_strategy` pasa la cota de plata y `deep/direct` no*.
+Eso no puede ser, y por eso `_sanity` existe.
+
+> `projected_calls` y `projected_tokens` pasaron a `int | None`. **`None` es «no
+> proyectado» y ninguna cota corre sobre eso**: se niega a decidir y lo dice
+> (`axis="money_unevaluated"`). Un `0` no se distingue de una proyección real que dio cero.
+
+Es la tercera vez en dos días que **ausente ≠ cero** cambia una conclusión —`barren_searches`,
+el split de tokens, y esto— y las tres veces el síntoma fue el mismo: el valor por defecto
+era plausible, así que nadie lo miró hasta que algo lo usó para decidir.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

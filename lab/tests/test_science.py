@@ -1944,6 +1944,81 @@ def check_handoff_authorisation(ok: bool) -> bool:
     return ok
 
 
+def check_model_is_an_action(ok: bool) -> bool:
+    """§44: el modelo es ACCION, y el espacio de decision es el par (modelo, paradigma).
+
+    LA TRAMPA QUE SE EVITA. Meter el modelo en el VOCABULARIO DE REGION seria el error
+    opuesto y esta medido lo que cuesta: un cuarto segmento le costo a theta toda su
+    confianza —cada episodio cayo en un bin demasiado chico para cruzar el piso de
+    evidencia— y ese fue el mecanismo de `P15`. La region es lo que la tarea ES; la accion
+    es lo que el motor HACE. El modelo se elige.
+
+    EL ORDEN DE LAS COTAS ES EL RESULTADO. Dial primero —una precondicion— y plata
+    despues. Al reves, un descuento suficiente compraria permiso para rutear al modelo mas
+    barato lo que el dial prohibe, que es exactamente lo que el dial existe para impedir.
+    """
+    from app.assurance import Assurance, PROFILES
+    from app.feasibility import admissible_pairs, check_pair
+    from app.models import CATALOG, DEEP, FAST, Capability, by_name
+    from app.paradigms import COST_PRIORS
+    from app.policy import PolicyBundle
+    from app.router import Router
+
+    print("\n--- 44. el modelo es una accion, no un estado ---")
+
+    docs = {f"u{i}": "x" * 4000 for i in range(30)}
+    base = {"unit_ids": list(docs), "budget_tokens": 120_000, "question": "q",
+            "task_id": "t1", "has_oracle": True}
+    C = ["react", "map_reduce", "dag_strategy"]
+    router = Router(PolicyBundle.cold_start("react", 0.0).sign(), COST_PRIORS, "react")
+
+    def plan(task, **kw):
+        return router.plan(task, region="many/oracle/loose", candidates=C,
+                           documents=docs, **kw)
+
+    ok &= check("sin catalogo el plan no inventa un modelo: dice vacio",
+                plan(base).model == "")
+    ok &= check("con catalogo elige, y entre admisibles gana el barato",
+                plan(base, models=CATALOG).model == "fast")
+    ok &= check("A3 exige capacidad y deja solo el caro — irreversible ya eleva a A3",
+                plan(base, models=CATALOG, requested=Assurance.CERTIFIED).model == "deep")
+
+    barato = dict(base, budget_usd=0.02)
+    ok &= check("un presupuesto en plata mata pares que en tokens entraban",
+                plan(barato, models=CATALOG).model == "fast")
+    try:
+        plan(barato, models=CATALOG, requested=Assurance.CERTIFIED)
+        ok &= check("el dial no se compra con un descuento", False)
+    except ValueError as exc:
+        ok &= check("dial primero y plata despues: se ABSTIENE, no baja de modelo",
+                    "capacidad" in str(exc))
+
+    _, vp = admissible_pairs(CATALOG, ["direct"], docs, barato)
+    ok &= check("el mismo paradigma vive en un modelo y muere en el otro",
+                vp[("fast", "direct")].feasible and not vp[("deep", "direct")].feasible)
+    ok &= check("y el motivo dice en que eje murio",
+                vp[("deep", "direct")].axis == "money")
+
+    # AUSENTE NO ES CERO, en la proyeccion. `dag_strategy` no proyecta tokens, y cobrarle
+    # 0 lo declaraba admisible en el modelo caro justo al brazo que mide 59x `direct`.
+    dag = check_pair(DEEP, "dag_strategy", docs, barato)
+    ok &= check("un paradigma sin proyeccion no se cobra gratis: se declara no evaluado",
+                dag.axis == "money_unevaluated" and dag.projected_tokens is None)
+
+    ok &= check("la capacidad es ORDINAL, no un puntaje que se compense con costo",
+                FAST.capability < DEEP.capability
+                and not PROFILES[Assurance.CERTIFIED].permits_model(Capability.FAST))
+    try:
+        by_name("no-existe")
+        ok &= check("un modelo fuera del catalogo levanta", False)
+    except ValueError:
+        ok &= check("un modelo fuera del catalogo levanta, no cae al barato callado", True)
+
+    ok &= check("el EXPLAIN lleva el modelo: una accion que no se registra no se replica",
+                plan(base, models=CATALOG).explain()["model"] == "fast")
+    return ok
+
+
 def check_measurement_and_state_are_two_trees(ok: bool) -> bool:
     """§43: `results/` es medicion y `state/` es el ledger, y son dos arboles.
 
@@ -2432,6 +2507,7 @@ def main() -> int:
     ok = check_money_is_a_unit_not_a_number(ok)
     ok = check_load_rows_guards_the_analyst(ok)
     ok = check_measurement_and_state_are_two_trees(ok)
+    ok = check_model_is_an_action(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

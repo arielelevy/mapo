@@ -30,8 +30,11 @@ not a degradation. It is the difference between a bounded system and a runaway.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any, Sequence
 from .tools import SUMMARY_CHARS
+
+if TYPE_CHECKING:  # el catalogo de modelos importa metrics, y la factibilidad no debe depender del analisis
+    from .models import Model
 
 CHARS_PER_TOKEN = 4
 
@@ -87,8 +90,16 @@ GUARANTEED_FULL_READ = frozenset({"direct", "cot", "map_reduce"})
 class Verdict:
     feasible: bool
     reason: str = ""
-    projected_calls: int = 0
-    projected_tokens: int = 0
+    # AUSENTE NO ES CERO, y aca costo caro. Cada rama de `check` llenaba SOLO el eje que
+    # miraba: `dag_strategy` proyecta llamadas y deja los tokens en 0, `react` al reves.
+    # Mientras el numero solo se imprimia no molestaba. Apenas una cota lo consumio —la
+    # de plata, `check_pair`— el 0 se leyo como GRATIS y declaro admisible en el modelo
+    # caro justo al brazo que mide 59x los tokens de `direct`.
+    #
+    # `None` es «no proyectado» y ninguna cota puede correr sobre eso: se niega a decidir
+    # y lo dice. Un 0 no se puede distinguir de una proyeccion real que dio cero.
+    projected_calls: int | None = None
+    projected_tokens: int | None = None
     # Which limit was hit. Two paradigms can both be infeasible for opposite reasons and
     # conflating them is what made map_reduce look like it scaled: it passes CONTEXT by
     # construction, because it never holds the units together, and fails BUDGET, because
@@ -334,3 +345,103 @@ def admissible(
     """
     verdicts = {p: check(p, documents, task) for p in paradigms}
     return [p for p, v in verdicts.items() if v.feasible], verdicts
+
+
+# Cuanto de la proyeccion es salida. `metrics` mide la mezcla REAL por brazo (0,3% a
+# 9,9%), pero la factibilidad corre ANTES de que exista una fila, asi que no la tiene.
+# Se usa una cota alta y no la media: sub-proyectar la salida abarata un par que no
+# entraba, y la factibilidad no puede admitir planes que no entran.
+PROJECTED_COMPLETION_SHARE = 0.15
+
+
+def check_pair(
+    model: "Model",
+    paradigm: str,
+    documents: dict[str, str],
+    task: dict[str, Any],
+) -> Verdict:
+    """Si el par `(modelo, paradigma)` puede correr. Sigue siendo pura aritmetica.
+
+    TRES COTAS, Y SON INDEPENDIENTES. La del paradigma ya existia; las otras dos entran
+    con el modelo, y ninguna se deduce de las otras:
+
+      paradigma   lo que `check()` ya decide: llamadas, contexto, cardinalidad
+      ventana     techo DURO del modelo. Un presupuesto generoso no agranda una ventana,
+                  asi que la cota que manda es la MENOR de las dos
+      plata       el presupuesto real. Un par puede entrar en tokens y no en plata, que
+                  es justamente lo que el banco no podia ni preguntar
+
+    EL PRESUPUESTO EN PLATA ES OPCIONAL Y AUSENTE NO ES CERO. Sin `budget_usd` declarado
+    no se proyecta plata y se dice —el par pasa por las otras dos cotas—. Tratar la
+    ausencia como cero declararia infactible a todo, que es la falla opuesta y peor.
+    """
+    verdict = check(paradigm, documents, task)
+    if not verdict.feasible:
+        return verdict
+
+    if verdict.projected_tokens is not None and (
+        verdict.projected_tokens > model.context_tokens
+    ):
+        return Verdict(
+            False,
+            f"{paradigm} proyecta {verdict.projected_tokens} tokens y la ventana de "
+            f"{model.name} es {model.context_tokens}: el presupuesto no agranda una "
+            f"ventana, asi que manda la cota mas chica",
+            projected_calls=verdict.projected_calls,
+            projected_tokens=verdict.projected_tokens,
+            axis="window",
+        )
+
+    budget_usd = task.get("budget_usd")
+    if budget_usd is None:
+        return verdict
+    if verdict.projected_tokens is None:
+        # NO SE PUEDE COBRAR LO QUE NO SE PROYECTO. El par pasa las otras dos cotas y la
+        # de plata se declara no evaluada — que no es lo mismo que aprobada, y el motivo
+        # queda en el veredicto para que el EXPLAIN no lo lea como un permiso.
+        return Verdict(
+            True,
+            f"{paradigm} no proyecta tokens, asi que la cota de plata NO se evaluo para "
+            f"{model.name}. No proyectado no es gratis: el par pasa por las otras dos "
+            f"cotas y esta se declara ausente",
+            projected_calls=verdict.projected_calls,
+            projected_tokens=None,
+            axis="money_unevaluated",
+        )
+
+    salida = int(verdict.projected_tokens * PROJECTED_COMPLETION_SHARE)
+    plata = model.money_for(verdict.projected_tokens - salida, salida)
+    if plata > float(budget_usd):
+        return Verdict(
+            False,
+            f"{paradigm} en {model.name} proyecta USD {plata:.4f} contra un presupuesto "
+            f"de USD {float(budget_usd):.4f}. Entra en tokens y no en plata: son dos "
+            f"cotas distintas y el banco no podia preguntar la segunda",
+            projected_calls=verdict.projected_calls,
+            projected_tokens=verdict.projected_tokens,
+            axis="money",
+        )
+    return verdict
+
+
+def admissible_pairs(
+    models: "Sequence[Model]",
+    paradigms: list[str],
+    documents: dict[str, str],
+    task: dict[str, Any],
+) -> tuple[list[tuple[str, str]], dict[tuple[str, str], Verdict]]:
+    """El espacio de decision entero, podado. La accion es el PAR.
+
+    Devuelve `(modelo, paradigma)` porque esa es la accion: elegir `react` sin decir en
+    que modelo no es una decision completa, y el registro tiene que poder reproducirla.
+
+    Los pares excluidos vuelven con su motivo, igual que en `admissible()`: un espacio
+    que se angosto tiene que decirlo, o el informe se lee como si se hubiera considerado
+    entero. Y con dos modelos el espacio es el doble, asi que callar la mitad es peor.
+    """
+    verdicts = {
+        (m.name, p): check_pair(m, p, documents, task)
+        for m in models
+        for p in paradigms
+    }
+    return [k for k, v in verdicts.items() if v.feasible], verdicts

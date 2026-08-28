@@ -48,6 +48,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any
 
+from .models import Capability
 from .beliefs import BeliefBase, Provenance
 
 
@@ -88,9 +89,24 @@ class AssuranceProfile:
     log_belief_base: bool
     admissible_patterns: frozenset[str] | None
     max_composition_depth: int
+    # PISO DE CAPACIDAD DEL MODELO, y es una PRECONDICION, no presupuesto.
+    #
+    # «El presupuesto es token y calidad del modelo» (planteo del autor, 2026-08-28). La
+    # calidad NO entra al costo: seria mezclar lo que se paga con lo que se compra, y
+    # entonces un descuento suficiente compraria permiso para rutear una accion
+    # irreversible al modelo mas barato. Entra como restriccion, y el lugar donde vive ya
+    # existia: el dial ya restringe PATRONES, ahora restringe tambien MODELOS.
+    #
+    # `None` es «cualquier modelo del catalogo», que es distinto de un piso bajo: un
+    # perfil que no opina no es un perfil que exige el minimo.
+    min_capability: "Capability | None" = None
 
     def permits(self, pattern: str) -> bool:
         return self.admissible_patterns is None or pattern in self.admissible_patterns
+
+    def permits_model(self, capability: "Capability") -> bool:
+        """Si el dial admite un modelo de esa capacidad. Piso ORDINAL, no puntaje."""
+        return self.min_capability is None or capability >= self.min_capability
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -104,6 +120,9 @@ class AssuranceProfile:
                 sorted(self.admissible_patterns) if self.admissible_patterns else "all"
             ),
             "max_composition_depth": self.max_composition_depth,
+            "min_capability": (
+                self.min_capability.name if self.min_capability else "any"
+            ),
         }
 
 
@@ -137,6 +156,11 @@ PROFILES: dict[Assurance, AssuranceProfile] = {
         log_belief_base=True,
         admissible_patterns=None,
         max_composition_depth=3,
+        # A2 NO EXIGE PISO, y no exigirlo es una decision. Puse `DEEP` primero por el
+        # argumento de «rinde cuentas» y es una politica mia sin una sola medicion detras:
+        # obligaria a pagar 25x en cada request contable. Si el modelo barato alcanza a
+        # este nivel de procedencia es una pregunta EMPIRICA, y esta registrada.
+        min_capability=None,
     ),
     Assurance.CERTIFIED: AssuranceProfile(
         level=Assurance.CERTIFIED,
@@ -147,6 +171,11 @@ PROFILES: dict[Assurance, AssuranceProfile] = {
         log_belief_base=True,
         admissible_patterns=CERTIFIED_PATTERNS,
         max_composition_depth=2,
+        # ACA EL ARGUMENTO ES ESTRUCTURAL Y NO HACE FALTA MEDIRLO. `decide_level` ya
+        # eleva a A3 toda accion irreversible («certified assurance is the floor»), asi
+        # que este piso ES el que impide rutear lo irreversible al modelo mas barato
+        # porque salga la cuenta. No se agrego mecanismo nuevo: se completo el que habia.
+        min_capability=Capability.DEEP,
     ),
 }
 
@@ -358,6 +387,7 @@ def resolve(
             log_belief_base=profile.log_belief_base,
             admissible_patterns=profile.admissible_patterns,
             max_composition_depth=profile.max_composition_depth,
+            min_capability=profile.min_capability,
         )
         reasons.append(
             "elicited credence is not yet calibrated, so at this level the provenance "

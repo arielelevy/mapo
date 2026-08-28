@@ -23,7 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, Sequence
 
 from .assurance import (
     Assurance,
@@ -47,12 +47,22 @@ from .rules import (
 )
 
 
+
+if TYPE_CHECKING:  # el catalogo importa metrics; el router no depende del analisis
+    from .models import Model
+
 @dataclass
 class Plan:
     """A concrete plan plus the full derivation that produced it."""
 
     action: str
     paradigm: str
+    # EL MODELO ES PARTE DE LA ACCION, no del contexto. Elegir `react` sin decir en que
+    # modelo no es una decision completa: el registro no la puede reproducir y el EXPLAIN
+    # no la puede defender. Vacio significa «catalogo de un solo modelo», que es el
+    # regimen en el que se midio todo hasta hoy — y decirlo vacio es distinto de mentir
+    # un nombre por omision.
+    model: str = ""
     ladder: list[str] = field(default_factory=list)
     gated: bool = False
     needs_probe: bool = False
@@ -68,6 +78,7 @@ class Plan:
         body = {
             "action": self.action,
             "paradigm": self.paradigm,
+            "model": self.model,
             "ladder": self.ladder,
             "gated": self.gated,
             "needs_probe": self.needs_probe,
@@ -211,6 +222,7 @@ class Router:
         horizon_provenance: Provenance = Provenance.ELICITED,
         horizon_credence: float = 0.0,
         prior_beliefs: list[dict[str, Any]] | None = None,
+        models: "Sequence[Model] | None" = None,
     ) -> Plan:
         """`prior_beliefs` continues a recorded history (a first plan's base) so that a
         post-probe replan supersedes rather than forgets: one base, one digest lineage,
@@ -222,9 +234,34 @@ class Router:
         # discovering that map_reduce loses on 500-unit tasks is learning arithmetic the
         # hard way: the cap was computable from the task before any token was spent.
         infeasible: dict[str, str] = {}
+        # El espacio de pares que sobrevivio la poda, por paradigma. Vacio cuando el
+        # catalogo es de un solo modelo, que es como se midio todo hasta hoy.
+        modelos_por_paradigma: dict[str, list[str]] = {}
         if documents is not None:
-            runnable, verdicts = feasibility.admissible(candidates, documents, task)
-            infeasible = {p: v.reason for p, v in verdicts.items() if not v.feasible}
+            if models:
+                pares, vp = feasibility.admissible_pairs(
+                    models, candidates, documents, task
+                )
+                for nombre, par in pares:
+                    modelos_por_paradigma.setdefault(par, []).append(nombre)
+                runnable = [p for p in candidates if p in modelos_por_paradigma]
+                # UN PARADIGMA MUERE SOLO SI MUERE EN TODOS LOS MODELOS. Reportar el
+                # motivo de uno solo diria «infactible» de algo que corria en el otro,
+                # que es narrar la poda al reves.
+                infeasible = {
+                    p: "; ".join(
+                        f"{m}: {v.reason}"
+                        for (m, q), v in sorted(vp.items())
+                        if q == p and not v.feasible
+                    )
+                    for p in candidates
+                    if p not in modelos_por_paradigma
+                }
+            else:
+                runnable, verdicts = feasibility.admissible(candidates, documents, task)
+                infeasible = {
+                    p: v.reason for p, v in verdicts.items() if not v.feasible
+                }
             if not runnable:
                 raise ValueError(
                     "No candidate can run this task: "
@@ -285,7 +322,7 @@ class Router:
         verdict: Verdict = standard_rules(policy).decide(base)
         return self._materialise(
             verdict, decision, profile, admissible, excluded, best, infeasible,
-            region=region,
+            region=region, models=models, pairs=modelos_por_paradigma,
         )
 
     def _cost_key(self, region: str, paradigm: str) -> float:
@@ -310,6 +347,8 @@ class Router:
         theta_best: str | None,
         infeasible: dict[str, str] | None = None,
         region: str = "",
+        models: "Sequence[Model] | None" = None,
+        pairs: dict[str, list[str]] | None = None,
     ) -> Plan:
         """Turn a rule action into a concrete plan under the assurance profile."""
         notes: list[str] = []
@@ -381,9 +420,46 @@ class Router:
                 f"{decision.level.label}"
             )
 
+        # EL MODELO SE ELIGE ULTIMO, y en ese orden por una razon. Primero el dial —una
+        # precondicion, no un precio— y despues la plata. Al reves, un descuento
+        # suficiente compraria permiso para rutear al mas barato lo que el dial prohibe.
+        #
+        # Entre los que quedan gana el mas barato, y eso NO es una politica timida: la
+        # ventaja del caro depende de la dificultad (X-5e: 0,81x los tokens en `gold_deep`
+        # y 1,90x en `gold_v2`), y ese eje es el que la region ya mide. Aprenderlo es de
+        # theta, que hoy ordena paradigmas y no pares — asi que el mecanismo esta y el
+        # aprendizaje esta registrado, en vez de fingido con una heuristica.
+        model_name = ""
+        pairs = pairs or {}
+        if models and paradigm in pairs:
+            permitidos = [
+                m for m in models
+                if m.name in pairs[paradigm]
+                and profile.permits_model(m.capability)
+            ]
+            if not permitidos:
+                raise ValueError(
+                    f"{decision.level.label} exige capacidad "
+                    f"{profile.min_capability.name if profile.min_capability else 'any'} "
+                    f"y ningun modelo factible para {paradigm} la alcanza."
+                )
+            elegido = min(permitidos, key=lambda m: (m.capability, m.name))
+            model_name = elegido.name
+            if len(permitidos) > 1:
+                notes.append(
+                    f"modelo {elegido.name}: el mas barato de "
+                    f"{[m.name for m in permitidos]} que el dial admite"
+                )
+            elif len(models) > 1:
+                notes.append(
+                    f"modelo {elegido.name}: unico admisible de "
+                    f"{[m.name for m in models]}"
+                )
+
         return Plan(
             action=action,
             paradigm=paradigm,
+            model=model_name,
             ladder=plan_ladder,
             gated=gated,
             needs_probe=probe,
