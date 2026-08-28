@@ -19,6 +19,29 @@ y por eso no puede cambiar un argmax. Una asociacion entre PARES no tiene esa pr
 
 QUE NO TOCA. No escribe ninguna fila. El registro de P15 y el de P16 quedan intactos; la
 salida es un archivo aparte.
+
+ESTADO AL 2026-08-27: NO FUNCIONA TODAVIA, y la causa es desconocida.
+-------------------------------------------------------------------
+Sobre `gold_transfer`, 93 de 112 celdas dan miss sellado. Dos cosas que hay que decir con
+cuidado:
+
+1. UN MISS SELLADO ACA NO PRUEBA NADA SOBRE EL CACHE (R-1). Lo mucho mas probable es que
+   el replay no este reconstruyendo el payload original. El runner llama
+   `REGISTRY[paradigm](client, surface, task)` con la tarea cruda y `SeededClient(cliente,
+   seed + trial)`, y esto usa `seed + 0`, asi que trial 0 deberia pegar. No pega, y por
+   ahora no se sabe por que. Candidatos sin verificar: el contenido que devuelven las
+   herramientas depende del recuperador, y el recuperador de embeddings puede estar
+   entregando algo distinto de lo que entrego en la corrida original.
+
+2. LA METRICA DE COSTO QUE ESTE SCRIPT IMPRIMIA ERA INCORRECTA. `SeededClient.spent`
+   acumula el `usage` de TODA completion, incluidas las servidas por cache. Reportar eso
+   como "tokens nuevos" confunde uso contabilizado con gasto real. En modo sellado el
+   gasto real es cero por construccion — un miss levanta excepcion y jamas sale a la red.
+   La cifra quedo renombrada a lo que es.
+
+Lo que si quedo probado: el modo sellado es la guarda correcta para esta clase de script.
+Sin el, la primera version salio a hacer llamadas vivas contra la misma cuota que estaba
+usando una corrida en curso, y solo se noto mirando el reloj del cache.
 """
 
 import json
@@ -29,7 +52,7 @@ from dataclasses import replace
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from app.config import Settings
-from app.llm import SeededClient
+from app.llm import SealedCacheMiss, SeededClient
 from app.paradigms import REGISTRY
 from app.runner import Runner
 
@@ -40,7 +63,15 @@ CORPUS = sys.argv[1] if len(sys.argv) > 1 else "gold_transfer"
 
 
 def main() -> None:
-    runner = Runner(settings, CORPUS, retriever_arm="hybrid", surface_variant="basic")
+    # SELLADO, y es la decision importante del script. En modo sellado un miss de cache
+    # es un ERROR DURO y nunca una llamada viva. Eso convierte "creo que el replay es
+    # gratis" en "el replay no puede no ser gratis": si un payload no fuera identico al
+    # de la corrida original, el script rompe en vez de gastar tokens contra la misma
+    # cuota que esta usando la corrida en curso. Y de paso es la prueba de R-1 — que el
+    # replay sellado sigue funcionando despues de mudar el cache a directorios con
+    # namespace por cuenta.
+    runner = Runner(settings, CORPUS, retriever_arm="hybrid",
+                    surface_variant="basic", sealed=True)
     tasks = {t["task_id"]: t for t in runner._tasks}  # noqa: SLF001
 
     cells = sorted({
@@ -56,6 +87,8 @@ def main() -> None:
     before = client.spent.total_tokens
     sequences: dict[str, dict[str, list[str]]] = defaultdict(dict)
     misses = 0
+    sealed_misses: list[tuple[str, str, str]] = []
+    failures: list[tuple[str, str, str]] = []
 
     for i, (task_id, paradigm) in enumerate(cells, start=1):
         fn = REGISTRY.get(paradigm)
@@ -65,20 +98,34 @@ def main() -> None:
         spent_before = client.spent.total_tokens
         try:
             fn(client, surface, tasks[task_id])
+        except SealedCacheMiss as miss:
+            # Distinto de un fallo del paradigma: es el replay diciendo que este payload
+            # no esta en el cache. Se cuenta aparte porque significa otra cosa — que la
+            # reconstruccion NO es la de la corrida original.
+            sealed_misses.append((task_id, paradigm, str(miss)[:90]))
         except Exception as exc:  # noqa: BLE001
-            # Un paradigma que fallo en la corrida original vuelve a fallar acá, y eso
-            # es correcto: se registra lo que alcanzó a hacer antes de romperse.
-            print(f"  [{i}/{len(cells)}] {task_id}/{paradigm}: {type(exc).__name__}")
+            # Un paradigma que fallo en la corrida original vuelve a fallar aca, y eso
+            # es correcto: se registra lo que alcanzo a hacer antes de romperse.
+            failures.append((task_id, paradigm, type(exc).__name__))
         if client.spent.total_tokens > spent_before:
             misses += 1
         sequences[task_id][paradigm] = list(surface.sequence)
 
     spent = client.spent.total_tokens - before
-    print(f"\ncosto del replay: {spent:,} tokens nuevos  ({misses} celdas con miss)")
-    if spent > 0:
-        print("  ATENCION: hubo misses de cache. El replay dejo de ser gratis y los")
-        print("  payloads no son identicos a los de la corrida original — no usar estas")
-        print("  secuencias como si fueran las de aquella corrida sin explicar por que.")
+    reconstruidas = sum(1 for v in sequences.values() for s in v.values() if s)
+    print(f"{chr(10)}uso contabilizado : {spent:,} tokens — incluye los servidos por")
+    print( "                    cache. El gasto REAL es cero: en modo sellado un miss")
+    print( "                    levanta excepcion y jamas sale a la red.")
+    print(f"celdas con secuencia: {reconstruidas}/{len(cells)}")
+    print(f"misses sellados     : {len(sealed_misses)}")
+    print(f"fallos de paradigma : {len(failures)}")
+    if sealed_misses:
+        print("")
+        print("  NO concluir de aca que el cache perdio entradas (R-1). Lo mucho mas")
+        print("  probable es que este replay no reconstruya el payload original, y esa")
+        print("  causa esta sin identificar. Ver el estado en el docstring.")
+        for t,pa,why in sealed_misses[:3]:
+            print(f"    {t}/{pa}: {why}")
 
     # --- que dice la secuencia -------------------------------------------------------
     transitions: dict[str, Counter] = defaultdict(Counter)
@@ -106,6 +153,8 @@ def main() -> None:
         "replay_cost_tokens": spent,
         "cells": len(cells),
         "cache_misses": misses,
+        "sealed_misses": [list(m) for m in sealed_misses],
+        "failures": [list(f) for f in failures],
         "sequences": sequences,
         "transitions": {
             p: {f"{a}->{b}": c for (a, b), c in t.items()}

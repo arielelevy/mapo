@@ -57,7 +57,7 @@
 - [ ] **A-3** · separar producto de banco ANTES de portar
 
 **Riesgos que nadie estaba mirando**
-- [ ] **R-1** · verificar el replay sellado tras la migración de caché *(barato, y es el único detector)*
+- [~] **R-1** · verificar el replay sellado — *intentado y **no concluyente**: el replay de secuencias da 93/112 misses, pero es mucho más probable que sea el replay y no el caché. Hace falta un test que replaye una celda por el MISMO camino que el runner*
 - [ ] R-2 · celdas † de la grilla congelada `gpt-5-chat`
 - [ ] R-3 · barrer el paper por «declarado, no medido»
 - [ ] R-4 · `lab/ui/index.html` sin explicar — adoptarlo o sacarlo
@@ -65,7 +65,7 @@
 
 **Decisiones dinámicas que hoy no gobierna nadie**
 - [ ] D-1 · cuándo parar de iterar *(el más barato: las señales ya existen)*
-- [~] D-2 · qué herramienta sigue — *secuencia ya instrumentada; falta el replay y el análisis*
+- [~] D-2 · qué herramienta sigue — *secuencia instrumentada; el replay **no funciona**: 93/112 misses sellados, causa sin identificar (`_replay_sequences.py`)*
 - [ ] D-3 · la descomposición en DAG
 - [ ] D-4 · challenger multi-agente con handoff por contrato
 - [ ] D-5 · la «Constant Soup» en general

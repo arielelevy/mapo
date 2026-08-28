@@ -260,7 +260,10 @@ Un auditor debe poder responder sin invocar al modelo:
 
 ## 11. Hipótesis falsables futuras
 
-Estas hipótesis no están preregistradas todavía; son el diseño del próximo registro.
+Estas hipótesis **no están preregistradas todavía**; son el diseño del próximo
+registro. Registrarlas con fecha es gratis y es la condición para que el resultado
+cuente — el patrón está implementado (`rec.py`, `certify.py`) y **sin medir**, que por
+las reglas del repo es deuda.
 
 | Hipótesis | Evidencia que la refuta |
 |---|---|
@@ -277,11 +280,26 @@ Estas hipótesis no están preregistradas todavía; son el diseño del próximo 
 
 - mejor paradigma fijo factible;
 - siempre-`react`;
-- router P15 congelado;
+- **router de P17** — detectores honestos por celda y ciclo sonda→re-plan;
 - nuevo eje de features sin REC;
 - sonda fija;
 - REC completa;
 - REC sin costo de sonda, solo como ablación diagnóstica.
+
+> **Corrección del 2026-08-27, y por qué no es cosmética.** El brazo de control decía
+> «router P15 congelado». Después quedó medido que en ese router **la regla de selección
+> no dispara nunca**: está pre-empatada tres veces —el corpus declaraba detector en el
+> 96% de las tareas, sacar el detector le entrega la decisión a la sonda y no a la
+> selección, y el banco daba un solo paso de los dos que `probe_then_decide` nombra.
+>
+> Con ese brazo como control, una diferencia a favor de REC **no** significaría «REC
+> repara lo que la selección no resuelve». Significaría «REC le gana a un router al que
+> nunca lo dejaron seleccionar» — un resultado bastante más chico, y de los que se leen
+> mal con facilidad. El control tiene que ser un router **al que sí se lo dejó decidir**,
+> que es el de P17.
+>
+> **Consecuencia de orden**: REC se mide **después** de P17, no en paralelo. La
+> dependencia no estaba escrita y ahora lo está.
 
 ### Métricas primarias
 
