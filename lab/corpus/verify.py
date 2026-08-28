@@ -194,6 +194,7 @@ class Verifier:
             "C7_irreversible": self._c7,
             "C8_currency": self._c8,
             "C9_declared_roster": self._c9,
+            "W1_shared_writes": self._w1,
             "B2_absence": self._b2,
             "D1_presupposition": self._d1,
         }.get(cell)
@@ -212,6 +213,45 @@ class Verifier:
             return False, f"unit describes {claim['name']}, question asks {name}"
         if [claim["account"]] != task["oracle"]:
             return False, f"account {claim['account']} != oracle {task['oracle']}"
+        return True, "ok"
+
+    def _w1(self, task: dict[str, Any]) -> tuple[bool, str]:
+        """Escrituras compartidas: el conflicto esta en alcance, o no esta.
+
+        DOS CONDICIONES, y la segunda es la que evita que la celda mienta:
+
+          1. el oraculo y la presencia del registro de cambio pendiente COINCIDEN — si no,
+             la respuesta correcta no es la que la tarea dice;
+          2. el caso negativo NO tiene unidad portadora. Es el punto de la polaridad
+             negativa: lo correcto es no encontrar nada y decirlo, y una unidad relevante
+             declarada ahi le mentiria al simulador de recuperacion.
+
+        Y SE VERIFICA QUE LA TAREA LO DECLARE. `shared_writes` es lo que eleva el piso a
+        A2, y la celda existe justamente porque ninguna tarea lo declaraba: una celda W1
+        que se olvide de declararlo volveria a dejar el piso dormido sin que nada avise.
+        """
+        if task.get("shared_writes") is not True:
+            return False, (
+                "W1 sin `shared_writes`: es lo unico que eleva el piso a A2, y sin eso la "
+                "celda no despierta la garantia que existe para medir"
+            )
+        marca = f"lock-{task['task_id'].split('-')[1]:0>3}"
+        presente = marca in task["unit_ids"]
+        espera_conflicto = task["oracle"] == ["conflict"]
+        if presente != espera_conflicto:
+            return False, (
+                f"el registro de cambio pendiente {'esta' if presente else 'no esta'} en "
+                f"alcance y el oraculo dice {task['oracle']}: no coinciden"
+            )
+        if not espera_conflicto and task.get("relevant_units"):
+            return False, (
+                "el caso negativo declara unidades relevantes: no hay unidad que lleve la "
+                "respuesta, y declarar una le miente al simulador de recuperacion"
+            )
+        if espera_conflicto:
+            texto = self.documents.get(marca, "").lower()
+            if "pending" not in texto and "amendment" not in texto:
+                return False, f"{marca} no registra una enmienda pendiente"
         return True, "ok"
 
     def _b2(self, task: dict[str, Any]) -> tuple[bool, str]:

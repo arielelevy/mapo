@@ -58,6 +58,30 @@ Resultados nano en `results/nano/` — NUNCA mezclar modelos en un mismo archivo
 resume. La grilla `gpt-5-chat` queda congelada como primer modelo (con sus celdas †
 pendientes documentadas); es el brazo de comparación multi-modelo, no se extiende.
 
+## Dónde vive cada cosa (ordenado 2026-08-28)
+
+```
+lab/
+  app/        el PRODUCTO — capa de decisión y paradigmas
+  bench/      el BANCO — analysis/ runs/ audits/ oneoff/ + _sanity.py
+  corpus/     generación y verificación del mundo
+  tests/      test_science.py · test_consolidation.py
+  results/    MEDICIÓN — evidencia de lo corrido          (fuera de git)
+  state/      ESTADO — ledger de creencias, θ, calibración (fuera de git)
+  cache/      completions content-addressed                (fuera de git)
+```
+
+Eran **72 scripts sueltos en la raíz**, al lado de `app/`. La regla —el banco importa al
+producto, el producto no sabe que el banco existe— estaba escrita y no se veía en el árbol.
+Se corren **desde `lab/`**: `py bench/analysis/_analyze_money.py`. Detalle en
+`bench/README.md`. Los nombres de script que el `README.md` menciona no cambiaron; sólo su
+carpeta.
+
+**`results/` y `state/` son dos árboles y no se mezclan.** Un `rglob("*.jsonl")` sobre
+resultados levantaba el ledger de creencias como filas medidas. Están fuera de git por
+tamaño, no por importancia: al ledger lo protege su cadena de hashes (`store.verify_chain`),
+no el control de versiones.
+
 ## Antes de gastar un token
 
 ```powershell
@@ -66,7 +90,9 @@ py tests\test_consolidation.py      # debe pasar completo
 py corpus\verify.py --corpus corpus\<nombre>
 # predicciones falsables registradas con fecha en README.md, ANTES de correr
 # repeat >= 3, piso de ruido POR CELDA, decisiones sobre brecha NETA
-# estimar tokens con corridas previas y reportar el estimado
+# ESTIMAR CONTRA EL CORPUS, NUNCA CONTRA EL REGISTRO: un .jsonl no declara si esta
+#   completo. Estimar desde uno parcial costo un error de 34x. La cuenta correcta es
+#   len(tasks.json) x brazos x repeat, cuesta lo mismo, y no se puede equivocar asi
 ```
 
 Corridas resumibles por `(task, paradigm, trial)`; el cache content-addressed hace la
