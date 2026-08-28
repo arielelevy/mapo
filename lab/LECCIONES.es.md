@@ -1079,6 +1079,48 @@ establecer un reemplazo.
 
 ---
 
+### 5.6 El costo que ordena la cascada está puesto a mano, y erra 2-7× · `MEDIDO`
+
+`COST_PRIORS` son multiplicadores escritos a mano contra `direct = 1,0`. Derivados del
+registro, **pareados sobre las tareas donde `direct` corrió de verdad**:
+
+| brazo | prior | observado pareado | |
+|---|---:|---:|---|
+| `dag_strategy` | 12,0 | **4,0** | 3× de más |
+| `map_reduce` | 8,0 | **1,2** | 6,6× |
+| `reflection` | 5,0 | **1,6** | 3,2× |
+| `react` | 3,0 | **2,1** | 1,4× |
+| `plan_execute` | 6,0 | **7,5** | 0,8× — el único corto, y está retirado |
+
+**Y lo primero fue averiguar quién consume ese número, porque la respuesta obvia era la
+equivocada.** Iba a escribir que gobiernan la **poda de factibilidad**. Es falso:
+`feasibility.admissible()` corre su propia aritmética sobre el material y el presupuesto
+declarado, y **no los mira**. La poda no está afectada.
+
+Gobiernan **dos ordenamientos**, y el segundo importa más de lo que parece:
+
+| dónde | qué decide |
+|---|---|
+| `min(admissible, key=priors)` | el brazo al que se cae cuando el fallback no es admisible |
+| `sorted(admissible, key=priors)` | **el orden de la cascada** |
+
+> Con `reflection` estimado en 5,0 cuando mide **1,6**, la cascada **nunca lo prueba
+> primero** aunque sea de los más baratos. Y la cascada es el mecanismo al que el paper le
+> acredita haber capturado el 100% de la brecha: **empezar por el peldaño equivocado es
+> exactamente el costo que la escalera existe para evitar.**
+
+**La base de la escala también es floja, y eso no se arregla midiendo mejor.** `direct` es
+el denominador y **sólo es factible donde toda la evidencia entra en ventana** — 7 tareas
+en 1.008 filas. Una escala anclada a un brazo que no corre en el régimen que el producto
+apunta no tiene base medible ahí.
+
+**Y el propio código dice que el prior es transitorio**: *«relative priors only… measured
+mean_cost supersedes them once theta has data»*. Así que el error vive exactamente en la
+ventana donde θ todavía no aprendió — **cada despliegue nuevo y cada región nueva**, que es
+donde un producto se juega la primera impresión.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una
