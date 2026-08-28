@@ -423,6 +423,46 @@ capture. If that happens, P15b is evaluated on C5 alone and the C3 half is repor
 **vacuous, not as confirmed** — the distinction matters, and it is written down here rather
 than decided once the numbers are in. C3 in nano remains an open region, not a result.
 
+### Registered prediction — P16, the clean replication (2026-08-27, before the run)
+
+P15 refuted the product claim and said why. Both causes are fixed and their effect was
+measured for free on the old corpus; this run tests them where it counts — a world θ has
+never seen.
+
+`gold_p16`, **seed 61** (used so far: 7, 23, 47). Verified 26/26 by the generator-
+independent verifier, and the continuation axis separates it exactly as it separates the
+other three (C5 6/6, zero false positives on C1/C2/C4). θ is fitted on the FULL prior
+record — deep + holdout + v2 + transfer — under 4-segment regions
+(`REGION_VOCABULARY = regions/2-continuation`). Nothing from `gold_p16` enters θ.
+
+**The verdict code is frozen before the run.** `_analyze_p16.py` is committed in the same
+commit as this prediction and before a single row of `gold_p16` exists. Registering a
+prediction in prose still leaves room to pick the valuation after seeing the numbers;
+freezing the code that judges does not. Whatever it prints is the verdict.
+
+**Estimated before spending**: 12,344,856 tokens over 336 feasible cells (P15 actual:
+14.07M). `repeat = 3`, per-cell noise floor, `workers = 1`.
+
+The valuation, decided now: the **real action** is scored — a cascade climbs rung by rung
+until the oracle accepts, a gate runs the fallback and does not execute the plan — and
+**the full climbed cost is charged**, at λ = 0.05 primary. That last part is what P15's
+exploratory decomposition could not close, and it is the one that could take the
+advantage away.
+
+| # | Prediction | If it fails |
+|---|---|---|
+| P16a | On the **routing cohort** (non-gated tasks), action-aware net utility at λ=0.05 beats BOTH the best fixed paradigm and always-`react`, by more than the per-cell noise floor | Per-request selection does not pay once climbing is charged. The axis and the action-aware valuation were necessary and still not sufficient, and the routing surface is reported as a measured negative — twice, on two worlds, which is a stronger negative than most routing papers publish as a positive |
+| P16b | The **gate price** is reported separately and is a deficit: on irreversible tasks the gate runs the fallback by design. Preregistered as a COST, not as a routing failure | If the gated cohort shows a gain, the gate is not costing what the design says it costs and the governance claim needs restating |
+| P16c | The advantage survives to λ ≥ 0.05 and the **crossover λ is published** whatever it is — the point where charging for cost erases the gain | A crossover below 0.05 means the gain is an artifact of not charging for tokens, and the honest claim becomes "selection buys quality only when cost is free" |
+| P16d | Reproducibility holds under the new vocabulary: re-deciding from the recorded belief base yields the identical paradigm AND digest on 26/26 | The 4th region segment broke decision stability — and §6.2's auditability claim goes with it |
+
+**What a negative buys.** P15 already established that selection without sensing loses.
+If P16 also fails, the finding is not "the router does not work": it is that on this
+corpus family, at this model tier, **per-request paradigm selection does not recover its
+cost even with the missing axis supplied and the real action scored** — with the
+mechanism isolated at each step. That is a publishable negative result about a technique
+the literature reports positively, and it is what the bench was built to be able to say.
+
 ### P15 verdict (2026-08-27, same day, run complete: 390/390 cells, 0 infra, 14.07M tokens vs 9.58M estimated)
 
 | # | Verdict | The number |
