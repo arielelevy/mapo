@@ -994,6 +994,91 @@ enunciaba. Estaba anotado antes de correr y por eso se puede decir ahora.
 
 ---
 
+### 7.15 El agregado esconde la imposibilidad que la celda muestra · `MÉTODO`
+
+Cinco números derivados salieron mal en un solo día, y los cinco de la **misma forma**: un
+valor plausible a la vista, reportado antes de chequear una cota que lo refutaba — y en los
+cinco la cota estaba a una línea.
+
+| lo reportado | qué lo refutaba |
+|---|---|
+| «la declaración de tools es el 43% del gasto de `rewoo`» | una declaración **no puede superar al prompt que la contiene**. Real: **0%** |
+| «la brecha de oráculo cae a cero al descontar» | la utilidad está **acotada**, y el cálculo daba **−463** |
+| «la señal de estancamiento no discrimina» | la clave estaba **ausente**, no en cero |
+
+Ninguno rompió nada. Los tres **devolvieron un número que se podía leer como resultado**, que
+es la forma cara: un error que rompe cuesta una corrida, uno que devuelve un número cuesta
+una conclusión y no se sabe cuál.
+
+**Y acá está la parte que no es obvia, y que sólo se ve al construir la guarda.** La cota
+`parte ≤ todo` **no ataja** el 43%: a nivel agregado, 82.368 sobre 189.899 es perfectamente
+posible. La imposibilidad aparece **una granularidad más abajo** — en la celda `c1-000`,
+1.056 tokens de declaración sobre un prompt de 664.
+
+> **Un promedio puede ser posible mientras cada uno de sus términos es imposible.** Agregar
+> es exactamente la operación que hace desaparecer la contradicción, así que la verificación
+> tiene que correr **en la granularidad donde el hecho vive** — no donde es cómodo mirarlo.
+
+Es la misma forma que ya había aparecido dos veces con otro nombre: el piso de ruido se mide
+**por celda** y no global, y la comparación pareada compara **réplicas de la misma celda** y
+no medias de brazos. Las tres veces el error es agregar antes de verificar.
+
+**Lo ejecutable**, porque una resolución de ser más cuidadoso no es una mejora: `_sanity.py`
+—`share`, `bounded`, `required`, `all_present`, `paired`— **levanta** en vez de avisar, y se
+llama **por celda**. Un aviso al lado de un número imposible sigue publicando el número.
+
+---
+
+### 7.16 «General» era una propiedad de los mundos donde se midió · `MEDIDO`
+
+`P8` se registró el 2026-08-26 con cinco predicciones y una regla de decisión escrita, el
+mundo se generó y se verificó, la corrida se hizo — **y el veredicto nunca se computó**. El
+paper siguió diciendo «not yet run» durante dos días. Apareció barriendo por «declarado, no
+medido», que la regla del repo llama deuda.
+
+| | |
+|---|---|
+| **P8a** `react` u ≥ 0,9 en toda celda | **NO TRANSFIERE** — bajo 0,9 en **4 de 4**, mínimo **0,000** |
+| **P8b** `map_reduce` u = 0 en la acoplada | **SIN N** — no corrió en este corpus |
+| **P8c** `rewoo` gana C2/C4, falla acoplada | transfiere |
+| **P8d** `gist_reader` u ≥ 0,75 a costo ≤ react | **NO TRANSFIERE** — u **0,118**, y **más caro** |
+| **P8e** `dag_strategy` en riesgo en la acoplada profunda | transfiere |
+
+**Dos fallan ⇒ la regla registrada dispara: los veredictos por celda pasan a ser
+corpus-locales.**
+
+**Y la objeción obvia la contesta el dato, no un argumento.** Si nada funcionara en ese
+mundo, `P8a` fallaría por el mundo y no por `react`:
+
+| tarea | mejor brazo | `react` |
+|---|---|---:|
+| `c2-000-w48` | `rewoo` **1,000** | 0,667 |
+| `c4-000-w48` | `dag_strategy` **1,000** | **0,000** |
+| `c3-001-h2` | nadie llega a nada | 0,000 |
+| `c5-000-w48` | nadie llega a nada | 0,000 |
+
+> En las dos celdas donde el mundo **es demostrablemente resoluble**, otro brazo saca
+> puntaje perfecto y el «fallback general» saca 0,667 y **0,000**. La refutación no se apoya
+> en las celdas que nadie resolvió.
+
+> **`react` no es malo: «general» era una propiedad de los mundos donde se lo midió.** Un
+> veredicto por celda derivado de una sola semilla no es estructural hasta que sobrevive a
+> otra, y éste no sobrevivió.
+
+**Y hay algo que decir sobre cómo se llegó acá.** Al computar el veredicto conté `P8b` —que
+**no tiene celdas donde evaluarse**— como una predicción que falla, y con eso la regla
+disparaba con tres en vez de dos. Es exactamente el error que 7.15 acababa de describir y
+para el que se había escrito una guarda, **cometido minutos después**. Que el resultado no
+cambie de dirección no lo vuelve inofensivo: cambiaba el margen con el que se afirma, y una
+regla de decisión que dispara con tres cuando debería disparar con dos es una regla que
+alguien puede empujar.
+
+**Límite honesto**: 32 filas y 4 tareas es un diseño de screening, registrado como tal.
+Alcanza para **refutar** una afirmación universal —un contraejemplo basta— y no para
+establecer un reemplazo.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

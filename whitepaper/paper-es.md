@@ -952,10 +952,15 @@ leer-todo es correcto y lo más barato ahí. El régimen fuera-de-ventana ya est
 483k con `repeat = 3` (§7.4–7.5), y el claim de régimen a través de 135k/483k/1,27M
 descansa en el barrido de factibilidad a costo cero. Sigue abierto: no hay corrida
 completa a 1,27M (sólo su aritmética de factibilidad), dos celdas pesadas fuera de
-ventana todavía sin réplica completa (marcadas † en §7.4), y un mundo
-held-out con seed nueva, generado y verificado independientemente, cuyo test de
-transferencia está registrado como P8 y no corrió todavía — **hasta que corra, los
-veredictos por celda son afirmaciones sobre mundos seed-7.**
+ventana todavía sin réplica completa (marcadas † en §7.4).
+
+**Y un punto salió de esa lista por haber sido contestado, en la dirección que nos cuesta.**
+El mundo held-out con seed nueva —generado y verificado independientemente— ya corrió su
+test de transferencia registrado, P8. **Dos de sus cinco predicciones no transfieren**, así
+que por su propia regla de decisión registrada los veredictos por celda de más abajo son
+**corpus-locales**: afirmaciones sobre mundos seed-7, cada una con salvedad por mundo. La
+refutación no se apoya en las celdas que nadie resolvió — en las dos donde otro brazo llega
+a puntaje perfecto, el fallback general devuelve 0,667 y 0,000.
 
 **Ya existen réplicas, y el ruido es por celda.** La réplica accidental del primer
 estudio (§7.3) y el `repeat = 3` del segundo coinciden: la reproducibilidad es por tarea

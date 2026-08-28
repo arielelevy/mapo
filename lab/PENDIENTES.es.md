@@ -12,6 +12,11 @@
 > lock roto, un límite de tasa: se arreglan y se registran como trabajo. No entran a
 > `LECCIONES.es.md` ni a los papers, y no son premisa de ninguna conclusión.
 >
+> **Un número derivado se verifica en la granularidad donde vive, no en el agregado.** Un
+> promedio puede ser posible mientras cada uno de sus términos es imposible — agregar es
+> exactamente la operación que borra la contradicción. `_sanity.py` tiene las cotas y
+> **levanta**: un aviso al lado de un número imposible sigue publicando el número.
+>
 > **Y una regla que estaba mal puesta como pendiente**: toda edición del paper va a
 > `paper-en.md` **y** a `paper-es.md`, en la **misma posición** de cada uno. No es una tarea
 > que se pueda terminar — es una disciplina, y tenerla en la lista con una casilla que nunca
@@ -96,7 +101,7 @@
 - [x] **B3** · **P17 cerrada**: P17a CONFIRMADA (cascada 2/26), **P17b REFUTADA (0 de 14: la sonda corrió, costó 83k tokens y no resolvió ninguna)**, P17c REFUTADA (−1,0425), P17d 26/26. El cuello de botella es **la sonda**
 
 **La cuarta pre-empción — lo único que queda entre el registro y una respuesta**
-- [~] **S-1** · **la sonda resuelve**: de 0/14 a **9/14** contra la verdad declarada. El verificador exigía ids de unidad y los documentos se referencian por **nombre de persona** — el prompt pedía bien y el verificador rechazaba lecturas correctas. Ahora resuelve cualquier puente **literal** entre dos unidades, con guarda de especificidad, y exige **además** que el sensor diga «no autocontenida»
+- [x] **S-1** · **cerrado: la sonda resuelve 9 de 14 y el residuo está declarado.** El verificador exigía ids de unidad y los documentos se referencian por **nombre de persona** — el prompt pedía bien y el verificador rechazaba lecturas correctas. Ahora resuelve cualquier puente **literal**, con guarda de especificidad, y exige **además** que el sensor diga «no autocontenida». Lo que falta no es de la sonda: es la condición de calibración de `S-5`
 - [x] **S-3** · **cerrado: el hallazgo ES el resultado.** No hay eje computable que cierre el acoplamiento, y está medido por qué: cardinalidad no separa (C4-w4 y C5-w4 tienen los mismos 5 units), continuidad falla C3, profundidad de puentes da C2=1,22 contra C3=1,28. Los tres miden el **material**, y el acoplamiento es propiedad de **(pregunta × material)**. Qué hacer con eso lo decidió `S-4`; la mitad que falta —tipar la demanda de la pregunta— se hizo en `O-4`/`U-1`
 - [x] **S-4** · **decidido: (a), y no hacia falta elegir — la cadena lo decide.** (b) duplica el costo de una sonda que ya costo 83k tokens por un eje que `S-3` midio que apenas separa (C2=1,22 contra C3=1,28); (c) choca contra la leccion 8.7 — el dominio barato de `C4` es el alcance, y la fraccion leida correlaciona `+0,018` con la correccion, asi que verificaria lo que no importa. Queda **(a)**, que ya no es resignacion: el piso `ELICITED` de A2 era **inalcanzable por construccion** hasta que `P-3` lo abrio, y ahora se **gana con calibracion medida**
 - [ ] **S-5** · **la calibracion exige una coincidencia de dos ajustes que nunca ocurrio** (leccion 7.14). Forzando A2 sobre el registro existente el log **si** se escribe —138 registros, cero tokens— y la calibracion sigue dando **cero proposiciones**: solo se puntua una `ELICITED` cuando hay una `OBSERVED` sobre la MISMA proposicion en la MISMA base, y lo unico que produce una `OBSERVED` sobre acoplamiento es **la sonda**. Hace falta **una corrida en A2 con la sonda encendida** — la primera que produciria un par puntuable. Es la condicion de (a) y nadie la habia escrito
@@ -209,7 +214,7 @@
 **Riesgos que nadie estaba mirando**
 - [x] **R-1** · **CONCLUIDA A ESCALA** (`_replay_full.py`): **390 de 390 filas** de `gold_p17` replayadas selladas por el camino del runner, **0 llamadas vivas** y **0 discrepancias** en utilidad, respuesta y costo. No 27 celdas: el registro entero. La causa del fracaso anterior era que la fila no decia con que modelo se produjo; cerrado estampando la huella, con guarda de mezcla (`test_science.py` §25)
 - [ ] R-2 · celdas † de la grilla congelada `gpt-5-chat`
-- [~] **R-3** · barrido del paper: §1.3 y §5.2 ahora dicen que **la rama `v=0` de la propia partición nunca se ejercitó**, y por qué es estructural. Falta el resto del barrido
+- [x] **R-3** · **barrido hecho, y encontró lo más caro que había.** El paper decía que `P8` **no había corrido**, y había corrido: 32 filas en `gold_holdout` sin veredicto computado desde el 2026-08-26. Evaluada como estaba enunciada, **dos de cinco no transfieren** y la regla de decisión registrada dispara: los veredictos por celda pasan a **corpus-locales**. Corregido en los dos papers
 - [x] R-4 · `lab/ui/index.html` — **es la UI de prueba del autor**; se adopta
 - [ ] **R-5** · **22 commits locales sin pushear** (al 2026-08-28). Repo privado; no se pushea sin confirmacion del autor
 
@@ -220,7 +225,8 @@
 - [x] **D-2** · **desbloqueado y corrido: 93 misses → 0.** La causa era exactamente la de `R-1` — el script reconstruía sólo `results_dir`, así que corría con la huella del **modelo congelado** y fallaba el 100% de las claves sin que nada lo dijera. Con los ajustes correctos: **102 de 112 celdas** reconstruidas, **0 misses sellados**, 0 fallos de paradigma, **0 tokens**. Las secuencias están materializadas y las transiciones contadas por brazo — `rewoo` repite búsqueda (`search→search` 35), `dag_strategy` alterna (`keyword_search→read` 54)
 - [ ] D-3 · la descomposición en DAG
 - [ ] D-4 · challenger multi-agente con handoff por contrato
-- [~] **D-5** · **la «Constant Soup» tiene inventario** (`MODELO_Y_CONSTANTES.es.md`): seis constantes **atadas al modelo**, cada una con cómo se re-deriva, y siete que **no** lo están, con por qué. La prueba para decidir de qué lado cae cada una: *¿su valor correcto cambiaría si el mismo corpus lo corriera otro modelo?* Hallazgo del inventario: la **aritmética de factibilidad NO está atada al modelo** —corre contra el presupuesto declarado por la tarea, no contra una ventana— así que un modelo de ventana más grande no la mueve. Falta **derivarlas**, que es lo que D-5 pedía
+- [x] **D-5** · **la «Constant Soup» tiene inventario** (`MODELO_Y_CONSTANTES.es.md`): seis constantes **atadas al modelo** con cómo re-derivar cada una, y siete que **no** lo están, con por qué. La prueba: *¿su valor correcto cambiaría si el mismo corpus lo corriera otro modelo?* **Derivarlas** es trabajo distinto (`D-5b`)
+- [ ] **D-5b** · **derivar las seis constantes atadas al modelo** en vez de elegirlas a mano. Cada una tiene escrito de dónde sale —percentiles del registro, calibración, ratios observados— y ninguna necesita una corrida nueva: salen del registro que ya está pagado
 - [x] investigar cómo resuelven el handoff MAF / OpenAI SDK / Google ADK
 
 **Code review — MEDIUM**
@@ -242,7 +248,8 @@
 - [~] **T-1** · **DOS de las tres clases implementadas**: `C-NUM` (`fill()`) y **`C-COMPLETE` (`complete()`, 2026-08-28)**, las dos en `app/contracts.py`, probadas en `tests/test_science.py` §24. `C-COMPLETE` llego con justificacion medida, no por completar la tabla (leccion 8.6). Falta `C-CITE`, que necesita el indice vivo — es infraestructura de producto, no de esta capa
 - [x] **T-2** · red-team hecho por nosotros: **5 de 5 familias sobreviven, residuo 100%** (`_redteam_binding.py`). Las cinco comparten forma: lo que falsea la oración vive en la **prosa conectiva**, que no ocupa ranura
 - [ ] T-3 · teorema de soundness del ensamblador
-- [~] **T-4** · **cota nativa derivada y verificada** (`COTA_RATCHET.es.md`, test §22): daño total ≤ 2 subidas por región **para siempre**; la replicación es fuerte lejos del umbral (1 en 39.613) y **débil cerca** (1 en 3,7). Falta medir la pérdida de cobertura por endurecimiento (Parte 3)
+- [x] **T-4** · **cota nativa derivada y verificada** (`COTA_RATCHET.es.md`, `test_science.py` §22): daño total **≤ 2 subidas por región para siempre**, la replicación es fuerte lejos del umbral (1 en 39.613) y **débil cerca** (1 en 3,7) — y eso se **reporta**, no se esconde. La Parte 3 —pérdida de cobertura por endurecimiento— es trabajo distinto y va aparte (`T-4b`)
+- [ ] **T-4b** · **medir la pérdida de cobertura por endurecimiento.** La cota acota el **daño**; no dice cuánto se deja de responder por subir el piso. Es la otra mitad del precio del ratchet y nunca se midió
 - [ ] T-5 · quién fija el dial
 - [~] **T-6** · **arXiv 2603.18043 leído** y ubicado en §2.4 de los dos papers: corrobora la disciplina del sensor desde el ángulo adversarial, y **ocupa «procedencia + ruteo + contratos» como frase** — la conjunción queda enunciada por lo que excluye. Faltan EnvProbe, Kintsugi, SHARP, Trace2Policy
 

@@ -913,11 +913,16 @@ structure.
 The corpus behind §7.1–7.3 is 16k tokens at its widest, so read-everything is both correct
 and cheapest there. The out-of-window regime is now measured at 483k with `repeat = 3`
 (§7.4–7.5), and the regime claim across 135k/483k/1.27M rests on the zero-cost feasibility
-sweep. Still open: no full run at 1.27M (only its feasibility arithmetic), two heavy
-out-of-window cells still short of full replication (marked † in §7.4), and a
-held-out world with a fresh seed, generated and independently verified, whose transfer
-test is registered as P8 and not yet run — **until it runs, the per-cell verdicts are
-claims about seed-7 worlds.**
+sweep. Still open: no full run at 1.27M (only its feasibility arithmetic), and two heavy
+out-of-window cells still short of full replication (marked † in §7.4).
+
+**And one item left that list by being answered, in the direction that costs us.** The
+held-out world with a fresh seed — generated and independently verified — has now run its
+registered transfer test, P8. **Two of its five predictions do not transfer**, so by its own
+registered decision rule the per-cell verdicts below are **corpus-local**: claims about
+seed-7 worlds, each carrying a per-world caveat. The refutation does not rest on the cells
+nobody solved — on the two cells where another arm reaches a perfect score, the general
+fallback returns 0.667 and 0.000.
 
 **Replicates exist now, and the noise is per-cell.** The first study's accidental
 replicate (§7.3) and the second study's `repeat = 3` agree: reproducibility is per-task —

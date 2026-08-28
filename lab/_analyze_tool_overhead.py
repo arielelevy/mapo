@@ -36,6 +36,7 @@ from app.config import Settings
 from app.metrics import Observation, Study
 from app.runner import Runner
 from app.tools import specs_for
+from _sanity import share
 
 # Solo `gold_p17`, que es el unico replayado con el contador nuevo. Los otros dos
 # necesitan su propio replay sellado; incluirlos sin el contador daria un descuento
@@ -81,7 +82,13 @@ def observations(rows: list[dict[str, Any]], discount: int) -> list[Observation]
         # sobrecosto estimado supera al costo registrado, lo que hay es una fila cuyo
         # `calls` y `cost_tokens` no son coherentes, y aplastarlo a 1 lo deja visible en
         # el ratio en vez de romper la division.
-        adjusted = max(int(cost - discount * calls), 1) if discount else int(cost)
+        if discount:
+            # POR CELDA, que es donde la imposibilidad se ve. El agregado la esconde:
+            # 82.368 sobre 189.899 es posible, y `c1-000` con 1.056 de declaracion sobre
+            # 664 de prompt no lo es. Y el `max(...,1)` que habia acá aplastaba el piso y
+            # produjo utilidades de -463 que se leyeron como «la brecha cae a cero».
+            share(discount * calls, cost, f"declaracion/gasto {task_id}/{paradigm}")
+        adjusted = int(cost - discount * calls) if discount else int(cost)
         out.append(Observation(
             task_id=task_id,
             region=group[0]["region"],

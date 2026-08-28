@@ -640,6 +640,53 @@ Ground truth is re-derived independently by `corpus/verify.py::_c8`, which also 
 task whose superseded value is absent from the material — without it, a wrong answer would
 only mean "not found", which the other cells already measure.
 
+### P8 verdict (2026-08-28) — the transfer test, registered 2026-08-26 and never scored
+
+**Why this sat unevaluated.** The five predictions were registered before running, the
+world was generated and verified, the run happened — and the verdict was never computed.
+The paper still said *"not yet run"*. It surfaced while sweeping for "declared, not
+measured", which this repo's own rule calls debt.
+
+`gold_holdout` is seed 23; every prior per-cell verdict came from seed-7 worlds. Screening
+design as registered: 4 discriminating tasks × 4 arms × repeat 2 = 32 rows.
+
+| # | verdict | |
+|---|---|---|
+| **P8a** `react` u ≥ 0.9 on every feasible cell | **DOES NOT TRANSFER** | below 0.9 on **4 of 4** cells, min **0.000** |
+| **P8b** `map_reduce` u = 0 on the coupled cell | **NOT EVALUABLE** | `map_reduce` did not run in this corpus |
+| **P8c** `rewoo` wins C2/C4, fails coupled/unknown-horizon | **transfers** | 0.75 against 0.000 |
+| **P8d** `gist_reader` u ≥ 0.75 on C2/C4/C5 at ≤ react's cost | **DOES NOT TRANSFER** | u **0.118**, and costs *more* than react |
+| **P8e** `dag_strategy` stays at risk on the deep coupled cell | **transfers** | 0.000 on both replicates |
+
+**Not evaluable is not refuted.** `P8b` has no cells to be evaluated on, so it did not
+fail — it could not be asked. Counting it would demote CONCLUSIONS on an absence of data.
+
+**The registered decision rule fires: two fail, so CONCLUSIONS is corpus-local**, and every
+per-cell rule now carries a per-world caveat.
+
+**And the obvious objection is answered by the data, not by argument.** If nothing worked in
+this world, `P8a` would fail for a reason that is about the world and not about `react`. It
+is not so:
+
+| task | best arm | `react` |
+|---|---|---:|
+| `c2-000-w48` | `rewoo` **1.000** | 0.667 |
+| `c4-000-w48` | `dag_strategy` **1.000** | **0.000** |
+| `c3-001-h2` | nothing reaches anything | 0.000 |
+| `c5-000-w48` | nothing reaches anything | 0.000 |
+
+> On the two cells where the world is demonstrably solvable, another arm reaches a perfect
+> score and `react` — the "general fallback" — gets 0.667 and **0.000**. The refutation does
+> not rest on the two cells nobody solved.
+
+**What this costs the paper.** The `react`-as-general-fallback claim was derived from seed-7
+worlds and does not survive one unseen world. It is not that `react` is bad: it is that
+"general" was a property of the worlds it was measured on.
+
+**Honest limits.** 32 rows and 4 tasks is a screening design, registered as such. It is
+enough to *refute* a universal claim — one counterexample suffices — and not enough to
+establish a replacement.
+
 ### P22 registered (2026-08-28, before REC has run) — the six REC hypotheses
 
 `PATRON_REC.es.md` §11 stated six hypotheses in prose. Prose is not a preregistration: *"the
