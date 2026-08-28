@@ -914,6 +914,44 @@ es una función pura del payload y la procedencia sería mentira. El primer inte
 
 ---
 
+### 5.4 Un modelo caro resuelve con menos tokens — pero sólo donde la tarea es difícil · `MEDIDO`
+
+La hipótesis del autor: un modelo más caro cuesta más por token **y debería resolver con
+menos llamadas**, así que el presupuesto no puede estar en tokens. Contestable **sin gastar
+un token**: `gold_v2` y `gold_deep` están corridos en los dos modelos, y la comparación se
+arma **uniendo estudios**, nunca juntando filas.
+
+| corpus | utilidad del caro | del barato | tokens del caro / del barato | **punto de equilibrio** |
+|---|---:|---:|---:|---:|
+| `gold_v2` (~18k) | 0,551 | 0,277 | **1,90×** | 0,53× |
+| `gold_deep` (~483k) | 0,680 | 0,381 | **0,81×** | **1,24×** |
+
+> **La hipótesis se confirma, y la condición es la dificultad.** En el corpus difícil el
+> modelo caro usa **menos** tokens para el mismo trabajo; en el fácil usa casi el doble.
+> «Resuelve con menos llamadas» no es una propiedad del modelo: es una propiedad del par
+> **(modelo × dificultad)**.
+
+**Y el número sobrio es el punto de equilibrio.** Aun donde gana, el caro puede costar hasta
+**1,24×** por token y nada más. Las diferencias de precio reales entre gamas suelen ser de
+un orden de magnitud, así que **no se paga solo ni siquiera donde usa menos tokens**.
+
+**Lo cual hace más fuerte el caso del ruteo, no más débil.** Si el modelo caro no puede
+pagarse globalmente, el uso correcto es **exactamente donde gana** — y eso es 3 de 6 tareas
+en un corpus y 3 de 8 en el otro. En cada uno hay al menos una tarea donde **el barato
+alcanza más alto**: no es que el caro domine y el resto sea ruido.
+
+**Dos disciplinas que este resultado obligó a fijar antes de mirarlo.** Al agregar el eje de
+modelo, el baseline **también** se fortalece: «mejor fijo» pasa a ser el mejor **par**
+`(modelo, paradigma)`, porque es lo que elegiría un despliegue que no rutea. Compararse
+contra el mejor paradigma de **un solo** modelo habría manufacturado la brecha. Con el
+baseline correcto queda en `+0,042` y `+0,009` — chica, y honesta.
+
+Y el eje de costo sigue siendo **tokens**, lo que favorece sistemáticamente al caro. Por eso
+lo que se reporta es el **punto de equilibrio** y no una cuenta: con la tarifa declarada
+(`X-5a`) esto se vuelve plata.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una
