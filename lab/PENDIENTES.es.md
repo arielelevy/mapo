@@ -80,6 +80,41 @@ actuó sobre eso.
 | **D-4** | **La partición de `map_reduce`** | Fija por construcción | **Challenger multi-agente (idea del autor)**: agentes con alcance propio y handoffs con contrato, en vez de una partición fija y un fold. Los handoffs (agente_i → agente_j) son exactamente las asociaciones que P-2c aprende, y el contrato del handoff es exactamente dónde viven las creencias tipadas. **Encaja con el alcance declarado del producto** — `CLAUDE.md` ya lista «acciones … handoffs con contrato» como una de las cuatro superficies. Califica como patrón legítimo y no como prompting, porque la diferencia es **estructural**: alcances independientes y transferencia explícita. Entra al catálogo como candidato **con predicción falsable registrada antes de correr**, como todos |
 | **D-5** | **La «Constant Soup» en general** | Una docena de umbrales a mano en `dag.py` | Derivarlos, que es lo que el propio módulo dice que habría que hacer. D-1 y D-3 son los dos primeros |
 
+### Cómo implementan el handoff los frameworks, y por qué eso ES la oportunidad
+
+Consultado en fuentes el 2026-08-27, porque el patrón no está en nuestro catálogo y
+convenía ver cómo lo resuelve el resto antes de diseñarlo.
+
+| Framework | Cómo transfiere el control |
+|---|---|
+| **Microsoft Agent Framework** | `HandoffAgentExecutor` **inyecta herramientas de handoff** en cada agente según las reglas configuradas, y el agente invoca una para transferir. Topología de malla, agentes conectados **sin orquestador**: cada agente decide cuándo transferir |
+| **OpenAI Agents SDK** | El handoff *es* una herramienta: se genera `transfer_to_<agent_name>` y el modelo la llama. Aparece en la traza como cualquier otra acción |
+| **Google ADK** | «LLM-driven delegation»: el LLM lee las `description` de los sub-agentes y **genera `transfer_to_agent()`** |
+
+**Los tres hacen lo mismo: el modelo emite una llamada a herramienta y eso transfiere el
+control.** O sea, el handoff estándar de la industria es exactamente el anti-patrón que
+§2b acaba de catalogar — flujo de control decidido por el modelo.
+
+**Y ahí está la oportunidad, que es la tesis del producto aplicada a una superficie
+nueva.** La versión MAPO conserva la ESTRUCTURA —alcances independientes, transferencia de
+propiedad, contexto que viaja completo— y cambia **quién decide la transferencia**: no una
+herramienta que el modelo llama, sino una **regla determinista sobre la base de creencias**,
+con piso de procedencia. El modelo puede *proponer* el handoff como proposición tipada; la
+transferencia la autoriza la regla. Eso es exactamente lo que `CLAUDE.md` ya llama
+«handoffs con contrato», y es una diferencia medible y no retórica:
+
+- **Reproducible**: misma base de creencias ⟹ mismo handoff. Con `transfer_to_agent()` la
+  transferencia hereda toda la varianza del modelo.
+- **Gateable**: un handoff hacia un agente con capacidad irreversible puede exigir
+  `COMPUTED`/`OBSERVED`, cosa que una llamada a herramienta no puede exigirse a sí misma.
+- **Auditable**: el handoff entra al EXPLAIN como cualquier otra decisión.
+
+**Vecino de literatura a leer antes de afirmar novedad** (aparecido en la misma búsqueda,
+NO leído todavía): *«The Provenance Paradox in Multi-Agent LLM Routing: Delegation
+Contracts and Attested Identity»*, arXiv 2603.18043. Por el título toca las tres cosas a
+la vez — procedencia, contratos de delegación y ruteo — así que entra a T-6 con prioridad
+alta: si ya dice esto, la novedad hay que reformularla.
+
 **Por qué esta familia importa ahora y no antes.** Está medido que elegir paradigma
 predice el **60%** de la varianza del recall de evidencia fuera de muestra, y que el recall
 es la variable dominante del resultado. Pero un paradigma es, mecánicamente, una política
@@ -141,7 +176,7 @@ arreglar**: esta tabla se armó por grep y alguno puede haberse cerrado de rebot
 | T-3 | Teorema de soundness del ensamblador | La salida está *implicada* por la base de creencias; el LLM propone plantilla, el código instancia y verifica el binding |
 | T-4 | Cota nativa del ratchet | Pérdida de cobertura por endurecimiento y tasa de falsos endurecimientos bajo la guarda split-half. **Reemplaza el préstamo del Teorema 10.1**, que acota algo que un ratchet no puede hacer |
 | T-5 | Quién fija el dial | Definirlo, y cómo se evalúa marginalizando sobre sus posiciones |
-| T-6 | Vecinos de REC leídos completos | EnvProbe, Kintsugi, SHARP, Trace2Policy… antes de usar «primero» en el paper; reabrir el claim de consolidación del `GATE.md` |
+| T-6 | Vecinos leídos completos | EnvProbe, Kintsugi, SHARP, Trace2Policy… antes de usar «primero» en el paper; reabrir el claim de consolidación del `GATE.md`. **Prioridad alta, agregado 2026-08-27**: arXiv 2603.18043, *The Provenance Paradox in Multi-Agent LLM Routing: Delegation Contracts and Attested Identity* — por el título toca procedencia + contratos de delegación + ruteo a la vez, que es nuestra conjunción. NO leído |
 
 ---
 
