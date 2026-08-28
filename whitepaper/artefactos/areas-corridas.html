@@ -1,0 +1,600 @@
+<title>Anatomía de una corrida</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
+
+<style>
+:root {
+  color-scheme: light;
+  --surface:        #fcfcfb;
+  --surface-sunk:   #f2f2ef;
+  --rule:           #e0e0da;
+  --rule-strong:    #c9c9c1;
+  --ink:            #0b0b0b;
+  --ink-2:          #52514e;
+  --ink-3:          #7d7c76;
+  --accent:         #256abf;
+  --s1: #2a78d6;  --s2: #eb6834;  --s3: #1baf7a;  --s4: #eda100;  --s5: #e87ba4;
+  --grid:           #e8e8e3;
+  --zero:           #b4b4ac;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface:      #1a1a19;
+    --surface-sunk: #232322;
+    --rule:         #35352f;
+    --rule-strong:  #4a4a43;
+    --ink:          #ffffff;
+    --ink-2:        #c3c2b7;
+    --ink-3:        #8f8e85;
+    --accent:       #5598e7;
+    --s1: #3987e5;  --s2: #d95926;  --s3: #199e70;  --s4: #c98500;  --s5: #d55181;
+    --grid:         #2b2b28;
+    --zero:         #55554d;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface:      #1a1a19;
+  --surface-sunk: #232322;
+  --rule:         #35352f;
+  --rule-strong:  #4a4a43;
+  --ink:          #ffffff;
+  --ink-2:        #c3c2b7;
+  --ink-3:        #8f8e85;
+  --accent:       #5598e7;
+  --s1: #3987e5;  --s2: #d95926;  --s3: #199e70;  --s4: #c98500;  --s5: #d55181;
+  --grid:         #2b2b28;
+  --zero:         #55554d;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  font-size: 16.5px;
+  line-height: 1.62;
+  margin: 0;
+  padding: 0 1.25rem 6rem;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 50rem; margin: 0 auto; }
+.prose { max-width: 37rem; }
+
+header { padding: 4.5rem 0 2.75rem; border-bottom: 1px solid var(--rule); margin-bottom: 3rem; }
+
+.eyebrow {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: .72rem; font-weight: 500;
+  letter-spacing: .13em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+h1 {
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(2.1rem, 5.5vw, 3rem);
+  line-height: 1.08;
+  letter-spacing: -.015em;
+  text-wrap: balance;
+  margin: .7rem 0 1rem;
+}
+
+.standfirst {
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-size: 1.15rem; line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 34rem;
+  margin: 0;
+}
+
+h2 {
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-weight: 600;
+  font-size: 1.6rem;
+  line-height: 1.2;
+  letter-spacing: -.01em;
+  text-wrap: balance;
+  margin: 0 0 .5rem;
+}
+
+p { margin: 0 0 1.05rem; }
+strong { font-weight: 600; }
+
+.figure { margin: 0 0 4.5rem; }
+.figure > .prose { margin-bottom: 1.75rem; }
+
+.chart-shell {
+  background: var(--surface-sunk);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 1.5rem 1.25rem 1.1rem;
+  overflow-x: auto;
+}
+.chart-shell svg { display: block; width: 100%; height: auto; min-width: 33rem; }
+
+.legend {
+  display: flex; flex-wrap: wrap; gap: .35rem 1.1rem;
+  margin: 0 0 1rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: .76rem;
+  color: var(--ink-2);
+}
+.legend span { display: inline-flex; align-items: center; gap: .42rem; }
+.swatch { width: 11px; height: 11px; border-radius: 2px; flex: none; }
+
+figcaption {
+  font-size: .875rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 37rem;
+  margin-top: 1.1rem;
+  padding-left: .9rem;
+  border-left: 2px solid var(--rule-strong);
+}
+figcaption b { color: var(--ink); font-weight: 600; }
+
+.readout {
+  display: flex; flex-wrap: wrap; gap: 0 2.5rem;
+  margin: 1.25rem 0 0;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+.readout div { padding: .4rem 0; }
+.readout dt { font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.readout dd { margin: .15rem 0 0; font-size: 1.45rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+details { margin-top: 1.15rem; }
+summary {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: .76rem; color: var(--ink-2);
+  cursor: pointer; padding: .3rem 0;
+}
+summary:hover { color: var(--ink); }
+details table {
+  border-collapse: collapse;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: .78rem;
+  font-variant-numeric: tabular-nums;
+  margin-top: .6rem;
+  width: 100%;
+}
+details th, details td { text-align: right; padding: .3rem .7rem; border-bottom: 1px solid var(--rule); }
+details th:first-child, details td:first-child { text-align: left; }
+details th { color: var(--ink-3); font-weight: 500; }
+.scroll-x { overflow-x: auto; }
+
+.tick { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10.5px; fill: var(--ink-3); }
+.axis-title { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10.5px; fill: var(--ink-3); letter-spacing: .06em; }
+.mark-label { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; font-weight: 500; }
+
+.tip {
+  position: fixed; z-index: 20; pointer-events: none;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--rule-strong); border-radius: 3px;
+  padding: .5rem .65rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: .74rem; line-height: 1.5;
+  box-shadow: 0 4px 14px rgba(0,0,0,.13);
+  opacity: 0; transition: opacity .1s;
+  font-variant-numeric: tabular-nums;
+}
+.tip.on { opacity: 1; }
+.tip b { display: block; margin-bottom: .25rem; }
+.tip i { font-style: normal; color: var(--ink-3); }
+
+footer {
+  border-top: 1px solid var(--rule);
+  padding-top: 1.5rem; margin-top: 1rem;
+  font-size: .8rem; color: var(--ink-3);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  line-height: 1.7;
+}
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">gold_transfer · 26 tareas · 5 paradigmas · gpt-5.4-nano</div>
+  <h1>Anatomía de una corrida</h1>
+  <p class="standfirst">Tres lecturas de área sobre las mismas 390 filas: dónde el router
+  podría decidir y no puede, de dónde sale la utilidad, y qué pagó todo esto.</p>
+</header>
+
+<div class="prose" style="margin-bottom:3.5rem">
+  <p>Un área apilada afirma <em>partes de un todo sobre un eje ordenado</em>. Usarla
+  para otra cosa miente con la forma antes de mentir con los números, así que acá hay
+  tres figuras y no cinco: las tres preguntas de esta corrida que de verdad tienen esa
+  estructura.</p>
+  <p>Lo que quedó afuera a propósito: la utilidad por celda entre paradigmas. Cinco
+  paradigmas sobre una tarea no son partes de un todo — son cinco mediciones
+  alternativas de la misma cosa, y apilarlas inventaría una suma que no existe.</p>
+</div>
+
+<figure class="figure" id="fig1">
+  <div class="prose">
+    <div class="eyebrow">área bajo la curva · predictor selectivo</div>
+    <h2>Decidir sólo donde estás seguro</h2>
+    <p>El router puede negarse a decidir. Cuando se niega, corre el default —
+    <code>dag_strategy</code>, que en este corpus es el mejor paradigma fijo. Entonces
+    la pregunta se puede hacer así: <b>si lo dejamos decidir sólo en las tareas donde
+    está más seguro, ¿gana o pierde contra el default?</b></p>
+    <p>Se prueba con 1 tarea, con 2, con 5, con las 26. Ese barrido es el eje horizontal
+    — <em>cobertura</em> es qué fracción de las tareas decidió el router en vez de
+    delegar. El eje vertical es cuánto ganó o perdió contra el default en esas tareas.</p>
+    <p>Para hacerlo hay que poder ordenar las tareas por seguridad, y <b>θ no puede: su
+    margen de confianza es 0 en las 26</b>. No hay «las que está más seguro». Así que
+    nunca decide en ninguna, la cobertura se queda clavada en cero, y el barrido
+    devuelve <strong>un solo punto</strong> en el origen en vez de una curva.</p>
+  </div>
+  <div class="chart-shell">
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--s1)"></i>techo — mismas propuestas, ranqueadas con gold</span>
+      <span><i class="swatch" style="background:var(--ink-2)"></i>θ — un solo punto en (0, 0)</span>
+    </div>
+    <svg id="svg1" viewBox="0 0 720 340" role="img" aria-label="Curva riesgo-cobertura: el techo sube a 0,51 y θ es un único punto en el origen"></svg>
+  </div>
+  <figcaption>El <b>techo</b> hace trampa a propósito, y por eso sirve. Toma
+  <b>exactamente los mismos paradigmas que θ propuso</b> y los ordena mirando el
+  resultado que de hecho obtuvieron — con gold, o sea después de saber la respuesta.
+  Nadie puede ordenar así en producción: no es una política, es el mejor orden posible.
+  <br><br>Sirve para separar dos fallas que se confunden todo el tiempo. Si con el mejor
+  orden posible tampoco se ganara nada, el problema sería <em>qué paradigma propone θ</em>
+  y habría que cambiar las propuestas. Pero el techo llega a <b>+0,511 decidiendo el 77%
+  de las tareas</b>. O sea: <b>las propuestas de θ sirven; lo que falta es saber en
+  cuáles confiar</b>. Eso es exactamente lo que P17 va a medir. (La curva se corta en
+  0,923 porque dos tareas empatan en el rango más bajo y entran juntas.)</figcaption>
+  <dl class="readout">
+    <div><dt>AURC θ</dt><dd>0,000</dd></div>
+    <div><dt>AURC techo</dt><dd>+0,400</dd></div>
+    <div><dt>captura máx.</dt><dd>+0,511</dd></div>
+  </dl>
+  <details>
+    <summary>ver la tabla</summary>
+    <div class="scroll-x"><table id="tbl1"></table></div>
+  </details>
+</figure>
+
+<figure class="figure" id="fig2">
+  <div class="prose">
+    <div class="eyebrow">descomposición acumulada · eje ordenado por construcción</div>
+    <h2>De dónde sale la utilidad</h2>
+    <p>La cascada prueba peldaños en orden y se queda con el primero que resuelve. La
+    utilidad total se descompone entonces por <em>qué peldaño la capturó</em>, sobre un
+    eje que está ordenado por construcción: la profundidad.</p>
+    <p><b>21 de 26 tareas</b> cascadean, y el primer peldaño se lleva 10,00 de 13,03.</p>
+  </div>
+  <div class="chart-shell">
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--s1)"></i>utilidad acumulada por profundidad</span>
+      <span><i class="swatch" style="background:var(--s2)"></i>tareas que aún siguen bajando</span>
+    </div>
+    <svg id="svg2" viewBox="0 0 720 340" role="img" aria-label="Utilidad acumulada por profundidad de la escalera: el primer peldaño aporta 10 de 13,03"></svg>
+  </div>
+  <figcaption>Esta es la figura que explica por qué el peldaño inicial no puede mover la
+  calidad, y con eso el resultado de E2: <b>la escalera cubre todo</b>, así que cambiar
+  con qué peldaño se arranca cambia el costo, no el resultado. Un ridge de 72 parámetros
+  rutea mejor que θ en crudo y sin embargo, envuelto en la cascada, coincide en 0 de 26
+  tareas. Los intentos que no resuelven <b>igual se pagan</b>: 21 tareas entran al
+  peldaño 1 y 9 siguen vivas en el 4.</figcaption>
+  <dl class="readout">
+    <div><dt>peldaño 1</dt><dd>76,8%</dd></div>
+    <div><dt>utilidad total</dt><dd>13,03</dd></div>
+    <div><dt>profundidad máx.</dt><dd>5</dd></div>
+  </dl>
+  <details>
+    <summary>ver la tabla</summary>
+    <div class="scroll-x"><table id="tbl2"></table></div>
+  </details>
+</figure>
+
+<figure class="figure" id="fig3">
+  <div class="prose">
+    <div class="eyebrow">composición acumulada · 14,07 M tokens</div>
+    <h2>Qué pagó la grilla</h2>
+    <p>El costo se suma, y la pregunta es qué fracción se lleva cada paradigma. Las
+    tareas van ordenadas por costo total, de mayor a menor, así que la curva muestra
+    <em>dónde se concentra el gasto</em> y no el orden accidental del archivo.</p>
+    <p>Las <b>seis tareas más caras se llevan más de la mitad</b> de la grilla entera.</p>
+  </div>
+  <div class="chart-shell">
+    <div class="legend" id="leg3"></div>
+    <svg id="svg3" viewBox="0 0 720 360" role="img" aria-label="Tokens acumulados por paradigma a lo largo de 26 tareas ordenadas por costo"></svg>
+  </div>
+  <figcaption><b>dag_strategy</b> se lleva 8,26 M de 14,07 M — el 59% — y es además el
+  mejor fijo de este corpus, así que la comparación honesta contra el ruteo se hace
+  contra el brazo más caro. <b>rewoo</b> resuelve con 0,19 M, el 1,3%: la diferencia
+  entre paradigmas es de casi dos órdenes de magnitud, y por eso la brecha de oráculo
+  <em>neta</em> — descontando lo que cuesta decidir — es la única cifra que decide algo.</figcaption>
+  <dl class="readout">
+    <div><dt>total</dt><dd>14,07 M</dd></div>
+    <div><dt>dag_strategy</dt><dd>59%</dd></div>
+    <div><dt>rewoo</dt><dd>1,3%</dd></div>
+  </dl>
+  <details>
+    <summary>ver la tabla</summary>
+    <div class="scroll-x"><table id="tbl3"></table></div>
+  </details>
+</figure>
+
+<footer>
+  Datos: <code>results/nano/area_plots.json</code>, generado por <code>lab/_plot_areas.py</code>
+  sobre las filas ya pagadas de <code>gold_transfer</code> — cero tokens.<br>
+  Corpus held-out seed 47, <code>gpt-5.4-nano</code>, t=0 + seed, 3 réplicas por celda.
+  Mejor fijo: <code>dag_strategy</code>.
+</footer>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+const D = {"corpus":"gold_transfer","tasks":26,"best_fixed":"dag_strategy","aurc":0.0,"aurc_ceiling":0.40011,"risk_coverage_ceiling":[{"coverage":0.0,"captured":0.0},{"coverage":0.0385,"captured":0.19558},{"coverage":0.0385,"captured":0.19558},{"coverage":0.1154,"captured":0.4464},{"coverage":0.1154,"captured":0.4464},{"coverage":0.1538,"captured":0.51115},{"coverage":0.1538,"captured":0.51115},{"coverage":0.7692,"captured":0.51115},{"coverage":0.7692,"captured":0.51115},{"coverage":0.7692,"captured":0.51115},{"coverage":0.7692,"captured":0.51115},{"coverage":0.7692,"captured":0.51115},{"coverage":0.8846,"captured":0.14451},{"coverage":0.8846,"captured":0.14451},{"coverage":0.8846,"captured":0.14451},{"coverage":0.8846,"captured":0.14451},{"coverage":0.9231,"captured":-0.09992},{"coverage":0.9231,"captured":-0.09992},{"coverage":0.9231,"captured":-0.09992},{"coverage":0.9231,"captured":-0.09992},{"coverage":0.9231,"captured":-0.09992}],"risk_coverage_degenerate":true,"ladder":[{"depth":1,"utility":10.0,"attempted":21},{"depth":2,"utility":1.0,"attempted":11},{"depth":3,"utility":1.0,"attempted":10},{"depth":4,"utility":0.3635,"attempted":9},{"depth":5,"utility":0.6667,"attempted":1}],"cascading_tasks":21,"paradigms":["dag_strategy","gist_reader","map_reduce","react","rewoo"],"cost":[{"tasks":1,"cell":"C2","dag_strategy":544540,"gist_reader":131796,"map_reduce":0,"react":398574,"rewoo":30243},{"tasks":2,"cell":"C2","dag_strategy":1232412,"gist_reader":261860,"map_reduce":0,"react":563710,"rewoo":40675},{"tasks":3,"cell":"C5","dag_strategy":1925768,"gist_reader":391628,"map_reduce":0,"react":679923,"rewoo":47963},{"tasks":4,"cell":"C5","dag_strategy":2399713,"gist_reader":517327,"map_reduce":0,"react":928507,"rewoo":56914},{"tasks":5,"cell":"C5","dag_strategy":2941267,"gist_reader":647095,"map_reduce":0,"react":1028270,"rewoo":64161},{"tasks":6,"cell":"C4","dag_strategy":3417081,"gist_reader":778441,"map_reduce":0,"react":1175312,"rewoo":79167},{"tasks":7,"cell":"C2","dag_strategy":3809887,"gist_reader":904363,"map_reduce":0,"react":1336380,"rewoo":90763},{"tasks":8,"cell":"C2","dag_strategy":4228618,"gist_reader":1035757,"map_reduce":0,"react":1448130,"rewoo":110315},{"tasks":9,"cell":"C2","dag_strategy":4589316,"gist_reader":1124512,"map_reduce":86035,"react":1540733,"rewoo":113570},{"tasks":10,"cell":"C4","dag_strategy":4895769,"gist_reader":1250382,"map_reduce":86035,"react":1715818,"rewoo":118221},{"tasks":11,"cell":"C5","dag_strategy":5257837,"gist_reader":1376090,"map_reduce":86035,"react":1827596,"rewoo":127172},{"tasks":12,"cell":"C4","dag_strategy":5548189,"gist_reader":1507436,"map_reduce":86035,"react":1958971,"rewoo":138742},{"tasks":13,"cell":"C7","dag_strategy":5963140,"gist_reader":1544447,"map_reduce":86035,"react":2042885,"rewoo":143620},{"tasks":14,"cell":"C4","dag_strategy":6191356,"gist_reader":1633062,"map_reduce":172015,"react":2135860,"rewoo":146488},{"tasks":15,"cell":"C7","dag_strategy":6582028,"gist_reader":1669737,"map_reduce":172015,"react":2167048,"rewoo":150795},{"tasks":16,"cell":"C4","dag_strategy":6780872,"gist_reader":1795607,"map_reduce":172015,"react":2295760,"rewoo":155881},{"tasks":17,"cell":"C2","dag_strategy":6951754,"gist_reader":1884260,"map_reduce":257992,"react":2388836,"rewoo":158608},{"tasks":18,"cell":"C4","dag_strategy":7109258,"gist_reader":1972873,"map_reduce":343858,"react":2482381,"rewoo":161156},{"tasks":19,"cell":"C5","dag_strategy":7271489,"gist_reader":2032664,"map_reduce":413347,"react":2558568,"rewoo":164553},{"tasks":20,"cell":"C5","dag_strategy":7431225,"gist_reader":2080750,"map_reduce":482850,"react":2634894,"rewoo":167900},{"tasks":21,"cell":"C7","dag_strategy":7636374,"gist_reader":2117425,"map_reduce":482850,"react":2687173,"rewoo":172035},{"tasks":22,"cell":"C7","dag_strategy":7801249,"gist_reader":2154436,"map_reduce":482850,"react":2749644,"rewoo":176432},{"tasks":23,"cell":"C3","dag_strategy":7989625,"gist_reader":2178180,"map_reduce":482850,"react":2778795,"rewoo":180618},{"tasks":24,"cell":"C3","dag_strategy":8127228,"gist_reader":2236959,"map_reduce":482850,"react":2820065,"rewoo":184746},{"tasks":25,"cell":"C1","dag_strategy":8213337,"gist_reader":2237779,"map_reduce":500289,"react":2842778,"rewoo":186690},{"tasks":26,"cell":"C1","dag_strategy":8262252,"gist_reader":2238609,"map_reduce":517824,"react":2865558,"rewoo":188607}],"total_tokens":14072850};
+
+const tip = document.getElementById('tip');
+function showTip(e, html) {
+  tip.innerHTML = html;
+  tip.classList.add('on');
+  const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = e.clientX + pad, y = e.clientY - h - pad;
+  if (x + w > innerWidth - 8) x = e.clientX - w - pad;
+  if (y < 8) y = e.clientY + pad;
+  tip.style.left = x + 'px';
+  tip.style.top = y + 'px';
+}
+function hideTip() { tip.classList.remove('on'); }
+
+const NS = 'http://www.w3.org/2000/svg';
+function el(name, attrs, parent) {
+  const n = document.createElementNS(NS, name);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+const fmt = (v, d = 2) => v.toFixed(d).replace('.', ',');
+const M = (v) => (v / 1e6).toFixed(2).replace('.', ',') + ' M';
+
+/* ---------- fig 1: riesgo-cobertura ---------- */
+(function () {
+  const svg = document.getElementById('svg1');
+  const W = 720, H = 340, L = 58, R = 24, T = 18, B = 42;
+  const pw = W - L - R, ph = H - T - B;
+
+  // dedupe: el barrido de umbrales repite puntos cuando varios rangos empatan
+  const pts = [];
+  for (const p of D.risk_coverage_ceiling) {
+    const last = pts[pts.length - 1];
+    if (!last || last.coverage !== p.coverage || last.captured !== p.captured) pts.push(p);
+  }
+  const yMin = -0.15, yMax = 0.6;
+  const X = (c) => L + c * pw;
+  const Y = (v) => T + (yMax - v) / (yMax - yMin) * ph;
+
+  for (const g of [-0.1, 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]) {
+    el('line', { x1: L, x2: L + pw, y1: Y(g), y2: Y(g),
+      stroke: g === 0 ? 'var(--zero)' : 'var(--grid)', 'stroke-width': g === 0 ? 1.5 : 1 }, svg);
+    const t = el('text', { x: L - 9, y: Y(g) + 3.5, 'text-anchor': 'end', class: 'tick' }, svg);
+    t.textContent = (g > 0 ? '+' : '') + fmt(g, 1);
+  }
+  for (const c of [0, 0.25, 0.5, 0.75, 1]) {
+    const t = el('text', { x: X(c), y: T + ph + 20, 'text-anchor': 'middle', class: 'tick' }, svg);
+    t.textContent = fmt(c, 2);
+  }
+  const at = el('text', { x: L + pw, y: T + ph + 36, 'text-anchor': 'end', class: 'axis-title' }, svg);
+  at.textContent = 'COBERTURA →';
+
+  // area del techo, cortada en el cero: lo capturado por debajo de cero es perdida
+  let d = `M ${X(pts[0].coverage)} ${Y(0)}`;
+  for (const p of pts) d += ` L ${X(p.coverage)} ${Y(p.captured)}`;
+  d += ` L ${X(pts[pts.length - 1].coverage)} ${Y(0)} Z`;
+  el('path', { d, fill: 'var(--s1)', 'fill-opacity': .17 }, svg);
+
+  let ld = '';
+  pts.forEach((p, i) => { ld += (i ? ' L ' : 'M ') + X(p.coverage) + ' ' + Y(p.captured); });
+  el('path', { d: ld, fill: 'none', stroke: 'var(--s1)', 'stroke-width': 2,
+    'stroke-linejoin': 'round' }, svg);
+
+  // el punto unico de theta, con anillo de superficie
+  el('circle', { cx: X(0), cy: Y(0), r: 7, fill: 'var(--surface-sunk)' }, svg);
+  el('circle', { cx: X(0), cy: Y(0), r: 4.5, fill: 'var(--ink-2)' }, svg);
+  const tl = el('text', { x: X(0) + 13, y: Y(0) + 22, class: 'mark-label', fill: 'var(--ink-2)' }, svg);
+  tl.textContent = 'θ — cobertura 0, sin curva';
+
+  const peak = pts.reduce((a, p) => p.captured > a.captured ? p : a, pts[0]);
+  const pl = el('text', { x: X(peak.coverage) - 8, y: Y(peak.captured) - 11,
+    'text-anchor': 'end', class: 'mark-label', fill: 'var(--s1)' }, svg);
+  pl.textContent = '+' + fmt(peak.captured, 3) + ' a ' + Math.round(peak.coverage * 100) + '% de cobertura';
+
+  pts.forEach((p) => {
+    const hit = el('circle', { cx: X(p.coverage), cy: Y(p.captured), r: 11,
+      fill: 'transparent', style: 'cursor:crosshair' }, svg);
+    hit.addEventListener('mousemove', (e) => showTip(e,
+      `<b>techo</b>cobertura <i>${fmt(p.coverage, 3)}</i><br>captura <i>${(p.captured > 0 ? '+' : '') + fmt(p.captured, 4)}</i>`));
+    hit.addEventListener('mouseleave', hideTip);
+  });
+
+  const tb = document.getElementById('tbl1');
+  tb.innerHTML = '<tr><th>cobertura</th><th>captura (techo)</th></tr>' +
+    pts.map(p => `<tr><td>${fmt(p.coverage, 4)}</td><td>${(p.captured > 0 ? '+' : '') + fmt(p.captured, 5)}</td></tr>`).join('') +
+    `<tr><td>θ (único punto)</td><td>0,00000</td></tr>`;
+})();
+
+/* ---------- fig 2: la escalera ---------- */
+(function () {
+  const svg = document.getElementById('svg2');
+  const W = 720, H = 340, L = 58, R = 108, T = 18, B = 42;
+  const pw = W - L - R, ph = H - T - B;
+  const rungs = D.ladder;
+  let cum = 0;
+  const acc = rungs.map(r => ({ ...r, cum: (cum += r.utility) }));
+  const total = cum;
+  const yMax = 15, aMax = 24;
+  const X = (d) => L + (d - 1) / (rungs.length - 1) * pw;
+  const Y = (v) => T + (1 - v / yMax) * ph;
+  const Ya = (v) => T + (1 - v / aMax) * ph;
+
+  for (const g of [0, 3, 6, 9, 12, 15]) {
+    el('line', { x1: L, x2: L + pw, y1: Y(g), y2: Y(g),
+      stroke: g === 0 ? 'var(--zero)' : 'var(--grid)', 'stroke-width': g === 0 ? 1.5 : 1 }, svg);
+    const t = el('text', { x: L - 9, y: Y(g) + 3.5, 'text-anchor': 'end', class: 'tick' }, svg);
+    t.textContent = fmt(g, 0);
+  }
+  rungs.forEach(r => {
+    const t = el('text', { x: X(r.depth), y: T + ph + 20, 'text-anchor': 'middle', class: 'tick' }, svg);
+    t.textContent = r.depth;
+  });
+  const at = el('text', { x: L + pw, y: T + ph + 36, 'text-anchor': 'end', class: 'axis-title' }, svg);
+  at.textContent = 'PROFUNDIDAD DE LA ESCALERA →';
+  const ay = el('text', { x: L - 9, y: T - 4, 'text-anchor': 'end', class: 'axis-title' }, svg);
+  ay.textContent = 'UTILIDAD';
+
+  // escalonada: la profundidad es discreta, y una diagonal afirmaria valores intermedios
+  let d = `M ${X(1)} ${Y(0)}`;
+  acc.forEach((r, i) => {
+    d += ` L ${X(r.depth)} ${Y(i ? acc[i - 1].cum : 0)} L ${X(r.depth)} ${Y(r.cum)}`;
+    if (i === acc.length - 1) d += ` L ${X(r.depth)} ${Y(0)} Z`;
+  });
+  el('path', { d, fill: 'var(--s1)', 'fill-opacity': .2, stroke: 'var(--s1)',
+    'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+
+  // los intentos que igual se pagaron
+  let ad = '';
+  acc.forEach((r, i) => { ad += (i ? ' L ' : 'M ') + X(r.depth) + ' ' + Ya(r.attempted); });
+  el('path', { d: ad, fill: 'none', stroke: 'var(--s2)', 'stroke-width': 2,
+    'stroke-dasharray': '5 4', 'stroke-linejoin': 'round' }, svg);
+
+  acc.forEach(r => {
+    el('circle', { cx: X(r.depth), cy: Ya(r.attempted), r: 5.5, fill: 'var(--surface-sunk)' }, svg);
+    el('circle', { cx: X(r.depth), cy: Ya(r.attempted), r: 3.5, fill: 'var(--s2)' }, svg);
+  });
+
+  const first = acc[0];
+  el('line', { x1: X(1), x2: X(1), y1: Y(0), y2: Y(first.cum),
+    stroke: 'var(--s1)', 'stroke-width': 2 }, svg);
+  const fl = el('text', { x: X(1) + 11, y: Y(first.cum) - 10, class: 'mark-label', fill: 'var(--s1)' }, svg);
+  fl.textContent = 'peldaño 1: ' + fmt(first.cum) + ' de ' + fmt(total) + ' (' + Math.round(first.cum / total * 100) + '%)';
+
+  const last = acc[acc.length - 1];
+  const el2 = el('text', { x: X(last.depth) + 10, y: Y(last.cum) + 4, class: 'mark-label', fill: 'var(--s1)' }, svg);
+  el2.textContent = fmt(total) + ' total';
+  const al = el('text', { x: X(last.depth) + 10, y: Ya(last.attempted) + 4, class: 'mark-label', fill: 'var(--s2)' }, svg);
+  al.textContent = last.attempted + ' intento' + (last.attempted === 1 ? '' : 's');
+
+  acc.forEach(r => {
+    const hit = el('rect', { x: X(r.depth) - 22, y: T, width: 44, height: ph,
+      fill: 'transparent', style: 'cursor:crosshair' }, svg);
+    hit.addEventListener('mousemove', (e) => showTip(e,
+      `<b>peldaño ${r.depth}</b>captura <i>${fmt(r.utility)}</i><br>acumulado <i>${fmt(r.cum)}</i><br>intentos <i>${r.attempted}</i>`));
+    hit.addEventListener('mouseleave', hideTip);
+  });
+
+  const tb = document.getElementById('tbl2');
+  tb.innerHTML = '<tr><th>peldaño</th><th>captura</th><th>acumulado</th><th>intentos</th></tr>' +
+    acc.map(r => `<tr><td>${r.depth}</td><td>${fmt(r.utility)}</td><td>${fmt(r.cum)}</td><td>${r.attempted}</td></tr>`).join('');
+})();
+
+/* ---------- fig 3: el costo ---------- */
+(function () {
+  const svg = document.getElementById('svg3');
+  const W = 720, H = 360, L = 62, R = 116, T = 18, B = 42;
+  const pw = W - L - R, ph = H - T - B;
+  const ps = D.paradigms, rows = D.cost;
+  const colors = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)'];
+  const totals = ps.map(p => rows[rows.length - 1][p]);
+  const grand = totals.reduce((a, b) => a + b, 0);
+
+  // el orden de apilado es por tamano: las bandas finas quedan arriba y se ven
+  const order = ps.map((p, i) => i).sort((a, b) => totals[b] - totals[a]);
+  const yMax = 15e6;
+  const X = (i) => L + i / (rows.length - 1) * pw;
+  const Y = (v) => T + (1 - v / yMax) * ph;
+
+  for (let g = 0; g <= 15e6; g += 3e6) {
+    el('line', { x1: L, x2: L + pw, y1: Y(g), y2: Y(g),
+      stroke: g === 0 ? 'var(--zero)' : 'var(--grid)', 'stroke-width': g === 0 ? 1.5 : 1 }, svg);
+    const t = el('text', { x: L - 9, y: Y(g) + 3.5, 'text-anchor': 'end', class: 'tick' }, svg);
+    t.textContent = g === 0 ? '0' : (g / 1e6) + ' M';
+  }
+  for (const i of [0, 5, 10, 15, 20, 25]) {
+    const t = el('text', { x: X(i), y: T + ph + 20, 'text-anchor': 'middle', class: 'tick' }, svg);
+    t.textContent = i + 1;
+  }
+  const at = el('text', { x: L + pw, y: T + ph + 36, 'text-anchor': 'end', class: 'axis-title' }, svg);
+  at.textContent = 'TAREAS, DE LA MÁS CARA A LA MÁS BARATA →';
+  const ay = el('text', { x: L - 9, y: T - 4, 'text-anchor': 'end', class: 'axis-title' }, svg);
+  ay.textContent = 'TOKENS ACUMULADOS';
+
+  const below = rows.map(() => 0);
+  const stackTops = [];
+  order.forEach((pi, k) => {
+    const p = ps[pi];
+    const top = rows.map((r, i) => below[i] + r[p]);
+    let d = `M ${X(0)} ${Y(below[0])}`;
+    rows.forEach((r, i) => { d += ` L ${X(i)} ${Y(top[i])}`; });
+    for (let i = rows.length - 1; i >= 0; i--) d += ` L ${X(i)} ${Y(below[i])}`;
+    d += ' Z';
+    el('path', { d, fill: colors[k], 'fill-opacity': .82 }, svg);
+
+    // separador de 2px en color de superficie entre bandas contiguas
+    if (k < order.length - 1) {
+      let sd = '';
+      rows.forEach((r, i) => { sd += (i ? ' L ' : 'M ') + X(i) + ' ' + Y(top[i]); });
+      el('path', { d: sd, fill: 'none', stroke: 'var(--surface-sunk)', 'stroke-width': 2 }, svg);
+    }
+    stackTops.push({ p, k, mid: (below[rows.length - 1] + top[rows.length - 1]) / 2,
+      total: totals[pi] });
+    rows.forEach((r, i) => { below[i] = top[i]; });
+  });
+
+  // etiquetas directas: el alivio que exige el WARN de contraste en tema claro
+  stackTops.forEach(s => {
+    const pct = s.total / grand * 100;
+    const y = Y(s.mid);
+    const t = el('text', { x: L + pw + 10, y: y + 4, class: 'mark-label', fill: 'var(--ink)' }, svg);
+    t.textContent = s.p;
+    const t2 = el('text', { x: L + pw + 10, y: y + 17, class: 'tick' }, svg);
+    t2.textContent = M(s.total) + ' · ' + (pct < 10 ? fmt(pct, 1) : Math.round(pct)) + '%';
+    el('rect', { x: L + pw + 2, y: y - 5, width: 5, height: 11, rx: 1.5, fill: colors[s.k] }, svg);
+  });
+
+  const half = rows.findIndex(r => ps.reduce((a, p) => a + r[p], 0) >= grand / 2) + 1;
+  el('line', { x1: X(half - 1), x2: X(half - 1), y1: T, y2: T + ph,
+    stroke: 'var(--ink-2)', 'stroke-width': 1.5, 'stroke-dasharray': '4 4' }, svg);
+  const hl = el('text', { x: X(half - 1) + 8, y: T + 14, class: 'mark-label', fill: 'var(--ink-2)' }, svg);
+  hl.textContent = half + ' tareas = la mitad del gasto';
+
+  const cross = el('line', { x1: 0, x2: 0, y1: T, y2: T + ph, stroke: 'var(--ink-3)',
+    'stroke-width': 1, opacity: 0 }, svg);
+  const hit = el('rect', { x: L, y: T, width: pw, height: ph, fill: 'transparent',
+    style: 'cursor:crosshair' }, svg);
+  hit.addEventListener('mousemove', (e) => {
+    const box = svg.getBoundingClientRect();
+    const rel = (e.clientX - box.left) / box.width * W;
+    let i = Math.round((rel - L) / pw * (rows.length - 1));
+    i = Math.max(0, Math.min(rows.length - 1, i));
+    const r = rows[i];
+    cross.setAttribute('x1', X(i)); cross.setAttribute('x2', X(i));
+    cross.setAttribute('opacity', 1);
+    const tot = ps.reduce((a, p) => a + r[p], 0);
+    showTip(e, `<b>tras ${r.tasks} tarea${r.tasks === 1 ? '' : 's'} · ${r.cell}</b>` +
+      order.map((pi) => `${ps[pi]} <i>${M(r[ps[pi]])}</i>`).join('<br>') +
+      `<br>total <i>${M(tot)}</i>`);
+  });
+  hit.addEventListener('mouseleave', () => { cross.setAttribute('opacity', 0); hideTip(); });
+
+  const leg = document.getElementById('leg3');
+  leg.innerHTML = order.map((pi, k) =>
+    `<span><i class="swatch" style="background:${colors[k]}"></i>${ps[pi]}</span>`).join('');
+
+  const tb = document.getElementById('tbl3');
+  tb.innerHTML = '<tr><th>tareas</th><th>celda</th>' + order.map(pi => `<th>${ps[pi]}</th>`).join('') + '<th>total</th></tr>' +
+    rows.map(r => `<tr><td>${r.tasks}</td><td>${r.cell}</td>` +
+      order.map(pi => `<td>${M(r[ps[pi]])}</td>`).join('') +
+      `<td>${M(ps.reduce((a, p) => a + r[p], 0))}</td></tr>`).join('');
+})();
+</script>

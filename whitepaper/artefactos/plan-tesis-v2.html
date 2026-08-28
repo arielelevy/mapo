@@ -233,7 +233,7 @@
 
 <header>
   <div class="eyebrow">
-    <span>MAPO</span><span>plan de tesis · v2.3</span><span>2026-08-27</span><span>estado vivo — P16 corriendo</span>
+    <span>MAPO</span><span>plan de tesis · v2.4</span><span>2026-08-27</span><span>estado vivo — P16 corriendo · P17 registrada</span>
   </div>
   <h1>El precio de la solidez</h1>
   <p class="standfirst">Tres golpes el mismo día: el criterio de éxito refutado en held-out, una revisión adversarial que partió la tesis v1, y una regresión de 72 parámetros que ruteó mejor que toda la maquinaria. Los tres empujan al mismo lugar — y ese lugar es mejor que donde estábamos.</p>
@@ -245,7 +245,7 @@
     <p class="lead">Corpus nuevo (seed 47), θ ajustada solo con el registro previo, 390 celdas, 14,07M tokens, cero errores de infraestructura. El ruteo perdió.</p>
 
     <div class="verdict-strip">
-      <div class="v-card ref"><span class="v-id">P15a · brecha neta</span><span class="v-word">REFUTADA</span><span class="v-desc">−0,087 contra el mejor fijo (dag 0,615 vs ruteo 0,527), más allá del piso de ruido (0,057). Contra siempre-react: +0,035, dentro del piso — vacuo.</span></div>
+      <div class="v-card ref"><span class="v-id">P15a · brecha neta</span><span class="v-word">REFUTADA</span><span class="v-desc">−0,087 contra el mejor fijo (dag 0,615 vs ruteo 0,527), más allá del piso de ruido (0,057). <strong>Corrección posterior:</strong> el bootstrap pareado sobre tareas da IC95 que <em>incluye el cero</em> (p=0,19) y Benjamini-Hochberg no deja sobrevivir ningún contraste. Las dos lecturas valen y dicen cosas distintas: contra su criterio registrado la predicción falla, y con 26 tareas no hay potencia para establecer el signo. Se reporta así.</span></div>
       <div class="v-card ref"><span class="v-id">P15b · concentración</span><span class="v-word">REFUTADA</span><span class="v-desc">La ganancia apareció en C2 (+0,121) pero la pérdida se concentró donde se predijo la ganancia: C5 (−0,278). C3 volvió oráculo-cero: vacua, como exigía el addendum.</span></div>
       <div class="v-card na"><span class="v-id">P15c · abstención</span><span class="v-word">SIN N</span><span class="v-desc">Una sola abstención en 26 tareas. Una observación no es un veredicto.</span></div>
       <div class="v-card ok"><span class="v-id">P15d · reproducibilidad</span><span class="v-word">CONFIRMADA</span><span class="v-desc">Re-decidir desde la base de creencias registrada reprodujo paradigma y digest en 26/26. La auditabilidad queda en pie.</span></div>
@@ -258,7 +258,7 @@
 
     <div class="claim">
       <span class="label">El titular honesto</span>
-      <p><strong>La selección sin sensado pierde contra un buen default fijo.</strong> El router perdió exactamente donde su sensado era ciego — y la maquinaria para des-cegarlo (la sonda, la estimación de horizonte) existe desde hoy y no estaba en el camino de decisión. Seguimiento exploratorio, no registrado: repetir el pase de decisión con la sonda aportando coupling/horizonte y medir cuánto de los −0,087 recupera.</p>
+      <p><strong>La selección sin sensado pierde contra un buen default fijo.</strong> El router perdió exactamente donde su sensado era ciego — y la maquinaria para des-cegarlo existía y no estaba en el camino de decisión del banco. Perseguir <em>por qué</em> llevó bastante más lejos que recuperar los −0,087: la regla de selección <strong>no había disparado jamás</strong>, y no por estar mal calibrada. Está abajo.</p>
     </div>
   
     <h3>La descomposición del −0,087 (exploratorio, post-registro, mismo corpus)</h3>
@@ -354,6 +354,29 @@ ruteo 0.00 · fijo 1.00</title></rect>
     </div>
 
     <p>Dos consecuencias, ninguna cómoda. <strong>(1)</strong> El claim de ruteo, en esta familia de corpus, es en buena medida un claim sobre la <em>cascada</em> y no sobre la selección: el resultado de dominancia de cascada está haciendo el trabajo que se le acreditaba al teorema de selección. <strong>(2)</strong> La única superficie donde la selección todavía puede pagar es el <strong>costo</strong> — arrancar en el peldaño correcto y frenar antes. Medido: subir desde el más barato cuesta 2,24M tokens contra 2,49M de siempre-<code>dag_strategy</code>; la cascada ya sale ~10% más barata que el mejor fijo. Eso convierte al <strong>barrido de λ de P16 en la medición decisiva del programa entero</strong>, no en un chequeo de robustez.</p>
+
+    <h3>Por qué θ nunca especializa: tres pre-empciones, y sólo una era nuestra</h3>
+    <p>El margen de θ es <strong>0 en las 26 tareas</strong>. Perseguir la causa no dio una, dio tres — apiladas, independientes, y de naturalezas distintas.</p>
+
+    <p><strong>1 · Ser corregible implicaba tener detector.</strong> Toda tarea con gold declaraba <code>has_oracle</code>, porque el mismo campo servía para dos cosas: «el banco tiene clave de respuestas» y «existe un detector barato en runtime». Con detector en todas, la regla de <em>cascada</em> dispara en prioridad 90 y la de <em>selección</em>, en 70, nunca se evalúa. El banco no podía medir selección porque el corpus se lo impedía por construcción — y eso <strong>no es un bug del router</strong>.</p>
+
+    <p><strong>2 · Sacar el oráculo no le entrega la decisión a la selección.</strong> Se la entrega a la <em>sonda</em>, que está en 80. La selección sigue tercera en la fila.</p>
+
+    <p><strong>3 · <code>probe_then_decide</code> nombra dos pasos y el banco daba uno.</strong> Ésta sí era nuestra. <code>serve.answer</code> sondeaba y replanificaba; el banco llamaba a <code>plan()</code> una vez y puntuaba lo que volviera — o sea el <em>placeholder</em>, el paradigma más barato elegido para probar <em>después</em> de sondear. Con detectores honestos son <strong>14 de 26 tareas</strong> puntuadas sobre una decisión que nadie tomó.</p>
+
+    <div class="claim">
+      <span class="label">Arreglado, y la regla disparó</span>
+      <p>Copiar el ciclo al banco habría arreglado el síntoma y arrancado la enfermedad: dos implementaciones de una decisión, libres de separarse. El ciclo vive <strong>una sola vez</strong> en <code>app/decide.py</code> y lo comparten producto y banco. Verificado sin red: en una tarea bulk sin oráculo el plan dice <code>probe_then_decide</code> con <code>unresolved</code> en true; se corre la sonda, y el re-plan vuelve <strong><code>specialise</code></strong>. Es <strong>la primera vez que la regla de selección dispara en toda la investigación</strong>.</p>
+    </div>
+
+    <h3>La curva que no existe</h3>
+    <p>Con margen 0 en todas las tareas, el barrido riesgo-cobertura de θ produce <strong>un solo punto</strong> en el origen: <strong>AURC 0,000</strong>. No es una curva mala, es la ausencia de la curva. El contraste que importa: ranquear <em>las mismas propuestas de θ</em> con gold — un techo, no una política — llega a <strong>+0,511 de captura al 77% de cobertura</strong>, AURC +0,400. Las propuestas contienen valor; lo que falta es la señal de confianza que lo coseche. <a href="https://claude.ai/code/artifact/26467301-8847-404d-a7b5-5ff50311bffe">Las tres figuras de área</a> tienen el detalle.</p>
+
+    <h3>P17: el corpus que deja medir selección</h3>
+    <p><code>gold_p17</code> (seed 73) declara <code>has_oracle</code> por celda según si <em>verificar</em> es más barato que <em>resolver</em>: C1 y C7 sí, C2/C3/C4/C5 no. Gold en las 26 tareas — la corrección no cambia y no puede cambiar; lo que cambia es qué se le dice a la <em>decisión</em>. <strong>6 de 26 con detector</strong>, contra 25 de 26 en todos los corpus del registro.</p>
+    <p>El prerrequisito son <strong>dos sitios</strong>, no uno, y averiguarlo justificó simularlo antes de pagarlo: <code>features.py:214</code> arma el segmento de región, pero el que carga el peso es <code>rules.py:248</code>, la creencia que la cascada <em>lee</em>. Una primera simulación pisó sólo la región y reportó cero cambio — respuesta correcta a la pregunta equivocada.</p>
+    <p><strong>P17a confirmada offline, cero tokens:</strong> la cascada cae de <strong>22 a 2</strong> de 26, más ajustado que el ≤6 predicho, porque las cuatro tareas irreversibles de C7 se las lleva el gate en prioridad 100 antes de que la cascada llegue a mirar. Quedan <strong>14 tareas esperando la sonda</strong> — el único lugar de donde la selección puede salir, lo que vuelve a P17b una apuesta real y no un trámite.</p>
+    <p class="lead" style="margin-top:1.2rem">Riesgo registrado antes de correr: θ se ajusta sobre corpus cuyas regiones se computaron con la regla vieja, así que el segmento <code>oracle</code>/<code>no_oracle</code> significa algo distinto en el entrenamiento y en la decisión. Si P17b falla con margen 0 <em>por falta de episodios</em> — y no por falta de señal — la lectura honesta es que hay que <strong>reconstruir los corpus</strong> bajo la regla honesta antes de poder medir selección. Es un costo que conviene enunciar ahora y no descubrir después.</p>
   </div>
 </section>
 
@@ -381,6 +404,11 @@ ruteo 0.00 · fijo 1.00</title></rect>
           <tr><td>P16 registrada y CORRIENDO</td><td>seed 61, verificado 26/26. Lo decisivo: el <strong>código del veredicto quedó commiteado antes de la corrida</strong> — no queda margen para elegir la valuación después de ver los números. Cobra la escalera completa (λ=0,05 primario, barrido publicado) y separa el cohorte de ruteo del precio del gate</td><td class="num">a595b64</td></tr>
           <tr><td>REC F4: el loop offline y el certificado</td><td>el camino único de borrador a cláusula promovida: tres mundos con manifiestos inmutables y solapamiento rechazado por identidad de tarea; el que propone no decide; validate decide si el final se consulta; el <strong>final se GASTA una sola vez</strong> (ledger: el segundo claim falla, y si validate rechaza el final ni se mira); el certificado liga incumbente + cláusula + esquema + fingerprint + los tres manifiestos + criterio prerregistrado + números, sin fecha en el digest; la instalación es fail-closed sobre el payload FIRMADO del bundle — editar una cláusula instalada invalida la firma</td><td class="num">hoy</td></tr>
           <tr><td>Hebbiano: medido, no opinado</td><td>seleccionar por peso Hebbiano, por utilidad media o por tasa de victorias elige IDÉNTICO en gold_transfer (0,5263 los tres): el peso es registro, no política — la plasticidad que gobierna es el decay de θ y el ratchet de §6.2</td><td class="num">gratis</td></tr>
+          <tr><td><strong>El ciclo de decisión, una sola vez</strong></td><td><code>app/decide.py</code>: <code>probe_then_decide</code> nombra dos pasos y ahora los dan los dos llamadores. <strong>La regla de selección disparó por primera vez</strong> — tarea bulk sin oráculo, se sonda, el re-plan vuelve <code>specialise</code>. Un plan sin resolver es un aplazamiento, jamás una elección, y lo que cuesta decidir se devuelve en vez de absorberse</td><td class="num">dc948fa</td></tr>
+          <tr><td><strong>P17: corpus honesto + P17a</strong></td><td><code>--honest-detectors</code> declara el detector por celda según si verificar es más barato que resolver; <code>gold_p17</code> seed 73, gold en 26/26, detector en 6/26. <strong>P17a confirmada sin gastar un token: la cascada cae de 22 a 2.</strong> El prerrequisito son dos sitios (<code>features.py:214</code> y <code>rules.py:248</code>), y espera a que P16 cierre</td><td class="num">d77e469</td></tr>
+          <tr><td>Estadística: IC + FDR + AURC</td><td>bootstrap pareado sobre TAREAS (no filas), Benjamini-Hochberg sobre la familia con p-valor, AURC de la abstención. Resultado incómodo y correcto: el IC de P15a incluye el cero (p=0,19) y BH no deja sobrevivir ningún contraste; el AURC de θ es <strong>0,000 degenerado</strong> contra un techo de +0,400</td><td class="num">gratis</td></tr>
+          <tr><td>Backoff jerárquico de región</td><td>una región sin evidencia difiere a su padre y <strong>devuelve qué nivel contestó</strong> — una afirmación sacada de un bin más grueso es más débil, y ocultarlo sería reclamar una especificidad que no tiene. Opt-in: P16 corre con su analizador congelado y no se toca</td><td class="num">gratis</td></tr>
+          <tr><td>Docs sincronizados con el código</td><td>cada afirmación verificada contra <code>app/</code> en vez de asumida: dos deudas cerradas que ya no eran ciertas, una que sí lo es dejada viva (el peso Hebbiano se actualiza y el router no lo lee nunca), REC deja de figurar como propuesta</td><td class="num">d77e469</td></tr>
           <tr><td>REC F2: evidencia</td><td>span literal obligatorio (un id en scope que el texto no contiene NO resuelve; auto-puntero tampoco), unidad elegida por recuperación léxica determinista, costo de sonda en la factura, <strong>fail-closed</strong>: necesidad de sonda sin resolver ⟹ se difiere, jamás se ejecuta el placeholder</td><td class="num">hoy</td></tr>
         </tbody>
       </table>
@@ -391,18 +419,20 @@ ruteo 0.00 · fijo 1.00</title></rect>
       <table>
         <thead><tr><th>Qué</th><th>Por qué importa</th><th>Costo</th></tr></thead>
         <tbody>
-          <tr><td><strong>El veredicto de P16</strong></td><td>corriendo. El barrido de λ es ahora la medición decisiva: si la ventaja no sobrevive a cobrar el costo de escalar, la afirmación honesta pasa a ser «la selección compra calidad solo cuando los tokens son gratis»</td><td>en curso</td></tr>
-          <tr><td><strong>Re-encuadrar §5.1 vs §5.2 en el paper</strong></td><td>E2 muestra que la dominancia de cascada está haciendo el trabajo que se le acredita al teorema de selección. El paper tiene que decir cuál de los dos resultados sostiene el claim — con el número de E2 sobre la mesa</td><td>escritura, tras P16</td></tr>
-          <tr><td>Brazo en PROSA (E1)</td><td>los dos brazos están implementados y sin correr: el clasificador de producción tal cual, y el router en prosa más fuerte construible. Cuesta una llamada mini por tarea — se corre cuando P16 libere la cuota</td><td>~26 llamadas</td></tr>
-          <tr><td>Retención de contexto</td><td>la variable mediadora: ¿la ventaja topológica sobrevive al control?</td><td>re-análisis, gratis</td></tr>
-          <tr><td>FDR + IC + AURC</td><td>16 predicciones sin control de comparaciones múltiples</td><td>análisis, gratis</td></tr>
-          <tr><td>Semántica del contrato + mis-binding</td><td>sin esto, F6 (contratos) mide algo indefinido; buscar nuestro propio contraejemplo primero</td><td>pizarra</td></tr>
-          <tr><td>Cota nativa del ratchet</td><td>pérdida de cobertura por endurecimiento — reemplaza el préstamo del Teorema 10.1</td><td>pizarra</td></tr>
-          <tr><td>Calibración por proposición cargada al router activo</td><td>hoy se persiste pero los routers se crean sin leerla (handoff 3.7.1)</td><td>código</td></tr>
-          <tr><td>Horizonte con evidencia propia</td><td>coupling y horizonte comparten credencia en algunos caminos (handoff 3.5.9) — y el horizonte es el eje que P15 señaló</td><td>código</td></tr>
-          <tr><td>Corpus natural + segunda familia de modelos</td><td>validez externa real; un segundo generador propio reformula la objeción</td><td>la fase cara</td></tr>
-          <tr><td>Vecinos de REC leídos completos</td><td>EnvProbe, Kintsugi, SHARP, Trace2Policy… antes de usar «primero» en el paper; reabrir el claim de consolidación del GATE</td><td>lectura</td></tr>
-        </tbody>
+          <tr><td><strong>1 · El veredicto de P16</strong></td><td>corriendo, 46 de 390 celdas, cero errores de infraestructura. El código del veredicto quedó commiteado <em>antes</em> de la corrida. El barrido de λ dice si la ventaja sobrevive a cobrar el costo de escalar; si no, la afirmación honesta pasa a ser «la selección compra calidad sólo cuando los tokens son gratis»</td><td>en curso</td></tr>
+          <tr><td><strong>2 · Aplicar el prerrequisito</strong></td><td>que <code>features.py:214</code> y <code>rules.py:248</code> lean el detector declarado en vez del gold. Escrito y esperando: aplicarlo con P16 a mitad de corrida cambiaría lo que su analizador congelado computa en 2 de sus 26 tareas, y releer un veredicto pre-registrado a través de una regla que cambió por debajo disuelve lo único que el pre-registro compra</td><td>minutos, apenas P16 cierre</td></tr>
+          <tr><td><strong>3 · Correr P17</strong></td><td>la primera medición honesta de selección: detectores por celda, la sonda ejecutada y el plan re-derivado dentro del banco, y su costo cobrado. P17b (≥7 de 14 vuelven <code>specialise</code>), P17c (la brecha neta, que es el re-test de lo que P15a falló) y P17d. Riesgo registrado: si el margen es 0 por falta de episodios y no por falta de señal, hay que reconstruir los corpus bajo la regla honesta</td><td>~14M tokens</td></tr>
+          <tr><td>4 · Brazo en PROSA (E1)</td><td>los dos brazos implementados y sin correr: el clasificador de producción tal cual, y el router en prosa más fuerte construible. Se corre cuando P16 libere la cuota</td><td>~26 llamadas</td></tr>
+          <tr><td>5 · Re-encuadrar §5.1 vs §5.2 en el paper</td><td>E2 muestra que la dominancia de cascada hace el trabajo que se le acredita al teorema de selección. El paper tiene que decir cuál de los dos resultados sostiene el claim — ahora además con el AURC degenerado sobre la mesa</td><td>escritura, tras P16/P17</td></tr>
+          <tr><td>6 · Retención de contexto</td><td>la variable mediadora: ¿la ventaja topológica sobrevive al control por recall de evidencia?</td><td>re-análisis, gratis</td></tr>
+          <tr><td>7 · Semántica del contrato + mis-binding</td><td>sin esto, F6 (contratos) mide algo indefinido; buscar nuestro propio contraejemplo primero</td><td>pizarra</td></tr>
+          <tr><td>8 · Cota nativa del ratchet</td><td>pérdida de cobertura por endurecimiento — reemplaza el préstamo del Teorema 10.1</td><td>pizarra</td></tr>
+          <tr><td>9 · Calibración por proposición al router activo</td><td>hoy se persiste pero los routers se crean sin leerla</td><td>código</td></tr>
+          <tr><td>10 · Horizonte con evidencia propia</td><td>coupling y horizonte comparten credencia en algunos caminos — y el horizonte es el eje que P15 señaló</td><td>código</td></tr>
+          <tr><td>11 · El peso Hebbiano: usarlo o sacarlo</td><td><code>policy.py</code> lo actualiza y <code>router.py</code> no lo lee ni una vez. Medido: seleccionar por peso, por utilidad media o por tasa de victorias elige idéntico. Es registro, no política — y una afirmación que no gobierna nada no debería seguir en el camino activo</td><td>código</td></tr>
+          <tr><td>12 · Corpus natural + segunda familia de modelos</td><td>validez externa real; un segundo generador propio reformula la objeción, no la responde</td><td>la fase cara</td></tr>
+          <tr><td>13 · Vecinos de REC leídos completos</td><td>antes de usar «primero» en el paper; reabrir el claim de consolidación del GATE</td><td>lectura</td></tr>
+</tbody>
       </table>
     </div>
   </div>
@@ -498,8 +528,8 @@ ruteo 0.00 · fijo 1.00</title></rect>
       <div class="phase-id">F1</div>
       <div>
         <h3>Cerrar el ciclo del mecanismo: sensar y re-decidir</h3>
-        <p>Exploratorio sobre el mismo corpus (etiquetado así — no es predicción): re-correr el pase de decisión con la sonda aportando coupling y con un eje de horizonte en φ; medir cuánto de los −0,087 recupera. Después, <strong>P16 registrada</strong> en un corpus nuevo (seed nuevo): selección <em>con</em> sensado contra el mejor fijo. Es la réplica limpia de P15 con la variable que el mecanismo señaló.</p>
-        <div class="phase-meta"><span class="chip run">en curso</span><span class="chip done">saneamiento hecho (Fase 0 + REC F1–F2)</span><span class="chip">falta: P16 con seed nuevo</span></div>
+        <p>El seguimiento exploratorio se contestó y el resultado fue otro: no había nada que recuperar todavía, porque <strong>la regla de selección nunca había disparado</strong> — pre-empatada tres veces, y sólo la tercera era nuestra. Con el ciclo de dos pasos compartido, dispara. <strong>P16</strong> corre en seed 61 con su veredicto congelado; <strong>P17</strong> queda registrada sobre el corpus de detectores honestos, que es la primera vez que el banco puede medir selección.</p>
+        <div class="phase-meta"><span class="chip run">P16 corriendo · 46/390</span><span class="chip done">las tres pre-empciones diagnosticadas</span><span class="chip done">P17a confirmada: 22 → 2</span><span class="chip">falta: P16 cierra, prerrequisito, P17</span></div>
       </div>
     </div>
 
@@ -508,7 +538,7 @@ ruteo 0.00 · fijo 1.00</title></rect>
       <div>
         <h3>Los tres routers rivales</h3>
         <p>Router en prosa (el de producción, tal cual) + router en prosa <em>informado</em> (ve lo que ve φ) + <strong>brazo logístico</strong>: regresión sobre exactamente las features de φ. Si θ le gana a la prosa pero no a una logística de 200 parámetros, la maquinaria determinística es decoración — y hay que saberlo ya. La brecha neta descuenta el costo en tokens del propio gobierno (sonda incluida).</p>
-        <div class="phase-meta"><span class="chip">brazos prosa implementados</span><span class="chip">falta el logístico</span><span class="chip">filas ya pagadas</span></div>
+        <div class="phase-meta"><span class="chip done">brazos prosa implementados</span><span class="chip done">E2: el ridge corrido — rutea mejor que θ, idéntico envuelto</span><span class="chip">falta correr E1</span></div>
       </div>
     </div>
 
@@ -579,7 +609,7 @@ ruteo 0.00 · fijo 1.00</title></rect>
 </section>
 
 <footer>
-  <p>v2.3, 2026-08-27 — la sección «Estado vivo» es la fuente de verdad de avance. Mismo día que el veredicto de P15 (refutada, mecanismo verificado, commit <span class="mono">eef4096</span>) y la revisión adversarial que degradó «generación acotada» de tesis a corolario. Cada fase termina en algo que corre; el paper documenta lo que sobrevivió.</p>
+  <p>v2.4, 2026-08-27 — la sección «Estado vivo» es la fuente de verdad de avance. Mismo día que el veredicto de P15 (refutada, mecanismo verificado, commit <span class="mono">eef4096</span>) y la revisión adversarial que degradó «generación acotada» de tesis a corolario. Cada fase termina en algo que corre; el paper documenta lo que sobrevivió.</p>
 </footer>
 
 </div>

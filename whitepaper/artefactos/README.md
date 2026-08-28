@@ -16,4 +16,6 @@ terminal, `ctrl+]` reabre el último artefacto y `/artifacts` lista todos.
 
 | Archivo | Qué es | Publicado |
 |---|---|---|
-| `plan-tesis-v2.html` | Plan de tesis v2 (post-P15 y revisión adversarial): solidez epistémica con su precio medido, fases F0–F7, cómo se cae | claude.ai/code/artifact/c1bb7b87-fea4-48ff-a79e-f1e455ddefb5 |
+| `plan-tesis-v2.html` | Plan de tesis **v2.4**: solidez epistémica con su precio medido, las tres pre-empciones que impedían medir selección, P17 registrada, fases F0–F7, cómo se cae, y los próximos pasos en orden | claude.ai/code/artifact/c1bb7b87-fea4-48ff-a79e-f1e455ddefb5 |
+| `areas-corridas.html` | **Anatomía de una corrida**: las tres figuras de área de `gold_transfer` — dónde el router podría decidir y no puede (AURC 0,000 contra un techo de +0,400), de dónde sale la utilidad en la escalera (76,8% en el primer peldaño), y qué pagó la grilla (14,07 M tokens, `dag_strategy` el 59%) | claude.ai/code/artifact/26467301-8847-404d-a7b5-5ff50311bffe |
+| `area_data.json` | Los datos exactos de las tres figuras, generados por `lab/_plot_areas.py` sobre filas ya pagadas — cero tokens | — (dato, no documento) |
