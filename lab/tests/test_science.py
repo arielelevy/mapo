@@ -1405,6 +1405,222 @@ def check_horizon_has_its_own_evidence(ok: bool) -> bool:
     return ok
 
 
+# --- 34. las entradas de analisis giran --------------------------------------------------
+#
+# OCHO METODOS PUBLICOS DEL RUNNER NO TENIAN UNA SOLA PRUEBA: `study`, `replicates`,
+# `report`, `consolidate`, `save_report`, `decide_for`, `surface_for`, `features_for`. Son
+# exactamente los que producen todos los veredictos del banco.
+#
+# No es hipotetico: en el mismo dia dos defectos pasaron por ese agujero. Uno era un kwarg
+# que ya no existia y dejaba `report()` roto de plano; el otro, un `KeyError` cuando la
+# escalera de cascada nombra brazos que el estudio no corrio — el catalogo tiene trece y una
+# corrida mide cinco. Los dos aparecieron usando el codigo a mano, no probandolo.
+#
+# HERMETICO A PROPOSITO. El registro es sintetico y va a un directorio temporal: lo que se
+# verifica es que la maquina GIRE, no los numeros. Un test atado al registro pagado seria un
+# test que cambia de veredicto cuando cambia el dato, que es lo contrario de una prueba.
+def check_analysis_entrypoints(ok: bool) -> bool:
+    import json
+    import tempfile
+    from dataclasses import replace as dc_replace
+    from pathlib import Path as _Path
+
+    from app.assurance import Assurance
+    from app.config import Settings
+    from app.runner import Runner
+
+    print("\n--- 34. las entradas de analisis giran ---")
+
+    base = Settings.from_env()
+    with tempfile.TemporaryDirectory() as tmp:
+        settings = dc_replace(base, results_dir=_Path(tmp))
+        runner = Runner(settings, "gold_p19", retriever_arm="hybrid",
+                        surface_variant="basic")
+
+        # Un registro sintetico sobre las tareas REALES del corpus, con solo DOS brazos:
+        # asi la escalera de cascada nombra brazos ausentes, que es el caso que rompia.
+        tasks = runner._tasks[:8]  # noqa: SLF001
+        rows = []
+        for i, task in enumerate(tasks):
+            for paradigm in ("react", "rewoo"):
+                for trial in range(2):
+                    rows.append({
+                        "task_id": task["task_id"], "cell": task["cell"],
+                        "paradigm": paradigm, "trial": trial,
+                        "region": "many/oracle/loose",
+                        "utility": 1.0 if (i + trial) % 2 == 0 else 0.0,
+                        "cost_tokens": 1000 + i * 100,
+                        "calls": 3, "wall_seconds": 0.1, "iterations": 3,
+                        "cross_unit_lookups": 1, "hallucinated_units": 0,
+                        "tool_usage": {"tooled_calls": 3, "units_read": 2},
+                        "infeasible": False, "retriever": "hybrid",
+                        "has_oracle": bool(task.get("has_oracle", True)),
+                        "answer": "x", "truth_coupling": 0.3,
+                        "n_units": len(task["unit_ids"]),
+                        "phi_coupling": 0.3, "phi_continuation": 0.2,
+                    })
+        runner._results_path.write_text(  # noqa: SLF001
+            "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+            encoding="utf-8",
+        )
+
+        ok &= check("load_rows lee el registro", len(runner.load_rows()) == len(rows))
+
+        study = runner.study()
+        ok &= check("study arma celdas promediadas por trial",
+                    set(study.paradigms) == {"react", "rewoo"},
+                    ", ".join(sorted(study.paradigms)))
+        ok &= check("y elige un mejor fijo entre los que CORRIERON",
+                    study.best_fixed() in ("react", "rewoo"), study.best_fixed())
+
+        ok &= check("replicates da varianza por celda", bool(runner.replicates()))
+        ok &= check("episodes promedia por celda antes del oraculo",
+                    len(runner.episodes()) == len(tasks) * 2)
+
+        # Lo que rompia: la escalera nombra brazos que este estudio no corrio.
+        cascade = study.cascade_value(["direct", "react"], detector_sensitivity=1.0)
+        ok &= check("la cascada con un brazo ausente NO levanta - lo DICE, que es "
+                    "distinto de devolver un cero que se lee como «no rinde»",
+                    "note" in cascade and "no corrio" in cascade["note"],
+                    str(cascade.get("note", ""))[:60])
+
+        # Y las dos entradas completas, en los dos diales que importan.
+        # El contrato del informe, nombrado: son las piezas sobre las que se decide.
+        # Chequear "que devuelva un dict" no habria agarrado ninguno de los dos defectos;
+        # exigir las claves si, porque cada una viene de un camino distinto.
+        REQUIRED = {"summary", "cascade", "selection_terms", "risk_coverage",
+                    "oracle_gap_credibility", "calibration", "theta_signature"}
+        for dial in (Assurance.STANDARD, Assurance.ACCOUNTABLE):
+            report = runner.report(assurance=dial)
+            missing = REQUIRED - set(report)
+            ok &= check(f"report({dial.name}) corre entero y trae todas sus piezas",
+                        isinstance(report, dict) and not missing,
+                        f"faltan {sorted(missing)}" if missing
+                        else f"{len(report)} claves")
+
+        # `save_report` era la ultima entrada sin tocar, y escribe lo que se lee despues.
+        written = runner.save_report(runner.report())
+        ok &= check("save_report deja el informe en disco y legible",
+                    _Path(str(written)).exists()
+                    and isinstance(json.loads(_Path(str(written)).read_text(
+                        encoding="utf-8")), dict))
+
+        # A2 declara `log_belief_base`, y honrarlo es lo que cierra el bucle de
+        # calibracion. Que el flag exista y nadie lo lea fue P-10; que se lea y no
+        # escriba nada seria lo mismo con otro disfraz.
+        ok &= check("en A2 el log de creencias se ESCRIBE - es lo unico que puede "
+                    "alimentar la calibracion",
+                    runner.store.belief_log_path.exists()
+                    and sum(1 for _ in runner.store.iter_belief_log()) > 0)
+
+        # Y las tres entradas por-tarea.
+        task = tasks[0]
+        ok &= check("features_for computa phi sin llamar al modelo",
+                    runner.features_for(task, allow_derived=False).n_units > 0)
+        ok &= check("surface_for construye la superficie de esa tarea",
+                    bool(runner.surface_for(task).unit_ids()))
+
+    return ok
+
+
+# --- 35. el producto deja rastro ---------------------------------------------------------
+#
+# `serve.py` DECIDIA, EJECUTABA, RESPONDIA — Y NO ESCRIBIA NADA. Dos consecuencias, y son
+# las mismas que el banco ya pago tres veces hoy:
+#
+#   sin registro de la decision  el EXPLAIN existe solo mientras dura la respuesta. Un
+#                                artefacto de explicacion que no se puede consultar despues
+#                                no explica: decora.
+#   sin log de creencias         la calibracion nunca se computa en produccion, asi que
+#                                `trusts_elicited` no se gana NUNCA — la misma cadena que
+#                                dejo a A2 con piso ELICITED inalcanzable (leccion 7.14).
+#
+# Y este test existe ademas porque NADA ejercitaba `serve.answer()`. Un residuo de otra
+# correccion —un kwarg que ya no existe— quedo ahi y ningun test lo agarro, en el mismo dia
+# en que el mismo residuo aparecio en `report()`. Dos veces el mismo descuido, dos caminos
+# sin cubrir.
+def check_product_leaves_a_trace(ok: bool) -> bool:
+    import inspect
+    import tempfile
+    from pathlib import Path as _Path
+
+    from app import serve
+    from app.assurance import PROFILES, Assurance
+    from app.store import LearningStore
+
+    print("\n--- 35. el producto deja rastro ---")
+
+    # (a) Que el camino sea INVOCABLE. Es lo que el residuo rompia.
+    sig = inspect.signature(serve.answer)
+    ok &= check("`answer` acepta un store para dejar rastro",
+                "store" in sig.parameters, ", ".join(sig.parameters))
+    src = inspect.getsource(serve)
+    ok &= check("y ya no llama a la funcion que no existe - el residuo de otra "
+                "correccion, en el segundo lugar donde aparecio",
+                "_trusts_elicited(" not in src)
+
+    # (b) Que el rastro se escriba y se pueda LEER de vuelta.
+    with tempfile.TemporaryDirectory() as tmp:
+        store = LearningStore(_Path(tmp), "produccion")
+        plan = {
+            "assurance": {"level": Assurance.ACCOUNTABLE},
+            "region": "many/oracle/loose", "action": "specialise",
+            "paradigm": "react", "theta_version": 3,
+            "beliefs": {"coupling_tight": {"value": True, "credence": 0.8,
+                                           "provenance": "elicited"}},
+        }
+
+        class _Res:
+            def __init__(self):
+                self.plan = plan
+                self.answer = "respuesta"
+                self.citations = []
+                self.usage = None
+
+        class _Req:
+            def identity(self):
+                return "req-1"
+
+        serve._record(store, _Req(), _Res(), Assurance.STANDARD)  # noqa: SLF001
+
+        decisions = list(store.iter_decisions())
+        ok &= check("la decision queda en el ledger y se relee",
+                    len(decisions) == 1 and decisions[0]["request_id"] == "req-1")
+        ok &= check("con el PLAN entero adentro - sin el, no hay EXPLAIN que consultar",
+                    decisions[0]["plan"]["action"] == "specialise")
+
+        # (c) El nivel EFECTIVO, no el pedido. Se pidio A1 y el plan resolvio A2.
+        logged = list(store.iter_belief_log())
+        ok &= check("en A2 la base de creencias se escribe - es lo unico que puede "
+                    "alimentar la calibracion", len(logged) == 1)
+        if logged:
+            ok &= check("y el registro dice el nivel EFECTIVO, no el pedido - registrar "
+                        "el pedido diria que se decidio bajo una garantia mas floja",
+                        logged[0]["context"]["assurance"]
+                        == Assurance.ACCOUNTABLE.label,
+                        logged[0]["context"]["assurance"])
+
+    # (d) Y en un nivel que NO declara el log, no se escribe.
+    with tempfile.TemporaryDirectory() as tmp:
+        store = LearningStore(_Path(tmp), "produccion")
+        plan_low = dict(plan, assurance={"level": Assurance.STANDARD})
+
+        class _ResLow(_Res):
+            def __init__(self):
+                super().__init__()
+                self.plan = plan_low
+
+        serve._record(store, _Req(), _ResLow(), Assurance.STANDARD)  # noqa: SLF001
+        ok &= check("en A1 el log de creencias NO se escribe - el perfil lo declara y "
+                    "honrarlo es la mitad que faltaba",
+                    not PROFILES[Assurance.STANDARD].log_belief_base
+                    and not store.belief_log_path.exists())
+        ok &= check("pero la decision SI queda: auditar no depende del dial",
+                    len(list(store.iter_decisions())) == 1)
+
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -1673,6 +1889,8 @@ def main() -> int:
     ok = check_availability_and_guard(ok)
     ok = check_trust_is_signed_policy(ok)
     ok = check_horizon_has_its_own_evidence(ok)
+    ok = check_analysis_entrypoints(ok)
+    ok = check_product_leaves_a_trace(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

@@ -842,6 +842,44 @@ puntuable.
 
 ---
 
+### 8.8 Producción puede alimentar la calibración, nunca la utilidad · `MÉTODO`
+
+`serve.py` decidía, ejecutaba, respondía — y **no escribía nada**. Dos consecuencias, y son
+las mismas que el banco ya pagó tres veces:
+
+| lo que no se escribía | qué se pierde |
+|---|---|
+| la decisión | el EXPLAIN existe **sólo mientras dura la respuesta**. Un artefacto de explicación que no se puede consultar después no explica: decora |
+| la base de creencias | la calibración nunca se computa, así que `trusts_elicited` **no se gana nunca en producción** — la misma cadena de 7.14 |
+
+Se cierra persistiendo las dos cosas, y con una asimetría que hay que enunciar porque no es
+obvia: **lo que se registra no es simétrico entre lo que el producto sabe y lo que θ
+necesita.**
+
+> Un `Episode` —que es lo que θ aprende— lleva `was_best`, y eso exige saber qué habrían
+> hecho **los otros paradigmas**. Producción corre **uno solo**. Fabricar ese campo
+> enseñaría que el brazo elegido siempre gana, que es la forma exacta de que un sistema
+> aprenda de su propia elección.
+
+Así que el bucle se cierra **hasta donde la evidencia alcanza**:
+
+| producción alimenta | por qué puede |
+|---|---|
+| **calibración** | opinión contra observación, y las dos existen en el mismo request: la sonda observa lo que el extractor había estimado. Se adjudica sin contrafáctico |
+| **utilidad de θ** | **no puede** — sin detector barato no hay con qué saber si otro brazo lo habría hecho mejor |
+
+Cerrarlo del todo necesita exactamente lo que `has_oracle` declara, y **casi ninguna tarea
+real lo tiene**. Ése es el límite honesto del aprendizaje desde producción, y decirlo es
+preferible a un bucle que parece cerrado porque se alimenta de sí mismo.
+
+**Y una nota sobre cómo apareció.** Nada ejercitaba `serve.answer()`. Un residuo de otra
+corrección —un parámetro que ya no existía— quedó ahí, **en el mismo día en que el mismo
+residuo apareció en `report()`**: dos caminos sin cubrir, el mismo descuido dos veces. Ocho
+métodos públicos del runner tampoco tenían una sola prueba, y son los que producen todos
+los veredictos.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

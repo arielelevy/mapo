@@ -169,6 +169,7 @@ def answer(
     bundle: PolicyBundle,
     requested: Assurance = Assurance.STANDARD,
     probe: bool = True,
+    store: Any = None,
 ) -> Answer:
     """Decide, then execute what was decided — and record both."""
     # EL DIAL DECLARABA UNA GARANTIA QUE NADIE IMPONIA. `theta_may_learn_online` vivia en
@@ -180,7 +181,73 @@ def answer(
     # Se impone acá, alrededor del request ENTERO, y no adentro de cada paradigma: el
     # punto es que NADA en este tramo pueda acumular, venga de donde venga.
     with no_online_learning():
-        return _answer(request, settings, bundle, requested, probe)
+        result = _answer(request, settings, bundle, requested, probe)
+
+    # EL PRODUCTO NO DEJABA RASTRO. `serve.py` decidia, ejecutaba, respondia — y no
+    # escribia nada. Consecuencias, y son las mismas que el banco ya pago tres veces:
+    #
+    #   sin registro de la decision   no hay EXPLAIN que auditar despues de responder
+    #   sin log de creencias          la calibracion nunca se computa, asi que
+    #                                 `trusts_elicited` no se gana NUNCA en produccion
+    #
+    # Se persiste acá, alrededor del request entero y despues de decidir, por la misma
+    # razon que la guarda de aprendizaje: un solo lugar, y nada adentro puede olvidarlo.
+    if store is not None:
+        _record(store, request, result, requested)
+    return result
+
+
+def _record(store: Any, request: Request, result: Answer,
+            requested: Assurance) -> None:
+    """Dejar rastro de una decision de produccion. Lo que se puede, y solo eso.
+
+    LO QUE SE ESCRIBE. El plan entero —la decision, sus motivos tipados, la sonda si
+    corrio, el consumo— y la base de creencias cuando el perfil lo declara.
+    Honrar `log_belief_base` es lo unico que puede alimentar la calibracion, y sin
+    calibracion el piso derivado se queda en OBSERVED para siempre.
+    """
+    from .assurance import PROFILES
+
+    # EL NIVEL EFECTIVO, no el pedido. La garantia puede haber SUBIDO por lo que el
+    # request declara —una accion irreversible fuerza el piso— y registrar el pedido
+    # diria que se decidio bajo una garantia mas floja de la que se aplico.
+    #
+    # Si el plan no lo trae en la forma esperada se cae al pedido y NO se inventa: es
+    # un dato del plan, y suponerlo seria escribir algo que nadie decidio.
+    stated = result.plan.get("assurance")
+    resolved = stated.get("level") if isinstance(stated, dict) else stated
+    profile = PROFILES.get(resolved, PROFILES[requested])
+
+    store.append_decision({
+        "request_id": request.identity(),
+        "plan": result.plan,
+        "answer": result.answer,
+        "citations": list(result.citations),
+        "usage": result.usage.as_dict() if hasattr(result.usage, "as_dict") else {},
+    })
+
+    if profile.log_belief_base:
+        store.append_belief_base(
+            result.plan.get("beliefs", {}),
+            context={
+                "task_id": request.identity(),
+                "region": result.plan.get("region", ""),
+                "assurance": getattr(profile.level, "label", str(profile.level)),
+                "action": result.plan.get("action", ""),
+                "paradigm": result.plan.get("paradigm", ""),
+                "theta_version": result.plan.get("theta_version", 0),
+            },
+        )
+
+    # LO QUE NO SE ESCRIBE, Y POR QUE. Un `Episode` — que es lo que theta aprende — lleva
+    # `was_best`, y eso exige saber que habrian hecho los OTROS paradigmas. Produccion
+    # corre uno solo. Fabricar el campo enseñaria que el brazo elegido siempre gana, que
+    # es la forma exacta de que un sistema aprenda de su propia eleccion.
+    #
+    # Asi que el bucle se cierra hasta donde la evidencia alcanza: produccion alimenta
+    # CALIBRACION —opinion contra observacion, que si se puede adjudicar por request— y
+    # no alimenta UTILIDAD. Cerrarlo del todo necesita un detector barato, que es
+    # exactamente lo que `has_oracle` declara y casi ninguna tarea real tiene.
 
 
 def _answer(
@@ -193,8 +260,9 @@ def _answer(
     task = request.as_task()
     client = LLMClient(settings)
     surface = _surface(request, settings)
-    router = Router(bundle, COST_PRIORS, FALLBACK,
-                    trusts_elicited=_trusts_elicited(settings))
+    # La confianza en credencia elicitada va ADENTRO del bundle firmado, no como
+    # parametro: un parametro se puede olvidar en un sitio de construccion.
+    router = Router(bundle, COST_PRIORS, FALLBACK)
 
     # Computable features only. The derived ones cost a call and the probe below is the
     # honest way to pay for evidence: an estimate that nothing checks would enter the

@@ -142,6 +142,34 @@ class LearningStore:
             return {"seq": 0, "chain": self.GENESIS}
         return json.loads(self.belief_head_path.read_text(encoding="utf-8"))
 
+    @property
+    def decision_log_path(self) -> Path:
+        return self._root / f"{self._corpus}.decisions.jsonl"
+
+    def append_decision(self, record: dict[str, Any]) -> None:
+        """Dejar rastro de una decision de produccion.
+
+        POR QUE HACE FALTA. `serve.py` decidia, ejecutaba, respondia — y no escribia
+        nada. Sin esto, el EXPLAIN existe SOLO mientras dura la respuesta: un artefacto
+        de explicacion que no se puede consultar despues no explica, decora.
+
+        Append y `write_atomic` no aplican: es una linea por request y el archivo crece.
+        Lo que se protege es que una linea a medio escribir no envenene la lectura, y
+        eso lo da escribir la linea entera de una.
+        """
+        self._root.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(record, ensure_ascii=False)
+        with self.decision_log_path.open("a", encoding="utf-8") as sink:
+            sink.write(line + "\n")
+
+    def iter_decisions(self) -> "Iterator[dict[str, Any]]":
+        if not self.decision_log_path.exists():
+            return
+        with self.decision_log_path.open(encoding="utf-8") as source:
+            for line in source:
+                if line.strip():
+                    yield json.loads(line)
+
     def append_belief_base(
         self, base_dict: dict[str, Any], context: dict[str, Any] | None = None
     ) -> str:
