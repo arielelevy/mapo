@@ -80,7 +80,7 @@
 **Riesgos que nadie estaba mirando**
 - [~] **R-1** · verificar el replay sellado — *intentado y **no concluyente**: el replay de secuencias da 93/112 misses, pero es mucho más probable que sea el replay y no el caché. Hace falta un test que replaye una celda por el MISMO camino que el runner*
 - [ ] R-2 · celdas † de la grilla congelada `gpt-5-chat`
-- [ ] R-3 · barrer el paper por «declarado, no medido»
+- [~] **R-3** · barrido del paper: §1.3 y §5.2 ahora dicen que **la rama `v=0` de la propia partición nunca se ejercitó**, y por qué es estructural. Falta el resto del barrido
 - [x] R-4 · `lab/ui/index.html` — **es la UI de prueba del autor**; se adopta
 - [ ] R-5 · 11 commits locales sin pushear
 

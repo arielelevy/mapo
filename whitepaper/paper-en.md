@@ -98,6 +98,25 @@ because they rest on tool-usage traces rather than on effect sizes.
 Not established: a validated selector, any result on public benchmarks, and any claim about
 a regime other than exact-answer extraction over document collections.
 
+**Structurally untested, which is stronger than "not established" and was found by
+measurement.** §5.2 partitions the problem on `v`, the availability of a cheap runtime
+detector, and sends `v = 1` to a cascade and `v = 0` to a router. **Every corpus in this
+record sits on the `v = 1` side.** Not by choice: grading without a judge means grading by
+exact match, exact match needs a gold answer, and the same field was read as the runtime
+detector — so 25 of 26 tasks per corpus declared `v = 1`. The cascade rule fires at a higher
+priority than the selection rule, so on two independent held-out corpora **the selection
+rule never fired at all**, and both routing verdicts are measurements of the cascade.
+
+The general form is a caution about a whole class of experiment, not about this one:
+
+> A benchmark that establishes correctness by exact match against a reference **holds a
+> cheap detector on every task by construction**, and therefore cannot exercise the
+> `v = 0` branch of its own partition. Being gradeable implies being verifiable.
+
+Whether selection pays where verification is genuinely impossible is, on this record,
+**open** — and it needs a corpus whose detector availability is declared per task rather
+than inherited from the answer key.
+
 ---
 
 # 2. Related work
@@ -428,6 +447,19 @@ v = 0  (no oracle)              ->  route, under the discipline of Theorem 1
 
 Prediction is only necessary where verification is impossible. If this holds, much of the
 routing literature is solving the wrong problem in the verifiable regime.
+
+**And the partition has a sharp methodological consequence we paid to learn.** The `v = 0`
+branch is the one that needs a router, and it is precisely the branch an exact-match
+benchmark cannot contain: gold is what makes grading judge-free, and gold is a detector. In
+this record the conflation was literal — one field served as both — and the result is that
+two pre-registered routing predictions, on two independent held-out corpora, were answered
+by the cascade rule while the selection rule was never evaluated. The numbers are real; what
+they measure is the `v = 1` branch.
+
+Separating the two is not a tuning change. It requires a corpus that **declares detector
+availability per task** on grounds independent of the answer key — for us, whether verifying
+is cheaper than solving — and it moves the cascade from firing on 22 of 26 tasks to firing
+on 2.
 
 ---
 

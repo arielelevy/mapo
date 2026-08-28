@@ -108,6 +108,26 @@ efecto.
 ninguna afirmación sobre otro régimen que no sea extracción de respuesta exacta sobre
 colecciones de documentos.
 
+**Estructuralmente no puesto a prueba**, que es más fuerte que «no establecido» y salió de
+medir. §5.2 parte el problema según `v`, la disponibilidad de un detector barato en runtime,
+y manda `v = 1` a una cascada y `v = 0` a un ruteador. **Todos los corpus de este registro
+caen del lado `v = 1`.** No por elección: corregir sin juez significa corregir por
+coincidencia exacta, la coincidencia exacta necesita una respuesta de referencia, y el mismo
+campo se leía como el detector de runtime — así que 25 de 26 tareas por corpus declaraban
+`v = 1`. La regla de cascada dispara con prioridad más alta que la de selección, así que
+sobre dos corpus held-out independientes **la regla de selección no disparó nunca**, y los
+dos veredictos de ruteo son mediciones de la cascada.
+
+La forma general es una advertencia sobre toda una clase de experimento, no sobre éste:
+
+> Un benchmark que establece corrección por coincidencia exacta contra una referencia
+> **tiene un detector barato en cada tarea por construcción**, y por lo tanto no puede
+> ejercitar la rama `v = 0` de su propia partición. Ser corregible implica ser verificable.
+
+Si la selección paga donde verificar es genuinamente imposible queda, en este registro,
+**abierto** — y necesita un corpus cuya disponibilidad de detector se declare por tarea en
+vez de heredarse de la clave de respuestas.
+
 ---
 
 # 2. Trabajo relacionado
@@ -452,6 +472,19 @@ v = 0  (no hay oráculo)            ->  rutear, bajo la disciplina del Teorema 1
 
 Predecir sólo es necesario donde verificar es imposible. Si esto se sostiene, buena parte de la
 literatura de ruteo está resolviendo el problema equivocado en el régimen verificable.
+
+**Y la partición tiene una consecuencia metodológica filosa que pagamos por aprender.** La
+rama `v = 0` es la que necesita un ruteador, y es precisamente la rama que un benchmark de
+coincidencia exacta no puede contener: el gold es lo que hace que corregir no necesite juez,
+y el gold es un detector. En este registro la conflación fue literal —un mismo campo servía
+para las dos cosas— y el resultado es que dos predicciones de ruteo preregistradas, sobre
+dos corpus held-out independientes, las contestó la regla de cascada mientras la de
+selección no se evaluó nunca. Los números son reales; lo que miden es la rama `v = 1`.
+
+Separar las dos no es un cambio de calibración. Requiere un corpus que **declare la
+disponibilidad de detector por tarea** sobre bases independientes de la clave de respuestas
+—para nosotros, si verificar es más barato que resolver— y mueve la cascada de disparar en
+22 de 26 tareas a disparar en 2.
 
 ---
 
