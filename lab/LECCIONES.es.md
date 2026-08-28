@@ -367,6 +367,32 @@ guardar también la versión de la función que lo produjo.
 
 ---
 
+### 7.9 Un null mal especificado se pasa por resultado · `MEDIDO`
+
+Al probar si el orden de llamadas lleva señal, la primera permutación barajaba las
+etiquetas de éxito **por transición**. Pero el resultado es de la **fila**: una fila tiene
+una utilidad y todas sus transiciones heredan la misma etiqueta, así que están
+perfectamente correlacionadas. Barajar por transición **rompe ese bloque** y le regala al
+azar más variación independiente de la que existe — el null sale más disperso de lo que
+corresponde y el test se vuelve imposible de pasar *por una razón que no es la señal*.
+
+Con el null corregido —permutar **qué filas** salieron bien, conservando cada fila con sus
+transiciones— los observados pasaron de parecer irrelevantes a quedar **cerca** de los
+nulos (0,1427 contra 0,1237). El veredicto cambió de «no hay nada» a «no alcanza para
+decidir».
+
+Y hace falta un segundo chequeo que casi nunca se hace: **potencia**. Con `n` filas de las
+que `k` salieron bien hay `C(n,k)` asignaciones, así que el `p` mínimo alcanzable es
+`1/C(n,k)`. Si ese piso ya supera 0,05, el estrato **no puede** dar significativo aunque la
+señal fuera perfecta. Acá 4 de 8 estratos tenían potencia; los otros 4 no, y leerlos como
+«no hay efecto» habría sido confundir ausencia de potencia con ausencia de efecto.
+
+> Un test que no puede rechazar **no está midiendo**, está decorando. Y un null que rompe
+> la estructura de correlación de los datos produce números perfectamente publicables sobre
+> una hipótesis que nadie puso a prueba.
+
+---
+
 ## 9. Lo que este registro NO estableció
 
 Se escribe acá para que no se lo confunda con lo de arriba.
