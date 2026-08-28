@@ -299,6 +299,7 @@ camino disolvería la única garantía que hace que registrar una predicción va
 | `LECCIONES.es.md` | **Lo que el banco probó**, cada regla con su medición. Material de paper. |
 | `COTA_RATCHET.es.md` | La cota nativa del ratchet (T-4): terminación acotada en vez de varianza. |
 | `CONTRATOS.es.md` | Semántica de los contratos de afirmación (T-1). **Pizarra**, no implementado. |
+| `ONTOLOGIA_PREGUNTAS.es.md` | Qué exige un request, por eje, y cuáles el corpus puede medir. **Pizarra**. |
 | `DISENO.es.md` | Arquitectura lógica, decisiones, garantías y deuda. |
 | `ARQUITECTURA.es.md` | Arquitectura de plataforma: orquestación, ingesta, persistencia y backend. **Propuesta.** |
 | `PATRON_REC.es.md` | Patrón implementado (`rec.py`, `certify.py`) y protocolo de investigación. |

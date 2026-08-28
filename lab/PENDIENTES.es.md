@@ -56,6 +56,13 @@
 - [ ] AR-3 · predicción falsable antes de correr
 - [ ] AR-4 · baseline honesto: contra HyDE y RAG plano, no contra nada
 
+**Ontología de la pregunta** (`ONTOLOGIA_PREGUNTAS.es.md`, pizarra)
+- [ ] **O-1** · **B4/B5 vigencia y autoridad — el pendiente más barato del documento**: el corpus YA trae 6 enmiendas con supersesión escrita («*this filing supersedes any earlier domicile*»), verificable por código, y **ninguna predicción registrada la usa**
+- [ ] **O-2** · **B2 ausencia y negación** — el de peor relación daño/atención: afirmar una ausencia desde una muestra produce una respuesta que *parece normal*. La asimetría ya existe en la sonda, pero sólo del lado del material
+- [ ] **O-3** · **D1 presuposición** — el más fácil y no está: una presuposición ya tiene forma de proposición, así que el mecanismo para verificarla existe entero. Falta extraerla
+- [ ] **O-4** · **A1 cardinalidad de respuesta**: medible hoy (C1 singular, C2 enumerativa, C4 agregada) y **no medido**
+- [ ] **O-5** · cuatro ejes bloqueados **por el generador y no por el diseño** — B3 entidades, C1 conversación, A2 precisión, D2 subjetividad. Enumerados **antes** de pagar el cuarto caso
+
 **La fase de entendimiento — la mitad que S-3 declaró faltante**
 - [ ] **U-1** · fase que emite **demandas tipadas** del request, no un float de conclusión. **Lo que se tipa es la CARDINALIDAD DE LA RESPUESTA**, implícita en la forma del pedido y no binaria: singular («cuál fue el arma») / enumerativa («listame los nombres») / agregada («cuántos X»). Cada una falla distinto y sólo dos piden exhaustividad
 - [ ] **U-2** · que **la regla** combine demanda × material — resuelve los 4 falsos positivos de C4 sin heurísticas nuevas
