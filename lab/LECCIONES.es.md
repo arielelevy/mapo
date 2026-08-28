@@ -441,6 +441,41 @@ Errar hacia «tomado» cuesta un borrado manual; errar hacia «libre» corrompe 
 
 ---
 
+### 8.3b El acoplamiento es una propiedad de la PREGUNTA, y todos los ejes computables miden el MATERIAL · `MEDIDO`
+
+Buscando separar «hay que encadenar» de «hay que barrer» se probaron tres ejes, y ninguno
+lo hace:
+
+| eje | qué acierta | qué falla |
+|---|---|---|
+| **cardinalidad** | nada | C4-w4 y C5-w4 tienen **los mismos 5 units** y coupling 0,20 contra 0,70 |
+| **continuidad** (COMPUTED) | C5 perfecto 6/6, C4 y C2 correctos | **C3 lee `flat`** con coupling 0,80 |
+| **profundidad de puentes** | — | C2 (0,00) da 1,22 y C3 (0,60) da 1,28: indistinguibles, y C4 da **más** que los dos |
+
+Y la sonda es complementaria a la continuidad: acierta C3 y C5, falla C4. Ninguna
+combinación de dos de estos cierra, porque **los tres miden lo mismo** — el material.
+
+**Y el material no alcanza, por una razón que no es de calibración.** Los mismos documentos
+sostienen «seguí la línea de reporte un paso hacia arriba», que exige encadenar, y «cuántos
+X hay», que no. Mismo corpus, mismo grafo denso de personas que se repiten, acoplamiento
+distinto.
+
+> El acoplamiento que una tarea requiere es una propiedad de **(pregunta × material)**, y
+> todos los ejes computables disponibles son función del **material solo**. No es que falte
+> el eje correcto: es que la mitad de la información no está ahí.
+
+**Consecuencia sobre el retículo, y es incómoda.** El único componente que lee la pregunta
+es el modelo, así que el acoplamiento **no puede ser `COMPUTED`**. Lo máximo alcanzable es
+`ELICITED` sobre la pregunta, *verificado* contra el material — que es exactamente lo que la
+sonda hace. Sus 9 de 14 pueden estar cerca del techo de una lectura de una sola unidad, y
+no de un umbral mal puesto.
+
+*Salvedad de la medición de profundidad*: usa una regex de nombres propios como proxy de
+puente, y sobre C5 no encontró ninguno. El contraste C2 contra C3 —el que decide— no
+depende de eso.
+
+---
+
 ### 8.4 «Esta unidad no alcanza» tiene dos causas y una sonda de una unidad no las separa · `MEDIDO`
 
 La sonda quedó arreglada —de resolver **0 de 14** a acertar **9 de 14** contra la verdad

@@ -21,7 +21,8 @@
 
 **La cuarta pre-empción — lo único que queda entre el registro y una respuesta**
 - [~] **S-1** · **la sonda resuelve**: de 0/14 a **9/14** contra la verdad declarada. El verificador exigía ids de unidad y los documentos se referencian por **nombre de persona** — el prompt pedía bien y el verificador rechazaba lecturas correctas. Ahora resuelve cualquier puente **literal** entre dos unidades, con guarda de especificidad, y exige **además** que el sensor diga «no autocontenida»
-- [ ] **S-3** · **el residuo, y es estructural**: las 4 tareas C4 dan falso positivo. «Esta unidad no alcanza» tiene dos causas —la respuesta está en OTRO lado (cadena) o en TODOS (cobertura)— y desde una sola unidad se ven igual. La sonda debe reportar lo observado y **la regla** combinarlo con la cardinalidad, que φ ya tiene gratis
+- [~] **S-3** · **medido: no hay eje computable que lo cierre.** Cardinalidad no separa (C4-w4 y C5-w4 tienen los mismos 5 units); continuidad falla C3; profundidad de puentes da C2=1,22 contra C3=1,28. Los tres miden el **material**, y el acoplamiento es propiedad de **(pregunta × material)**
+- [ ] **S-4** · **decidir qué se hace con eso**, y son opciones de diseño, no de calibración: (a) aceptar que el acoplamiento tope en `ELICITED` verificado —la sonda ya lo hace— y ajustar el piso de la regla en consecuencia; (b) sondear sobre **dos** unidades para poder ver profundidad; (c) declarar que la celda C4 no necesita acoplamiento sino cobertura, y darle su propia regla
 - [x] **S-2** · resuelto: **no era el piso**. Era que el prompt y el verificador no pedían lo mismo
 
 **Catálogo — la misma vara que a los candidatos nuevos**
