@@ -27,7 +27,7 @@
 - [ ] M-5 · C3 profundo en nano
 
 **El catálogo confunde dimensiones ortogonales**
-- [ ] **F-1** · sacar `Blackboard` de `dag.py` a su propio módulo *(refactor, gratis)*
+- [x] **F-1** · `Blackboard` extraído a `paradigms/blackboard.py` — comportamiento idéntico, suites en verde; **F-2 ya es formulable**
 - [ ] **F-2** · medir `{blackboard, sin}` × `{react, dag}` en C2/C4 — **descontamina «el efecto dag_strategy»**
 - [ ] **F-3** · HyDE como factor de pre-proceso — *decidido: se usa*
 - [ ] **H-1** · portarlo como rama paralela fusionada por RRF, **no como herramienta**
@@ -74,7 +74,7 @@
 - [ ] **A-3** · separar producto de banco ANTES de portar
 
 **Apareció al aplicar B2**
-- [ ] **X-1** · un solo constructor `task → payload`, no tres a mano *(dos ya se habían separado)*
+- [x] **X-1** · un solo constructor `payload_for(task)` en `features.py` — los tres sitios lo usan
 - [ ] **X-2** · el ledger de costo no es convertible a plata *(falta el split prompt/completion y la tarifa)*
 
 **Riesgos que nadie estaba mirando**

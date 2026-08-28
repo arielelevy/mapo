@@ -27,7 +27,7 @@ import httpx
 
 from .config import Settings
 from .llm import RETRYABLE_STATUS
-from .features import FeatureExtractor, Features
+from .features import FeatureExtractor, Features, payload_for
 from dataclasses import replace as dc_replace
 
 from .beliefs import Provenance
@@ -252,20 +252,9 @@ class Runner:
         )
 
     def features_for(self, task: dict[str, Any], allow_derived: bool) -> Features:
-        payload = {
-            "question": task["question"],
-            "units": task["unit_ids"],
-            "oracle": task["oracle"],
-            # La capacidad de verificacion en RUNTIME, que es lo que la decision mira.
-            # Se pasa explicitamente porque este payload no es la tarea: es un subconjunto
-            # armado a mano, y omitir el campo lo volvia indistinguible de una tarea que
-            # no lo declara. La falla cerrada lo atrapo antes de gastar un token.
-            "has_oracle": task["has_oracle"],
-            "irreversible": task.get("irreversible", False),
-            "shared_writes": task.get("shared_writes", False),
-            "budget_tokens": task["budget_tokens"],
-        }
-        features, _ = self._extractor.extract(payload, allow_derived=allow_derived)
+        features, _ = self._extractor.extract(
+            payload_for(task), allow_derived=allow_derived
+        )
         # Continuation is measured from the material itself — free, deterministic,
         # COMPUTED. This is the axis whose absence P15 paid for.
         return dc_replace(

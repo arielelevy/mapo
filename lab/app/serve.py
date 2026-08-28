@@ -34,7 +34,7 @@ from typing import Any
 from . import grading
 from .assurance import Assurance
 from .config import Settings
-from .features import FeatureExtractor, measure_continuation
+from .features import FeatureExtractor, measure_continuation, payload_for
 from .llm import LLMClient, Usage
 from .paradigms import COST_PRIORS, FALLBACK, REGISTRY
 from .policy import PolicyBundle
@@ -170,18 +170,10 @@ def answer(
     # Computable features only. The derived ones cost a call and the probe below is the
     # honest way to pay for evidence: an estimate that nothing checks would enter the
     # belief base as ELICITED and the assurance dial would have to distrust it anyway.
-    features, _ = FeatureExtractor().extract(
-        {
-            "question": request.question,
-            "units": task["unit_ids"],
-            "oracle": task["oracle"],
-            "has_oracle": task["has_oracle"],
-            "irreversible": request.irreversible,
-            "shared_writes": request.shared_writes,
-            "budget_tokens": request.budget_tokens,
-        },
-        allow_derived=False,
-    )
+    # `as_task()` ya tradujo el request al vocabulario de la decision, asi que el payload
+    # sale de ahi y no de una segunda lectura del request. Eran los mismos valores
+    # escritos dos veces, y esa es la forma en que dos copias empiezan a diferir.
+    features, _ = FeatureExtractor().extract(payload_for(task), allow_derived=False)
     features = replace(
         features,
         continuation=measure_continuation(request.documents, task["unit_ids"]),

@@ -193,6 +193,30 @@ horizon_unknown = true if the number of steps required cannot be known in advanc
 No prose. No markdown fences. JSON only."""
 
 
+def payload_for(task: dict[str, Any]) -> dict[str, Any]:
+    """El vocabulario que el extractor de features consume, construido en UN lugar.
+
+    POR QUE EXISTE. Habia tres sitios armando este diccionario a mano —`runner.py`,
+    `serve.py`, y el `as_task()` del request— y **dos ya se habian separado**: los dos
+    del banco omitian `has_oracle`, asi que la decision recibia una tarea
+    indistinguible de una que no declara detector. El fallo cerrado lo atrapo antes de
+    gastar un token, pero atraparlo no es lo mismo que no poder volver a escribirlo.
+
+    LA DIFERENCIA CON UNA TAREA. El extractor habla de `units`; el corpus, de
+    `unit_ids`. Ese renombre es toda la traduccion, y es exactamente el tipo de detalle
+    que se copia mal la tercera vez.
+    """
+    return {
+        "question": task["question"],
+        "units": task["unit_ids"],
+        "oracle": task["oracle"],
+        "has_oracle": task["has_oracle"],
+        "irreversible": task.get("irreversible", False),
+        "shared_writes": task.get("shared_writes", False),
+        "budget_tokens": task["budget_tokens"],
+    }
+
+
 def has_runtime_detector(task: dict[str, Any]) -> bool:
     """Si existe un detector barato EN RUNTIME — no si el banco tiene clave de respuestas.
 

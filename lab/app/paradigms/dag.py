@@ -41,6 +41,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from .blackboard import Blackboard
 from ..llm import LLMClient, Usage
 from ..tools import ToolSurface
 from . import ANSWER_CONTRACT, Result, _run_tool_loop, parse_answer
@@ -55,32 +56,10 @@ DAG_DIMINISHING_RETURNS = 0.05
 DAG_SUB_AGENT_ITERATIONS = 10
 
 
-# -- blackboard ----------------------------------------------------------------
-
-
-@dataclass
-class Blackboard:
-    """Shared state across sub-agents.
-
-    Only what the control structure actually reads: findings, visited units, and a
-    tool-call ledger used to avoid duplicated work between parallel agents.
-    """
-
-    findings: list[str] = field(default_factory=list)
-    visited_units: set[str] = field(default_factory=set)
-    tool_calls: set[str] = field(default_factory=set)
-
-    def add_finding(self, sub_id: str, text: str) -> None:
-        self.findings.append(f"[{sub_id}] {text.strip()}")
-
-    def render(self) -> str:
-        if not self.findings:
-            return "(blackboard empty — you are the first agent)"
-        lines = ["FINDINGS SO FAR (from parallel agents):"]
-        lines.extend(f"  {f}" for f in self.findings)
-        if self.visited_units:
-            lines.append(f"UNITS ALREADY READ: {', '.join(sorted(self.visited_units))}")
-        return "\n".join(lines)
+# El blackboard vive en `blackboard.py`: es una DIMENSION (estado compartido), no una
+# propiedad de esta topologia. Mientras estuvo definido aca, la pregunta "¿react mejora
+# con estado compartido?" no se podia ni formular, y "el efecto dag_strategy" quedaba
+# siendo la conjuncion de la topologia de olas y el blackboard, sin nada que las separe.
 
 
 # -- planning ------------------------------------------------------------------
