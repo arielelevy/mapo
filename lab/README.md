@@ -505,6 +505,24 @@ so its argmax coincides. The plasticity that GOVERNS is elsewhere — θ's reinf
 the §6.2 assurance ratchet; the weight column is record, not policy, and the operational
 story should stop implying otherwise (handoff Fase 0, item 5).
 
+**The third pre-emption is fixed, and selection fires (2026-08-27).** The two-step cycle
+now lives once, in `app/decide.py`, and both callers take both steps — `serve.answer` and
+the bench (`Runner.decide_for`, opt-in via `resolve_probes`, off by default so it can
+never change what a registered prediction meant). Copying it into the bench would have
+fixed the symptom and started the disease: two implementations of one decision, free to
+drift, which is exactly the failure removed from the frozen execution layer this morning.
+
+Verified without a network: on a bulk task with no runtime oracle, one plan says
+`probe_then_decide` and `Decision.unresolved` is true — the paradigm on it is a
+placeholder for AFTER probing, and calling it a decision was the measurement gap. Run the
+probe, and the replan comes back **`specialise`**. That is the first time the selection
+rule has fired anywhere in this investigation, and it closes the diagnosis: the three
+pre-emptions were real, distinct, and only the third was ours to fix.
+
+Two properties the tests pin, because both are ways the cycle could quietly lie: a probe
+whose reading does not verify leaves the need UNRESOLVED (probing is not the same as
+having measured), and it is **still charged** — evidence that did not arrive also cost.
+
 **The full chain of pre-emption, measured (2026-08-27).** Separating the runtime
 detector from the grading gold — the fix `CIERRE` §3.8.2 asks for — was measured for free
 by passing the decision a task whose `oracle` is empty wherever **verifying is not cheaper

@@ -474,6 +474,93 @@ def check_continuation_axis(ok: bool) -> bool:
     return ok
 
 
+def check_decision_cycle(ok: bool) -> bool:
+    """El ciclo de dos pasos: sondear y DESPUES decidir — una sola implementacion."""
+    from dataclasses import dataclass  # noqa: PLC0415
+
+    from app.decide import decide  # noqa: PLC0415
+    from app.features import Features  # noqa: PLC0415
+    from app.paradigms import COST_PRIORS, FALLBACK  # noqa: PLC0415
+    from app.policy import Plasticity, PolicyBundle  # noqa: PLC0415
+    from app.router import Router  # noqa: PLC0415
+
+    print("\n21. El ciclo de decision de dos pasos")
+
+    @dataclass
+    class _Usage:
+        total_tokens: int = 140
+        calls: int = 1
+
+    @dataclass
+    class _Completion:
+        text: str
+        usage: _Usage
+
+    class _Sensor:
+        def __init__(self, text): self._text = text
+        def complete(self, messages, **kwargs): return _Completion(self._text, _Usage())
+
+    class _Surface:
+        def __init__(self, units): self._units = units
+        def unit_ids(self): return list(self._units)
+        def read_one(self, uid): return self._units[uid]
+
+    units = {f"u{i:02d}": "relleno" for i in range(20)}
+    units["u00"] = "la cuenta AR9911 figura en u07"
+    units["u07"] = "AR9911 pertenece a alguien"
+    task = {"task_id": "t", "question": "quien es el titular de AR9911?",
+            "unit_ids": sorted(units), "budget_tokens": 60_000, "oracle": []}
+
+    bundle = PolicyBundle.cold_start(fallback=FALLBACK, tau=0.3)
+    router = Router(bundle, COST_PRIORS, FALLBACK)
+    features = Features(n_units=len(units), has_oracle=False, irreversible=False,
+                        shared_writes=False, budget_tokens=60_000, continuation=True)
+    candidates = ["react", "rewoo", "map_reduce", "dag_strategy"]
+
+    # sin cliente: el plan pide sonda y NADIE la resuelve
+    blind = decide(task, router=router, features=features, candidates=candidates)
+    ok &= check("sin sonda el plan queda SIN RESOLVER, no decidido",
+                blind.unresolved and blind.plan.action == "probe_then_decide"
+                and not blind.probed,
+                "el paradigma del plan es un placeholder para DESPUES de sondear")
+    ok &= check("una decision no resuelta no cuesta nada",
+                blind.usage.total_tokens == 0 and blind.usage.calls == 0)
+
+    # con sensor: se sondea y se vuelve a decidir
+    resolved = decide(
+        task, router=router, features=features, candidates=candidates,
+        client=_Sensor('{"self_contained": false, "references": ["u07"]}'),
+        surface=_Surface(units),
+    )
+    ok &= check("con sensor la sonda corre y el plan se vuelve a derivar",
+                resolved.probed and resolved.plan_before_probe is not None)
+    ok &= check("la sonda deja de pedirse: la necesidad quedo resuelta",
+                not resolved.unresolved,
+                resolved.plan.action)
+    ok &= check("decidir CUESTA, y el costo viaja en la decision",
+                resolved.usage.total_tokens == 140 and resolved.usage.calls == 1,
+                "una sonda fuera de la factura des-mide el trade-off")
+    ok &= check("la region se recompone con lo observado",
+                resolved.features.coupling is not None
+                and resolved.features.region() != features.region(),
+                f"{features.region()} -> {resolved.features.region()}")
+    ok &= check("el efecto de la sonda sobre la decision queda registrado",
+                "changed_by_probe" in resolved.as_dict())
+
+    # una lectura que NO verifica no resuelve la necesidad: sigue sin decidirse
+    unreadable = decide(
+        task, router=router, features=features, candidates=candidates,
+        client=_Sensor("el sensor devolvio prosa"), surface=_Surface(units),
+    )
+    ok &= check("una sonda ILEGIBLE no resuelve nada y el plan sigue sin decidir",
+                unreadable.probed and unreadable.unresolved,
+                "sondear no es lo mismo que haber medido")
+    ok &= check("y esa sonda fallida igual se cobra",
+                unreadable.usage.total_tokens == 140,
+                "la evidencia que no llego tambien costo")
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -729,6 +816,7 @@ def main() -> int:
     ok = check_belief_history(ok)
     ok = check_rec_solver(ok)
     ok = check_continuation_axis(ok)
+    ok = check_decision_cycle(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

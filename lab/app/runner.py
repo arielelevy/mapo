@@ -31,6 +31,7 @@ from .features import FeatureExtractor, Features
 from dataclasses import replace as dc_replace
 
 from .beliefs import Provenance
+from .decide import decide as decide_once
 from .features import measure_continuation
 from .llm import LLMClient, SealedCacheMiss, SeededClient, Usage
 from .metrics import Observation, Study
@@ -187,6 +188,44 @@ class Runner:
         self.store = LearningStore(settings.results_dir, corpus_name)
 
     # -- features ----------------------------------------------------------
+
+    def decide_for(
+        self,
+        task: dict[str, Any],
+        router: Any,
+        candidates: list[str],
+        region: str,
+        requested: Any = None,
+        resolve_probes: bool = False,
+        client: Any = None,
+    ) -> Any:
+        """One decision for the bench, through the SAME cycle the product uses.
+
+        `resolve_probes` is opt-in and off by default, for two reasons. It spends a
+        model call per probing task — real money that the caller has to choose to
+        spend — and it changes what a decision IS on any task where the probe rule
+        fires, which must never happen underneath a prediction already registered
+        against the single-step behaviour.
+
+        With it off, this is exactly what `report()` always did: one `plan()` call,
+        and on a probing task the answer is a placeholder rather than a decision.
+        `Decision.unresolved` is what says so, instead of the caller having to know.
+        """
+        features = self.features_for(task, allow_derived=False)
+        features = dc_replace(
+            features,
+            continuation=measure_continuation(self._documents, task["unit_ids"]),
+        )
+        return decide_once(
+            task,
+            router=router,
+            features=features,
+            candidates=candidates,
+            requested=requested,
+            client=client if resolve_probes else None,
+            surface=self.surface_for(task) if resolve_probes else None,
+            probe=resolve_probes,
+        )
 
     def surface_for(self, task: dict[str, Any]) -> ToolSurface:
         """The tool surface for one task, built the same way the grid builds it.

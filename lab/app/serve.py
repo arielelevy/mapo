@@ -39,7 +39,7 @@ from .llm import LLMClient, Usage
 from .paradigms import COST_PRIORS, FALLBACK, REGISTRY
 from .policy import PolicyBundle
 from .beliefs import Provenance
-from .probe import ProbeResult, probe_coupling
+from .decide import decide as decide_once
 from .rec import diagnose as rec_diagnose
 from .rules import BeliefPolicy
 from .embeddings import EmbeddingClient
@@ -186,44 +186,22 @@ def answer(
         continuation=measure_continuation(request.documents, task["unit_ids"]),
     )
 
-    def plan_with(coupling=None, provenance=None, credence=0.0, prior=None):
-        kwargs: dict[str, Any] = {}
-        if coupling is not None:
-            kwargs["coupling"] = coupling
-            kwargs["coupling_credence"] = credence
-            if provenance is not None:
-                kwargs["coupling_provenance"] = provenance
-        if prior:
-            kwargs["prior_beliefs"] = prior
-        return router.plan(
-            task=task,
-            candidates=sorted(REGISTRY),
-            region=features.region(),
-            # Feasibility runs against the caller's real documents, so a paradigm that
-            # cannot fit this material is pruned before a token is spent.
-            documents=request.documents,
-            requested=requested,
-            **kwargs,
-        )
-
-    plan = plan_with()
-    reading: ProbeResult | None = None
-    if plan.needs_probe and probe:
-        reading = probe_coupling(client, surface, task)
-        # The region is REBUILT with what was observed. Replanning under the old
-        # region kept the request in the "unknown coupling" bin the probe had just
-        # left — which is the exact failure P15 measured: the vocabulary not seeing
-        # what the sensing knew.
-        features = replace(features, coupling=reading.coupling)
-        # ONE history: the replan continues the first plan's belief base, so the
-        # OBSERVED reading supersedes the estimate on the same record instead of
-        # opening a second story with no lineage back to the first.
-        plan = plan_with(
-            reading.coupling,
-            reading.provenance,
-            reading.credence,
-            prior=plan.verdict.get("beliefs", {}).get("beliefs", []),
-        )
+    # El ciclo, una sola vez y compartido con el banco (app/decide.py). Copiarlo aca
+    # habria dado dos implementaciones de una decision, libres de separarse.
+    decision = decide_once(
+        task,
+        router=router,
+        features=features,
+        candidates=sorted(REGISTRY),
+        documents=request.documents,
+        requested=requested,
+        client=client,
+        surface=surface,
+        probe=probe,
+    )
+    plan = decision.plan
+    features = decision.features
+    reading = decision.probe
 
     explain = plan.explain()
     probe_record = reading.as_dict() if reading else None
@@ -246,15 +224,10 @@ def answer(
     ).as_dict()
 
     if plan.gated:
+        # Lo que costo DECIDIR ya viene contado en la decision: reconstruirlo aca
+        # era una tercera copia de la misma aritmetica, y las tres podian separarse.
         gate_usage = Usage()
-        if reading is not None:
-            gate_usage.merge(
-                Usage(
-                    prompt_tokens=reading.cost_tokens,
-                    completion_tokens=0,
-                    calls=reading.calls,
-                )
-            )
+        gate_usage.merge(decision.usage)
         # Nothing runs. The caller asked for something whose consequences a human owns,
         # and returning a plan is the whole answer.
         return Answer(
@@ -270,7 +243,7 @@ def answer(
             ),
         )
 
-    if plan.needs_probe:
+    if decision.unresolved:
         # FAIL-CLOSED. The plan still wants evidence nobody produced — probing was
         # disabled, or the reading did not reach the floor the rules demand. The
         # paradigm on the plan is a PLACEHOLDER the probe rule chose as "cheapest to
@@ -279,14 +252,7 @@ def answer(
         # the honest move, and it is recorded as exactly that.
         fallback_result = REGISTRY[bundle.fallback](client, surface, task)
         deferred_usage = Usage()
-        if reading is not None:
-            deferred_usage.merge(
-                Usage(
-                    prompt_tokens=reading.cost_tokens,
-                    completion_tokens=0,
-                    calls=reading.calls,
-                )
-            )
+        deferred_usage.merge(decision.usage)
         deferred_usage.merge(fallback_result.usage)
         return Answer(
             outcome="deferred",
@@ -302,18 +268,11 @@ def answer(
             ),
         )
 
+    # Decidir cuesta tokens, y esos tokens estan en la factura: una sonda que no
+    # llega al total hace que el camino gobernado parezca tan barato como el ciego,
+    # que es des-medir el unico trade-off que esta capa existe para tasar.
     usage = Usage()
-    if reading is not None:
-        # Deciding cost tokens too. A probe that never reaches the bill makes the
-        # governed path look exactly as cheap as the blind one, which un-measures
-        # the one trade-off this layer exists to price.
-        usage.merge(
-            Usage(
-                prompt_tokens=reading.cost_tokens,
-                completion_tokens=0,
-                calls=reading.calls,
-            )
-        )
+    usage.merge(decision.usage)
     ladder: list[dict[str, Any]] = []
 
     if plan.ladder and len(plan.ladder) > 1 and request.oracle:
