@@ -1,0 +1,23 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# artefactos de build de TypeScript
+*.tsbuildinfo
+
+# logs de gestores de paquetes
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# configuración local del editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+
+# el endpoint del motor y cualquier credencial van por entorno, nunca al repo
+.env
+.env.local
+.env.*.local

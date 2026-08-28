@@ -1,0 +1,60 @@
+.shell {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, 1fr) var(--tray);
+  min-height: 0;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.stream {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 26px 0 8px;
+}
+
+/* el fantasma que sigue al puntero mientras arrastrás */
+.ghost {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 11px;
+  background: var(--panel);
+  border: 1px solid var(--live);
+  border-radius: 2px;
+  box-shadow: 0 6px 18px rgb(16 23 27 / 0.16);
+  cursor: grabbing;
+}
+.ghostId {
+  font: 500 11px/1 var(--mono);
+  color: var(--live);
+}
+.ghostTitle {
+  font-size: 12.5px;
+  color: var(--graphite);
+}
+
+@media (max-width: 1240px) {
+  .body {
+    grid-template-columns: 260px minmax(0, 1fr) 264px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+    overflow-y: auto;
+  }
+}

@@ -248,14 +248,20 @@ dejara de alcanzar, cambiar de motor es una clase, no una migración.
 
 ## 5. Postgres como ledger epistémico
 
-Postgres es correcto para "pesos y aprendizajes", pero llamarlo así lo subestima. Lo
-importante es que **el esquema haga estructuralmente imposibles las deudas** que hoy
-`DISENO.es.md` §5 lista como bloqueantes. Una restricción de integridad no se olvida en
-una revisión de código.
+Postgres es correcto para "pesos y aprendizajes", pero llamarlo así lo subestima.
+
+**Corrección respecto de una versión anterior de este documento.** Las dos deudas que
+acá se citaban como bloqueantes —pseudorreplicación y fuga del bloque final— ya están
+cerradas en código (`DISENO.es.md` §5, "Cerrado 2026-08-27"): un episodio es una celda
+`(tarea, paradigma)` en `runner.py`, la candidata se ajusta sin el bloque final en
+`consolidation.py`, y `app/certify.py:98` tiene un `FinalLedger` que rechaza la segunda
+certificación contra el mismo mundo final. El esquema de abajo **no cierra esas deudas:
+las persiste**. Hoy la guarda vive en proceso y en un archivo; en Postgres sobrevive a
+un reinicio, a dos workers concurrentes y a una auditoría externa. Eso es lo que agrega.
 
 ```sql
--- Deuda §5.2: las repeticiones crudas cuentan como episodios independientes.
--- La PK hace imposible insertar un trial como si fuera un episodio.
+-- Persiste la regla de runner.py: un episodio es una celda, no un trial.
+-- La PK hace imposible que dos workers reintroduzcan la pseudorreplicación.
 create table episode (
   task_id        text not null,
   paradigm       text not null,
@@ -268,8 +274,8 @@ create table episode (
   primary key (task_id, paradigm, policy_version)
 );
 
--- Deuda §5.8 + BENCHMARK, disciplina de datos 7 y 8: "tocar final una sola vez".
--- Lo impone la base, no la disciplina.
+-- La contraparte durable de FinalLedger (app/certify.py:98): "tocar final una sola vez"
+-- deja de depender de un archivo local y pasa a ser una restricción de integridad.
 create table final_use_ledger (
   claim_id             text primary key,
   dataset_manifest_hash text not null,
@@ -414,12 +420,12 @@ que es exactamente lo que pasó en `app/`.
 
 ## 9. Orden de implementación
 
-Respeta `CIERRE-2026-08-27.es.md` §9: primero la validez del aprendizaje, después las
-capacidades. Construir sobre episodios pseudorreplicados y un final contaminado produciría
-una mejora aparente que el propio protocolo debería rechazar.
+La validez del aprendizaje ya se saneó en código. Lo que falta es que esas guardas
+sobrevivan fuera de un proceso: hoy un reinicio, un segundo worker o un auditor externo
+no tienen cómo verificarlas. Por eso la persistencia va primero y REC va último.
 
-1. Esquema Postgres y migración del ledger desde JSONL. Cierra §5.2 y §5.8 por
-   construcción: es la deuda bloqueante.
+1. Esquema Postgres y migración del ledger desde JSONL: hace durables las guardas que
+   `runner.py`, `consolidation.py` y `certify.py` ya imponen en proceso.
 2. `data/ports.py` y adapters; mover `mapo.core` a puro, con el test de imports.
 3. Ingesta fase 0: sensor `pypdfium2` → Docling con procedencia → chunk → embed →
    `Chunk_vN` → verify → flip de `live_pointer`.

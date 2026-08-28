@@ -1,0 +1,96 @@
+.composer {
+  padding: 14px 0 18px;
+  background: var(--panel);
+  border-top: 1px solid var(--rule);
+}
+
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 var(--gut);
+}
+
+.box {
+  background: var(--ground);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+.box:focus-within {
+  border-color: var(--graphite);
+}
+
+.box textarea {
+  display: block;
+  width: 100%;
+  padding: 11px 12px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: 400 15px/1.5 var(--sans);
+  resize: none;
+  outline: none;
+  max-height: 168px;
+}
+
+.flags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 2px 12px 8px;
+}
+.flag {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font: 400 11px/1 var(--mono);
+  color: var(--graphite);
+  cursor: pointer;
+}
+.flag input {
+  margin: 0;
+  accent-color: var(--halt);
+  cursor: pointer;
+}
+/* Declarar una acción irreversible cambia el resultado, así que se ve. */
+.flagOn {
+  color: var(--halt);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 10px 9px;
+}
+
+.hint {
+  font: 400 10px/1.5 var(--mono);
+  color: var(--graphite);
+}
+
+.send,
+.cancel {
+  margin-left: auto;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 2px;
+  font: 700 11px/1 var(--cond);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.send {
+  background: var(--live);
+  color: #fff;
+}
+.send:disabled {
+  background: var(--rule);
+  color: var(--graphite);
+  cursor: not-allowed;
+}
+.cancel {
+  background: none;
+  border: 1px solid var(--halt);
+  color: var(--halt);
+}

@@ -1,0 +1,37 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Hoja de plano: un plan se dibuja antes de que se construya nada.
+
+   Tres colores con UN significado cada uno. Nada más en la aplicación los usa:
+     --live     la decisión que sobrevive
+     --halt     gated — un humano tiene que intervenir
+     --abstain  deferred — abstención, que no es un error
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --ground: #dde2e5;
+  --panel: #f4f6f7;
+  --sunk: #d5dbdf;
+  --ink: #10171b;
+  --ink-soft: #222b31;
+  --graphite: #69747a;
+  --rule: #c2cace;
+  --rule-soft: #d3d9dc;
+
+  --live: #1b4de4;
+  --live-wash: #e8edfc;
+  --halt: #b3341e;
+  --halt-wash: #f7eae7;
+  --halt-ink: #5c1b0f;
+  --abstain: #8a6d1f;
+  --abstain-wash: #f6f1e2;
+  --abstain-ink: #4a3a0f;
+
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+
+  --rail: 296px;
+  --tray: 300px;
+  --gut: 20px;
+  --measure: 760px;
+}

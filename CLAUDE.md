@@ -36,10 +36,21 @@ Postgres ahora, DBOS después, Temporal sólo con disparadores escritos) y NO La
 nunca; Docling como extractor primario con procedencia página+bbox y un sensor barato
 —`pypdfium2`, no PyMuPDF, que es AGPL— decidiendo OCR antes de la primera pasada;
 Weaviate con hybrid y una colección por versión de índice, con `live_pointer` en Postgres
-como único flip atómico de promoción; Postgres como ledger epistémico con un esquema que
-hace estructuralmente imposibles las deudas §5.2 y §5.8 de `DISENO.es.md`; FastAPI con
-SSE resumible y eventos tipados, donde A3 buffea la respuesta hasta verificar citas.
-Ninguna de esas piezas está ejecutada.
+como único flip atómico de promoción; Postgres como ledger epistémico, que NO cierra
+deudas nuevas sino que hace durables las guardas que `runner.py`, `consolidation.py` y
+el `FinalLedger` de `certify.py` ya imponen en proceso; FastAPI con SSE resumible y
+eventos tipados, donde A3 buffea la respuesta hasta verificar citas. Ninguna de esas
+piezas está ejecutada.
+
+**Consola de prueba: `ui/`** (Vite + React 19 + TypeScript; `npm install && npm run dev`).
+Consume los mismos eventos tipados de `/v1/answer` y trae un modo demo para trabajarla sin
+motor y sin gastar tokens. Tres cosas que la hacen fiel al producto y no hay que romper:
+la **escalera de decisión** —los trece paradigmas tachándose por factibilidad, garantía y
+θ ANTES de que exista un token—; `done`/`gated`/`deferred` **estructuralmente distintos**,
+no tres colores del mismo cartel; y `irreversible`/`shared_writes`/`regulated` **declarados
+por el caller, jamás inferidos del texto** (`serve.py` los asienta como COMPUTED 1.0).
+La bandeja de contexto recalcula la poda aritmética en cada toggle: se ve qué paradigmas
+mata cada unidad antes de gastar nada. Detalle en `ui/README.md`.
 
 ## Orden de prioridad: EL PRODUCTO PRIMERO, EL PAPER DESPUÉS
 
@@ -106,7 +117,7 @@ paradigma es el caso medido primero, no el alcance del producto.
 - **Arquitectura física (2026-08-27, posterior y manda): `lab/ARQUITECTURA.es.md`.**
   Restricciones del autor: on-prem/Docker, Weaviate, single-tenant. Orquestación fase 0:
   Redis Streams + workers, **Temporal todavía NO** — entra sólo si dispara uno de los
-  gatillos escritos en su §2.1 (gate A3 parkeado días con timers, fan-out multi-máquina,
+  gatillos escritos en su §2.3 (gate A3 parkeado días con timers, fan-out multi-máquina,
   o un segundo lenguaje/servicio en el pipeline). LangGraph descartado, no pospuesto.
   Lo que NO cambia: **la capa de decisión nunca depende de un orquestador** y los
   paradigmas siguen siendo funciones async planas — el banco mide exactamente lo que
