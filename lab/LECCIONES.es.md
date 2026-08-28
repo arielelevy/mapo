@@ -312,6 +312,28 @@ ser una cantidad aprendida por región, protegida por la guarda.**
 
 ---
 
+### 2.4 Un contrato constructivo detiene el token, no la proposición · `MEDIDO`
+
+C-NUM hace que el modelo escriba **nombres de ranura y nunca dígitos**, así que ningún
+numeral inventado puede aparecer: el proyector lo garantiza por construcción. Contra eso se
+construyeron cinco familias de contraejemplo y **las cinco pasaron el contrato sin una sola
+queja**, mientras el control positivo emitía normalmente.
+
+Las cinco comparten una forma: **lo que falsea la oración vive en la prosa conectiva**
+—referente, modificador, negación, verbo, condicional— y **la prosa conectiva no ocupa
+ninguna ranura**. El proyector y el residuo son complementarios por construcción.
+
+> «Imposible de producir» es **falso** mientras el binding lo medie el modelo. Lo defendible
+> es *«verificado por construcción sobre `π_C`, con residuo declarado y medido»* — y un
+> residuo sin número no es una salvedad, es una excusa.
+
+La única dirección que lo achica es **agrandar el proyector**: llevar la prosa conectiva de
+«lo que el modelo escribe» a «lo que el contrato genera». Eso no elimina el residuo, lo
+**relocaliza** a la distancia entre la plantilla elegida y la que correspondía — más chica y,
+sobre todo, **enumerable**.
+
+---
+
 ## 9. Lo que este registro NO estableció
 
 Se escribe acá para que no se lo confunda con lo de arriba.

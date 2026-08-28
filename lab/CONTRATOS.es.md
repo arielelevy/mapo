@@ -92,11 +92,28 @@ mientras **todo** `π_C(o)` verifica. El contrato no falla; el contrato **no mir
 Tres familias donde buscarlo, y las tres son composicionales — surgen de combinar términos
 que individualmente pasan:
 
-| familia | forma del contraejemplo |
-|---|---|
-| **Referente** | el número correcto, atado al sujeto equivocado por la prosa conectiva |
-| **Alcance de agregación** | «excluyendo devoluciones» donde el `COMPUTED` era «incluyendo» — el modificador no está en ninguna ranura |
-| **Negación y condicional** | los términos son verdaderos y la oración que los liga invierte lo que afirman |
+**MEDIDO el 2026-08-27** (`_redteam_binding.py`, contra la implementación de C-NUM en
+`app/contracts.py`): **cinco familias construidas, cinco sobreviven. Residuo 100%.** El
+control positivo emite, así que el contrato tampoco rechaza de más.
+
+| familia | contraejemplo | ¿pasa el contrato? |
+|---|---|---|
+| **Referente** | «El total de **2025** fue 1200», con 1200 = `total_2024` | **sí** |
+| **Alcance de agregación** | «**Excluyendo devoluciones**, el total fue 1850», con 1850 = incluyéndolas | **sí** |
+| **Negación** | «**Ningún** mes superó los 430», con 430 = el máximo mensual | **sí** |
+| **Comparación** | «Las ventas **cayeron** a 1400», con 1400 > el trimestre anterior | **sí** |
+| **Condicional** | «**Si se aprueba** la ampliación, la capacidad llega a 500», con 500 = la actual | **sí** |
+
+**Y las cinco comparten una sola forma**, que es el hallazgo y no la lista:
+
+> Lo que hace falsa a la oración vive en la **prosa conectiva** —el referente, el
+> modificador, la negación, el verbo, el condicional— y **la prosa conectiva no ocupa
+> ninguna ranura**, así que ninguna ranura puede contradecirla.
+
+Eso convierte el residuo de una preocupación en una **cantidad con dirección**: C-NUM
+detiene por completo el número inventado y **no detiene nada** del binding. No es que el
+contrato sea débil — es que su proyector y el residuo son complementarios por
+construcción.
 
 **Consecuencia sobre lo que se puede afirmar.** Mientras el binding lo medie el modelo,
 «imposible de producir» es **falso**. La afirmación honesta es:
