@@ -67,6 +67,48 @@ class Provenance(str, Enum):
         return self.rank >= floor.rank
 
 
+def admissible_for_action(belief: "Belief", floor: "Provenance") -> bool:
+    """Si una creencia puede sostener una ACCION, no solo una estimacion.
+
+    DOS CONDICIONES, y son independientes. La procedencia tiene que llegar al piso — eso
+    es lo que ya se exigia — y el alcance tiene que ser **este request**. Un prior sobre
+    la poblacion puede ser aritmetica perfecta y aun asi no ser evidencia sobre lo que
+    esta por pasar: «en casos parecidos esto funciono» no es «acá esto es cierto».
+
+    Es la unica forma de que una asociacion aprendida entre a la base con su procedencia
+    honesta —`COMPUTED`, porque lo es— sin que eso la habilite a gatear lo irreversible.
+    """
+    return (
+        belief.provenance.at_least(floor)
+        and belief.scope is Scope.REQUEST
+    )
+
+
+class Scope(str, Enum):
+    """SOBRE QUE es la creencia: este request, o la poblacion de requests parecidos.
+
+    POR QUE HACE FALTA UN SEGUNDO EJE. `Provenance` ordena **como** se obtuvo una
+    creencia, y ese orden alcanzaba mientras todo lo que entraba a la base fuera sobre el
+    request de adelante. Una asociacion APRENDIDA rompe eso: es aritmetica exacta sobre un
+    ledger —o sea que por procedencia *parece* `COMPUTED`— y sin embargo no dice nada
+    sobre este pedido. Dice que en pedidos parecidos, antes, tal transicion acompaño al
+    exito.
+
+    Meterla como `COMPUTED` dejaria que una **regularidad estadistica gatee una accion
+    irreversible**, que es exactamente lo que el piso existe para impedir. Meterla como
+    `ELICITED` mentiria en el otro sentido: no es la opinion de un modelo, es una
+    frecuencia medida y reproducible.
+
+    El problema no era que faltara un casillero en la escala: era que la escala mide una
+    cosa y hacian falta dos. Con el alcance separado, una asociacion aprendida se declara
+    honesta en los dos ejes —`COMPUTED` sobre `POPULATION`— y queda estructuralmente fuera
+    de lo irreversible sin necesidad de degradar su procedencia.
+    """
+
+    REQUEST = "request"
+    POPULATION = "population"
+
+
 class Rejection(str, Enum):
     """Why a requirement was not met — as a value, not as a sentence.
 
@@ -122,6 +164,9 @@ class Belief:
     credence: float
     provenance: Provenance
     evidence: str = ""
+    # SOBRE QUE es. Por defecto, sobre este request — que es lo que era todo hasta que
+    # entraron las asociaciones aprendidas. Ver `Scope`.
+    scope: Scope = Scope.REQUEST
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.credence <= 1.0:

@@ -880,6 +880,40 @@ los veredictos.
 
 ---
 
+### 2.5 El retículo ordenaba una dimensión y hacían falta dos · `MÉTODO`
+
+`ASSUMED < ELICITED < OBSERVED < COMPUTED` ordena **cómo** se obtuvo una creencia, y
+alcanzaba mientras todo lo que entraba a la base fuera **sobre el request de adelante**.
+
+Una asociación aprendida rompe eso. Es aritmética exacta sobre un ledger —por procedencia
+**es** `COMPUTED`— y sin embargo no dice nada sobre este pedido: dice que en pedidos
+parecidos, antes, tal transición acompañó al éxito.
+
+| dónde ponerla | qué mentira sería |
+|---|---|
+| `COMPUTED` a secas | una **regularidad estadística podría gatear una acción irreversible**, que es exactamente lo que el piso existe para impedir |
+| degradada a `ELICITED` | no es la opinión de un modelo: es una frecuencia **medida y reproducible** |
+
+> **El problema no era que faltara un casillero en la escala: era que la escala mide una
+> cosa y hacían falta dos.** `Scope ∈ {REQUEST, POPULATION}` separa *sobre qué es* la
+> creencia de *cómo se obtuvo*, y el piso de las acciones pasa a exigir las dos: procedencia
+> suficiente **y** alcance de este request.
+
+Así la asociación entra honesta en los dos ejes —`COMPUTED` sobre `POPULATION`— y queda
+estructuralmente fuera de lo irreversible **sin degradarle la procedencia**.
+
+**Y un invariante viejo atajó un error de diseño en el camino.** `Belief` exige que
+`COMPUTED` lleve credencia exactamente 1,0, porque una computación con credencia menor no
+es una función pura del payload y la procedencia sería mentira. El primer intento ponía la
+*fuerza* de la asociación como credencia — y el invariante lo rechazó, con razón:
+
+> Lo que el ledger sostiene con certeza no es **que convenga** la transición: es que **su
+> fuerza medida vale lo que vale**. Eso sí es aritmética exacta. La proposición pasa a
+> afirmar la **medición**, con la fuerza en el valor, y quien quiera actuar la lee y decide
+> — la creencia no decide por él.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

@@ -1705,6 +1705,73 @@ def check_contract_names_its_deficit(ok: bool) -> bool:
     return ok
 
 
+# --- 37. sobre QUE es una creencia, no solo como se obtuvo ------------------------------
+#
+# EL RETICULO ORDENABA UNA DIMENSION Y HACIAN FALTA DOS. `Provenance` dice **como** se
+# obtuvo una creencia, y alcanzaba mientras todo lo que entraba a la base fuera sobre el
+# request de adelante.
+#
+# Una asociacion APRENDIDA rompe eso: es aritmetica exacta sobre un ledger —por procedencia
+# ES `COMPUTED`— y sin embargo no dice nada sobre este pedido. Dice que en pedidos
+# parecidos, antes, tal transicion acompaño al exito.
+#
+#   entrarla como COMPUTED    dejaria que una regularidad estadistica gatee una accion
+#                             irreversible, que es lo que el piso existe para impedir
+#   bajarla a ELICITED        mentiria en el otro sentido: no es la opinion de un modelo,
+#                             es una frecuencia medida y reproducible
+#
+# El problema no era que faltara un casillero en la escala: era que la escala mide una cosa
+# y hacian falta dos.
+def check_scope_is_a_second_axis(ok: bool) -> bool:
+    from app.association import AssociationTable
+    from app.beliefs import Belief, Provenance, Scope, admissible_for_action
+
+    print("\n--- 37. el alcance como segundo eje ---")
+
+    aqui = Belief("la unidad dice X", "X", 1.0, Provenance.COMPUTED)
+    ok &= check("una creencia sobre ESTE request al piso puede sostener una accion",
+                admissible_for_action(aqui, Provenance.OBSERVED))
+
+    prior = Belief("frecuencia en casos parecidos", 0.9, 1.0, Provenance.COMPUTED,
+                   scope=Scope.POPULATION)
+    ok &= check("un prior sobre la POBLACION no puede, con la misma procedencia - «en "
+                "casos parecidos esto funciono» no es «acá esto es cierto»",
+                not admissible_for_action(prior, Provenance.OBSERVED))
+    ok &= check("y no hizo falta degradarle la procedencia para lograrlo: sigue siendo "
+                "COMPUTED, porque lo es", prior.provenance is Provenance.COMPUTED)
+
+    ok &= check("el default es REQUEST - que es lo que era todo antes de que existieran "
+                "las asociaciones aprendidas", aqui.scope is Scope.REQUEST)
+
+    # Y la asociacion aprendida ya puede entrar a la base.
+    table = AssociationTable()
+    for _ in range(4):
+        table.observe("c2", ["search", "read", "answer"], was_good=True)
+    table.observe("c2", ["search", "search", "answer"], was_good=False)
+    beliefs = table.as_beliefs("c2", "search")
+    ok &= check("una asociacion aprendida se convierte en creencias", bool(beliefs))
+
+    if beliefs:
+        b = beliefs[0]
+        # LA PROPOSICION ES LA MEDICION, NO LA RECOMENDACION. El invariante de `Belief`
+        # —COMPUTED exige credencia 1,0— es lo que obligo a verlo: lo que el ledger
+        # sostiene con certeza no es que convenga la transicion, es que su fuerza medida
+        # vale lo que vale.
+        ok &= check("afirma la MEDICION y no la recomendacion - por eso puede ser "
+                    "COMPUTED con credencia 1,0 sin mentir",
+                    b.credence == 1.0 and b.provenance is Provenance.COMPUTED
+                    and "fuerza medida" in b.proposition, b.proposition)
+        ok &= check("la fuerza va en el VALOR, que es donde una regla la puede leer",
+                    isinstance(b.value, float) and 0.0 <= b.value <= 1.0, str(b.value))
+        ok &= check("y ninguna de ellas puede gatear una accion irreversible",
+                    not any(admissible_for_action(x, Provenance.OBSERVED)
+                            for x in beliefs))
+        ok &= check("la evidencia dice el conteo, no una adjetivacion",
+                    "episodios" in b.evidence, b.evidence[:48])
+
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -1976,6 +2043,7 @@ def main() -> int:
     ok = check_analysis_entrypoints(ok)
     ok = check_product_leaves_a_trace(ok)
     ok = check_contract_names_its_deficit(ok)
+    ok = check_scope_is_a_second_axis(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

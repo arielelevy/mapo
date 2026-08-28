@@ -33,6 +33,7 @@ probada sobre `(region, paradigma)`; lo unico que cambia es la clave.
 
 from __future__ import annotations
 
+from .beliefs import Belief, Provenance, Scope
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
@@ -112,6 +113,53 @@ class AssociationTable:
             if ctx == context and src == a
         ]
         return sorted(out, key=lambda pair: -pair[1])
+
+    def as_beliefs(self, context: str, source: str, floor: float = 0.0) -> list[Belief]:
+        """Lo aprendido sobre `source`, como creencias que la base puede recibir.
+
+        POR QUE ESTO NO PODIA EXISTIR HASTA AHORA. Una asociacion aprendida es aritmetica
+        exacta sobre un ledger, asi que por procedencia **es** `COMPUTED` — negarlo seria
+        mentir en un eje. Pero entrar como `COMPUTED` a secas dejaria que una regularidad
+        estadistica gatee una accion irreversible, que es lo que el piso existe para
+        impedir. Y bajarla a `ELICITED` mentiria en el otro sentido: no es la opinion de
+        un modelo, es una frecuencia medida y reproducible.
+
+        El reticulo no tenia el casillero porque el problema no era un casillero: ordenaba
+        **como** se obtuvo una creencia cuando ademas hacia falta **sobre que es**. Con
+        `Scope.POPULATION` la asociacion se declara honesta en los dos ejes y queda
+        estructuralmente fuera de lo irreversible sin degradar su procedencia.
+
+        `floor` filtra: por debajo de el la transicion no se afirma. `0.0` deja pasar
+        todo lo observado, que es distinto de lo nunca visto — eso no aparece.
+        """
+        out: list[Belief] = []
+        for successor, weight in self.successors(context, source):
+            if weight < floor:
+                continue
+            link = self.links[(context, source, successor)]
+            # LA PROPOSICION ES LA MEDICION, NO LA RECOMENDACION, y el invariante de
+            # `Belief` es lo que obligo a verlo: `COMPUTED` con credencia < 1 seria una
+            # procedencia mentirosa —«esto es una funcion pura del payload» y a la vez
+            # «no estoy seguro»—.
+            #
+            # Lo que el ledger sostiene con certeza no es que convenga `successor`: es
+            # que su fuerza medida vale lo que vale. Eso SI es aritmetica exacta, asi que
+            # entra a credencia 1,0 con su valor adentro. Quien quiera actuar lee el
+            # valor y decide; la creencia no decide por el.
+            out.append(Belief(
+                proposition=f"fuerza medida de `{source}` -> `{successor}`",
+                value=round(weight, 5),
+                credence=1.0,
+                provenance=Provenance.COMPUTED,
+                evidence=(
+                    f"{link.good} de {link.observations} episodios en `{context}` "
+                    f"con esa transicion terminaron bien"
+                ),
+                # LA MITAD QUE HACE ADMISIBLE A LA OTRA: es un prior sobre pedidos
+                # parecidos, no una observacion sobre este.
+                scope=Scope.POPULATION,
+            ))
+        return out
 
     def prune(self) -> list[tuple[str, str, str]]:
         """Sacar lo que llego al piso SIN haberse observado nunca.
