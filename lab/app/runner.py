@@ -328,6 +328,7 @@ class Runner:
         terse_tools: bool = False,
         demand_obligations: bool = False,
         shared_state: bool | None = None,
+        offer_board: bool = False,
     ) -> None:
         # Hybrid is the default because it is what a real deployment has. The degraded
         # arms exist to test whether the conclusion depends on retrieval quality, not to
@@ -374,6 +375,10 @@ class Runner:
         # la dimension contra los patrones, que es lo que `F-2` pide para poder atribuir
         # «el efecto dag_strategy» a la topologia o al estado compartido.
         self.shared_state = shared_state
+        # SEXTO FACTOR, y el que el autor pidio: el board COMO HERRAMIENTA, ofrecido a
+        # todos los patrones por igual. Es el unico que se puede cruzar `{con, sin} x
+        # {patrones}` de verdad, porque el board estructural solo existe en `dag`.
+        self.offer_board = offer_board
         self._retriever = arms[retriever_arm]
         # Kept so the surface can expose lexical and dense SEPARATELY alongside the
         # fused entry point. Offering only the fused view took the choice of modality
@@ -408,7 +413,9 @@ class Runner:
         if demand_obligations:
             suffix += "_oblig"
         if shared_state is not None:
-            suffix += "_board" if shared_state else "_noboard"
+            suffix += "_dagboard" if shared_state else "_nodagboard"
+        if offer_board:
+            suffix += "_boardtool"
         self._results_path = (
             settings.results_dir / f"{corpus_name}{suffix}_rows.jsonl"
         )
@@ -497,6 +504,7 @@ class Runner:
             terse_tools=self.terse_tools,
             demand_obligations=self.demand_obligations,
             shared_state=self.shared_state,
+            offer_board=self.offer_board,
         )
 
     def features_for(self, task: dict[str, Any], allow_derived: bool) -> Features:

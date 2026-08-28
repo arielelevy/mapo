@@ -35,6 +35,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from .board import Blackboard
 from .cognitive import COGNITIVE_TOOL_SPECS, WorkingState
 from .retrieval import CorpusView, LexicalRetriever, Retriever, tokenise
 
@@ -237,6 +238,7 @@ def specs_for(
     offer_read_all: bool = False,
     drop: tuple[str, ...] = (),
     terse: bool = False,
+    offer_board: bool = False,
 ) -> list[dict[str, Any]]:
     """The tool list for a surface variant.
 
@@ -268,23 +270,28 @@ def specs_for(
     read_all_spec = [
         t for t in ACCOUNTING_TOOL_SPECS if t["function"]["name"] == "read_all"
     ] if offer_read_all else []
+    # EN TODAS LAS VARIANTES, no solo en una: el board es un factor cruzado contra los
+    # patrones, y ofrecerlo en `cognitive` nada mas lo volveria una propiedad de esa
+    # variante — que es exactamente el pliegue del que `F-2` queria salir.
+    board_specs = list(BOARD_TOOL_SPECS) if offer_board else []
 
     if variant == "basic":
-        return _keep(list(TOOL_SPECS) + read_all_spec)
+        return _keep(list(TOOL_SPECS) + read_all_spec + board_specs)
     if variant == "accounting":
-        return _keep(list(TOOL_SPECS) + list(ACCOUNTING_TOOL_SPECS))
+        return _keep(list(TOOL_SPECS) + list(ACCOUNTING_TOOL_SPECS) + board_specs)
     if variant == "cognitive":
         return _keep(
             list(TOOL_SPECS)
             + list(ACCOUNTING_TOOL_SPECS)
             + list(COGNITIVE_TOOL_SPECS)
+            + board_specs
         )
     if variant == "managed":
         # Same tools as basic, deliberately: the difference under test is not what the
         # model CAN call but what the harness DOES to the history. The cognitive arm
         # measured that voluntary self-management does not happen (1 note, 1 compaction,
         # 0 plans in 28 rows); `managed` moves the bookkeeping to the environment.
-        return _keep(list(TOOL_SPECS) + read_all_spec)
+        return _keep(list(TOOL_SPECS) + read_all_spec + board_specs)
     raise ValueError(f"Unknown surface variant {variant!r}. Use one of {VARIANTS}.")
 
 
@@ -303,6 +310,56 @@ def specs_for(
 # contra el presupuesto declarado — texto completo si entra, resumenes de TODAS las
 # unidades si no. Nunca trunca en silencio, que seria lo peor: el agente creeria haber
 # visto todo y responderia desde un prefijo.
+
+# EL BLACKBOARD COMO HERRAMIENTA, disponible para TODOS los patrones (decision del autor,
+# 2026-08-28). Es la unica forma de que el estado compartido sea un FACTOR de verdad: un
+# board que solo existe adentro de `dag_strategy` no se puede cruzar contra los demas, y
+# entonces «el efecto dag_strategy» queda siendo la conjuncion de la topologia y el board.
+#
+# Y NO ES REDUNDANTE CON LA TRANSCRIPCION, que es lo que yo habia escrito y estaba mal. El
+# registro lo desmiente: bajo presupuesto, el texto leido sobrevive al 28% hasta la llamada
+# que responde (`note_retention`). Un apunte posteado al board sobrevive la compactacion;
+# la transcripcion no. Para un agente solo, el board es DURABILIDAD, no repeticion.
+#
+# NO ES FLUJO DE CONTROL. Escribir y leer estado compartido es una ACCION, como buscar o
+# leer. El invariante prohibe que el modelo decida que paradigma corre o si un gate pasa —
+# no que tome notas.
+BOARD_TOOL_SPECS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "post",
+            "description": (
+                "Post a finding to the shared board. It SURVIVES context compaction, "
+                "so post anything you will need later and might lose. Keep it short "
+                "and self-contained: a fact, not a reference to something above."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "finding": {
+                        "type": "string",
+                        "description": "One self-contained fact worth keeping.",
+                    }
+                },
+                "required": ["finding"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "board",
+            "description": (
+                "Read everything posted to the shared board so far, including findings "
+                "posted by other agents working on the same task."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+]
+
+
 AVAILABLE_IN: dict[str, tuple[str, ...]] = {
     "read_all": ACCOUNTING_VARIANTS,
     "coverage": ACCOUNTING_VARIANTS,
@@ -313,7 +370,12 @@ AVAILABLE_IN: dict[str, tuple[str, ...]] = {
 }
 
 
-def available(name: str, variant: str, offer_read_all: bool = False) -> bool:
+def available(
+    name: str,
+    variant: str,
+    offer_read_all: bool = False,
+    offer_board: bool = False,
+) -> bool:
     """Si `name` esta disponible en `variant`. Lo no listado esta en todas.
 
     El factor `offer_read_all` entra ACA tambien y no solo en `specs_for`: si la
@@ -322,6 +384,11 @@ def available(name: str, variant: str, offer_read_all: bool = False) -> bool:
     """
     if name == "read_all" and offer_read_all:
         return True
+    if name in ("post", "board"):
+        # LA DISPONIBILIDAD SIGUE A LA OFERTA, igual que `read_all`. Si no la siguiera,
+        # encender el factor ofreceria una tool que el dispatch despues rechaza — la
+        # separacion que §31 impide.
+        return offer_board
     return variant in AVAILABLE_IN.get(name, VARIANTS)
 
 
@@ -409,8 +476,18 @@ class ToolSurface:
     # `None` es «como cada patron venga de fabrica»: dag CON, react SIN. Es el regimen en
     # el que se midio todo hasta hoy, y decirlo `None` lo distingue de haberlo elegido.
     shared_state: bool | None = None
+    # FACTOR: ofrecer el board COMO HERRAMIENTA a todos los patrones. Distinto de
+    # `shared_state`, que gobierna el board ESTRUCTURAL de dag —el que escribe el codigo—.
+    # Fundirlos mediria dos cosas con un interruptor.
+    offer_board: bool = False
     calls: dict[str, int] = field(default_factory=dict)
+    board_posts: int = 0
+    board_reads: int = 0
     units_read: set[str] = field(default_factory=set)
+    # UN SOLO BOARD POR CELDA. `dag_strategy` escribe el suyo desde el codigo y la tool
+    # escribe el mismo objeto: si fueran dos, un sub-agente que postea no veria los
+    # hallazgos que el codigo asento, y habria dos «estados compartidos» a la vez.
+    board_state: Blackboard = field(default_factory=Blackboard)
     hallucinated: int = 0
     batched_reads: int = 0
     # Units any search has ever surfaced, and how many consecutive searches surfaced
@@ -619,6 +696,8 @@ class ToolSurface:
         unread = [u for u in self.view.unit_ids if u not in self.units_read]
         return {
             "units_read": len(self.units_read),
+            "board_posts": self.board_posts,
+            "board_reads": self.board_reads,
             "units_total": total,
             "fraction_read": round(len(self.units_read) / total, 3) if total else 1.0,
             "unread_unit_ids": unread[:40],
@@ -712,11 +791,30 @@ class ToolSurface:
         # obligatorio— y `ToolFailure` es lo que el loop compartido atrapa. Con
         # `ValueError` la misma llamada mataba la tarea en unos paradigmas y degradaba en
         # otros, asi que dos brazos se puntuaban distinto por el mismo error del modelo.
-        if not available(name, self.variant, self.offer_read_all):
+        if not available(name, self.variant, self.offer_read_all, self.offer_board):
             raise ToolFailure(
                 f"{name} no esta disponible en la superficie {self.variant}. "
-                f"Disponibles: {sorted(t['function']['name'] for t in specs_for(self.variant, self.offer_read_all, terse=self.terse_tools))}"
+                f"Disponibles: {sorted(t['function']['name'] for t in specs_for(self.variant, self.offer_read_all, terse=self.terse_tools,
+                          offer_board=self.offer_board))}"
             )
+
+        if name == "post":
+            texto = self._required(args, "finding", "post").strip()
+            # UN APUNTE VACIO NO SE GUARDA, y se dice: un board con entradas vacias hace
+            # que `board()` devuelva ruido y que el conteo de apuntes mienta sobre cuanto
+            # estado hay. Se rechaza la escritura, no la llamada.
+            if not texto:
+                return json.dumps({"posted": False, "reason": "apunte vacio"})
+            self.board_state.add_finding("agent", texto[:600])
+            self.board_posts += 1
+            return json.dumps({"posted": True, "entries": len(self.board_state.findings)})
+
+        if name == "board":
+            self.board_reads += 1
+            return json.dumps({
+                "entries": len(self.board_state.findings),
+                "board": self.board_state.render(),
+            })
 
         if name == "coverage":
             return json.dumps(self._coverage())
@@ -850,6 +948,8 @@ class ToolSurface:
             "calls": dict(sorted(self.calls.items())),
             "sequence": list(self.sequence),
             "units_read": len(self.units_read),
+            "board_posts": self.board_posts,
+            "board_reads": self.board_reads,
             "batched_reads": self.batched_reads,
             "hallucinated_units": self.hallucinated,
             "relevant_units_read": len(self.units_read & self.view.relevant),

@@ -1,75 +1,13 @@
-"""Estado compartido entre sub-agentes: una DIMENSION, no un paradigma.
+"""Compatibilidad: el blackboard vive en `app/board.py`.
 
-POR QUE VIVE ACA Y NO ADENTRO DE `dag.py`. Estaba definido dentro de `dag_strategy` y no
-lo usaba nadie mas, y eso tiene una consecuencia medible: `dag_strategy` es el mejor
-paradigma fijo en `gold_transfer` —el brazo contra el que el ruteo perdio en P15— y es la
-UNICA estructura con blackboard. Asi que lo que el registro llama «el efecto
-dag_strategy» es la conjuncion de dos cosas —la topologia de olas y el estado
-compartido— y nada en el registro las separa.
-
-Peor: mientras el blackboard viva adentro de un paradigma, la pregunta «¿`react` mejora
-con estado compartido?» no se puede ni formular. El catalogo se distingue por ESTRUCTURA
-DE CONTROL DE FLUJO; el estado compartido es otra dimension, y soldarla adentro de un
-brazo convierte un factor en una propiedad del brazo.
-
-Mover el modulo no mide nada por si solo — el comportamiento es identico y las suites lo
-confirman. Lo que habilita es la medicion: `{con blackboard, sin}` x `{react,
-dag_strategy}` sobre las celdas donde la descomposicion importa.
+SE MUDO PORQUE `tools.py` LO NECESITA. El board es una herramienta disponible para todos
+los patrones (correccion del autor, 2026-08-28), y `app/tools.py` no puede importar de
+`app/paradigms/` sin ciclo: `paradigms/__init__` importa `tools`. Un modulo de nivel
+superior lo rompe, y este archivo queda para que nada que ya importaba de aca se rompa.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from ..board import Blackboard
 
-
-@dataclass
-# DONDE ES FACTOR Y DONDE SERIA OTRO PATRON. `F-2` pedia cruzar `{board, sin} x {react,
-# dag}`, y la mitad de ese cruce NO SE PUEDE construir sin cambiar lo que se mide:
-#
-#   dag_strategy   FACTOR limpio. Las olas ya corren en secuencia, asi que el board es una
-#                  adicion encima: apagarlo deja las mismas olas, el mismo verify y los
-#                  mismos replans, y lo unico que cambia es si cada sub-agente ve lo que
-#                  los anteriores encontraron. Eso es exactamente una dimension
-#
-#   react          DEGENERADO. Es UN agente en un bucle: no hay entre quienes compartir, y
-#                  su transcripcion ya es el estado. Un «react con board» le agregaria al
-#                  prompt un resumen de lo que el prompt ya contiene, asi que la celda
-#                  medira redundancia, no estado compartido
-#
-#   map_reduce     SERIA OTRO PATRON. Sus llamadas son independientes por construccion —de
-#                  ahi que escale—. Darle estado compartido las vuelve secuenciales, y eso
-#                  cambia el grafo de control, que es la definicion de patron y no de
-#                  factor (`PATRON_O_FACTOR.es.md`)
-#
-#   handoff        LIMITE. Lo que viaja entre alcances ES su estado compartido minimo, asi
-#                  que quitarlo deja la topologia —alcances disjuntos, transferencia
-#                  autorizada por codigo— sin nada que transferir. Discutible; hasta que se
-#                  decida, no se mide, y no medirlo se dice.
-#
-# Asi que el cruce real es `{board, sin} x {dag_strategy}` mas los patrones donde la
-# dimension no aplica. Una celda vacia POR CONSTRUCCION no es un hueco del banco: es una
-# propiedad de la topologia, y llenarla con algo que se le parezca mediria otra cosa.
-
-
-class Blackboard:
-    """Shared state across sub-agents.
-
-    Only what the control structure actually reads: findings, visited units, and a
-    tool-call ledger used to avoid duplicated work between parallel agents.
-    """
-
-    findings: list[str] = field(default_factory=list)
-    visited_units: set[str] = field(default_factory=set)
-    tool_calls: set[str] = field(default_factory=set)
-
-    def add_finding(self, sub_id: str, text: str) -> None:
-        self.findings.append(f"[{sub_id}] {text.strip()}")
-
-    def render(self) -> str:
-        if not self.findings:
-            return "(blackboard empty — you are the first agent)"
-        lines = ["FINDINGS SO FAR (from parallel agents):"]
-        lines.extend(f"  {f}" for f in self.findings)
-        if self.visited_units:
-            lines.append(f"UNITS ALREADY READ: {', '.join(sorted(self.visited_units))}")
-        return "\n".join(lines)
+__all__ = ["Blackboard"]

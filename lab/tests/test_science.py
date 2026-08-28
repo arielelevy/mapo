@@ -1944,6 +1944,93 @@ def check_handoff_authorisation(ok: bool) -> bool:
     return ok
 
 
+def check_board_is_a_tool_for_everyone(ok: bool) -> bool:
+    """§50: el blackboard es una HERRAMIENTA, ofrecida a todos los patrones por igual.
+
+    CORRECCION DE LO QUE ESCRIBI ANTES (indicacion del autor). Habia dicho que
+    `{board, sin} x {react, dag}` no se podia construir: que en `react` el board era
+    redundante con la transcripcion y que en `map_reduce` seria otro patron. Las dos
+    mitades estaban mal, y lo que las da vuelta es que el board sea una TOOL:
+
+      react       NO es redundante, y el propio registro lo desmiente: bajo presupuesto el
+                  texto leido sobrevive al 28% hasta la llamada que responde. Un apunte en
+                  el board sobrevive la compactacion; la transcripcion no. Para un agente
+                  solo, el board es DURABILIDAD
+      map_reduce  con una tool no se vuelve secuencial: cada map puede postear y el reduce
+                  leer, y ninguna llamada depende de otra salvo que el modelo elija leer
+
+    NO ES FLUJO DE CONTROL. Escribir y leer estado compartido es una ACCION, como buscar.
+    El invariante prohibe que el modelo decida que paradigma corre o si un gate pasa, no
+    que tome notas.
+
+    Y SON DOS FACTORES, no uno: `shared_state` gobierna el board ESTRUCTURAL de dag —el que
+    escribe el codigo— y `offer_board` la tool. Fundirlos mediria dos cosas con un
+    interruptor.
+    """
+    import json
+    from app.retrieval import CorpusView, LexicalRetriever
+    from app.tools import ToolFailure, ToolSurface, VARIANTS, available, specs_for
+
+    print("\n--- 50. el board es una tool para todos ---")
+
+    docs = {f"u{i}": f"unidad {i}" for i in range(5)}
+    view = CorpusView(task_id="t", documents=docs, unit_ids=list(docs),
+                      relevant_units=["u1"])
+
+    def surface(**kw):
+        return ToolSurface(view=view, hybrid=LexicalRetriever(),
+                           semantic=LexicalRetriever(), lexical=LexicalRetriever(),
+                           variant=kw.pop("variant", "basic"), budget_tokens=40_000, **kw)
+
+    faltan = [
+        v for v in VARIANTS
+        if "post" not in {
+            t["function"]["name"]
+            for t in specs_for(v, False, frozenset(), offer_board=True)
+        }
+    ]
+    ok &= check(f"se ofrece en TODAS las variantes, no en una ({VARIANTS})", not faltan)
+    ok &= check("y apagado no esta en ninguna: el default es el regimen ya medido",
+                all("post" not in {t["function"]["name"]
+                                   for t in specs_for(v, False, frozenset())}
+                    for v in VARIANTS))
+    ok &= check("la disponibilidad sigue a la oferta, como `read_all`",
+                available("post", "basic", offer_board=True)
+                and not available("post", "basic"))
+
+    s = surface(offer_board=True)
+    ok &= check("postear devuelve cuantas entradas hay, no solo «ok»",
+                json.loads(s.dispatch("post", {"finding": "AC-7741 es de Valerio"}))
+                == {"posted": True, "entries": 1})
+    ok &= check("un apunte vacio NO se guarda y se dice: un board con ruido hace que el "
+                "conteo mienta sobre cuanto estado hay",
+                json.loads(s.dispatch("post", {"finding": "   "}))["posted"] is False)
+    leido = json.loads(s.dispatch("board", {}))
+    ok &= check("leer devuelve lo posteado, y sigue siendo una sola entrada",
+                leido["entries"] == 1 and "AC-7741" in leido["board"])
+    ok &= check("los contadores entran al reporte: un factor que se enciende y no se "
+                "puede medir es una capacidad declarada y no ejecutada",
+                s.usage()["board_posts"] == 1 and s.usage()["board_reads"] == 1)
+
+    try:
+        surface().dispatch("post", {"finding": "x"})
+        ok &= check("sin el factor la tool no existe", False)
+    except ToolFailure:
+        ok &= check("sin el factor la tool no existe: se rechaza, no se ignora", True)
+
+    # UN SOLO BOARD POR CELDA: el que `dag` escribe desde el codigo es el mismo que la
+    # tool. Dos serian dos estados compartidos a la vez.
+    from app.board import Blackboard
+    ok &= check("la superficie ES la duena del board, asi que dag y la tool comparten uno",
+                isinstance(surface().board_state, Blackboard))
+
+    from app.tools import ToolSurface as TS
+    ok &= check("los dos factores estan separados y no se funden en un interruptor",
+                "shared_state" in TS.__dataclass_fields__
+                and "offer_board" in TS.__dataclass_fields__)
+    return ok
+
+
 def check_retrieval_is_a_factor(ok: bool) -> bool:
     """§49: la recuperacion es un FACTOR cruzado, y un brazo que llama al modelo se cobra.
 
@@ -2925,6 +3012,7 @@ def main() -> int:
     ok = check_who_sets_the_dial(ok)
     ok = check_the_code_draws_the_graph(ok)
     ok = check_retrieval_is_a_factor(ok)
+    ok = check_board_is_a_tool_for_everyone(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

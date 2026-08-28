@@ -1597,6 +1597,42 @@ paradigma admitido corriendo una forma que su propia cota prohíbe**.
 
 ---
 
+### 5.17 «No se puede construir» era mi error, no una propiedad de la topología · `CORRECCIÓN`
+
+Escribí que el cruce `{board, sin} × {react, dag}` que pedía `F-2` **no se podía construir**,
+con dos argumentos que sonaban estructurales:
+
+| | lo que escribí | por qué estaba mal |
+|---|---|---|
+| `react` | degenerado: un agente en un bucle, **su transcripción ya es el estado** | el propio registro lo desmiente — bajo presupuesto el texto leído sobrevive al **28%** hasta la llamada que responde (`note_retention`). Un apunte en el board **sobrevive la compactación**; la transcripción no |
+| `map_reduce` | sería otro patrón: vuelve **secuenciales** unas llamadas independientes | sólo si el board es estructural. Con una **tool**, cada map puede postear y el reduce leer, y ninguna llamada depende de otra salvo que el modelo elija leer |
+
+Lo que da vuelta las dos mitades es la corrección del autor: **el board tiene que ser una
+herramienta, disponible para todos**. Y entonces para un agente solo el board no es un
+resumen de lo que el prompt ya contiene — es **durabilidad**, que es un mecanismo distinto y
+medible.
+
+> Y no es flujo de control. Escribir y leer estado compartido es una **acción**, como buscar
+> o leer. El invariante prohíbe que el modelo decida qué paradigma corre o si un gate pasa;
+> no que tome notas.
+
+**Son dos factores y no uno, y fundirlos mediría dos cosas con un interruptor:**
+
+| | |
+|---|---|
+| `shared_state` | el board **estructural** de `dag`, que escribe el **código** en cada ola |
+| `offer_board` | la **tool**, ofrecida a todos por igual — la única cruzable `{con, sin} × {patrones}` |
+
+Y **un solo board por celda**: el que `dag` escribe desde el código es el mismo objeto que
+la tool. Si fueran dos, un sub-agente que postea no vería los hallazgos que el código asentó,
+y habría dos «estados compartidos» a la vez.
+
+**La forma del error vale más que el error.** Dije «no se puede construir» de algo que sí se
+podía, y el argumento se apoyaba en un supuesto —que la transcripción conserva lo leído— que
+**este mismo banco ya había medido falso**. Tenía el número a mano y razoné sin él.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

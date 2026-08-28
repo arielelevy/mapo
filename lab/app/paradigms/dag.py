@@ -305,7 +305,10 @@ def dag_strategy(
 ) -> Result:
     """Plan -> waves -> verify -> replan (<=3) -> synthesise, over a blackboard."""
     usage = Usage()
-    board = Blackboard()
+    # EL MISMO OBJETO que la tool escribe. Dos boards serian dos «estados
+    # compartidos» a la vez, y un sub-agente que postea no veria lo que el codigo
+    # asento en las olas anteriores.
+    board = surface.board_state
     query = task["question"]
     unit_ids = surface.unit_ids()
     iterations = 0
