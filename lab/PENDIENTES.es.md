@@ -57,7 +57,7 @@
 - [ ] AR-4 · baseline honesto: contra HyDE y RAG plano, no contra nada
 
 **La fase de entendimiento — la mitad que S-3 declaró faltante**
-- [ ] **U-1** · fase que emite **demandas tipadas** del request (`requires_exhaustive`, `needs_decomposition`, …), no un float de conclusión
+- [ ] **U-1** · fase que emite **demandas tipadas** del request, no un float de conclusión. **Polaridad corregida**: la exhaustividad es *implícita* en «listame los nombres», así que lo raro no es pedir todo — lo raro es que alcance una muestra
 - [ ] **U-2** · que **la regla** combine demanda × material — resuelve los 4 falsos positivos de C4 sin heurísticas nuevas
 - [ ] **U-3** · entran como `ELICITED`: el modelo lee la pregunta, no puede superar ese rango
 - [ ] **U-4** · `requires_exhaustive` se **verifica** con C-COMPLETE — el único camino a promoverla
@@ -529,6 +529,28 @@ Falta la mitad de la información, y la mitad que falta es **qué exige la pregu
 direcciones y **TODOS** los nombres es un requisito real y medible — pero *no siempre es
 necesario*. Hoy nada en el request lo declara, así que la cobertura se persigue igual en
 tareas que no la piden y se paga sin comprarse nada.
+
+**Corrección importante sobre la forma de esa demanda (autor, 2026-08-28).** No es un flag
+que alguien pone: **es implícita en la forma del pedido.** «Listame las direcciones» ya
+significa *todas* las direcciones; nadie escribe «listame todas las direcciones». El plural
+imperativo carga la exhaustividad, y por eso pasa desapercibida.
+
+Eso invierte la polaridad de U-1 y cambia qué hay que detectar:
+
+| encuadre | qué se busca | qué tan frecuente |
+|---|---|---|
+| ~~el que tenía~~ | ¿este request **declara** que quiere todo? | raro — casi nadie lo dice |
+| **el correcto** | ¿alcanza una **muestra**? | raro — el default de una enumeración es *todo* |
+
+El trabajo de la fase de entendimiento no es cazar declaraciones excepcionales: es **hacer
+explícita y tipada una demanda que el pedido ya trae implícita**.
+
+**Y la consecuencia operativa es dura.** Una enumeración que contesta con un subconjunto
+**está mal**, y en producción nada lo detecta. En el banco sí se ve —el F1 contra gold
+castiga la respuesta incompleta— pero eso es una propiedad del banco, no del producto: sin
+gold, la única forma de saber que una respuesta está completa es el contrato. Es
+exactamente `C-COMPLETE`, y su **dominio no lo declara el llamador: lo implica la forma de
+la pregunta.**
 
 **Lo que el producto tiene hoy es del tamaño equivocado.** `FeatureExtractor._derive` le
 pide al modelo **un solo float**, `coupling`. Eso es pedirle una **conclusión** —«¿está

@@ -506,6 +506,27 @@ un veredicto de acoplamiento que no está en posición de emitir.
 
 ---
 
+### 8.5 La demanda más importante del request es la que nadie escribe · `MÉTODO`
+
+«Listame las direcciones» significa **todas** las direcciones. Nadie escribe «listame
+*todas* las direcciones»: el plural imperativo ya carga la exhaustividad, y por eso pasa
+desapercibida en el diseño.
+
+Eso invierte qué hay que detectar. No se trata de cazar el request excepcional que
+*declara* que quiere todo — se trata de reconocer que **el default de una enumeración es
+todo**, y que lo excepcional es que alcance una muestra.
+
+**Y en producción nada lo verifica.** Una enumeración que contesta con un subconjunto está
+mal, punto. En un banco se ve, porque el F1 contra gold castiga la respuesta incompleta —
+pero eso es una propiedad del *banco*. Sin gold, la única forma de saber que una respuesta
+está completa es un contrato de completitud, y **su dominio no lo declara el llamador: lo
+implica la forma de la pregunta.**
+
+> Las demandas que el diseño olvida son las que el lenguaje ya expresa sin decirlas. Y son
+> justamente las que un sistema sin gold no puede recuperar después.
+
+---
+
 ## 9. Lo que este registro NO estableció
 
 Se escribe acá para que no se lo confunda con lo de arriba.
