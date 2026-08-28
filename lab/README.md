@@ -641,6 +641,37 @@ cleared, routing degenerates to the fallback on 20 of 22 tasks. **The binding co
 is the probe, and it is now the only thing between the record and an answer about
 selection.**
 
+### P10a's falsification survives a serious objection (2026-08-28, `_audit_graph_index.py`, zero tokens)
+
+**The objection, and it was a good one.** `graph_traverse` was falsified at u=0.000 on both
+coupled cells after a ~280k-token index. But that index is not built with NER: it asks the
+model, unit by unit, to *"list the entities and directed relations"*, and accepts whatever
+comes back **without verifying anything** — not that the entity appears in the text, not
+that the relation exists. Set beside the probe, which requires a reference to appear
+LITERALLY and records the span offset, the asymmetry is stark: this paradigm was measured
+with an input of exactly the class the product's own invariant refuses to admit as evidence.
+
+If the graph were wrong, u=0.000 would say nothing about traversal.
+
+**Checked, and the objection does not survive.**
+
+| | |
+|---|---|
+| entities appearing **literally** in the unit that declares them | **177/177 and 175/175 — 100%** |
+| `c3-000-h1` chain `memo-000 → memo-001` | **connected in the index** |
+| `c3-001-h2` chain `memo-008 → memo-010 → memo-011` | **connected, every hop** |
+
+The extractor was not hallucinating and **the traversal had exactly the edges it needed**.
+It walked them and still returned "Not found" at u=0.000 on both cells. P10a measured the
+thesis, not its dependency, and the falsification stands — **stronger than before, because
+the obvious way to dismiss it has now been closed with evidence rather than left open.**
+
+**The design risk is real anyway and is recorded separately.** That the extractor happened
+to be accurate here is a fact about this corpus, not a property of the mechanism: nothing in
+the index construction *requires* grounding, so a different corpus could poison the graph
+silently. If `graph_traverse` were ever revived, the index would need the probe's discipline
+— accept an entity only where it appears literally, and record the span.
+
 ### The same bar, applied to the incumbents (2026-08-28, `_audit_catalog.py`, zero tokens)
 
 A new candidate needs a registered prediction, a falsification criterion and a run before
