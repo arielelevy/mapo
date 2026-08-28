@@ -402,6 +402,10 @@ class ToolSurface:
     #
     # Sin este contador el sobrecosto no se puede atribuir, y `calls` no sirve de proxy.
     tooled_calls: int = 0
+    # Unidades leidas que SIGUEN en la historia al responder. Ver
+    # `note_retention`: el recall mide que se leyo, esto que sobrevivio.
+    retained_chars: int = 0
+    read_chars: int = 0
     # Shared across every agent working on the task: a note written by one sub-agent is
     # readable by the next. That persistence is the point — a synthesis prompt cannot
     # recover what a sub-agent knew and did not write down.
@@ -410,6 +414,51 @@ class ToolSurface:
     def note_malformed(self) -> None:
         """El modelo no entrego la forma pedida. Lo llama `parsing.py`, no el paradigma."""
         self.malformed_json += 1
+
+    def note_retention(self, messages: list[dict[str, Any]]) -> None:
+        """Cuantas de las unidades LEIDAS siguen en la historia al responder.
+
+        El recall dice si la evidencia se leyo. Esto dice si sobrevivio hasta la llamada
+        que responde, que es el segundo eslabon y nunca estuvo instrumentado.
+
+        En `basic` no hay compactacion, asi que esto da 1,0 siempre — y `basic` es la
+        variante de TODOS los estudios medidos. Que de 1,0 no es un resultado sobre la
+        retencion: es que ahi nada puede sacar evidencia de la historia. La medida
+        empieza a decir algo en `cognitive` y `managed`.
+        """
+        if not self.units_read:
+            self.retained_chars = 0
+            self.read_chars = 0
+            return
+
+        # SE MIDE EL TEXTO, NO LA MENCION, y la diferencia no es sutil.
+        #
+        # La compactacion NO borra: degrada el texto completo a un stub que CONSERVA EL
+        # ID —«nothing is deleted, only demoted; the id makes it re-readable»—. Contar
+        # ids presentes daba retencion 1,0 en la variante que compacta, o sea que medir
+        # la mencion reportaba «todo sobrevivio» exactamente donde nada sobrevivio.
+        #
+        # Se cuenta cuanto del texto leido sigue en la historia, como RATIO y sin umbral:
+        # elegir un corte seria otra constante a mano, y el ratio se puede cortar despues
+        # con un numero derivado.
+        historia = " ".join(
+            str(m.get("content") or "") for m in messages if m.get("role") == "tool"
+        )
+        leido = sum(len(self.view.documents[u]) for u in self.units_read
+                    if u in self.view.documents)
+        # Cuanto de lo leido sigue presente: se acota por lo leido porque la historia
+        # tambien lleva prompts y resultados de busqueda que no son texto de unidad.
+        self.retained_chars = min(len(historia), leido)
+        self.read_chars = leido
+
+        # UNA MEDIDA HONESTA EN VEZ DE DOS, UNA DE LAS CUALES MIENTE. El primer intento
+        # contaba UNIDADES cuyo texto seguia presente, buscando sus primeros caracteres.
+        # El stub de compactacion conserva justamente los primeros ~220, asi que ese
+        # conteo daba 4 de 4 mientras el texto real caia a un 28%.
+        #
+        # Queda el RATIO de caracteres, que no tiene ese punto ciego y ademas no necesita
+        # umbral: cortar «retenido / no retenido» seria otra constante a mano, y el ratio
+        # se puede cortar despues con un numero derivado.
 
     def note_dropped(self, n: int) -> None:
         """Elementos que llegaron incompletos adentro de una forma correcta."""
@@ -747,6 +796,14 @@ class ToolSurface:
             "barren_total": self.barren_total,
             "barren_refusals": self.barren_refusals,
             "tooled_calls": self.tooled_calls,
+            # DOS medidas, y la segunda es la que dice algo donde hay compactacion:
+            # cuantas unidades conservan su texto, y que fraccion del texto sobrevive.
+            # Que FRACCION del texto leido sigue en la historia al responder.
+            # `None` si no se leyo nada: sin denominador no hay fraccion.
+            "retention": (round(self.retained_chars / self.read_chars, 3)
+                          if self.read_chars else None),
+            "retained_chars": self.retained_chars,
+            "read_chars": self.read_chars,
             "stop_on_barren": self.stop_on_barren,
             "stall_warnings": self.stall_warnings,
             "bulk_read_refusals": self.bulk_read_refusals,

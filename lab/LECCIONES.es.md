@@ -1121,6 +1121,38 @@ donde un producto se juega la primera impresión.
 
 ---
 
+### 6.4 La retención no se podía medir donde se midió todo lo demás · `MEDIDO`
+
+El recall de evidencia es la variable dominante del resultado —brecha `+0,533`, y predice
+fuera de muestra al 60% desde el paradigma contra 3,8% desde la región—. Pero mide si la
+evidencia **se leyó**. El segundo eslabón —si **sobrevivió** hasta la llamada que
+responde— nunca estuvo instrumentado.
+
+Instrumentado ahora, y lo primero que dice es por qué faltaba:
+
+| variante | leído | retenido | retención |
+|---|---:|---:|---:|
+| `basic` | 29.600 | 29.600 | **1,000** |
+| `managed` | 29.600 | **8.314** | **0,281** |
+
+> **En `basic` la retención es 1,0 por construcción**: nada saca evidencia de la historia,
+> porque no hay compactación. Y `basic` es la variante de **todos** los estudios medidos.
+> La medida no faltaba por descuido: **no tenía nada que decir donde se midió**.
+
+Es el mismo patrón que ya apareció con los detectores, las entidades y el turno único: **el
+banco no puede ver una variable que su propio régimen vuelve constante.**
+
+**Y construirla mostró un punto ciego que casi la deja inservible.** El primer intento
+contaba **unidades** cuyo texto siguiera presente, buscando sus primeros caracteres. Pero la
+compactación **no borra**: degrada a un stub que conserva el id **y los primeros ~220
+caracteres**. Ese conteo daba **4 de 4 retenidas** mientras el texto real caía al 28%.
+
+> **Medir la mención en lugar del texto reporta «todo sobrevivió» exactamente donde nada
+> sobrevivió.** Queda una sola medida —el ratio de caracteres— en vez de dos, una de las
+> cuales mentía. Y sin umbral: cortar «retenido / no retenido» sería otra constante a mano.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

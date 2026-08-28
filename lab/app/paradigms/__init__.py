@@ -135,6 +135,19 @@ def _run_tool_loop(
             # cognitive arm measured the model will not do voluntarily.
             manage_history(messages)
 
+    # M-2, EL SEGUNDO ESLABON. El recall mide si la evidencia se LEYO; esto mide si
+    # SOBREVIVIO hasta la llamada que responde. No son lo mismo: un resultado de tool
+    # queda en la historia y se re-envia cada vuelta, salvo que la compactacion lo saque.
+    #
+    # Se cuenta por CONTENCION de ids declarados —una lista cerrada— adentro de los
+    # resultados que quedaron en la historia. No es parsear prosa: la direccion es buscar
+    # una lista conocida en un texto, no extraer del texto que ids hay.
+    #
+    # Y UNA SALVEDAD QUE ES EL HALLAZGO. En `basic` no hay compactacion, asi que la
+    # retencion es 1,0 POR CONSTRUCCION — y `basic` es la variante de todos los estudios
+    # medidos. La medida solo dice algo donde algo puede sacar evidencia de la historia.
+    surface.note_retention(messages)
+
     return completion, usage, messages, iterations
 
 
