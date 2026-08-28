@@ -35,7 +35,8 @@ from .decide import decide as decide_once
 from .features import measure_continuation
 from .llm import LLMClient, SealedCacheMiss, SeededClient, Usage
 from .metrics import Observation, Study
-from .paradigms import COST_PRIORS, FALLBACK, REGISTRY, Infeasible
+from .fsio import exclusive
+from .paradigms import COST_PRIORS, FALLBACK, Infeasible, REGISTRY, RETIRED
 from .embeddings import EmbeddingClient
 from .retrieval import CorpusView, Retriever, build_arms
 from .tools import VARIANTS, ToolSurface
@@ -289,6 +290,28 @@ class Runner:
         task_ids: list[str] | None = None,
         workers: int = 1,
     ) -> list[Row]:
+        """Como `_run_cross_product`, con un solo escritor por archivo de resultados.
+
+        Dos corridas sobre el mismo corpus escriben las MISMAS celdas en el mismo
+        `.jsonl`, y `study()` promedia por celda contando cada fila: la celda duplicada
+        pesa el doble y ninguna estadistica lo denuncia. El lock convierte eso en una
+        excepcion, que es la unica forma de enterarse.
+        """
+        with exclusive(self._results_path, owner=f"corpus={self._corpus_name}"):
+            return self._run_cross_product(
+                paradigms=paradigms, limit=limit, resume=resume,
+                repeat=repeat, task_ids=task_ids, workers=workers,
+            )
+
+    def _run_cross_product(
+        self,
+        paradigms: list[str] | None = None,
+        limit: int | None = None,
+        resume: bool = True,
+        repeat: int = 1,
+        task_ids: list[str] | None = None,
+        workers: int = 1,
+    ) -> list[Row]:
         """Run the cross product, `repeat` times per cell.
 
         repeat > 1 is what makes the noise floor measurable. Since gpt-5-chat refuses
@@ -297,7 +320,14 @@ class Runner:
         """
         if repeat < 1:
             raise ValueError("repeat must be >= 1")
-        selected = paradigms or sorted(REGISTRY)
+        if paradigms:
+            retired = sorted(set(paradigms) & RETIRED)
+            if retired:
+                raise ValueError(
+                    f"Paradigmas retirados, no se corren mas: {retired}. "
+                    "Su dato historico se replaya desde las filas ya pagadas."
+                )
+        selected = paradigms or sorted(set(REGISTRY) - RETIRED)
         # An explicit task list beats `limit`: probing whether a specific feature cell
         # discriminates needs those tasks, not the first N in generation order.
         if task_ids:

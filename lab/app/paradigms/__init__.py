@@ -352,6 +352,16 @@ def reflection(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) ->
 
 ParadigmFn = Callable[[LLMClient, ToolSurface, dict[str, Any]], Result]
 
+# Retirados: siguen en el REGISTRY porque su dato historico se replaya y las filas ya
+# pagadas hay que poder leerlas, pero NINGUNA corrida nueva los incluye.
+#
+# `cot` esta retirado por decision escrita (2026-08-26): quedo dominado por `direct` en
+# toda celda medida — misma utilidad, nunca mas barato — y la ingenieria de prompts no
+# es un patron. Se conserva como control nulo: es la evidencia de que el andamiaje por
+# prompt no compra nada. El default de `run_cross_product` lo excluye, y pedirlo por
+# nombre levanta excepcion en vez de correrlo callado.
+RETIRED: frozenset[str] = frozenset({"cot"})
+
 REGISTRY: dict[str, ParadigmFn] = {
     "direct": direct,
     "cot": cot,

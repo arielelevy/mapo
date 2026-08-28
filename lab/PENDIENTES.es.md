@@ -147,8 +147,17 @@ y del banco.
 ## 3. Code review — MEDIUM abiertos
 
 Del bloque de `code-review-2026-08-27.md`. Los bloques CRÍTICO y HIGH están aplicados;
-de los MEDIUM se aplicaron M2, M4, M5, M6, M7, M9, M12 y M19. **Verificar antes de
-arreglar**: esta tabla se armó por grep y alguno puede haberse cerrado de rebote.
+de los MEDIUM se aplicaron M2, M4, M5, M6, M7, M9, M12, M19 y —el 2026-08-27— **M3, M11,
+M17 y M18**. **Verificar antes de arreglar**: esta tabla se armó por grep y alguno puede
+haberse cerrado de rebote.
+
+**Los que quedan esperan a que P16 cierre, y por una razón concreta**: `_analyze_p16.py`
+llama a `router.plan`, que pasa por factibilidad y por reglas. **M10** (el `GIST_CHARS`
+inflado) y **M8** (la constante de supresión de sonda) cambiarían qué paradigmas se podan
+y qué regla dispara, así que moverlos ahora reescribiría el veredicto congelado por debajo.
+Van en el mismo turno que B2. **M1, M13, M14 y M16** tocan la ejecución de los paradigmas
+o la consolidación: con una corrida a mitad de camino, una fila que hoy crashea pasaría a
+degradar y el dato dejaría de ser homogéneo. También esperan.
 
 | # | Dónde | Qué |
 |---|---|---|

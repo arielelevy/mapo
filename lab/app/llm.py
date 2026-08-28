@@ -107,8 +107,14 @@ class _Throttle:
                     return
                 deficit = want - self._available
                 wait = deficit / max(self._rate, 1.0)
-            self.throttled_seconds += wait
-            time.sleep(min(wait, 30.0))
+                # Contabilizar lo que se DUERME, no lo que se calculo, y adentro del
+                # lock. Con `wait` de 100 s se sumaban 100 y se dormian 30, y la vuelta
+                # siguiente volvia a sumar: el contador inflaba el tiempo de throttle
+                # sin que nada lo desmintiera. Y `+=` fuera del lock es lectura-
+                # modificacion-escritura desde varios workers, que ademas pierde sumas.
+                slept = min(wait, 30.0)
+                self.throttled_seconds += slept
+            time.sleep(slept)
 
     def on_rate_limited(self) -> None:
         with self._lock:

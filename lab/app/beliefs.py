@@ -540,7 +540,7 @@ class Calibration:
             low, high = i * width, (i + 1) * width
             # Upper edge inclusive on the last bin so credence 1.0 is counted.
             bucket = [
-                correct for credence, correct in self._observations
+                (credence, correct) for credence, correct in self._observations
                 if low <= credence < high or (i == self._bins - 1 and credence == 1.0)
             ]
             if not bucket:
@@ -548,8 +548,13 @@ class Calibration:
             rows.append({
                 "bin": f"[{low:.1f},{high:.1f})",
                 "n": len(bucket),
-                "stated_mid": round((low + high) / 2, 3),
-                "observed_accuracy": round(sum(bucket) / len(bucket), 4),
+                # La MEDIA de lo declarado en el bin, no el centro del bin. Con cinco
+                # bins de ancho 0,2 el centro se equivoca hasta 0,1 de forma sistematica
+                # — y 0,1 es exactamente `max_ece`, el umbral que decide si la credencia
+                # elicitada puede gobernar una decision. O sea que el error del
+                # estimador alcanzaba solo para dar vuelta el veredicto que estima.
+                "stated_mean": round(sum(c for c, _ in bucket) / len(bucket), 4),
+                "observed_accuracy": round(sum(k for _, k in bucket) / len(bucket), 4),
             })
         return rows
 
@@ -560,7 +565,7 @@ class Calibration:
             return None
         total = sum(r["n"] for r in rows)
         return round(
-            sum(r["n"] * abs(r["stated_mid"] - r["observed_accuracy"]) for r in rows)
+            sum(r["n"] * abs(r["stated_mean"] - r["observed_accuracy"]) for r in rows)
             / total,
             5,
         )
