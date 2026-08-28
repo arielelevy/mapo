@@ -1184,6 +1184,45 @@ base medible en el régimen que el producto apunta**. La medida sí.
 
 ---
 
+### 7.17 Cuatro veces el mismo patrón es una regularidad, y se busca entera · `MÉTODO`
+
+En un día aparecieron cuatro capacidades **completas, declaradas, que ningún camino
+ejecutaba**: `theta_may_learn_online` en el perfil que nadie leía, la calibración que
+ninguno de cinco sitios pasaba, las particiones descubiertas sobre ejes inevaluables, y la
+supersesión del costo prometida en un comentario. **Ninguna rompía nada.** El sistema
+andaba, y una garantía que alguien enunció no existía.
+
+Buscarlas de a una es esperar a tropezarse. Un barrido mecánico —nombres definidos cuyo
+único uso es su propia serialización o un `print`— produjo **20 candidatos**. La mayoría
+son falsos positivos (un prompt usado dentro de un f-string), y eso está bien: **la lista no
+es un veredicto**, cada caso se decide leyendo, y esa diferencia no la puede hacer un grep.
+
+Cinco eran reales, y la peor lleva su propósito escrito al lado:
+
+> `REGION_VOCABULARY = "regions/2-continuation"`, con este comentario encima: *«un θ
+> ajustado bajo un vocabulario **nunca debe consumir regiones de otro**, y el EXPLAIN
+> registra cuál habló la decisión»*. **Nada lo estampaba en ninguna parte.**
+
+Es el mismo agujero que la huella de decodificación, con la misma consecuencia: dos filas
+de vocabularios distintos son indistinguibles al leerlas, así que se promedian. **P15 pagó
+exactamente eso** — el cuarto segmento del vocabulario le costó a θ toda su confianza, y
+ninguna fila decía bajo cuál había sido computada. Ahora se estampa, y la lectura **se
+niega** a mezclar.
+
+Las otras cuatro, con lo que cada una enseña:
+
+| muerta | qué enseñaba |
+|---|---|
+| `MAX_ATTEMPTS = 5` | resto del diseño anterior, **contradicho por el comentario ocho líneas abajo** —el presupuesto de reintento es tiempo, no intentos—. Una constante muerta que nombra un tope **se lee como un tope que existe** |
+| `GUARANTEED_FULL_READ` | una propiedad declarada de tres brazos que nada consulta ni impone |
+| `PRUNE_AFTER_CYCLES = 3` | la poda por ciclos **nunca ocurre** |
+| `HANDOFF_FLOOR` | **mía, de una hora antes**: declarada en el patrón que escribí y reemplazada por un literal dos funciones más abajo |
+
+> La última es la que hace útil al barrido. **El patrón no es de código viejo**: se comete
+> mientras se escribe, y se comete incluso sabiendo que existe.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

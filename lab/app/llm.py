@@ -34,7 +34,11 @@ from .fsio import write_atomic
 # request. Anything else — 400, 401, 404 — is a bug in the request and must surface
 # immediately rather than be retried into a timeout.
 RETRYABLE_STATUS = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
-MAX_ATTEMPTS = 5
+# `MAX_ATTEMPTS` vivia aca y no lo leia nadie: es un resto del diseño anterior,
+# contradicho por el comentario de ocho lineas mas abajo — el presupuesto de
+# reintento es TIEMPO y no intentos, porque contar intentos mide la impaciencia
+# del cliente y no la salud del endpoint. Una constante muerta que nombra un tope
+# se lee como un tope que existe.
 BASE_BACKOFF_SECONDS = 2.0
 # A server that is rate limiting can name a wait far longer than any run should absorb.
 # Honour the hint, but not without a ceiling: an unbounded sleep is indistinguishable

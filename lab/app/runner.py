@@ -27,7 +27,7 @@ import httpx
 
 from .config import Settings
 from .llm import RETRYABLE_STATUS
-from .features import FeatureExtractor, Features, payload_for
+from .features import REGION_VOCABULARY, FeatureExtractor, Features, payload_for
 from dataclasses import replace as dc_replace
 
 from .beliefs import Provenance
@@ -143,6 +143,16 @@ class Row:
     # el cache este intacto. Con la huella EN la fila, el replay la lee del registro en
     # vez de adivinarla, y `load_rows` puede negarse a mezclar.
     fingerprint: str = ""
+    # CON QUE VOCABULARIO SE COMPUTO LA REGION. `features.REGION_VOCABULARY` lo declara y
+    # su propio comentario dice para que: «un theta ajustado bajo un vocabulario nunca
+    # debe consumir regiones de otro, y el EXPLAIN registra cual hablo la decision».
+    # NADA LO ESTAMPABA.
+    #
+    # Es el mismo agujero que la huella de decodificacion, y con la misma consecuencia:
+    # dos filas de vocabularios distintos son indistinguibles al leerlas, asi que se
+    # promedian. P15 pago exactamente eso — el cuarto segmento del vocabulario le costo a
+    # theta toda su confianza, y ninguna fila decia bajo cual habia sido computada.
+    region_vocabulary: str = ""
     # EL SPLIT, y no es un detalle contable. `Usage` lo lleva desde siempre; la fila
     # guardaba solo el total, asi que la informacion se tiraba al escribir.
     #
@@ -483,6 +493,7 @@ class Runner:
                         # estampar la huella: ninguna fila puede salir sin decir bajo que
                         # decodificacion se produjo.
                         row.fingerprint = self._settings.fingerprint()
+                        row.region_vocabulary = REGION_VOCABULARY
                         sink.write(json.dumps(row.as_dict(), ensure_ascii=False) + "\n")
                         sink.flush()
                     status = row.error or f"u={row.utility:.3f}"
@@ -705,6 +716,17 @@ class Runner:
             raise ValueError(
                 f"{self._results_path.name} mezcla decodificaciones: {seen}. Promediar "
                 f"entre modelos no mide un paradigma: mide el modelo. Separa los archivos."
+            )
+        # Y LO MISMO PARA EL VOCABULARIO DE REGION, por la misma razon. Una region es una
+        # etiqueta cuyo significado lo fija el vocabulario que la produjo; dos filas de
+        # vocabularios distintos llevan la misma etiqueta queriendo decir cosas distintas.
+        vocabs = sorted({r["region_vocabulary"] for r in rows
+                         if r.get("region_vocabulary")})
+        if len(vocabs) > 1:
+            raise ValueError(
+                f"{self._results_path.name} mezcla vocabularios de region: {vocabs}. Una "
+                f"region significa lo que su vocabulario dice que significa, asi que "
+                f"promediarlas compara etiquetas que no nombran lo mismo."
             )
         mine = self._settings.fingerprint()
         if seen and seen[0] != mine and not Runner._warned_fingerprint:

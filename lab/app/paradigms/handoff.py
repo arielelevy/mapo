@@ -56,7 +56,10 @@ MAX_TURNS_PER_AGENT = 6
 # ELICITED— y la regla exige que lo que pide exista LITERAL en otro alcance, que es un
 # hecho computable sobre el material. Sin eso, un agente podria pedir transferencia
 # indefinidamente y el patron degeneraria en un bucle con otro nombre.
-HANDOFF_FLOOR = Provenance.COMPUTED
+# El agente PROPONE a su procedencia —es su lectura— y el codigo AUTORIZA a la suya.
+# Declararlas y no usarlas era la misma falla que este barrido busca, cometida acá.
+HANDOFF_FLOOR_PROPOSAL = Provenance.ELICITED
+HANDOFF_FLOOR_AUTHORISATION = Provenance.COMPUTED
 
 AGENT_CONTRACT = """You own ONLY the units listed below. You cannot see any others.
 
@@ -126,14 +129,27 @@ def _authorises(base: BeliefBase, missing: str, scope: list[str],
     enuncio, contra un texto. La direccion importa — buscar una cadena conocida adentro
     de un documento es finito; extraer del documento que cadenas hay es lo otro.
     """
-    if not base.satisfies("handoff_requested", 0.0, Provenance.ELICITED):
+    if not base.satisfies("handoff_requested", 0.0, HANDOFF_FLOOR_PROPOSAL):
         return False
     needle = " ".join(missing.lower().split())
     if len(needle) < 4:
         # Guarda de especificidad, la misma que la sonda: una cadena de tres caracteres
         # aparece en cualquier lado y autorizaria siempre.
         return False
-    return any(needle in " ".join(documents[u].lower().split()) for u in scope)
+    presente = any(needle in " ".join(documents[u].lower().split()) for u in scope)
+    if not presente:
+        return False
+    # La AUTORIZACION es un hecho computable sobre el material, no la lectura del agente.
+    # Se asienta a su propio piso para que el registro diga con que procedencia se
+    # transfirio — y no herede la del que la pidio, que es el error que P-4 costo.
+    base.assert_(Belief(
+        proposition="handoff_authorised",
+        value=missing,
+        credence=1.0,
+        provenance=HANDOFF_FLOOR_AUTHORISATION,
+        evidence=f"{missing!r} aparece literal en un alcance posterior",
+    ))
+    return True
 
 
 def handoff(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
@@ -206,14 +222,9 @@ def handoff(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Re
         # transferir hacia atras seria un bucle, no un handoff.
         adelante = [u for s in scopes[index + 1:] for u in s]
         if adelante and _authorises(base, missing, adelante, surface.view.documents):
+            # La autorizacion ya quedo asentada por la regla, con su propia
+            # procedencia. Asentarla otra vez aca duplicaria el hecho.
             handed = {"missing": missing, "partial": partial}
-            base.assert_(Belief(
-                proposition="handoff_authorised",
-                value=True,
-                credence=1.0,
-                provenance=Provenance.COMPUTED,
-                evidence=f"{missing!r} aparece literal en un alcance posterior",
-            ))
         else:
             handed = None
 
