@@ -340,9 +340,15 @@ class Runner:
         # modelo. Sin esto habria que rehacer el catalogo entero en cada tarea.
         self._embedder = embedder
         arms = build_arms(embedder=embedder)
-        if retriever_arm not in arms:
+        # LA VALIDACION TIENE QUE MIRAR EL CATALOGO COMPLETO, y este no lo era. `arms` se
+        # arma SIN cliente —los brazos que llaman al modelo se construyen por celda— asi
+        # que validar contra el se negaba a correr justo los que el cableado nuevo hace
+        # posibles. El brazo existia, el camino existia, y la puerta de entrada no lo
+        # conocia: la misma forma que el barrido de hoy busca, cometida en el cableado.
+        if retriever_arm not in arms and retriever_arm not in MODEL_CALLING_ARMS:
             raise ValueError(
-                f"Unknown retriever arm {retriever_arm!r}. Available: {sorted(arms)}"
+                f"Unknown retriever arm {retriever_arm!r}. Available: "
+                f"{sorted(set(arms) | MODEL_CALLING_ARMS)}"
             )
         if surface_variant not in VARIANTS:
             raise ValueError(
@@ -379,7 +385,10 @@ class Runner:
         # todos los patrones por igual. Es el unico que se puede cruzar `{con, sin} x
         # {patrones}` de verdad, porque el board estructural solo existe en `dag`.
         self.offer_board = offer_board
-        self._retriever = arms[retriever_arm]
+        # Un brazo que llama al modelo no tiene instancia compartida: se construye por
+        # celda en `surface_for`. Se deja el hibrido como base para lo que no es una celda
+        # —describe(), la sonda— y se dice, en vez de guardar un None que explote lejos.
+        self._retriever = arms.get(retriever_arm) or arms["hybrid"]
         # Kept so the surface can expose lexical and dense SEPARATELY alongside the
         # fused entry point. Offering only the fused view took the choice of modality
         # away from the agent, and that choice is part of the topology.

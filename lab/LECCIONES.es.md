@@ -1633,6 +1633,69 @@ podía, y el argumento se apoyaba en un supuesto —que la transcripción conser
 
 ---
 
+### 7.18 Una guarda puede leerse, ejecutarse, tener test que pasa — y no haber corrido nunca · `MÉTODO`
+
+El barrido de la 7.17 busca nombres que se definen y nadie lee. Encontró cinco reales, uno
+mío de una hora antes. **Horas después cometí la misma falla en una forma que ese barrido no
+puede ver**, y la cerré como hecha.
+
+La precondición de cobertura (`U-2`) poda paradigmas cuando la tarea exige cobertura total
+sobre material masivo. El código se lee, se ejecuta, tiene test que pasa. Y:
+
+| | |
+|---|---|
+| **el disparador** | `coverage_demanded` no lo declara **ningún corpus** salvo `gold_p19` — 20 tareas de 407 |
+| **la guarda** | `TRAVERSES_SCOPE ∩ fila activa = ∅`. Aunque disparara, **siempre** caería en la rama «no se pudo imponer» |
+
+Doblemente inerte, y la cerré con un `[x]`.
+
+**Por qué el barrido léxico no la ve.** `TRAVERSES_SCOPE` **sí** se lee: el router la
+consulta. El nombre gobierna. Lo que no existe es el **dato** que hace verdadera la
+condición — y eso no es una propiedad del código sino del **cruce entre el código y los
+corpus**. Sólo se ve ejecutando la condición contra ellos.
+
+`_audit_inerte.py` hace exactamente eso, y de siete disparadores encontró **cuatro que nunca
+dispararon**:
+
+| disparador | tareas |
+|---|---:|
+| acción irreversible (piso A3) | 58/407 |
+| precondición de cobertura (`U-2`) | 20/407 |
+| `C-COMPLETE` | 6/407 |
+| **`C-ABSENCE`** | **0** |
+| **`C-PRESUPPOSITION`** | **0** |
+| **presupuesto en plata** | **0** |
+| **escrituras compartidas (piso A2)** | **0** |
+
+Dos son esperables —sus celdas se escribieron hoy y su corpus no está commiteado—. Pero
+**`shared_writes` no lo declara ninguna tarea de ningún corpus**, y sostiene el piso A2
+entero: el nivel contable **nunca se alcanzó por esa vía en 407 tareas**.
+
+> Que una guarda no haya disparado puede estar bien: una guarda para un corpus que todavía
+> no existe es legítima. Pero tiene que ser una **decisión**, no una sorpresa. Y una que se
+> cerró como «hecha» sin haber corrido nunca no es ninguna de las dos.
+
+---
+
+### 8.9 Estimé desde una corrida parcial y erré 34× · `MÉTODO`
+
+Antes de gastar, estimé la corrida de `P26` en **362k tokens** leyendo el archivo de
+resultados existente de `gold_p18`. Gastó **12,2 millones**.
+
+El archivo tenía 90 filas sobre **6 tareas**. El corpus tiene **32**. Era una corrida
+**parcial**, y la leí como si fuera la referencia del corpus entero.
+
+**La regla del repo dice «estimar tokens ANTES de correr» y yo la cumplí — con el número
+equivocado.** El defecto no fue no estimar: fue estimar desde un registro sin preguntarle
+**de qué es registro**. Un archivo de resultados no declara si está completo, y el conteo de
+tareas del corpus estaba a una línea de distancia.
+
+> Es la misma forma que «ausente no es cero», movida un nivel: **parcial no es total**, y
+> nada en el archivo lo dice. Estimar contra `len(tasks.json)` en vez de contra las filas
+> pagadas cuesta lo mismo y no se puede equivocar así.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una
