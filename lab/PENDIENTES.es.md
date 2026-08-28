@@ -113,7 +113,7 @@
 **Mediciones**
 - [ ] M-1 · brazo en PROSA (E1) — implementado, sin correr
 - [~] M-2 · retención de contexto — *recall medido y predictivo; falta el segundo eslabón*
-- [ ] M-3 · transferencia de θ entre familias de modelos
+- [ ] **M-3** · transferencia de θ entre familias de modelos — **y ahora está acotado qué se rompería** (`MODELO_Y_CONSTANTES.es.md`): los **mecanismos** son independientes del modelo por construcción; las **magnitudes** no. El 33% evitable **se encoge** con un modelo que para solo; el barrido de λ **se corre entero** y el orden de los brazos puede darse vuelta; las asociaciones de orden pueden desvanecerse por **falta de varianza de secuencia**, que no es lo mismo que falta de señal
 - [ ] M-4 · corpus natural + segunda familia
 - [ ] M-5 · C3 profundo en nano
 
@@ -212,7 +212,7 @@
 - [x] **D-2** · **desbloqueado y corrido: 93 misses → 0.** La causa era exactamente la de `R-1` — el script reconstruía sólo `results_dir`, así que corría con la huella del **modelo congelado** y fallaba el 100% de las claves sin que nada lo dijera. Con los ajustes correctos: **102 de 112 celdas** reconstruidas, **0 misses sellados**, 0 fallos de paradigma, **0 tokens**. Las secuencias están materializadas y las transiciones contadas por brazo — `rewoo` repite búsqueda (`search→search` 35), `dag_strategy` alterna (`keyword_search→read` 54)
 - [ ] D-3 · la descomposición en DAG
 - [ ] D-4 · challenger multi-agente con handoff por contrato
-- [ ] D-5 · la «Constant Soup» en general
+- [~] **D-5** · **la «Constant Soup» tiene inventario** (`MODELO_Y_CONSTANTES.es.md`): seis constantes **atadas al modelo**, cada una con cómo se re-deriva, y siete que **no** lo están, con por qué. La prueba para decidir de qué lado cae cada una: *¿su valor correcto cambiaría si el mismo corpus lo corriera otro modelo?* Hallazgo del inventario: la **aritmética de factibilidad NO está atada al modelo** —corre contra el presupuesto declarado por la tarea, no contra una ventana— así que un modelo de ventana más grande no la mueve. Falta **derivarlas**, que es lo que D-5 pedía
 - [x] investigar cómo resuelven el handoff MAF / OpenAI SDK / Google ADK
 
 **Code review — MEDIUM**
