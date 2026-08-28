@@ -30,6 +30,9 @@
 - [ ] **F-1** · sacar `Blackboard` de `dag.py` a su propio módulo *(refactor, gratis)*
 - [ ] **F-2** · medir `{blackboard, sin}` × `{react, dag}` en C2/C4 — **descontamina «el efecto dag_strategy»**
 - [ ] **F-3** · HyDE como factor de pre-proceso — *decidido: se usa*
+- [ ] **H-1** · portarlo como rama paralela fusionada por RRF, **no como herramienta**
+- [ ] **H-2** · exponerlo como brazo `hybrid_hyde` — la dimensión ya existe en el banco
+- [ ] **H-3** · medir `{hybrid, hybrid_hyde}` **con el costo cobrado** *(P16c: sin λ el número no significa nada)*
 - [ ] **F-4** · escribir qué dimensión define un patrón y cuál es un factor *(gratis)*
 
 **«Anti-RAG» — la máquina existe (REC), le falta una pieza**
@@ -252,6 +255,48 @@ Entonces: **el anti-RAG nace con forma `managed`, no con forma `cognitive`.** El
 computa el déficit y **gatea**; la herramienta, si existe, es de sólo lectura y sirve para
 que el modelo se entere, nunca para que autorice. Ofrecerla y esperar que la use ya se
 probó acá y dio cero.
+
+### La forma correcta de HyDE ya estaba en `legacy/`, y el banco ya tiene la dimensión
+
+**Verificado en el código.** En `subgraphs/semantic_search.py` HyDE **no es una
+herramienta**: es una de **cuatro ramas paralelas obligatorias** que salen de `START`
+—`semantic_fts`, `semantic_entity`, `semantic_knn`, `semantic_hyde`— y todas convergen en
+un nodo de **fusión RRF + rerank**. Corre siempre, la dispara el entorno, y el modelo no
+elige nada.
+
+Eso tiene tres propiedades, y la tercera es la que hace que valga la pena:
+
+1. **Es incondicional**, o sea con forma `managed` y no `cognitive`. Es justo lo que este
+   banco midió que funciona, y su opuesto es lo que midió que no: *tools declaradas no
+   son tools usadas*.
+2. **Es paralela**, así que la rama extra no agrega latencia — sólo tokens.
+3. **Está fusionada, y eso ACOTA el daño.** Una respuesta hipotética mala aporta
+   candidatos que el RRF va a rankear abajo; **no puede desalojar lo que las otras tres
+   ramas encontraron**. El modo de falla no es «peor calidad», es «pagaste una llamada de
+   más». Riesgo acotado por construcción.
+
+**Y por eso mismo la objeción correcta no es la que dije antes, sino la de costo.** Yo
+había dudado de si la brecha semántica existe con un recuperador simulado. Con fusión, si
+no existe, HyDE simplemente no aporta y **cuesta su llamada**. O sea que la pregunta
+entera es *si la llamada extra se paga* — que es una pregunta de λ. Y **P16c acaba de
+medir que λ es donde las cosas se mueren**: el ruteo captura +0,121 sin cobrar el costo y
+ya está adentro del ruido en λ=0,02. Cualquier cosa siempre-encendida entra al registro
+por esa puerta.
+
+**La buena noticia: no hay arquitectura nueva que inventar.** El banco YA tiene esta
+dimensión como factor. `retrieval.py` expone brazos —`lexical`, `simulated`, `oracle`,
+`semantic`, `hybrid`— y `runner.py` escribe **un archivo por (corpus, brazo, variante de
+superficie)**, con el comentario que explica por qué: *«juntar los brazos promediaría
+sobre la variable misma que los brazos existen para separar»*.
+
+Entonces HyDE es **un brazo nuevo**, `hybrid_hyde`, y la comparación `{hybrid,
+hybrid_hyde}` es un factor limpio con camino de medición ya construido.
+
+| # | Qué | Costo |
+|---|---|---|
+| **H-1** | Portar HyDE como **rama paralela fusionada por RRF**, no como herramienta | código, chico |
+| **H-2** | Exponerlo como brazo `hybrid_hyde` — la dimensión ya existe | cableado |
+| **H-3** | Medir `{hybrid, hybrid_hyde}` **con el costo cobrado**, no sólo por calidad. Sin λ, el número no significa nada: eso es lo que P16c enseñó hoy | corrida chica |
 
 ### Y si aplica a todos los patrones, entonces no es un patrón: es un FACTOR
 
@@ -595,6 +640,12 @@ lo que producción ejecuta.
 
 ## 8. Reglas que aplican a todo lo de arriba
 
+- **Tools declaradas no son tools usadas** (2026-08-27). Medido en este banco: cuatro
+  herramientas de memoria de trabajo expuestas sobre 28 filas dieron un note, una
+  compactación y cero planes. *Exponer una capacidad no es proveerla, y ofrecerla no es
+  medirla.* Todo lo que enriquezca el contexto va **incondicional desde el entorno**
+  (forma `managed`), no ofrecido al modelo (forma `cognitive`). Si además se puede
+  **fusionar** en vez de reemplazar, el modo de falla queda acotado a costo.
 - **Ejecutado primero, teorizado después.** Nada entra al paper sin implementación que lo
   corra. Si está en el paper como «declarado, no medido», es deuda: implementarlo o sacarlo.
 - **Nada se afirma sin medida, cita o rótulo de hipótesis** (G3). Las novedades se enuncian
