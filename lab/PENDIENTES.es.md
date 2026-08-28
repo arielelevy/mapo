@@ -61,6 +61,7 @@
 **Lo más grande, y no estaba en la lista**
 - [ ] **A-1** · arrancar el producto — *el motor nuevo no existe*
 - [ ] **A-2** · decidir qué se porta de `legacy/`
+- [ ] **A-2b** · cosecha de `legacy/`: `context_guard` **sí** (mecanismo, no sus constantes) · `hyde` al producto pero medirlo acá puede no significar nada · el prompt de suficiencia **no**
 - [ ] **A-3** · separar producto de banco ANTES de portar
 
 **Riesgos que nadie estaba mirando**
@@ -215,6 +216,36 @@ AcquisitionClause = LA PREGUNTA, acotada y certificada  (certify.py, ya implemen
 máquina**, y `CLAUDE.md` ya la nombra («contenido: números slot-filled desde `COMPUTED`,
 citado-o-callado, **contratos de completitud**»). De las cinco etapas, tres están
 implementadas y probadas. Falta la primera, que es teoría, y el cableado.
+
+### ¿Y si fuera una tool? — **no**, y la razón está medida en este mismo banco
+
+Es la respuesta intuitiva y hay precedente en el código: `coverage` ya es exactamente
+esta forma, una herramienta que le dice al modelo qué no cubrió («una respuesta armada
+con parte de las unidades está mal aunque cada parte esté bien, y nada más te lo va a
+decir»). Y el factor `{con, sin}` ya tiene maquinaria: `VARIANTS = ("basic",
+"accounting", "cognitive", "managed")`.
+
+**Pero este banco ya midió qué pasa cuando se ofrece una capacidad así, y el resultado
+fue nulo.** `PATTERNS.md` §4.14: cuatro herramientas de memoria de trabajo (`note`,
+`notes`, `plan`, `advance`) expuestas sobre 28 filas dieron **un note, una compactación y
+cero planes**. La maquinaria de compactación, medida aparte en 29× de reducción, **nunca
+se disparó**. La conclusión quedó escrita ahí: *exponer una capacidad no es proveerla, y
+ofrecerla no es medirla*.
+
+Un detector de huecos ofrecido como herramienta hereda ese prior. Y arrastra un segundo
+problema, peor: una herramienta que el modelo **elige** llamar pone al modelo a decidir
+cuándo revisar su propia suficiencia — que es exactamente lo que rechazamos del prompt de
+`agent_config.py:392`.
+
+**El repo ya contiene la corrección, y hay que empezar por ahí en vez de repetir el
+experimento.** Después de que `cognitive` fallara, apareció `managed`, y su comentario en
+`paradigms/__init__.py` dice qué se aprendió: *«Incondicional y determinista: el entorno
+hace la contabilidad que el brazo cognitive midió que el modelo no hace voluntariamente.»*
+
+Entonces: **el anti-RAG nace con forma `managed`, no con forma `cognitive`.** El entorno
+computa el déficit y **gatea**; la herramienta, si existe, es de sólo lectura y sirve para
+que el modelo se entere, nunca para que autorice. Ofrecerla y esperar que la use ya se
+probó acá y dio cero.
 
 ### Y si aplica a todos los patrones, entonces no es un patrón: es un FACTOR
 
@@ -408,6 +439,7 @@ que **REC va después de P17, no en paralelo** — y esa dependencia no estaba e
 | # | Qué | Por qué importa |
 |---|---|---|
 | **A-1** | **Arrancar el producto: el motor nuevo no existe** | Es el objetivo declarado del repo — «el producto es el motor MAPO, y todavía no existe como tal; se construye a partir de lo que el banco pruebe». Todo lo demás de esta lista lo sirve, y sin embargo el ítem no estaba. Espera a que el registro esté maduro, que hoy significa: P16 cerrado, P17 corrido, y una decisión sobre si la selección paga |
+| **A-2b** | **Cosecha de `legacy/`, con la reserva de cada una** | **`context_guard.py` — el mejor candidato.** Vigila el crecimiento del contexto entre iteraciones y, al cruzar un umbral, **desaloja** el `ToolMessage` viejo más grande y lo reemplaza por un hallazgo enfocado en la consulta. Tiene la forma correcta —**incondicional, desde el entorno**, o sea `managed` y no `cognitive`— y ataca justo la variable dominante: es un mecanismo que decide **qué evidencia sobrevive** hasta la llamada que responde, que es literalmente M-2. **La reserva**: `GROWTH_GAP_THRESHOLD = 20_000` y `KEEP_RECENT_MESSAGES = 6` son Constant Soup, y son exactamente la clase de constante que D-5 dice que hay que **aprender por dominio** en vez de copiar. Se porta el mecanismo, no los números.<br><br>**`hyde.py` — con una reserva que antes no dije.** Su valor depende de un recuperador real sobre un índice real. En este banco la recuperación está **simulada a recall y precisión medidos**, así que la brecha semántica que HyDE tiende puede sencillamente no existir acá — y medirla igual sería repetir §4.14, *medir la herramienta fuera del régimen donde el problema que resuelve existe*. Portarla al **producto** es defendible; **medirla en el banco** puede no significar nada.<br><br>**`blackboard.py`** — ya está reimplementado en `dag_strategy`; no hay nada que portar.<br><br>**El prompt `proved`/`insufficient`/`hypothetical` (`agent_config.py:392`) — NO.** El modelo como juez de su propia suficiencia. |
 | **A-2** | **Decidir qué se porta de `legacy/`** | La capa congelada resolvió cuatro cosas que el banco nunca tuvo que modelar: búsqueda sobre índice real, scoping por permisos, citas verificadas contra el índice, y streaming. `legacy/README.md` es lectura obligatoria antes de portar cualquier pieza, pero **no hay una decisión escrita de qué entra y qué no**. **Primeras dos entradas de esa decisión (2026-08-27)**: `hyde.py` **sí** — alucina en el canal de la consulta, donde una alucinación no puede volverse afirmación, y es el complemento del anti-RAG; el prompt de `agent_config.py:392` que le pide al modelo declarar el contexto `insufficient` **no** — es el modelo como juez de su propia suficiencia |
 | **A-3** | **Separar producto de banco antes de portar, no después** | Es P-11 mirado desde el otro lado: si el motor nuevo arranca copiando `lab/app/` tal como está, se lleva el banco adentro y la mezcla vuelve el día uno |
 
