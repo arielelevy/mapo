@@ -59,6 +59,56 @@ selección. Es un costo enunciado ahora, no descubierto después.
 
 ---
 
+## 2b. Las decisiones dinámicas que hoy no gobierna nadie
+
+**La inconsistencia, verificada en el código y no supuesta.** El invariante del producto
+dice: *«El LLM es sensor: emite proposiciones; JAMÁS maneja flujo de control ni decide
+gates.»* Eso se cumple **entre** paradigmas — la capa de decisión elige cuál corre. No se
+cumple **adentro** de ninguno: ahí el modelo maneja el flujo de control, que es
+exactamente lo que el invariante prohíbe.
+
+Y el repo ya lo sabía a medias: `paradigms/dag.py:16-21` llama al problema por su nombre
+—*«una topología con una docena de umbrales es una topología cuyo comportamiento se fija a
+mano en vez de derivarse»*— y lo registra en el catálogo como **Constant Soup**. Nunca se
+actuó sobre eso.
+
+| # | La decisión | Quién la toma hoy | Qué habilitaría gobernarla |
+|---|---|---|---|
+| **D-1** | **Cuándo parar de iterar** | Un tope constante en código (`max_iterations=20` para react, `4` para plan-execute, `paradigms/__init__.py:211,282`) **o el modelo**, que corta emitiendo una respuesta sin `tool_calls`. Las dos son flujo de control decidido fuera de la capa de decisión | **El mejor candidato de todos, y el más barato.** Es la decisión atada *directo* al costo, y las señales contables para gobernarla **ya existen y ya se registran**: `stall_warnings` (el recuperador se secó), `coverage`, `relevant_units_read`. El loop de `paradigms/__init__.py:81` **no consulta ninguna**. Son deterministas y contables ⇒ entran como creencias `COMPUTED` sin violar nada |
+| **D-2** | **Qué herramienta sigue** | El modelo, en cada vuelta | Es P-2c: asociación (tool_i → tool_j). Bloqueado por la misma instrumentación — `tools.py:375` guarda un conteo sin secuencia |
+| **D-3** | **La descomposición en DAG** | El modelo: produce `sub_questions` con sus dependencias declaradas, y `_assign_waves` sólo topologiza lo que el modelo dijo (`dag.py:186`). O sea, **el modelo dibuja el grafo de control** | Gobernar la forma —cuántos nodos, qué profundidad de replan— con creencias sobre el request en vez de con la propuesta del modelo. Es la versión estructural de D-1 |
+| **D-4** | **La partición de `map_reduce`** | Fija por construcción | **Challenger multi-agente (idea del autor)**: agentes con alcance propio y handoffs con contrato, en vez de una partición fija y un fold. Los handoffs (agente_i → agente_j) son exactamente las asociaciones que P-2c aprende, y el contrato del handoff es exactamente dónde viven las creencias tipadas. **Encaja con el alcance declarado del producto** — `CLAUDE.md` ya lista «acciones … handoffs con contrato» como una de las cuatro superficies. Califica como patrón legítimo y no como prompting, porque la diferencia es **estructural**: alcances independientes y transferencia explícita. Entra al catálogo como candidato **con predicción falsable registrada antes de correr**, como todos |
+| **D-5** | **La «Constant Soup» en general** | Una docena de umbrales a mano en `dag.py` | Derivarlos, que es lo que el propio módulo dice que habría que hacer. D-1 y D-3 son los dos primeros |
+
+**Por qué esta familia importa ahora y no antes.** Está medido que elegir paradigma
+predice el **60%** de la varianza del recall de evidencia fuera de muestra, y que el recall
+es la variable dominante del resultado. Pero un paradigma es, mecánicamente, una política
+sobre estas decisiones. Así que la capa de decisión está gobernando la palanca **por su
+nombre** —«corré `dag_strategy`»— y no por su contenido. El 40% de varianza que el nombre
+del paradigma no explica vive acá adentro.
+
+**Y no se fijan a mano ni se aprenden una vez: se aprenden EN PRODUCCIÓN, por dominio**
+(decisión del autor, 2026-08-27). Cuándo parar, cuántos nodos, qué orden de herramientas
+— todo eso depende del dominio, del corpus y de cómo está armado el sistema. Un umbral
+ajustado sobre un corpus sintético y horneado en el código es la Constant Soup otra vez,
+sólo que con un número mejor elegido.
+
+Eso NO significa aprender adentro de un request, que el invariante prohíbe. Significa
+**aprender offline del tráfico de esa instalación**, con copy-on-write y guarda de
+promoción, y transportar el resultado en el bundle firmado. **Esa maquinaria ya existe y
+ya está probada**: §6.2 hace exactamente esto para el piso de garantía — estadísticas de
+rechazo tipado por región → piso aprendido → guarda de replicación → bundle firmado. La
+generalización es una sola frase: **toda constante que dependa del dominio debería ser una
+cantidad aprendida por región, transportada en el bundle y protegida por la guarda**, con
+la misma forma que los pisos ya validados.
+
+**Orden sugerido, por costo creciente**: D-1 (las señales ya existen, sólo hay que
+consultarlas) → instrumentar la secuencia de tools (D-2/P-2c) → D-4 como candidato nuevo
+→ D-3 → P-2e (componer el patrón), que es el techo y arrastra las dos tensiones de A2/A3
+y del banco.
+
+---
+
 ## 3. Code review — MEDIUM abiertos
 
 Del bloque de `code-review-2026-08-27.md`. Los bloques CRÍTICO y HIGH están aplicados;
