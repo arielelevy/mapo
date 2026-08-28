@@ -111,7 +111,7 @@
 - [ ] T-1 · semántica formal del contrato
 - [ ] T-2 · red-team de mis-binding
 - [ ] T-3 · teorema de soundness del ensamblador
-- [ ] T-4 · cota nativa del ratchet
+- [~] **T-4** · **cota nativa derivada y verificada** (`COTA_RATCHET.es.md`, test §22): daño total ≤ 2 subidas por región **para siempre**; la replicación es fuerte lejos del umbral (1 en 39.613) y **débil cerca** (1 en 3,7). Falta medir la pérdida de cobertura por endurecimiento (Parte 3)
 - [ ] T-5 · quién fija el dial
 - [~] **T-6** · **arXiv 2603.18043 leído** y ubicado en §2.4 de los dos papers: corrobora la disciplina del sensor desde el ángulo adversarial, y **ocupa «procedencia + ruteo + contratos» como frase** — la conjunción queda enunciada por lo que excluye. Faltan EnvProbe, Kintsugi, SHARP, Trace2Policy
 

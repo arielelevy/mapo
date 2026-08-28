@@ -564,6 +564,69 @@ def check_decision_cycle(ok: bool) -> bool:
     return ok
 
 
+# =====================================================================================
+# 22. LA COTA NATIVA DEL RATCHET (T-4)
+# =====================================================================================
+# Reemplaza el prestamo del Teorema 10.1 de v1, que acotaba VARIANZA BAJO OSCILACION. El
+# piso que aprende no puede oscilar: es monotono y con techo, asi que ese teorema acotaba
+# algo que el mecanismo no puede hacer — se cumplia trivialmente y no decia nada. Error de
+# categoria, no cita floja.
+#
+# Lo que un ratchet SI necesita que se le acote es cuanto dano acumulado puede hacer antes
+# de detenerse, y eso es un conteo. Derivacion completa en `COTA_RATCHET.es.md`.
+def check_ratchet_bound(ok: bool) -> bool:
+    from math import comb
+
+    from app.assurance import (
+        Assurance,
+        LEARNED_FLOOR_CEILING,
+        MIN_REJECTION_RATE,
+        MIN_REQUESTS_PER_REGION,
+    )
+
+    print("\n--- 22. la cota nativa del ratchet ---")
+
+    levels = list(Assurance)
+    ceiling = levels.index(LEARNED_FLOOR_CEILING)
+
+    # Proposicion 1: el numero de subidas por region esta acotado por los niveles que
+    # quedan por encima de su base. No hay nada probabilistico: una secuencia monotona
+    # sobre un orden total finito cambia a lo sumo esa cantidad de veces.
+    per_base = {a.name: max(0, ceiling - levels.index(a)) for a in levels}
+    ok &= check("el techo aprendido no llega a CERTIFIED - una estadistica sobre "
+                "evidencia no es evidencia sobre certificabilidad",
+                LEARNED_FLOOR_CEILING is not Assurance.CERTIFIED,
+                LEARNED_FLOOR_CEILING.name)
+    ok &= check("subidas acotadas por region: a lo sumo 2, desde el piso mas bajo",
+                max(per_base.values()) == 2, str(per_base))
+    ok &= check("una region que ya esta en el techo no puede volver a endurecer",
+                per_base[LEARNED_FLOOR_CEILING.name] == 0)
+
+    # Proposicion 2: endurecimiento espurio. Los dos splits son conjuntos de TAREAS
+    # disjuntos, asi que condicionados en q son independientes y la probabilidad de que
+    # una region sana endurezca es el producto.
+    def qualifies(n: int, q: float) -> float:
+        need = -(-n // 2)  # techo de n/2, que es lo que exige MIN_REJECTION_RATE=0.5
+        return sum(comb(n, i) * q**i * (1 - q) ** (n - i) for i in range(need, n + 1))
+
+    n = MIN_REQUESTS_PER_REGION
+    p_clean = qualifies(n, 0.10) ** 2
+    p_edge = qualifies(n, 0.45) ** 2
+    ok &= check("MIN_REJECTION_RATE es la mitad, asi que 'califica' es 'mayoria rechazo'",
+                abs(MIN_REJECTION_RATE - 0.5) < 1e-9)
+    ok &= check("la replicacion es fuerte lejos del umbral (q=0.10: menos de 1 en 10.000)",
+                p_clean < 1e-4, f"1 en {1 / p_clean:,.0f}")
+    ok &= check("y DEBIL cerca del umbral (q=0.45: peor que 1 en 5) - se reporta, "
+                "no se esconde",
+                p_edge > 0.2, f"1 en {1 / p_edge:,.1f}")
+
+    # Y la conjuncion de las dos: aun con la guarda debil, el dano total esta acotado.
+    ok &= check("la monotonia acota el dano de su propia tasa de falsos positivos: "
+                "<= 2 subidas por region, para siempre",
+                max(per_base.values()) * 1 == 2)
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -820,6 +883,7 @@ def main() -> int:
     ok = check_rec_solver(ok)
     ok = check_continuation_axis(ok)
     ok = check_decision_cycle(ok)
+    ok = check_ratchet_bound(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1
