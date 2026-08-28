@@ -81,6 +81,49 @@ pidiendo bajo el nombre de «Constant Soup», y hasta hoy era una queja sin inve
 
 ---
 
+## Y la corrección del autor, que es la parte que faltaba
+
+Lo de arriba trata al modelo como algo que se **fija** antes de medir. La objeción correcta
+es que no lo es:
+
+> **Un modelo más caro cuesta más por token y debería resolver con menos llamadas.** Contar
+> **tokens** mezcla dos cosas que se mueven en sentidos opuestos.
+
+Y el spread necesario para que eso importe **ya existe dentro de un solo modelo**: `rewoo`
+promedia **2.435** tokens por celda contra **89.800** de `dag_strategy` — un factor **37×**.
+Un modelo diez veces más caro por token que necesitara 37 veces menos tokens **saldría más
+barato en plata**. El banco hoy no puede ni preguntarlo, porque λ barre sobre tokens y
+`cost_ratio` normaliza contra el brazo más barato **del mismo modelo**: cruzando modelos,
+numerador y denominador se mueven juntos.
+
+Tres consecuencias, y una de ellas tiene la trampa adentro:
+
+**1. La unidad es plata.** Está medio construida: el split prompt/completion ya vive en la
+fila y la tarifa se declara por entorno. **Y el piso del ratio tiene que ser global**, no por
+modelo — si el brazo más barato de A cuesta `$0,01` y el de B `$0,10`, ratios por modelo
+hacen que los dos parezcan igual de eficientes.
+
+**2. El modelo es ACCIÓN, no estado.** El espacio de decisión pasa a ser el par
+`(modelo, paradigma)` y la factibilidad poda pares. Meterlo en la **región** sería el error
+opuesto, y ya está medido lo que cuesta: agregar un cuarto segmento al vocabulario le costó a
+θ toda su confianza, porque cada episodio cayó en un bin demasiado chico para cruzar el piso
+de evidencia. Ése fue el mecanismo de `P15`. **El modelo se elige, no se observa.**
+
+**3. «Token y calidad» se separa en dos cosas distintas.** La calidad **no** es presupuesto:
+es lo que se compra. Pero sí hay una restricción real, y ya existe el lugar donde vive — **el
+dial**. Hoy A2/A3 restringen los *paradigmas* admisibles; tienen que restringir también los
+**modelos**, porque una acción irreversible no puede rutearse al más barato porque salga la
+cuenta.
+
+> **Plata** es el presupuesto. **Piso de capacidad** es una precondición. Meter la calidad
+> adentro del costo las volvería intercambiables, y no lo son: se puede compensar un
+> presupuesto chico gastando menos, y no se puede compensar una garantía faltante gastando
+> más.
+
+Registrado como `X-5` a `X-5e`.
+
+---
+
 ## El riesgo que conviene enunciar antes de cambiar de modelo
 
 **Un modelo mucho más capaz podría volver innecesario el ruteo, y eso no sería un fracaso
