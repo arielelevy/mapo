@@ -610,11 +610,42 @@ bias — a clumsy paradigm's full-recall cells are the easy tasks, while a good 
 include hard ones. So the magnitude comparison stands on its own (two means, same cells),
 and the sign flip is a lead to chase, not a result to cite.
 
-**What it changes.** If it survives instrumentation, "this structure wins" becomes "this
-structure retrieves more" — which is *more* actionable, not less: the fix moves to the
-retriever, and paradigm selection is left arbitrating a smaller share of the variance
-than the whole routing program has been assuming. That is also a caution for P17: a
-selection rule that finally fires is arbitrating over the smaller effect.
+**Then the question that decides whether any of this is actionable: WHO determines
+recall?** Three candidates with opposite consequences. If the TASK does, it belongs to
+the world and there is nothing to decide. If the REGION does, the decision layer already
+sees it and can route on it. If the PARADIGM does, then choosing a paradigm IS choosing
+how much evidence gets read.
+
+| what | share of recall variance | groups |
+|---|---:|---:|
+| region — what the decision SEES | **5.2%** | 5 |
+| paradigm — what the decision CHOOSES | **62.2%** | 5 |
+| region × paradigm | 82.7% | 22 |
+| task — what the world contributes | 10.5% | 21 |
+
+**The paradigm determines recall six times more than the task does.** So routing is not
+arbitrating at the margin of the dominant variable — it is the **main lever on it**. That
+rescues the routing program rather than undermining it, and it reframes what routing is
+FOR: not "pick the structure that reasons better" but **"pick the structure that will
+actually read the evidence."**
+
+**And the 5.2% is the problem.** Inside every region recall runs the full range, 0.00 to
+1.00. The router holds the main lever on the main variable and pulls it nearly blind,
+because φ's region barely predicts where it matters. That is the same shape as P15's
+verified mechanism — a decision made without an axis for the thing that decides the
+outcome — arriving from a completely independent direction.
+
+*Read with care*: these are marginal shares over unbalanced groups; they do not sum to
+anything and region and paradigm are not orthogonal. The 22-group number is inflated —
+at ~4 points per group part of that 82.7% is fit, not structure. The two that carry the
+argument are 5 groups each, and it is their CONTRAST that says something.
+
+**What it changes.** The probe exists to turn an unseen variable into an observed one,
+and today it senses **coupling**. The measurement says the variable worth sensing is
+whether the evidence will be found. That is a product direction with a number behind it,
+and it is not implemented — so it is registered as debt, not written into the paper.
+It is also a caution for P17: a selection rule that finally fires is choosing on a
+belief unrelated to the largest source of variance in the outcome.
 
 ### P17 registered (2026-08-27, before any number exists)
 

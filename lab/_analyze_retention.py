@@ -184,6 +184,76 @@ for corpus in CORPORA:
                       "paradigms": rows_out}
     print()
 
+# --- de que depende el recall, y que de eso puede VER la decision --------------------
+# Si el recall es la variable que manda, la pregunta de producto no es cuanto manda
+# sino QUIEN lo determina. Tres candidatos con consecuencias opuestas: si lo determina
+# la TAREA, es del mundo y no hay nada que decidir; si lo determina la REGION, la capa
+# de decision ya lo ve y puede rutear sobre eso; si lo determina el PARADIGMA, entonces
+# elegir paradigma ES elegir cuanta evidencia se va a leer — y el ruteo pasa a ser la
+# palanca principal sobre la variable principal, no una arbitrando al margen.
+def variance_share(points, keyfn):
+    grouped = defaultdict(list)
+    for x in points:
+        grouped[keyfn(x)].append(x[3])
+    values = [x[3] for x in points]
+    mean = sum(values) / len(values)
+    total = sum((v - mean) ** 2 for v in values)
+    if total == 0:
+        return None, len(grouped)
+    within = sum(
+        sum((v - sum(g) / len(g)) ** 2 for v in g) for g in grouped.values()
+    )
+    return 1 - within / total, len(grouped)
+
+
+print("=" * 72)
+print("De que depende el recall (gold_transfer)")
+print("")
+runner = Runner(settings, "gold_transfer", retriever_arm="hybrid", surface_variant="basic")
+tasks_t = {t["task_id"]: t for t in runner._tasks}  # noqa: SLF001
+grouped_rows = defaultdict(list)
+for r in runner.load_rows():
+    if r.get("infra_error") or r.get("infeasible"):
+        continue
+    grouped_rows[(r["task_id"], r["paradigm"])].append(r)
+
+points = []
+for (task_id, paradigm), rows in grouped_rows.items():
+    relevant = tasks_t[task_id].get("relevant_units") or []
+    if not relevant:
+        continue
+    rc = sum(
+        min(1.0, (x.get("tool_usage") or {}).get("relevant_units_read", 0) / len(relevant))
+        for x in rows
+    ) / len(rows)
+    points.append((rows[0]["region"], paradigm, task_id, rc))
+
+shares = {}
+for name, fn in (
+    ("region — lo que la decision VE", lambda x: x[0]),
+    ("paradigma — lo que la decision ELIGE", lambda x: x[1]),
+    ("region x paradigma", lambda x: (x[0], x[1])),
+    ("tarea — cuanto pone el mundo", lambda x: x[2]),
+):
+    share, k = variance_share(points, fn)
+    shares[name] = None if share is None else round(share, 4)
+    print(f"  {name:<40} {share:>7.1%}  ({k} grupos)")
+
+print("")
+print("  LEER ESTO CON CUIDADO. Son fracciones marginales sobre grupos desbalanceados:")
+print("  no suman a nada y region y paradigma no son ortogonales. Y la de 22 grupos")
+print("  sobre 90 puntos esta inflada — a ~4 puntos por grupo, parte de ese 82,7% es")
+print("  ajuste, no estructura. Las dos que importan son robustas al reparo porque son")
+print("  de 5 grupos cada una, y su CONTRASTE es lo que dice algo.")
+print("")
+print("  El paradigma determina el recall MUCHO mas que la tarea. O sea: elegir")
+print("  paradigma es elegir cuanta evidencia se va a leer. El ruteo no arbitra al")
+print("  margen de la variable dominante — es la palanca principal sobre ella.")
+print("  Pero la REGION casi no lo predice, asi que hoy esa palanca se acciona a")
+print("  ciegas: dentro de cada region el recall va de 0,00 a 1,00.")
+print("=" * 72)
+print("")
+
 # --- el titular: comparar las dos magnitudes -----------------------------------------
 print("=" * 72)
 print("La comparacion que no depende del condicionamiento:")
@@ -210,6 +280,7 @@ print("  de recall. Es maxima en C5 — justo la celda donde el ruteo mas perdio
 print("=" * 72)
 
 path = settings.results_dir / "retention.json"
+report["variance_shares_gold_transfer"] = shares
 path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 print(f"reporte: {path}")
 print("\nLectura: 'ventaja' es contra el promedio de los pares EN LA MISMA TAREA.")
