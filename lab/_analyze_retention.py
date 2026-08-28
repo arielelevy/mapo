@@ -131,6 +131,32 @@ for corpus in CORPORA:
         print(f"    utilidad media con recall parcial  : {sum(lo) / len(lo):.3f}  (n={len(lo)})")
         print(f"    diferencia                         : {sum(hi) / len(hi) - sum(lo) / len(lo):+.3f}")
 
+    # LA OBJECION OBVIA, contestada antes de que la haga alguien: si las celdas de
+    # recall completo fueran todas C1, la brecha seria dificultad de tarea disfrazada
+    # de recall. Estratificar por celda lo decide — si la brecha sobrevive DENTRO de
+    # cada estrato, no puede ser el estrato.
+    strata = defaultdict(lambda: {"full": [], "part": []})
+    for c in cells.values():
+        key = "full" if c["recall"] >= 1.0 else "part"
+        strata[c["cell"]][key].append(c["utility"])
+
+    print("\n    estratificado por celda (la brecha no puede ser dificultad si vive adentro):")
+    print(f"    {'celda':<7}{'n':>4}{'u recall pleno':>16}{'n':>5}{'u parcial':>12}{'brecha':>9}")
+    strat_out = {}
+    for cell in sorted(strata):
+        f, pt = strata[cell]["full"], strata[cell]["part"]
+        if not f or not pt:
+            note = "sin celdas de recall pleno" if not f else "todas con recall pleno"
+            print(f"    {cell:<7}{len(f):>4}{'':>16}{len(pt):>5}{'':>12}   {note}")
+            strat_out[cell] = {"n_full": len(f), "n_partial": len(pt), "gap": None}
+            continue
+        uf, up = sum(f) / len(f), sum(pt) / len(pt)
+        print(f"    {cell:<7}{len(f):>4}{uf:>16.3f}{len(pt):>5}{up:>12.3f}{uf - up:>+9.3f}")
+        strat_out[cell] = {"n_full": len(f), "n_partial": len(pt),
+                           "u_full": round(uf, 4), "u_partial": round(up, 4),
+                           "gap": round(uf - up, 4)}
+    print()
+
     all_adv, _ = paired_advantage(cells, restrict_full_recall=False)
     ctl_adv, _ = paired_advantage(cells, restrict_full_recall=True)
 
@@ -154,6 +180,7 @@ for corpus in CORPORA:
     gap = (sum(hi) / len(hi) - sum(lo) / len(lo)) if (hi and lo) else None
     report[corpus] = {"cells": len(cells), "full_recall": full,
                       "recall_gap": None if gap is None else round(gap, 4),
+                      "by_cell": strat_out,
                       "paradigms": rows_out}
     print()
 
@@ -176,6 +203,10 @@ print()
 print("  La diferencia entre leer toda la evidencia y no leerla es varias veces")
 print("  mayor que la diferencia entre paradigmas. Eso no depende de condicionar")
 print("  sobre nada: son dos medias sobre las mismas celdas.")
+print("")
+print("  Y sobrevive estratificando: en gold_transfer la brecha esta DENTRO de cada")
+print("  celda que tiene los dos grupos, asi que no es dificultad de tarea disfrazada")
+print("  de recall. Es maxima en C5 — justo la celda donde el ruteo mas perdio en P15.")
 print("=" * 72)
 
 path = settings.results_dir / "retention.json"

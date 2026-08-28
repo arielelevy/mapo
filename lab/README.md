@@ -577,6 +577,27 @@ that is not a contradiction: they include `direct`, whose advantage IS a recall 
 collapsing exactly where a paradigm's edge is known to be retrieval is the story, not an
 exception to it.
 
+**The obvious objection, answered before anyone raises it.** If the full-recall cells
+were all C1, the gap would be task difficulty wearing recall's clothes. Stratifying by
+cell decides it, and the gap **survives inside every stratum that has both groups** —
+so it cannot be the stratum:
+
+| cell | n full | u full | n partial | u partial | gap |
+|---|---:|---:|---:|---:|---:|
+| C1 single | 4 | 1.000 | 6 | 0.667 | +0.333 |
+| C2 bulk | 7 | 0.839 | 14 | 0.656 | +0.183 |
+| C3 chain | 0 | — | 8 | 0.000 | no full-recall cell exists |
+| C4 aggregate | 9 | 0.815 | 8 | 0.417 | +0.398 |
+| C5 horizon | 5 | 0.800 | 21 | 0.079 | **+0.721** |
+| C7 irreversible | 4 | 1.000 | 4 | 0.583 | +0.417 |
+
+And it comes back stronger than it went in. The gap is **largest on C5 (+0.721)** — the
+exact cell where P15's routing lost the most (−0.278). On the cell that decided the
+refutation, reading the evidence is worth more than anywhere else in the corpus, and the
+routing decision was being made without knowing whether the evidence would be read.
+C3 has no full-recall cell at all and scores 0.000 across the board, which is the same
+oracle-zero region already on the record — stated rather than averaged away.
+
 **The suggestive part, reported as an indication and not a verdict.** Restricting to
 cells that read ALL the relevant evidence, `dag_strategy` — the best fixed paradigm, the
 one P15's routing lost to — goes from **+0.083 to −0.040**. Its advantage changes sign.
