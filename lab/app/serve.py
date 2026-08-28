@@ -175,6 +175,7 @@ def answer(
             "question": request.question,
             "units": task["unit_ids"],
             "oracle": task["oracle"],
+            "has_oracle": task["has_oracle"],
             "irreversible": request.irreversible,
             "shared_writes": request.shared_writes,
             "budget_tokens": request.budget_tokens,

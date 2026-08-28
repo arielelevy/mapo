@@ -256,6 +256,11 @@ class Runner:
             "question": task["question"],
             "units": task["unit_ids"],
             "oracle": task["oracle"],
+            # La capacidad de verificacion en RUNTIME, que es lo que la decision mira.
+            # Se pasa explicitamente porque este payload no es la tarea: es un subconjunto
+            # armado a mano, y omitir el campo lo volvia indistinguible de una tarea que
+            # no lo declara. La falla cerrada lo atrapo antes de gastar un token.
+            "has_oracle": task["has_oracle"],
             "irreversible": task.get("irreversible", False),
             "shared_writes": task.get("shared_writes", False),
             "budget_tokens": task["budget_tokens"],

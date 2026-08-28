@@ -17,7 +17,7 @@
 **Bloqueantes**
 - [x] **B1** · veredicto de P16 — **P16a REFUTADA** (−1,2888), **P16c decisiva**: +0,1211 con λ=0 y adentro del ruido en λ=0,02 · P16d 26/26 · 0 infra · 13,95M tokens
 - [x] **B2** · detectores honestos aplicados — una sola función `has_runtime_detector`, falla cerrada; **P17a confirmada con el código real: cascada 2/26**
-- [ ] **B3** · correr P17 — la primera medición honesta de selección
+- [~] **B3** · **P17 corriendo** — humo verde, veredicto congelado en git antes de la primera fila
 
 **Mediciones**
 - [ ] M-1 · brazo en PROSA (E1) — implementado, sin correr
@@ -73,6 +73,10 @@
 - [ ] **A-2b** · cosecha de `legacy/`: `context_guard` **sí** (mecanismo, no sus constantes) · `hyde` al producto pero medirlo acá puede no significar nada · el prompt de suficiencia **no**
 - [ ] **A-3** · separar producto de banco ANTES de portar
 
+**Apareció al aplicar B2**
+- [ ] **X-1** · un solo constructor `task → payload`, no tres a mano *(dos ya se habían separado)*
+- [ ] **X-2** · el ledger de costo no es convertible a plata *(falta el split prompt/completion y la tarifa)*
+
 **Riesgos que nadie estaba mirando**
 - [~] **R-1** · verificar el replay sellado — *intentado y **no concluyente**: el replay de secuencias da 93/112 misses, pero es mucho más probable que sea el replay y no el caché. Hace falta un test que replaye una celda por el MISMO camino que el runner*
 - [ ] R-2 · celdas † de la grilla congelada `gpt-5-chat`
@@ -94,8 +98,8 @@
 - [x] **M11** · ECE sobre la credencia declarada, no el centro del bin
 - [x] **M17** · `cot` fuera del default (`RETIRED`)
 - [x] **M18** · un solo escritor por archivo de resultados
-- [ ] M8 · constante de supresión de sonda
-- [ ] M10 · `GIST_CHARS` inflado ⇒ sobre-rechazo
+- [ ] M8 · constante de supresión de sonda *(ya no bloqueado: P16 cerró)*
+- [ ] M10 · `GIST_CHARS` inflado ⇒ sobre-rechazo *(ya no bloqueado; **esperar a que P17 termine**: cambia `router.plan`)*
 - [ ] M1 · args del modelo ⇒ `ToolFailure`
 - [ ] M13 · accesos fuera del `try` en dag/modern
 - [ ] M14 · extractor JSON duplicado ×9
@@ -547,6 +551,34 @@ que **REC va después de P17, no en paralelo** — y esa dependencia no estaba e
 | **R-3** | **Barrer el paper por «declarado, no medido»** | Regla propia del repo: lo que esté así **es deuda, y se implementa o se saca**. Nunca se hizo el barrido completo, sólo se corrigió lo que fue apareciendo |
 | **R-4** | **`lab/ui/index.html` sin explicar** | Aparece sin trackear en el árbol y no lo escribí yo. O se adopta con su propósito escrito, o se saca — un archivo huérfano en el repo es una pregunta que alguien va a hacer |
 | **R-5** | **11 commits locales sin pushear** | Por regla no se pushea sin confirmación, y está bien. Pero el estado «hay N commits que sólo existen en esta máquina» es un riesgo real que conviene tener a la vista |
+
+---
+
+## 2d. Lo que apareció al aplicar B2 (2026-08-27)
+
+**Tres sitios construían el payload de features a mano, y dos descartaban el campo.**
+La falla cerrada de `has_runtime_detector` los encontró **antes de gastar un token** —
+P17 murió al instante con 0 tokens en vez de correr 14M midiendo mal.
+
+| sitio | qué pasaba | veredicto |
+|---|---|---|
+| `runner.py:255` | arma un payload a mano y **omitía `has_oracle`** | bug, arreglado |
+| `serve.py:173` | el mismo payload, la misma omisión | bug, arreglado |
+| `serve.py:91` | `has_oracle = bool(self.oracle)` | **CORRECTO, y hay que decir por qué** |
+
+**El tercero no es un bug y la distinción importa.** En el producto, `oracle` es *«un
+oráculo de coincidencia exacta, cuando el llamador tiene uno; su presencia es lo que hace
+admisible a la cascada»* — o sea un criterio de verificación **que aporta el llamador**.
+Ahí `bool(oracle)` **es** el detector de runtime, honestamente.
+
+> **El producto siempre tuvo la semántica correcta. El banco fue el que rompió la
+> distinción**, reusando el mismo campo para el gold — y de ahí salió la pre-empción que
+> impidió medir selección durante toda la investigación.
+
+| # | Qué queda | Costo |
+|---|---|---|
+| **X-1** | Un solo constructor `task → payload de features`, en vez de tres a mano. Los tres eran la misma idea escrita tres veces, y dos ya se habían separado | refactor, chico |
+| **X-2** | El ledger de costo **no es convertible a plata**: la fila guarda `cost_tokens` total sin separar prompt de completion, y no hay tarifa registrada en ningún lado. P16 fueron 1.938 llamadas y 13,95M tokens y no se puede decir cuánto costó | chico, y hace falta para hablar de costo en serio |
 
 ---
 

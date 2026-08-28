@@ -245,7 +245,16 @@ llamaba transferencia.
 leyó»: mismo histograma, dos políticas distintas. La **secuencia** es lo único que permite
 aprender asociaciones entre pares.
 
-### 7.5 Una decisión que vive en dos implementaciones se separa sola · `MEDIDO`
+### 7.5 Fallar cerrado es lo que convierte un bug caro en uno gratis · `MEDIDO`
+
+`has_runtime_detector` levanta excepción si la tarea no declara el campo, en vez de asumir
+`True`. Al aplicarlo, P17 **murió al instante con cero tokens gastados**: tres sitios
+construían el payload de features a mano y dos descartaban el campo.
+
+Con un default, esos dos habrían pasado silenciosamente y la corrida habría gastado ~14M
+tokens midiendo lo de siempre. **El default no era una comodidad: era el bug.**
+
+### 7.6 Una decisión que vive en dos implementaciones se separa sola · `MEDIDO`
 
 Pasó dos veces en el mismo día. El loop de herramientas tenía **tres copias divergentes**; y
 `probe_then_decide` nombra **dos pasos** que un llamador daba y el otro no — con detectores
@@ -254,6 +263,19 @@ honestos, eso son **14 de 26 tareas** puntuando un placeholder como si fuera una
 ---
 
 ## 8. Sobre la frontera entre el producto y el modelo
+
+### 7.7 El producto tenía la semántica correcta; el banco la rompió · `MEDIDO`
+
+En el producto, `oracle` es un criterio de verificación **que aporta el llamador**, y su
+presencia es lo que hace admisible a la cascada. Ahí derivar el detector de `bool(oracle)`
+es correcto: el llamador tiene con qué verificar, o no tiene.
+
+El banco reusó el mismo nombre para el **gold**, que es otra cosa entera — y de esa
+reutilización salió la pre-empción que impidió medir selección durante toda la
+investigación.
+
+> Cuando un banco y un producto comparten un nombre para dos conceptos distintos, el que
+> pierde la distinción es el banco, y lo que se pierde es la capacidad de medir.
 
 ### 8.1 El invariante se cumple entre patrones y se rompe adentro de cada uno · `MEDIDO`
 
