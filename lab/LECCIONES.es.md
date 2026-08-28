@@ -393,6 +393,31 @@ señal fuera perfecta. Acá 4 de 8 estratos tenían potencia; los otros 4 no, y 
 
 ---
 
+### 7.10 Una guarda sin recuperación se convierte en la falla que evitaba · `MEDIDO`
+
+El lock que impide dos corridas sobre el mismo archivo (M18) hizo justo lo que tenía que
+hacer, y **bloqueó la reanudación de P17**: la corrida anterior la mataron a las 336 filas
+y dejó el lock puesto, con un PID que ya no existía.
+
+Sin recuperación de huérfanos, un `Ctrl-C` bloquea **todas** las corridas siguientes hasta
+que alguien borre un archivo oculto a mano — y se descubre en el peor momento posible,
+justo cuando se quiere retomar lo que se cortó.
+
+Y el arreglo casi no funciona por una segunda razón: **`os.kill(pid, 0)` en Windows no
+levanta `ProcessLookupError` para un PID inexistente**, levanta `OSError` con
+`winerror 87`. El catch genérico lo leía como «vivo», así que el huérfano nunca se
+reclamaba: el arreglo sobrevivía al arreglo.
+
+> Una guarda contra la corrupción tiene que decir también **cómo se sale de ella**. Si no,
+> deja de ser una guarda y pasa a ser un modo de falla nuevo — con la agravante de que
+> nadie lo prueba, porque probarlo exige matar un proceso.
+
+La asimetría que ordena la decisión: **ante la duda, «sigue tomado»**. Reclamar el lock de
+una corrida viva duplicaría celdas, que es el daño exacto que el lock existe para impedir.
+Errar hacia «tomado» cuesta un borrado manual; errar hacia «libre» corrompe el registro.
+
+---
+
 ## 9. Lo que este registro NO estableció
 
 Se escribe acá para que no se lo confunda con lo de arriba.

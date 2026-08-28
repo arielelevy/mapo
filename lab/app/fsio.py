@@ -21,6 +21,52 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
+def _claim(lock: Path, owner: str) -> int:
+    """Crear el lock de forma atomica y dejar adentro quien lo tiene."""
+    fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    try:
+        os.write(fd, f"pid={os.getpid()} {owner}".strip().encode("utf-8"))
+    except OSError:
+        pass
+    return fd
+
+
+def _alive(held: str) -> bool:
+    """Si el proceso que dice tener el lock sigue existiendo.
+
+    Ante la duda devuelve True: reclamar un lock de una corrida VIVA duplicaria celdas,
+    que es exactamente el dano que el lock existe para impedir. Errar hacia "sigue
+    tomado" cuesta un borrado manual; errar hacia "esta libre" corrompe el registro.
+
+    El riesgo residual es reciclado de PID: el sistema puede haberle dado ese numero a
+    otro proceso. Se acepta a conciencia — la alternativa sería no reclamar nunca, y eso
+    ya se probó hoy y bloqueó una reanudacion.
+    """
+    if not held.startswith("pid="):
+        return True
+    try:
+        pid = int(held.split()[0].removeprefix("pid="))
+    except (ValueError, IndexError):
+        return True
+    if pid == os.getpid():
+        return True
+    try:
+        os.kill(pid, 0)  # senal 0: no hace nada, solo chequea existencia
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # existe y es de otro usuario
+    except OSError as exc:
+        # Windows no levanta ProcessLookupError para un PID inexistente: levanta
+        # OSError con winerror 87 (ERROR_INVALID_PARAMETER). Sin este caso, un lock
+        # huerfano se lee como vivo y no se reclama nunca — que es exactamente el
+        # bloqueo que esta funcion existe para evitar, sobreviviendo al arreglo.
+        if getattr(exc, "winerror", None) == 87:
+            return False
+        return True
+    return True
+
+
 class AlreadyRunning(RuntimeError):
     """Otra corrida tiene tomado este archivo de resultados."""
 
@@ -41,7 +87,7 @@ def exclusive(path: Path, owner: str = ""):
     """
     lock = path.with_name(f".{path.name}.lock")
     try:
-        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        fd = _claim(lock, owner)
     except OSError as exc:
         if exc.errno != errno.EEXIST:
             raise
@@ -50,13 +96,27 @@ def exclusive(path: Path, owner: str = ""):
             held = lock.read_text(encoding="utf-8").strip()
         except OSError:
             pass
-        raise AlreadyRunning(
-            f"{path.name} ya lo tiene otra corrida ({held or 'sin datos'}). "
-            f"Si es un lock huerfano, borrar {lock}."
-        ) from exc
+        # HUERFANO. Una corrida que muere —matada, cortada, o el proceso que se cae—
+        # deja el lock puesto, y sin esto un `Ctrl-C` bloquea TODAS las corridas
+        # siguientes hasta que alguien borre un archivo oculto a mano. Eso convierte
+        # una guarda contra duplicacion en una trampa, y se descubre en el peor momento:
+        # justo cuando se quiere reanudar lo que se corto.
+        if not _alive(held):
+            try:
+                lock.unlink()
+                fd = _claim(lock, owner)
+            except OSError:
+                raise AlreadyRunning(
+                    f"{path.name}: lock huerfano de {held or 'origen desconocido'} que "
+                    f"no se pudo reclamar. Borrar {lock}."
+                ) from exc
+        else:
+            raise AlreadyRunning(
+                f"{path.name} ya lo tiene otra corrida VIVA ({held}). "
+                f"Si estuviera equivocado, borrar {lock}."
+            ) from exc
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as sink:
-            sink.write(f"pid={os.getpid()} {owner}".strip())
+        os.close(fd)
         yield
     finally:
         try:
