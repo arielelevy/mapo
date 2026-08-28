@@ -86,6 +86,29 @@ Medido: declarar el detector por celda hace caer la cascada de **22 a 2 de 26**.
 > Una hipótesis que el diseño experimental no deja disparar no está siendo puesta a prueba,
 > aunque el experimento corra y produzca números.
 
+### 3.1b Un generador que vuelve trivial una dependencia no puede falsificar el patrón que existe para esa dependencia · `MEDIDO`
+
+`graph_traverse` quedó falsificado con u=0,000 tras construir un índice de entidades. La
+objeción obvia era que el índice se arma con output del modelo sin verificar, así que
+podía estar midiendo el extractor. Se chequeó: **177/177 entidades aparecen literalmente**
+en la unidad que las declara, y **las dos cadenas C3 están conectadas**, salto por salto.
+La travesía tenía sus aristas.
+
+Pero el 100% no es tranquilizador: **es el hallazgo**. El corpus tiene **cero** formas
+abreviadas, **cero** anáfora, y cada entidad en una sola forma canónica escrita completa.
+No hay nada que deduplicar ni que agrupar. El extractor acierta todo porque **la parte
+difícil de extraer entidades no existe ahí**.
+
+> Una falsación vale para el régimen en el que corrió. Si el generador vuelve gratis
+> justamente la dependencia que le da sentido al patrón, lo que se falsificó es el patrón
+> **en un mundo donde no hacía falta**.
+
+Es la misma forma que «ser corregible implicaba tener detector», llegando desde otro lado:
+en los dos casos el diseño del corpus decide qué hipótesis pueden siquiera ponerse a
+prueba, y en los dos casos lo hace en silencio.
+
+---
+
 ### 3.2 Una mejora que aplica a todos los patrones no es un patrón: es un factor · `MÉTODO`
 
 Si se pliega adentro de cada brazo, la comparación deja de ser «A vs B» y pasa a ser

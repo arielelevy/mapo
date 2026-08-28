@@ -666,11 +666,26 @@ It walked them and still returned "Not found" at u=0.000 on both cells. P10a mea
 thesis, not its dependency, and the falsification stands — **stronger than before, because
 the obvious way to dismiss it has now been closed with evidence rather than left open.**
 
-**The design risk is real anyway and is recorded separately.** That the extractor happened
-to be accurate here is a fact about this corpus, not a property of the mechanism: nothing in
-the index construction *requires* grounding, so a different corpus could poison the graph
-silently. If `graph_traverse` were ever revived, the index would need the probe's discipline
-— accept an entity only where it appears literally, and record the span.
+**And the 100% is not reassurance — it is the finding.** Checked against `gold_deep`: the
+corpus contains **zero** abbreviated forms (`J. Pérez`), **zero** anaphora (`the holder`,
+`said account`), and every entity appears in one canonical, fully spelled surface form.
+There is nothing to deduplicate, nothing to cluster, no coreference to resolve. A
+prompt-based extractor scores 100% because **the hard part of entity extraction is absent
+by construction.**
+
+So P10a is sound *for the regime it ran in*, and that regime is one where
+`graph_traverse`'s hardest dependency is free. **The same structural shape as the detector
+conflation**, arriving from a different direction:
+
+> A generator that makes a dependency trivial cannot falsify a pattern whose reason to
+> exist is that the dependency is hard.
+
+`graph_traverse` therefore moves to **standby, not retirement** (author's decision,
+2026-08-28). Reviving it requires a corpus with real entity resolution work — surface
+variants, abbreviations, anaphora, cross-document coreference — and an index built with the
+probe's discipline: accept an entity only where it appears literally, record the span. Until
+such a corpus exists, the honest statement is *"falsified where entity resolution is free"*,
+not *"falsified"*.
 
 ### The same bar, applied to the incumbents (2026-08-28, `_audit_catalog.py`, zero tokens)
 

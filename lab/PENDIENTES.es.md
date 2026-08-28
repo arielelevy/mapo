@@ -25,6 +25,8 @@
 
 **Catálogo — la misma vara que a los candidatos nuevos**
 - [x] K-3 · **la falsación de `graph_traverse` (P10a) sobrevive a su objeción más seria**: el índice está 100% anclado en el texto y las dos cadenas C3 están conectadas — la travesía tenía las aristas y aun así dio u=0,000. Riesgo de diseño registrado aparte: el índice **no exige** anclaje, así que otro corpus podría envenenarlo en silencio
+- [ ] **K-5** · **`graph_traverse` pasa a STANDBY, no retirado** (decisión del autor, 2026-08-28). La falsación vale «donde resolver entidades es gratis», que no es lo mismo que «vale». Revivirlo exige (a) un corpus con resolución de entidades real y (b) un índice con la disciplina de la sonda
+- [ ] **K-6** · **Corpus con entidades de verdad**: variantes de superficie, abreviaturas, anáfora, correferencia entre documentos. Sin eso, **ningún patrón de grafo se puede medir donde tiene sentido** — y es el mismo agujero estructural que el detector heredado del gold
 - [ ] **K-4** · `RETIRED` sólo bloquea un brazo por código, mientras `pointer_chase` y `graph_traverse` están falsificados **sólo en un documento**. Una decisión que vive en prosa y no en el ejecutable es la misma deriva que se viene cerrando todo el día
 - [ ] **K-1** · **`plan_execute` está DOMINADO** (0 únicos mejores, 0 más barato al empatar, sobre 14 celdas): retirarlo por el mismo criterio con el que se retiró el único brazo retirado hasta hoy. Salvedad: aquél cayó sobre *toda* celda medida y esto son 14
 - [x] K-2 · `map_reduce` **no** está dominado — gana una celda. Reemplazarlo por handoff cambiaría cobertura medida por un brazo sin medir: van **uno contra otro**, no uno en lugar del otro
