@@ -295,6 +295,7 @@ camino disolvería la única garantía que hace que registrar una predicción va
 
 | Documento | Alcance |
 |---|---|
+| `PENDIENTES.es.md` | **Todo lo que falta, en un solo lugar.** Fuente única de "qué queda". |
 | `DISENO.es.md` | Arquitectura lógica, decisiones, garantías y deuda. |
 | `ARQUITECTURA.es.md` | Arquitectura de plataforma: orquestación, ingesta, persistencia y backend. **Propuesta.** |
 | `PATRON_REC.es.md` | Patrón implementado (`rec.py`, `certify.py`) y protocolo de investigación. |

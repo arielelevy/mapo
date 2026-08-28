@@ -233,7 +233,7 @@
 
 <header>
   <div class="eyebrow">
-    <span>MAPO</span><span>plan de tesis · v2.4</span><span>2026-08-27</span><span>estado vivo — P16 corriendo · P17 registrada</span>
+    <span>MAPO</span><span>plan de tesis · v2.5</span><span>2026-08-27</span><span>estado vivo — P16 corriendo · P17 registrada</span>
   </div>
   <h1>El precio de la solidez</h1>
   <p class="standfirst">Tres golpes el mismo día: el criterio de éxito refutado en held-out, una revisión adversarial que partió la tesis v1, y una regresión de 72 parámetros que ruteó mejor que toda la maquinaria. Los tres empujan al mismo lugar — y ese lugar es mejor que donde estábamos.</p>
@@ -376,6 +376,37 @@ ruteo 0.00 · fijo 1.00</title></rect>
     <p><code>gold_p17</code> (seed 73) declara <code>has_oracle</code> por celda según si <em>verificar</em> es más barato que <em>resolver</em>: C1 y C7 sí, C2/C3/C4/C5 no. Gold en las 26 tareas — la corrección no cambia y no puede cambiar; lo que cambia es qué se le dice a la <em>decisión</em>. <strong>6 de 26 con detector</strong>, contra 25 de 26 en todos los corpus del registro.</p>
     <p>El prerrequisito son <strong>dos sitios</strong>, no uno, y averiguarlo justificó simularlo antes de pagarlo: <code>features.py:214</code> arma el segmento de región, pero el que carga el peso es <code>rules.py:248</code>, la creencia que la cascada <em>lee</em>. Una primera simulación pisó sólo la región y reportó cero cambio — respuesta correcta a la pregunta equivocada.</p>
     <p><strong>P17a confirmada offline, cero tokens:</strong> la cascada cae de <strong>22 a 2</strong> de 26, más ajustado que el ≤6 predicho, porque las cuatro tareas irreversibles de C7 se las lleva el gate en prioridad 100 antes de que la cascada llegue a mirar. Quedan <strong>14 tareas esperando la sonda</strong> — el único lugar de donde la selección puede salir, lo que vuelve a P17b una apuesta real y no un trámite.</p>
+    <h3>Y una variable más grande que todo lo anterior</h3>
+    <p>El pendiente de «retención de contexto» preguntaba si la ventaja de un paradigma sobrevive a controlar por cuánta evidencia consiguió. Retención propiamente dicha no está instrumentada y no se afirma; lo que las filas ya pagadas sí traen es el primer eslabón: el <strong>recall de evidencia</strong>, qué fracción de las unidades que llevan la respuesta llegó a leer el paradigma.</p>
+
+    <p>El titular no depende de condicionar sobre nada — son dos medias sobre las mismas celdas. En <code>gold_transfer</code>: utilidad <strong>0,869</strong> con recall completo contra <strong>0,336</strong> con recall parcial. Esa brecha de <strong>+0,533 es 4,2× la mayor ventaja entre paradigmas</strong> (0,126).</p>
+
+    <p>La objeción obvia — que las celdas de recall completo sean todas fáciles — está contestada: estratificando por celda la brecha vive <em>adentro</em> de cada estrato (C1 +0,333, C2 +0,183, C4 +0,398, C7 +0,417), así que no puede ser el estrato. Y vuelve más fuerte: es <strong>máxima en C5, +0,721</strong> — exactamente la celda donde el ruteo más perdió en P15 (−0,278).</p>
+
+    <div class="claim">
+      <span class="label">Quién determina el recall, que es lo que decide si esto es accionable</span>
+      <p>Sobre <code>gold_transfer</code>: la <strong>región</strong> — lo que la decisión <em>ve</em> — explica el <strong>5,2%</strong> de la varianza del recall. El <strong>paradigma</strong> — lo que la decisión <em>elige</em> — explica el <strong>62,2%</strong>. La <strong>tarea</strong>, o sea cuánto pone el mundo, apenas el <strong>10,5%</strong>.</p>
+      <p>El paradigma determina el recall <strong>seis veces más que la tarea</strong>. El ruteo no arbitra al margen de la variable dominante: <strong>es la palanca principal sobre ella</strong>. Eso rescata al programa de ruteo en vez de socavarlo, y reencuadra para qué sirve — no «elegí la estructura que razona mejor» sino <strong>«elegí la estructura que de hecho va a leer la evidencia»</strong>.</p>
+      <p>Y el 5,2% es el problema. Dentro de cada región el recall recorre todo el rango, de 0,00 a 1,00: el router tiene la palanca principal sobre la variable principal y la acciona <strong>casi a ciegas</strong>. Es la misma forma que el mecanismo verificado de P15 —decidir sin eje para lo que decide el resultado— llegando desde una dirección completamente independiente.</p>
+    </div>
+
+    <p>Consecuencia de producto, con número atrás y <strong>sin implementar</strong>, así que queda como deuda y no entra al paper: la sonda existe para convertir una variable invisible en observada, y hoy sensa <em>acoplamiento</em>. La medición dice que la variable que conviene sensar es <em>si la evidencia se va a encontrar</em>. También es una advertencia para P17 — una regla de selección que por fin dispara está eligiendo sobre una creencia no relacionada con la mayor fuente de varianza del resultado.</p>
+
+    <h3>¿Es predictividad o sólo descripción?</h3>
+    <p>La descomposición de arriba es <strong>en la misma muestra</strong>: dice dónde vive la varianza, no que algo prediga. Predictividad es otra cosa y se contesta de una sola manera — ajustar en unos corpus y predecir en otro que el ajuste nunca vio. (Y no es reproducibilidad, que es una propiedad distinta — misma base de creencias ⟹ misma decisión — y se mide en P15d/P16d.)</p>
+    <div class="scroll"><table>
+      <thead><tr><th>predictor, ajustado en <code>gold_deep + gold_v2 + gold_holdout</code></th><th>MAE</th><th>R² fuera de muestra</th></tr></thead>
+      <tbody>
+        <tr><td>constante (media global)</td><td class="num">0,412</td><td class="num">−1,3%</td></tr>
+        <tr><td>por región — lo que la decisión <em>ve</em></td><td class="num">0,392</td><td class="num">3,8%</td></tr>
+        <tr><td><strong>por paradigma — lo que la decisión <em>elige</em></strong></td><td class="num">0,205</td><td class="num"><strong>60,0%</strong></td></tr>
+        <tr><td>región × paradigma</td><td class="num">0,183</td><td class="num">62,1%</td></tr>
+      </tbody>
+    </table></div>
+    <p>Ahora sí es predictividad: la tabla de recall por paradigma, ajustada en <strong>tres corpus distintos</strong>, explica el <strong>60% de la varianza del recall en un corpus que nunca vio</strong>. Y confirma la salvedad en vez de esquivarla — el 82,7% en muestra era ajuste: fuera de muestra, la región suma <strong>dos puntos</strong> sobre el paradigma solo.</p>
+
+    <p style="font-size:.92em;opacity:.85">Leído con cuidado: son fracciones marginales sobre grupos desbalanceados, no suman a nada, y región y paradigma no son ortogonales. La cifra de 22 grupos sobre 90 puntos está inflada. Las dos que cargan el argumento son de 5 grupos cada una, y lo que dice algo es su contraste. El cambio de signo de <code>dag_strategy</code> al condicionar (+0,083 → −0,040) se reporta como <em>indicio</em>: el recall es consecuencia del paradigma, y condicionar sobre una variable posterior al tratamiento no da un efecto directo insesgado.</p>
+
     <p class="lead" style="margin-top:1.2rem">Riesgo registrado antes de correr: θ se ajusta sobre corpus cuyas regiones se computaron con la regla vieja, así que el segmento <code>oracle</code>/<code>no_oracle</code> significa algo distinto en el entrenamiento y en la decisión. Si P17b falla con margen 0 <em>por falta de episodios</em> — y no por falta de señal — la lectura honesta es que hay que <strong>reconstruir los corpus</strong> bajo la regla honesta antes de poder medir selección. Es un costo que conviene enunciar ahora y no descubrir después.</p>
   </div>
 </section>
@@ -406,6 +437,7 @@ ruteo 0.00 · fijo 1.00</title></rect>
           <tr><td>Hebbiano: medido, no opinado</td><td>seleccionar por peso Hebbiano, por utilidad media o por tasa de victorias elige IDÉNTICO en gold_transfer (0,5263 los tres): el peso es registro, no política — la plasticidad que gobierna es el decay de θ y el ratchet de §6.2</td><td class="num">gratis</td></tr>
           <tr><td><strong>El ciclo de decisión, una sola vez</strong></td><td><code>app/decide.py</code>: <code>probe_then_decide</code> nombra dos pasos y ahora los dan los dos llamadores. <strong>La regla de selección disparó por primera vez</strong> — tarea bulk sin oráculo, se sonda, el re-plan vuelve <code>specialise</code>. Un plan sin resolver es un aplazamiento, jamás una elección, y lo que cuesta decidir se devuelve en vez de absorberse</td><td class="num">dc948fa</td></tr>
           <tr><td><strong>P17: corpus honesto + P17a</strong></td><td><code>--honest-detectors</code> declara el detector por celda según si verificar es más barato que resolver; <code>gold_p17</code> seed 73, gold en 26/26, detector en 6/26. <strong>P17a confirmada sin gastar un token: la cascada cae de 22 a 2.</strong> El prerrequisito son dos sitios (<code>features.py:214</code> y <code>rules.py:248</code>), y espera a que P16 cierre</td><td class="num">d77e469</td></tr>
+          <tr><td><strong>Recall de evidencia: la variable dominante</strong></td><td>brecha de <strong>+0,533</strong> entre leer toda la evidencia y no leerla, <strong>4,2× la mayor ventaja entre paradigmas</strong>; sobrevive estratificando por celda y es máxima en C5. Descomposición: región 5,2%, paradigma 62,2%, tarea 10,5% — el ruteo es la palanca principal sobre la variable principal, y la acciona casi a ciegas</td><td class="num">ec4da80</td></tr>
           <tr><td>Estadística: IC + FDR + AURC</td><td>bootstrap pareado sobre TAREAS (no filas), Benjamini-Hochberg sobre la familia con p-valor, AURC de la abstención. Resultado incómodo y correcto: el IC de P15a incluye el cero (p=0,19) y BH no deja sobrevivir ningún contraste; el AURC de θ es <strong>0,000 degenerado</strong> contra un techo de +0,400</td><td class="num">gratis</td></tr>
           <tr><td>Backoff jerárquico de región</td><td>una región sin evidencia difiere a su padre y <strong>devuelve qué nivel contestó</strong> — una afirmación sacada de un bin más grueso es más débil, y ocultarlo sería reclamar una especificidad que no tiene. Opt-in: P16 corre con su analizador congelado y no se toca</td><td class="num">gratis</td></tr>
           <tr><td>Docs sincronizados con el código</td><td>cada afirmación verificada contra <code>app/</code> en vez de asumida: dos deudas cerradas que ya no eran ciertas, una que sí lo es dejada viva (el peso Hebbiano se actualiza y el router no lo lee nunca), REC deja de figurar como propuesta</td><td class="num">d77e469</td></tr>
@@ -424,14 +456,15 @@ ruteo 0.00 · fijo 1.00</title></rect>
           <tr><td><strong>3 · Correr P17</strong></td><td>la primera medición honesta de selección: detectores por celda, la sonda ejecutada y el plan re-derivado dentro del banco, y su costo cobrado. P17b (≥7 de 14 vuelven <code>specialise</code>), P17c (la brecha neta, que es el re-test de lo que P15a falló) y P17d. Riesgo registrado: si el margen es 0 por falta de episodios y no por falta de señal, hay que reconstruir los corpus bajo la regla honesta</td><td>~14M tokens</td></tr>
           <tr><td>4 · Brazo en PROSA (E1)</td><td>los dos brazos implementados y sin correr: el clasificador de producción tal cual, y el router en prosa más fuerte construible. Se corre cuando P16 libere la cuota</td><td>~26 llamadas</td></tr>
           <tr><td>5 · Re-encuadrar §5.1 vs §5.2 en el paper</td><td>E2 muestra que la dominancia de cascada hace el trabajo que se le acredita al teorema de selección. El paper tiene que decir cuál de los dos resultados sostiene el claim — ahora además con el AURC degenerado sobre la mesa</td><td>escritura, tras P16/P17</td></tr>
-          <tr><td>6 · Retención de contexto</td><td>la variable mediadora: ¿la ventaja topológica sobrevive al control por recall de evidencia?</td><td>re-análisis, gratis</td></tr>
-          <tr><td>7 · Semántica del contrato + mis-binding</td><td>sin esto, F6 (contratos) mide algo indefinido; buscar nuestro propio contraejemplo primero</td><td>pizarra</td></tr>
-          <tr><td>8 · Cota nativa del ratchet</td><td>pérdida de cobertura por endurecimiento — reemplaza el préstamo del Teorema 10.1</td><td>pizarra</td></tr>
-          <tr><td>9 · Calibración por proposición al router activo</td><td>hoy se persiste pero los routers se crean sin leerla</td><td>código</td></tr>
-          <tr><td>10 · Horizonte con evidencia propia</td><td>coupling y horizonte comparten credencia en algunos caminos — y el horizonte es el eje que P15 señaló</td><td>código</td></tr>
-          <tr><td>11 · El peso Hebbiano: usarlo o sacarlo</td><td><code>policy.py</code> lo actualiza y <code>router.py</code> no lo lee ni una vez. Medido: seleccionar por peso, por utilidad media o por tasa de victorias elige idéntico. Es registro, no política — y una afirmación que no gobierna nada no debería seguir en el camino activo</td><td>código</td></tr>
-          <tr><td>12 · Corpus natural + segunda familia de modelos</td><td>validez externa real; un segundo generador propio reformula la objeción, no la responde</td><td>la fase cara</td></tr>
-          <tr><td>13 · Vecinos de REC leídos completos</td><td>antes de usar «primero» en el paper; reabrir el claim de consolidación del GATE</td><td>lectura</td></tr>
+          <tr><td>6 · Instrumentar retención de verdad</td><td>el recall ya está medido y manda; falta el segundo eslabón — cuánta de la evidencia recuperada sobrevive hasta la llamada que responde. Eso sí necesita código y una corrida</td><td>código + corrida</td></tr>
+          <tr><td><strong>7 · Que la sonda sense recuperabilidad</strong></td><td>la sonda convierte una variable invisible en observada, y hoy sensa acoplamiento. La medición dice que la que conviene sensar es si la evidencia se va a encontrar. Deuda registrada con número atrás, no escrita en el paper</td><td>código</td></tr>
+          <tr><td>9 · Semántica del contrato + mis-binding</td><td>sin esto, F6 (contratos) mide algo indefinido; buscar nuestro propio contraejemplo primero</td><td>pizarra</td></tr>
+          <tr><td>10 · Cota nativa del ratchet</td><td>pérdida de cobertura por endurecimiento — reemplaza el préstamo del Teorema 10.1</td><td>pizarra</td></tr>
+          <tr><td>11 · Calibración por proposición al router activo</td><td>hoy se persiste pero los routers se crean sin leerla</td><td>código</td></tr>
+          <tr><td>12 · Horizonte con evidencia propia</td><td>coupling y horizonte comparten credencia en algunos caminos — y el horizonte es el eje que P15 señaló</td><td>código</td></tr>
+          <tr><td>13 · El peso Hebbiano: usarlo o sacarlo</td><td><code>policy.py</code> lo actualiza y <code>router.py</code> no lo lee ni una vez. Medido: seleccionar por peso, por utilidad media o por tasa de victorias elige idéntico. Es registro, no política — y una afirmación que no gobierna nada no debería seguir en el camino activo</td><td>código</td></tr>
+          <tr><td>14 · Corpus natural + segunda familia de modelos</td><td>validez externa real; un segundo generador propio reformula la objeción, no la responde</td><td>la fase cara</td></tr>
+          <tr><td>15 · Vecinos de REC leídos completos</td><td>antes de usar «primero» en el paper; reabrir el claim de consolidación del GATE</td><td>lectura</td></tr>
 </tbody>
       </table>
     </div>
@@ -609,7 +642,7 @@ ruteo 0.00 · fijo 1.00</title></rect>
 </section>
 
 <footer>
-  <p>v2.4, 2026-08-27 — la sección «Estado vivo» es la fuente de verdad de avance. Mismo día que el veredicto de P15 (refutada, mecanismo verificado, commit <span class="mono">eef4096</span>) y la revisión adversarial que degradó «generación acotada» de tesis a corolario. Cada fase termina en algo que corre; el paper documenta lo que sobrevivió.</p>
+  <p>v2.5, 2026-08-27 — la sección «Estado vivo» es la fuente de verdad de avance. Mismo día que el veredicto de P15 (refutada, mecanismo verificado, commit <span class="mono">eef4096</span>) y la revisión adversarial que degradó «generación acotada» de tesis a corolario. Cada fase termina en algo que corre; el paper documenta lo que sobrevivió.</p>
 </footer>
 
 </div>

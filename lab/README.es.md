@@ -4,7 +4,8 @@
 > [README.md](README.md)
 
 Esta página resume la solución. La arquitectura, las decisiones, las deudas comprobadas
-y los diagramas viven en [`DISENO.es.md`](DISENO.es.md). El patrón de autorreparación
+y los diagramas viven en [`DISENO.es.md`](DISENO.es.md); **la lista completa de lo que
+falta, en un solo lugar, está en [`PENDIENTES.es.md`](PENDIENTES.es.md)**. El patrón de autorreparación
 vive en [`PATRON_REC.es.md`](PATRON_REC.es.md).
 
 > **Regla del repo**: nada se describe acá sin implementación que lo corra. Si una
