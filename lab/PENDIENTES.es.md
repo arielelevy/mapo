@@ -65,7 +65,7 @@
 - [ ] P-8 · promoción sin incertidumbre
 - [ ] P-9 · repetir consolidación reaplica historia
 - [ ] P-10 · flags declarativos del dial A0–A3
-- [ ] P-11 · separar producto de banco (`serve.py` importa `grading`)
+- [x] **P-11** · dependencia invertida: `app/verify.py` es el verificador del **producto** y `grading` es la cara del **banco** sobre el mismo primitivo. Relocación pura, verificada re-puntuando 390 filas: **0 discrepancias**
 
 **Lo más grande, y no estaba en la lista**
 - [ ] **A-1** · arrancar el producto — *el motor nuevo no existe*

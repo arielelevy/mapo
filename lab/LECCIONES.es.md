@@ -334,6 +334,30 @@ sobre todo, **enumerable**.
 
 ---
 
+### 7.8 Arreglar el corrector deja el registro internamente inconsistente · `MEDIDO`
+
+M9 arregló el corrector —los ítems sin contenido normalizado dejan de contar— y eso cambió
+el F1 de respuestas con puntuación suelta. Las filas escritas **antes** del arreglo
+conservan su utilidad vieja, así que el registro pasó a tener dos correctores adentro sin
+que nada lo dijera.
+
+Encontrado de rebote, re-puntuando el registro entero para verificar que otra refactorización
+fuera pura: **4 filas de 780** difieren. El corrimiento por celda es de **0,0044** en
+`gold_transfer` y **0,0172** en `gold_p16`, contra pisos de ruido de 0,0573 y 0,0339 — o
+sea **adentro del ruido en los dos casos**, así que ningún veredicto se mueve.
+
+Lo que importa no es la magnitud sino la clase de error:
+
+> Una fila es el registro de lo que pasó, pero **la utilidad no es lo que pasó: es una
+> función de lo que pasó**. Congelarla adentro de la fila hace que arreglar el corrector
+> parta el registro en dos épocas, y nada en el archivo dice a cuál pertenece cada fila.
+
+Es la misma forma que 7.3 con las regiones. La regla general: **lo que es función de un
+registro se recomputa; sólo lo irreducible se guarda.** Si por costo hay que guardarlo,
+guardar también la versión de la función que lo produjo.
+
+---
+
 ## 9. Lo que este registro NO estableció
 
 Se escribe acá para que no se lo confunda con lo de arriba.

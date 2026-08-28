@@ -31,7 +31,7 @@ import hashlib
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from . import grading
+from .verify import score as detector_score
 from .assurance import Assurance
 from .config import Settings
 from .features import FeatureExtractor, measure_continuation, payload_for
@@ -277,7 +277,7 @@ def answer(
         for rung in plan.ladder:
             result = REGISTRY[rung](client, surface, task)
             usage.merge(result.usage)
-            score = grading.score(result.answer, request.oracle)
+            score = detector_score(result.answer, request.oracle)
             ladder.append(
                 {"paradigm": rung, "utility": round(score, 3),
                  "tokens": result.usage.total_tokens}
