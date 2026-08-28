@@ -952,6 +952,48 @@ lo que se reporta es el **punto de equilibrio** y no una cuenta: con la tarifa d
 
 ---
 
+### 5.5 Un rechazo que el modelo puede reintentar no es flujo de control · `MEDIDO`
+
+`D-1` midió que **el 33% del gasto es evitable** a igual utilidad. La regla de parada se
+implementó para capturarlo: pasado el umbral de búsquedas estériles, buscar **se rechaza**
+con motivo tipado, y leer y responder quedan intactos. Predicciones registradas antes de
+correr.
+
+| | resultado |
+|---|---|
+| **P20a** el costo baja ≥ 10% | **REFUTADA** — baja **2,6%** |
+| **P20b** la utilidad no cae más que el ruido | **CONFIRMADA** — cae 0,0057 contra un piso de 0,0773 |
+| **P20c** muerde donde el modelo controla el bucle | **CONFIRMADA** — 2,8% contra 0,0% |
+| **P20d** después del rechazo el modelo lee o responde | **REFUTADA** — **re-emite búsqueda el 69%** |
+
+> **`P20d` explica a `P20a`.** El código rechaza la búsqueda y el modelo **vuelve a pedirla
+> con otras palabras**, 69 de cada 100 veces. La regla no removió el desperdicio: le agregó
+> una vuelta.
+
+**Y eso toca el invariante, no la eficiencia.** El producto dice que el LLM es sensor y
+**jamás maneja flujo de control**. Un rechazo que el modelo puede esquivar reintentando deja
+el flujo de control exactamente donde estaba:
+
+> **Rechazar una llamada no es quitarle la decisión al modelo. Quitársela es no ofrecerle la
+> herramienta.**
+
+La corrección que se sigue de la medición es estructural y no un umbral distinto: pasado el
+límite, las herramientas de búsqueda tienen que **salir de la lista de specs** de las
+llamadas siguientes. Ahí el modelo no puede reintentar — no porque se le diga que no, sino
+porque la acción no existe.
+
+**Lo que sí quedó establecido, y es lo que hace segura la corrección.** `P20b` confirma que
+cortar la búsqueda **no cuesta utilidad**: 0,0057 de caída contra un piso de ruido de
+0,0773. Así que el riesgo de la versión estructural no es contestar peor — es que el 33%
+siga sin ser alcanzable, y eso lo dirá la corrida.
+
+**Y una nota sobre `P20c`, que está «confirmada» y no significa mucho.** 2,8% contra 0,0%
+cumple el criterio, pero `react` —el brazo de bucle más puro— tuvo **cero rechazos**: casi
+no se estanca. La predicción acertó por `dag_strategy` y `rewoo`, no por el mecanismo que
+enunciaba. Estaba anotado antes de correr y por eso se puede decir ahora.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una
