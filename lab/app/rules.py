@@ -78,6 +78,18 @@ ACTION_PROBE = "probe_then_decide"
 ACTION_SPECIALISE = "specialise"
 ACTION_DEFER = "defer_to_fallback"
 
+# El umbral de credencia sobre el acoplamiento, en UN solo lugar.
+#
+# POR QUE. La regla de sonda decidia "ya esta medido" con umbral 0,0 y la de especializar
+# exigia 0,7. Entre los dos habia una ZONA MUERTA: una observacion de credencia 0,3
+# suprimia la sonda —porque 0,3 > 0,0— y no alcanzaba para especializar —porque
+# 0,3 < 0,7—. El request quedaba sin sondear y sin especializar, o sea peor que si el
+# acoplamiento no se hubiera estimado nunca.
+#
+# Dos reglas que hablan de la misma proposicion y usan umbrales distintos no estan
+# afinadas distinto: estan en desacuerdo sobre que significa "conocido".
+COUPLING_CREDENCE_FLOOR = 0.7
+
 BULK_THRESHOLD = 8
 
 
@@ -194,7 +206,7 @@ def standard_rules(policy: BeliefPolicy) -> Governance:
                     Requirement(
                         proposition="coupling_tight",
                         expected=True,
-                        min_credence=0.7,
+                        min_credence=COUPLING_CREDENCE_FLOOR,
                         min_provenance=derived_floor,
                     ),
                 ],
@@ -294,7 +306,9 @@ def sense(
     # "Unmeasured" means: no belief about coupling at the provenance floor the RULES
     # will accept. Reading the floor from the shared policy is what keeps the probe
     # rule and the specialise rule from disagreeing about what counts as known.
-    measured = base.satisfies("coupling_tight", 0.0, policy.derived_floor)
+    measured = base.satisfies(
+        "coupling_tight", COUPLING_CREDENCE_FLOOR, policy.derived_floor
+    )
     base.assert_(Belief(
         proposition="coupling_unmeasured",
         value=not measured,

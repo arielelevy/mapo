@@ -98,11 +98,11 @@
 - [x] **M11** · ECE sobre la credencia declarada, no el centro del bin
 - [x] **M17** · `cot` fuera del default (`RETIRED`)
 - [x] **M18** · un solo escritor por archivo de resultados
-- [ ] M8 · constante de supresión de sonda *(ya no bloqueado: P16 cerró)*
-- [ ] M10 · `GIST_CHARS` inflado ⇒ sobre-rechazo *(ya no bloqueado; **esperar a que P17 termine**: cambia `router.plan`)*
-- [ ] M1 · args del modelo ⇒ `ToolFailure` *(espera a P17)*
-- [ ] M13 · accesos fuera del `try` en dag/modern *(espera a P17)*
-- [ ] M14 · extractor JSON duplicado ×9 *(espera a P17: toca ejecución de paradigmas)*
+- [x] **M8** · `COUPLING_CREDENCE_FLOOR` compartido: había una **zona muerta** — credencia 0,3 suprimía la sonda y no alcanzaba para especializar
+- [x] **M10** · `GIST_CHARS` derivado de `SUMMARY_CHARS`: 400 → 220. El gist real promedia 69,4 chars, o sea **5,8× de sobre-proyección**
+- [x] **M1** · args validados en `dispatch` ⇒ `ToolFailure`; el catch ampliado de `modern.py` se retira. **Era sesgo con dirección**: el mismo output malformado era recuperable en un paradigma y fatal en otro
+- [x] **M13** · la FORMA validada, no sólo el parseo: `well_formed` filtra elementos sin las claves que el código lee dos líneas abajo
+- [x] **M14** · `paradigms/parsing.py`: **cero copias**, un solo contrato de excepciones (había cinco tuplas distintas)
 - [x] **M15** · loop de calibración deduplicado en `beliefs.score_calibration` — y las contradicciones, que sólo estaban en una copia, ahora se persisten en las dos
 - [x] **M16** · un solo filtro de `None`: una fila legacy volteaba la consolidación entera
 - [ ] pip-audit nunca corrido
@@ -593,9 +593,10 @@ haberse cerrado de rebote.
 llama a `router.plan`, que pasa por factibilidad y por reglas. **M10** (el `GIST_CHARS`
 inflado) y **M8** (la constante de supresión de sonda) cambiarían qué paradigmas se podan
 y qué regla dispara, así que moverlos ahora reescribiría el veredicto congelado por debajo.
-Van en el mismo turno que B2. **M1, M13, M14 y M16** tocan la ejecución de los paradigmas
-o la consolidación: con una corrida a mitad de camino, una fila que hoy crashea pasaría a
-degradar y el dato dejaría de ser homogéneo. También esperan.
+**Todos aplicados el 2026-08-27.** Los que tocaban la ejecución de los paradigmas
+—M1, M13, M14— y los que pasaban por `router.plan` —M8, M10— se hicieron **matando P17
+a los 46 filas** en vez de dejarlos esperando otra corrida de cuatro horas. Verificado
+después: el mecanismo de P17 no se movió (cascada 2/26, catorce esperando la sonda).
 
 | # | Dónde | Qué |
 |---|---|---|

@@ -378,6 +378,39 @@ class ToolSurface:
             ),
         }
 
+    @staticmethod
+    def _required(args: dict[str, Any], key: str, tool: str) -> Any:
+        """Un argumento que falta es un error del MODELO, no del harness.
+
+        POR QUE ESTO IMPORTA PARA LA COMPARACION. `args["query"]` crudo levanta
+        `KeyError`, y `KeyError` no es `ToolFailure`. El loop compartido atrapa sólo
+        `ToolFailure`, asi que ahi una llamada malformada mataba la tarea entera y la
+        puntuaba cero; `modern.py` habia ampliado su catch a `(ToolFailure, ValueError,
+        KeyError)`, asi que ahi la misma llamada degradaba y seguia.
+
+        O sea: **el mismo output malformado del modelo era recuperable en un paradigma y
+        fatal en otro**, y la diferencia entraba a la medicion como si fuera calidad del
+        paradigma. Un paradigma que pide mas argumentos por llamada estaba mas expuesto,
+        que es precisamente la clase de sesgo con direccion que un banco existe para no
+        tener.
+        """
+        if key not in args or args[key] is None:
+            raise ToolFailure(
+                f"{tool}: falta el argumento obligatorio '{key}'."
+            )
+        return args[key]
+
+    @staticmethod
+    def _bounded_int(args: dict[str, Any], key: str, default: int, tool: str) -> int:
+        """Un `limit` no numerico tampoco es una excepcion del harness."""
+        raw = args.get(key, default)
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            raise ToolFailure(
+                f"{tool}: '{key}' tiene que ser un entero, llego {raw!r}."
+            ) from None
+
     def dispatch(self, name: str, args: dict[str, Any]) -> str:
         self.calls[name] = self.calls.get(name, 0) + 1
         # Se registra ANTES de despachar, a proposito: una llamada que falla igual fue
@@ -401,13 +434,21 @@ class ToolSurface:
                     if u.strip() and u.strip() in self.view.unit_ids
                 ]
                 return json.dumps(
-                    self.state.add_note(args["topic"], args["finding"], units)
+                    self.state.add_note(
+                        self._required(args, "topic", "note"),
+                        self._required(args, "finding", "note"),
+                        units,
+                    )
                 )
             if name == "notes":
                 return json.dumps(self.state.render_notes())
             if name == "plan":
-                return json.dumps(self.state.set_plan(args["steps"]))
-            return json.dumps(self.state.advance(args["result"]))
+                return json.dumps(
+                    self.state.set_plan(self._required(args, "steps", "plan"))
+                )
+            return json.dumps(
+                self.state.advance(self._required(args, "result", "advance"))
+            )
 
         if name == "read_all":
             if self.variant in ("basic", "managed"):
@@ -416,7 +457,9 @@ class ToolSurface:
 
         if name == "search":
             ranked = self.hybrid.rank(
-                self.view, args["query"], int(args.get("limit", 8))
+                self.view,
+                self._required(args, "query", "search"),
+                self._bounded_int(args, "limit", 8, "search"),
             )
             note = self._note_search(ranked)
             body: dict[str, Any] = {
@@ -430,7 +473,7 @@ class ToolSurface:
             return json.dumps(body)
 
         if name == "keyword_search":
-            query = args["query"]
+            query = self._required(args, "query", name)
             ranked = self.lexical.rank(self.view, query, int(args.get("limit", 8)))
             terms = tokenise(query)
             out = []
@@ -446,7 +489,9 @@ class ToolSurface:
 
         if name == "semantic_search":
             ranked = self.semantic.rank(
-                self.view, args["query"], int(args.get("limit", 5))
+                self.view,
+                self._required(args, "query", "keyword_search"),
+                self._bounded_int(args, "limit", 5, "keyword_search"),
             )
             self.units_read.update(ranked)
             return json.dumps([
@@ -455,7 +500,9 @@ class ToolSurface:
 
         if name == "read":
             requested = [
-                part.strip() for part in str(args["unit_ids"]).split(",") if part.strip()
+                part.strip()
+                for part in str(self._required(args, "unit_ids", name)).split(",")
+                if part.strip()
             ]
             if len(requested) > 1:
                 self.batched_reads += 1

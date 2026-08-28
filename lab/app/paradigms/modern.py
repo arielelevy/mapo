@@ -24,6 +24,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from .parsing import extract_json, well_formed
 from ..fsio import write_atomic
 from ..llm import LLMClient, Usage
 from ..tools import MAX_BATCH_READ, ToolFailure, ToolSurface, _summarise
@@ -61,13 +62,14 @@ def rewoo(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Resu
     )
     usage.merge(plan.usage)
 
-    try:
-        raw = plan.text.strip()
-        raw = raw[raw.index("{"): raw.rindex("}") + 1]
-        steps = json.loads(raw)["steps"][:MAX_PLAN_STEPS]
-    except (ValueError, KeyError, TypeError):
-        # A malformed plan is a real failure of this paradigm on this task.
-        steps = []
+    # A malformed plan is a real failure of this paradigm on this task: degrada a cero
+    # pasos, no explota.
+    declared = extract_json(plan.text, "steps")
+    steps = declared[:MAX_PLAN_STEPS] if isinstance(declared, list) else []
+
+    # La forma, no sólo el parseo: `steps` podia ser una lista de strings y `step.get`
+    # levantaba AttributeError fuera de todo try.
+    steps = well_formed(steps, "tool")
 
     evidence: dict[str, str] = {}
     for i, step in enumerate(steps, start=1):
@@ -80,7 +82,11 @@ def rewoo(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Resu
                 args[k] = v
         try:
             output = surface.dispatch(str(step.get("tool", "")), args)
-        except (ToolFailure, ValueError, KeyError) as failure:
+        # Sólo `ToolFailure`, igual que el loop compartido. El catch ampliado a
+        # `(ValueError, KeyError)` existia para tapar que `dispatch` levantaba
+        # excepciones crudas; ahora valida y levanta `ToolFailure`, asi que taparlo aca
+        # volveria a esconder un bug real del harness detras de una degradacion.
+        except ToolFailure as failure:
             output = json.dumps({"error": str(failure)})
         evidence[out_key] = output[:EVIDENCE_ITEM_CHARS]
 
@@ -118,11 +124,9 @@ def gist_reader(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -
     )
     usage.merge(triage.usage)
 
-    try:
-        raw = triage.text.strip()
-        raw = raw[raw.index("{"): raw.rindex("}") + 1]
-        decision = json.loads(raw)
-    except (ValueError, TypeError):
+    # `json.loads` puede devolver una lista y entonces `.get` explota fuera del try.
+    decision = extract_json(triage.text, default={})
+    if not isinstance(decision, dict):
         decision = {}
 
     if isinstance(decision.get("answer"), str) and decision["answer"].strip():
@@ -230,10 +234,8 @@ def _entity_graph(
             max_tokens=GRAPH_INDEX_MAX_TOKENS,
         )
         usage.merge(completion.usage)
-        try:
-            raw = completion.text.strip()
-            payload = json.loads(raw[raw.index("{"): raw.rindex("}") + 1])
-        except (ValueError, TypeError):
+        payload = extract_json(completion.text)
+        if not isinstance(payload, dict):
             continue
         ents = [
             str(e).strip().lower()
@@ -283,13 +285,10 @@ def graph_traverse(
         messages=[{"role": "user", "content": q_prompt}], max_tokens=300
     )
     usage.merge(q.usage)
-    try:
-        raw = q.text.strip()
-        seeds = [
-            str(e).strip().lower()
-            for e in json.loads(raw[raw.index("{"): raw.rindex("}") + 1])["entities"]
-        ]
-    except (ValueError, KeyError, TypeError):
+    entities = extract_json(q.text, "entities")
+    if isinstance(entities, list):
+        seeds = [str(e).strip().lower() for e in entities]
+    else:
         seeds = []
 
     # Deterministic walk: BFS from the question's entities, units scored by how early
@@ -361,13 +360,10 @@ def extract_compute(
         messages=[{"role": "user", "content": schema_prompt}], max_tokens=300
     )
     usage.merge(schema.usage)
-    try:
-        raw = schema.text.strip()
-        fields = [
-            str(f)
-            for f in json.loads(raw[raw.index("{"): raw.rindex("}") + 1])["fields"]
-        ][:8] or ["value"]
-    except (ValueError, KeyError, TypeError):
+    declared = extract_json(schema.text, "fields")
+    if isinstance(declared, list):
+        fields = [str(f) for f in declared][:8] or ["value"]
+    else:
         fields = ["value"]
 
     rows: list[dict[str, Any]] = []
@@ -384,8 +380,7 @@ def extract_compute(
         )
         usage.merge(completion.usage)
         try:
-            raw = completion.text.strip()
-            payload = json.loads(raw[raw.index("{"): raw.rindex("}") + 1])
+            payload = extract_json(completion.text, default={})
             for row in payload["rows"]:
                 if isinstance(row, dict):
                     row["_unit"] = unit_id
@@ -462,6 +457,8 @@ def streaming_scan(
         text = completion.text.strip()
         try:
             updated = text[text.index("{"): text.rindex("}") + 1][:CARRY_MAX_CHARS]
+            # Se valida el RECORTE, no el objeto entero: el corte a CARRY_MAX_CHARS
+            # puede partir el JSON, y lo que se arrastra es el recorte.
             json.loads(updated)
             carry = updated
         except (ValueError, TypeError):
@@ -541,12 +538,10 @@ def pointer_chase(
         )
         usage.merge(pick.usage)
         iterations += 1
-        try:
-            raw = pick.text.strip()
-            start = str(
-                json.loads(raw[raw.index("{"): raw.rindex("}") + 1])["start"]
-            ).strip()
-        except (ValueError, KeyError, TypeError):
+        picked = extract_json(pick.text, "start")
+        if picked is not None:
+            start = str(picked).strip()
+        else:
             start = ""
         # An anchor outside the offered hits is a proposition the code does not
         # accept: fall back to the retriever's top hit, deterministically.
@@ -581,7 +576,7 @@ def pointer_chase(
             fact, nxt = "", ""
             try:
                 raw = step.text.strip()
-                payload = json.loads(raw[raw.index("{"): raw.rindex("}") + 1])
+                payload = extract_json(raw, default={})
                 fact = str(payload.get("fact") or "").strip()
                 nxt = str(payload.get("next") or "").strip()
             except (ValueError, TypeError):

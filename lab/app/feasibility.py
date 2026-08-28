@@ -31,11 +31,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from .tools import SUMMARY_CHARS
 
 CHARS_PER_TOKEN = 4
 
-# One gist line per unit: SUMMARY_CHARS of body plus id and length hint (tools._summarise).
-GIST_CHARS = 400
+# Una linea de gist por unidad. Se DERIVA de la formula que la produce
+# (`tools._summarise`: `body[:SUMMARY_CHARS]` mas " … [N chars]") en vez de declararse
+# a mano, mas un margen para el sobre de la respuesta de busqueda — id de unidad y JSON.
+#
+# POR QUE IMPORTABA. Estaba fijo en 400 y el gist real de `gold_transfer` promedia 69,4
+# caracteres con un maximo de 126: una sobre-proyeccion de 5,8x. La factibilidad rechaza
+# un paradigma cuando su proyeccion no entra en el presupuesto, asi que inflar el gist
+# no es conservador — declara INFACTIBLE a un paradigma que entraba, y esa exclusion
+# entra al registro como si fuera un hecho aritmetico sobre la tarea.
+#
+# Sigue siendo una COTA SUPERIOR, no un promedio: la factibilidad no puede sub-proyectar
+# sin admitir planes que no entran. Por eso parte de SUMMARY_CHARS —el techo del recorte—
+# y no de la media medida.
+GIST_ENVELOPE_CHARS = 40  # " … [NNNNN chars]" + id de unidad + sobre JSON
+GIST_CHARS = SUMMARY_CHARS + GIST_ENVELOPE_CHARS
 
 # A paradigm may consume this share of the task budget. The remainder is the
 # conversation itself, which a paradigm using the entire budget would not leave room for.

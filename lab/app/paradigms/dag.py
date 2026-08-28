@@ -41,6 +41,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from .parsing import extract_json, well_formed
 from .blackboard import Blackboard
 from ..llm import LLMClient, Usage
 from ..tools import ToolSurface
@@ -230,12 +231,14 @@ def dag_strategy(
     usage.merge(plan_completion.usage)
     iterations += 1
 
-    try:
-        sub_questions = _parse_json(plan_completion.text, "sub_questions")
-        sub_questions = sub_questions[:DAG_MAX_SUB_QUESTIONS]
-        if not sub_questions:
-            raise ValueError("empty plan")
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError, IndexError):
+    # `well_formed` filtra ademas la FORMA, no solo el parseo: un plan que parsea pero
+    # trae elementos sin `id` explotaba dos lineas mas abajo, en `_assign_waves`, FUERA
+    # de este try — o sea que el paradigma degradaba con un JSON roto y moria con un JSON
+    # valido de forma equivocada, que son incoherentes entre si.
+    sub_questions = well_formed(
+        extract_json(plan_completion.text, "sub_questions"), "id", "question"
+    )[:DAG_MAX_SUB_QUESTIONS]
+    if not sub_questions:
         # A malformed plan degrades to a single sub-question equal to the query. This
         # is how such strategies behave in practice, and removing it would measure a
         # tidier paradigm than anyone actually runs.
@@ -322,9 +325,13 @@ def dag_strategy(
         usage.merge(replan_completion.usage)
         iterations += 1
 
-        try:
-            retries = _parse_json(replan_completion.text, "sub_questions")
-        except (json.JSONDecodeError, KeyError, TypeError):
+        # Antes el filtro de abajo quedaba FUERA del try: `r["id"]` sobre un elemento
+        # sin `id` mataba la tarea entera, justo despues de que el `except` de arriba
+        # decidiera que un replan malformado sólo corta el bucle.
+        retries = well_formed(
+            extract_json(replan_completion.text, "sub_questions"), "id", "question"
+        )
+        if not retries:
             break
         retries = [r for r in retries if r["id"] not in extractions]
         if not retries:
