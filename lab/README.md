@@ -422,6 +422,41 @@ capture. If that happens, P15b is evaluated on C5 alone and the C3 half is repor
 **vacuous, not as confirmed** — the distinction matters, and it is written down here rather
 than decided once the numbers are in. C3 in nano remains an open region, not a result.
 
+### Registered predictions — P25, absence and presupposition (2026-08-28, before running)
+
+Two obligations the harness never had, each with a cell, a verifier, and a typed contract.
+The factor `demand_obligations` is off by default: asking for the declarations changes the
+prompt every arm reads, so its rows are not comparable with the rows measured so far.
+
+**B2 — absence.** The worst harm/attention ratio in the family. An absence asserted from a
+sample produces an answer that **looks normal**: "no memo covers X" reads just as confident
+after 3 units as after 40. A presence error collapses on its own — the reader looks for the
+fact and it is not there — and an absence error leaves no trace, because there is nothing to
+look for. The rule is the asymmetry: **presence needs one witness, absence needs the whole
+domain**.
+
+**D1 — presupposition.** "On what date did X transfer the account?" takes for granted that
+a transfer happened. If none did, **every** answer to the question as asked is false,
+*including* "no date is recorded": declining the datum ratifies the premise as surely as
+supplying one.
+
+| | prediction | falsified if |
+|---|---|---|
+| **P25a** | with the contract OFF, arms assert absence having read **<50%** of the scope on the majority of B2 tasks | they read the domain anyway, which would mean the caution was already there and the contract buys nothing |
+| **P25b** | with the contract ON, `absence.emitted` falls — **fewer answers are issued**, and that is the contract working, not a regression | emission does not fall, which would mean the declaration is being made without changing behaviour |
+| **P25c** | on D1 with the contract OFF, the majority of arms **answer the question** — supply a date or decline the date — rather than reject the premise | they reject it unprompted, which would retire the contract |
+| **P25d** | `direct` is **not** better at either than the search-driven arms; the failure is one of obligation, not of context | it is better, which would mean the obligation is really a retrieval problem |
+
+**And a limit stated before the run, not after.** B2's absent roles come from `ABSENT_ROLES`
+— legitimate names from the same vocabulary that the generator never assigns. The first
+version looked for a role from `ROLES` that nobody in scope held, which works at width 12
+and **disappears at width 40**: with enough people all five get instantiated. That would
+have confined the absence cell to the small regime — the one the product does not target,
+and the one where the failure matters least. Asserting an absence over 12 units is less
+reckless than over 400.
+
+---
+
 ### Registered predictions — P24, terse tool descriptions as a FACTOR (2026-08-28, before running)
 
 Tool descriptions are **1,167 of the 2,135 characters** of the spec payload — 55%. Cutting

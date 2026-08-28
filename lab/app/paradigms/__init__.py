@@ -58,6 +58,34 @@ def parse_answer(text: str) -> str:
     return matches[-1].strip() if matches else text.strip()
 
 
+# QUE PARADIGMAS RECORREN EL ALCANCE ENTERO POR CONSTRUCCION.
+#
+# ES UNA PROPIEDAD A PRIORI, NO UN RESULTADO APRENDIDO. No dice «react pierde en C2» —eso
+# lo mide theta y cambia con el corpus—. Dice que `react` **lee una muestra**, y una
+# muestra no puede establecer una afirmacion sobre un dominio entero. Es la misma
+# asimetria de `C-ABSENCE`, del lado del request en vez del enunciado.
+#
+#   map_reduce      una llamada POR UNIDAD. Cubre el alcance porque su forma lo obliga
+#   direct          todo el material en un prompt. Cubre cuando la factibilidad lo admite,
+#                   y cuando no lo admite ya esta podado antes de llegar aca
+#   react           busca y lee lo que decide leer. Puede cubrir; nada lo obliga
+#   rewoo           un plan y evidencia por paso. Mismo caso
+#   dag_strategy    ramas sobre sub-preguntas. Cubre lo que las sub-preguntas alcanzan
+#   gist_reader     resume y despues lee lo elegido. Por diseno NO cubre
+#   handoff         alcances disjuntos que suman el total, pero cada agente ve el suyo y
+#                   la transferencia es condicional: la union no esta garantizada
+#
+# LA DUDA SE RESUELVE HACIA `False`. Un paradigma que no esta en el mapa no recorre: si
+# no se sabe, no se puede prometer. Y prometerlo de mas es justo la falla que la
+# precondicion existe para impedir.
+TRAVERSES_SCOPE: frozenset[str] = frozenset({"map_reduce", "direct"})
+
+
+def traverses_scope(paradigm: str) -> bool:
+    """Si este paradigma recorre el alcance entero por su ESTRUCTURA, no por suerte."""
+    return paradigm in TRAVERSES_SCOPE
+
+
 @dataclass
 class Result:
     answer: str

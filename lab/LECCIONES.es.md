@@ -1429,6 +1429,79 @@ un token.
 
 ---
 
+### 5.12 La cota acota el daño; el precio se paga entero en un solo escalón · `MEDIDO`
+
+`COTA_RATCHET.es.md` acota el **daño**: el piso sólo sube y hay cuatro niveles, así que una
+región no puede endurecerse más de dos veces para siempre. Eso suena barato, y **la cota no
+dice nada del costo de oportunidad**. Medido sobre el registro, sin gastar un token:
+
+| nivel | brazos | cobertura | u(mejor fijo) | pérdida |
+|---|---:|---:|---:|---:|
+| A0 exploratorio | 5 | 100% | 0,6101 | 0,0000 |
+| A1 estándar | 5 | 100% | 0,6101 | 0,0000 |
+| A2 contable | 5 | 100% | 0,6101 | 0,0000 |
+| **A3 certificado** | **2** | **40%** | **0,4221** | **0,1880** |
+
+**El ratchet es gratis hasta A2 y cuesta todo de una vez en A3.** A0/A1/A2 declaran
+`admissible_patterns=None` —no restringen nada— así que subir dentro de ese rango no compra
+garantía ni cuesta cobertura: **no hace nada**. El único escalón que hace algo cuesta el
+**60% del catálogo** y el **31% de la utilidad**.
+
+> Eso reordena la lectura de la cota. «A lo sumo dos subidas» invita a pensar en un daño
+> que se acumula despacio. Lo medido es lo contrario: **una sola de las tres transiciones
+> tiene precio, y ahí es abrupto**.
+
+**Y el promedio esconde a quien paga.** Por región, al endurecer A0→A3:
+
+| región | Δ | n |
+|---|---:|---:|
+| `many/no_oracle/loose/chain` | **−0,5000** | 4 |
+| `many/no_oracle/loose/flat` | −0,3777 | 7 |
+| `many/no_oracle/tight/flat` | −0,3333 | 2 |
+
+Barato en promedio y caro donde importa **no es barato**. En el corpus de sonda la pérdida
+media a A3 es **0,0000** y aun así una región pierde 0,0877: la media dice que no pasó nada
+y algo pasó.
+
+**Dos regiones perdían 1,0000 y 0,6667 y no están en la tabla de arriba, a propósito.**
+Tienen **n=1**. Un delta sobre una tarea es un sorteo, no una propiedad de la región — y sin
+la marca el número más grande de la tabla, que casi siempre es el de n más chico, se lee
+como el hallazgo. El analizador ahora los marca y reporta aparte **el peor con n≥3**.
+
+---
+
+### 5.13 Gatear una demanda exhaustiva mata la celda que existe para resolverla · `EJECUTADO`
+
+`U-2` pedía que la regla combine **demanda × material**. El primer intento fue una regla de
+gate a prioridad 85: *cobertura exhaustiva exigida + material masivo ⟹ `GATE`*. Corre y
+hace lo que dice. Y **mata a `C2` entera**, que es exhaustiva y masiva y es justo el caso
+que los paradigmas existen para resolver.
+
+**El error no fue el umbral: fue el momento.** La regla corre **antes** de ejecutar, así que
+no puede saber si se cubrió el alcance. Lo único que puede saber de antemano es la
+**estructura**:
+
+| | |
+|---|---|
+| `map_reduce` | una llamada **por unidad**: cubre porque su forma lo obliga |
+| `direct` | todo el material en un prompt; y donde no entra, la factibilidad ya lo podó |
+| `react`, `rewoo`, `dag_strategy` | leen lo que deciden leer. **Pueden** cubrir; nada lo obliga |
+| `gist_reader` | resume y después lee lo elegido: por diseño **no** cubre |
+
+Así que la precondición **poda**, no gatea, y **no es un eje del selector**: `O-4b` midió que
+la demanda **no reordena paradigmas**, y usarla como feature de ruteo agregaría bins sin
+poder de discriminación — el mecanismo por el que `P15` le costó a θ toda su confianza.
+
+> Y no poda a cero. Si ningún candidato recorre el alcance, se sigue con todos y el EXPLAIN
+> **dice que la precondición no se pudo imponer**. Podar a cero convertiría una precondición
+> en una abstención universal.
+
+Es la misma asimetría de `C-ABSENCE`, del lado del request en vez del enunciado: una
+respuesta armada desde una muestra no es una respuesta peor, es **una afirmación sobre un
+dominio que nadie recorrió**.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

@@ -35,7 +35,9 @@ from .assurance import (
 from . import feasibility
 from .beliefs import BeliefBase, Provenance, Verdict
 from .policy import MIN_EPISODES_FOR_CONFIDENCE, PolicyBundle
+from .paradigms import traverses_scope
 from .rules import (
+    BULK_THRESHOLD,
     ACTION_CASCADE,
     ACTION_DEFER,
     ACTION_GATE,
@@ -289,6 +291,40 @@ class Router:
         )
         profile: AssuranceProfile = decision.profile
 
+        # PRECONDICION DE COBERTURA: demanda x material, y NO es un eje del selector.
+        #
+        # `O-4b` midio que la demanda **no reordena paradigmas**, asi que usarla como
+        # feature de ruteo agregaria bins sin poder de discriminacion — el mecanismo por
+        # el que `P15` le costo a theta toda su confianza. Aca no ordena: PODA.
+        #
+        # La conjuncion es la regla, y ninguna mitad sola dice nada: exigir exhaustividad
+        # sobre tres unidades se cumple solo, y material masivo sin demanda de cobertura
+        # es el caso normal. Juntas, una respuesta armada desde una muestra no es una
+        # respuesta peor — es una afirmacion sobre un dominio que nadie recorrio.
+        #
+        # Y NO GATEA, que fue el primer intento y estaba mal: gatear ahi mata a `C2`
+        # entera, que es exhaustiva y masiva y es justo el caso que los paradigmas existen
+        # para resolver. Ademas la regla corre ANTES de ejecutar, asi que no puede saber
+        # que se cubrio; lo unico que puede saber de antemano es la ESTRUCTURA.
+        cobertura_excluidos: list[str] = []
+        cobertura_no_impuesta: str = ""
+        if task.get("coverage_demanded") == "exhaustive" and len(
+            task.get("unit_ids") or []
+        ) > BULK_THRESHOLD:
+            recorren = [p for p in candidates if traverses_scope(p)]
+            if recorren:
+                cobertura_excluidos = [p for p in candidates if p not in recorren]
+                candidates = recorren
+            else:
+                # NINGUNO RECORRE. No se poda a cero y se sigue con todos, porque podar a
+                # cero convertiria una precondicion en una abstencion universal. Se DICE,
+                # y el EXPLAIN lleva que la garantia no se pudo imponer.
+                cobertura_no_impuesta = (
+                    "cobertura exhaustiva exigida sobre material masivo y ningun "
+                    "candidato recorre el alcance por construccion: la precondicion NO "
+                    "se pudo imponer y la respuesta se arma desde una muestra"
+                )
+
         admissible, excluded = restrict(candidates, profile)
         if not admissible:
             raise ValueError(
@@ -320,9 +356,18 @@ class Router:
         )
 
         verdict: Verdict = standard_rules(policy).decide(base)
+        avisos = []
+        if cobertura_excluidos:
+            avisos.append(
+                f"precondicion de cobertura: {sorted(cobertura_excluidos)} no recorren el "
+                f"alcance por construccion y la pregunta exige cobertura total"
+            )
+        if cobertura_no_impuesta:
+            avisos.append(cobertura_no_impuesta)
         return self._materialise(
             verdict, decision, profile, admissible, excluded, best, infeasible,
             region=region, models=models, pairs=modelos_por_paradigma,
+            extra_notes=avisos,
         )
 
     def _cost_key(self, region: str, paradigm: str) -> float:
@@ -349,9 +394,10 @@ class Router:
         region: str = "",
         models: "Sequence[Model] | None" = None,
         pairs: dict[str, list[str]] | None = None,
+        extra_notes: list[str] | None = None,
     ) -> Plan:
         """Turn a rule action into a concrete plan under the assurance profile."""
-        notes: list[str] = []
+        notes: list[str] = list(extra_notes or [])
         infeasible = infeasible or {}
         # EL COSTO MEDIDO SUPERSEDE AL PRIOR, y hasta ahora no lo hacia. El comentario del
         # constructor decia «measured mean_cost supersedes them once theta has data» y

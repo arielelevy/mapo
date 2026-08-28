@@ -15,6 +15,7 @@ enough evidence per proposition to calibrate.
 
     n_units             int    how many independent work units      COMPUTED
     is_bulk             bool   n_units > 8                          COMPUTED
+    demands_exhaustive  bool   la celda declara cobertura total     COMPUTED
     has_oracle          bool   a cheap failure detector exists      COMPUTED
     irreversible        bool   the task commits an unsafe action    COMPUTED
     shared_writes       bool   units write shared state             COMPUTED
@@ -272,6 +273,23 @@ def sense(
         provenance=Provenance.COMPUTED,
         evidence=f"n_units={n_units} vs threshold {BULK_THRESHOLD}",
     ))
+    # LA DEMANDA DE COBERTURA, y es del REQUEST, no del material. Viene declarada por
+    # celda (`REQUEST_DEMANDS`) y NO se infiere de la prosa del enunciado: inferir «esta
+    # pregunta pide todo» leyendo el texto es el parseo de prosa que no se acepta.
+    #
+    # AUSENTE NO ES `sufficient`. Un corpus anterior a `REQUEST_DEMANDS` no declara el eje,
+    # y ahi la creencia NO se asienta: caer al valor laxo le regalaria la precondicion mas
+    # facil justo a las tareas de las que menos se sabe.
+    demanded = task.get("coverage_demanded")
+    if demanded:
+        base.assert_(Belief(
+            proposition="demands_exhaustive",
+            value=demanded == "exhaustive",
+            credence=1.0,
+            provenance=Provenance.COMPUTED,
+            evidence=f"la celda declara coverage_demanded={demanded!r}",
+        ))
+
     # ESTA es la que la cascada lee. La del segmento de region es la otra mitad, y las
     # dos salen de la misma funcion a proposito: eran la misma idea escrita dos veces.
     detector = has_runtime_detector(task)
