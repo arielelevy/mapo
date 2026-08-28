@@ -842,18 +842,20 @@ class Runner:
         # in `fitted/`, OUTSIDE the glob that `latest_theta_path()` treats as the
         # live policy: a report is a reading, and a reading must not install an
         # unpromoted bundle as production — that path goes through `promote()` only.
-        cold = PolicyBundle.cold_start(fallback=FALLBACK, tau=0.3)
+        # La confianza en credencia elicitada se computa desde el log de creencias y va
+        # ADENTRO del bundle, firmada — no como parametro del router. El bundle frio no
+        # la trae, asi que se asienta acá, que es donde se arma el que va a decidir.
+        cold = dc_replace(
+            PolicyBundle.cold_start(fallback=FALLBACK, tau=0.3),
+            trusts_elicited=self.store.trusts_elicited(),
+        )
         learned = Plasticity.candidate(
             cold, episodes, tau=0.3, notes=f"fitted from {len(episodes)} episodes"
         )
         fitted_dir = self.store.policy_dir / "fitted"
         fitted_dir.mkdir(parents=True, exist_ok=True)
         learned.save(fitted_dir)
-        # La calibracion se recomputa desde el log y se persiste; el router la
-        # consultaba a traves de un objeto que nadie le pasaba. Ahora la lee de la
-        # unica fuente que la guarda.
-        router = Router(learned, COST_PRIORS, FALLBACK,
-                        trusts_elicited=self.store.trusts_elicited())
+        router = Router(learned, COST_PRIORS, FALLBACK)
         profile = PROFILES[assurance]
 
         rows_by_task: dict[str, dict[str, Any]] = {}

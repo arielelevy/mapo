@@ -1,17 +1,20 @@
 """X-4d: descontar la declaracion de tools, y ver si algun veredicto de lambda se movia.
 
 QUE SE PREGUNTA, Y POR QUE ES LA PRIMERA DE LA FAMILIA. Las specs de tools se re-envian en
-CADA llamada. Medido: 7,7% del gasto total en `gold_p17`/`basic`. Pero el numero que
-importa no es ese sino su DISPERSION — `rewoo` carga 43,4% de declaracion contra 3,8% de
-`gist_reader`, un factor de diez.
+cada llamada QUE LAS LLEVA — que no son todas: de 27 sitios que llaman al modelo, uno pasa
+`tools`. Medido con `tooled_calls`: 6,7% del gasto, repartido `dag_strategy` 8,0%,
+`react` 4,5% y `rewoo` 0,0%.
 
-Y ese sobrecosto NO ES UNA PROPIEDAD DEL PARADIGMA: es una propiedad de cuantas veces
-llama, multiplicada por un tamano de spec que es del harness. El barrido de lambda —que
-decide que paradigma conviene— compara brazos cargando cada uno con un fijo distinto que
-no le pertenece.
+Ese sobrecosto NO ES UNA PROPIEDAD DEL PARADIGMA: es una propiedad de cuantas veces llama
+al bucle de tools, multiplicada por un tamano de spec que es del harness. La pregunta es si
+el barrido de lambda —que decide que paradigma conviene— sobrevive a sacarselo.
 
-Esto no cuesta un token: el sobrecosto es `llamadas x tokens_de_spec`, y las dos cantidades
-ya estan en la fila.
+Esto no cuesta un token: el registro se replaya sellado y se recomputa.
+
+UNA VERSION ANTERIOR DE ESTE SCRIPT ESTIMABA EL SOBRECOSTO POR `calls`, y era falso: suponia
+que toda llamada lleva la declaracion. Daba 43% para `rewoo`, que en realidad es CERO, y en
+7 celdas producia mas declaracion que prompt entero. Ahora se descuenta por `tooled_calls`,
+y si una celda no lo registra el script SE NIEGA a descontar en vez de estimar.
 
 LO QUE DECIDE. Si al descontarlo ningun veredicto se mueve, el resto de X-4 —cache de
 prompt, acortar descripciones— es OPTIMIZACION y no correccion. Si alguno se mueve, hay un
@@ -34,7 +37,10 @@ from app.metrics import Observation, Study
 from app.runner import Runner
 from app.tools import specs_for
 
-CORPORA = ["gold_p17", "gold_p16", "gold_transfer"]
+# Solo `gold_p17`, que es el unico replayado con el contador nuevo. Los otros dos
+# necesitan su propio replay sellado; incluirlos sin el contador daria un descuento
+# de cero disfrazado de medicion.
+CORPORA = ["gold_p17"]
 LAMBDAS = (0.0, 0.02, 0.05, 0.10)
 
 
@@ -42,7 +48,18 @@ def spec_tokens(variant: str) -> int:
     return len(json.dumps(specs_for(variant), ensure_ascii=False)) // 4
 
 
-def observations(rows: list[dict[str, Any]], discount: int) -> list[Observation]:
+def tooled(row: dict[str, Any]) -> int | None:
+    """Llamadas que LLEVARON la declaracion. `None` si la fila no lo registra.
+
+    AUSENTE NO ES CERO. Una fila anterior al contador no dice «no llevo declaracion»:
+    dice que no se sabe. Leerla como cero descontaria de menos y haria pasar por
+    resultado un promedio sobre filas que no se pueden descontar.
+    """
+    tu = row.get("tool_usage") or {}
+    return tu.get("tooled_calls") if "tooled_calls" in tu else None
+
+
+def observations(rows: list[dict[str, Any]], discount: int) -> list[Observation] | None:
     """Celdas promediadas por trial, con el sobrecosto descontado o no.
 
     Se promedia por celda ANTES de tomar el oraculo, igual que `runner.study`: alimentar
@@ -56,7 +73,10 @@ def observations(rows: list[dict[str, Any]], discount: int) -> list[Observation]
     for (task_id, paradigm), group in sorted(cells.items()):
         n = len(group)
         cost = sum(x["cost_tokens"] for x in group) / n
-        calls = sum(x.get("calls", 0) for x in group) / n
+        counts = [tooled(x) for x in group]
+        if any(c is None for c in counts):
+            return None  # el registro no permite descontar: se dice, no se estima
+        calls = sum(counts) / n
         # `max(..., 1)`: descontar no puede producir un costo cero o negativo. Si el
         # sobrecosto estimado supera al costo registrado, lo que hay es una fila cuyo
         # `calls` y `cost_tokens` no son coherentes, y aplastarlo a 1 lo deja visible en
@@ -86,9 +106,13 @@ def main() -> None:
         if not (settings.corpus_dir / corpus).is_dir():
             print(f"{corpus}: ausente, declarado y no ignorado")
             continue
-        runner = Runner(settings, corpus, retriever_arm="hybrid",
-                        surface_variant="basic")
-        rows = [r for r in runner.load_rows() if not r.get("infeasible")]
+        replayed = settings.results_dir / "_replay_full" / f"{corpus}_rows.jsonl"
+        if not replayed.exists():
+            print(f"{corpus}: sin replay con el contador. Corre `_replay_full.py` primero.")
+            continue
+        rows = [json.loads(l) for l in
+                replayed.read_text(encoding="utf-8").splitlines() if l.strip()]
+        rows = [r for r in rows if not r.get("infeasible")]
         if not rows:
             print(f"{corpus}: sin filas factibles")
             continue
@@ -99,8 +123,12 @@ def main() -> None:
 
         per_corpus = {}
         for lam in LAMBDAS:
-            with_o = Study(observations(rows, 0), lambda_cost=lam)
-            without = Study(observations(rows, overhead), lambda_cost=lam)
+            obs_with, obs_without = observations(rows, 0), observations(rows, overhead)
+            if obs_without is None:
+                print("  el registro no lleva `tooled_calls` en toda celda: no se descuenta")
+                break
+            with_o = Study(obs_with, lambda_cost=lam)
+            without = Study(obs_without, lambda_cost=lam)
             b1, b2 = with_o.best_fixed(), without.best_fixed()
             g1, g2 = with_o.oracle_gap(), without.oracle_gap()
             flag = "  <- CAMBIA" if b1 != b2 else ""

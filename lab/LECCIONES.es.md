@@ -797,6 +797,51 @@ Cerrado en tres piezas:
 
 ---
 
+### 7.14 La confianza sólo se gana donde dos ajustes coinciden, y nunca coincidieron · `MEDIDO`
+
+`S-4` preguntaba qué hacer con el acoplamiento: aceptar que tope en `ELICITED` verificado,
+sondear sobre dos unidades, o darle a `C4` una regla de cobertura propia. Se leía como una
+elección de diseño. **Resultó ser una cadena causal completa, y ninguno de sus eslabones lo
+decidió nadie.**
+
+| eslabón | verificado en el código |
+|---|---|
+| los estudios corren en **A1** | es el default del parámetro `assurance` de `report()` |
+| `log_belief_base` es `True` **sólo en A2/A3** | los dos perfiles bajos lo tienen en `False` |
+| ⇒ nunca se escribió un log de creencias | `results/*/beliefs/` estaba **vacío** |
+| ⇒ la calibración nunca se computó | ningún archivo de calibración existía |
+| ⇒ `trusts_elicited` nunca se ganó | y el default es **no confiar** |
+| ⇒ el piso derivado es `OBSERVED` | `BeliefPolicy.from_trust(False, …)` |
+| ⇒ la regla de acoplamiento exige la **sonda** | y la sonda resuelve **9 de 14** |
+
+**Y hay un eslabón más, que es el que lo cierra del todo.** Forzando `A2` sobre el registro
+existente el log **sí** se escribe —138 registros, sin gastar un token— y aun así la
+calibración da **cero proposiciones**. La razón está en su propia definición:
+
+> Sólo se puntúa una creencia `ELICITED` cuando existe una `OBSERVED` **sobre la misma
+> proposición, en la misma base**. Evidencia adjudicando opinión.
+
+La única cosa que produce una `OBSERVED` sobre acoplamiento **es la sonda**. Así que un par
+puntuable requiere que, en el mismo request, la sonda haya corrido **y** la base se haya
+registrado — o sea A2 **y** sonda a la vez.
+
+> **La maquinaria que permite ganar la confianza exige una coincidencia de dos ajustes que
+> nunca ocurrió.** No está rota ni mal diseñada: nunca tuvo la oportunidad de correr.
+
+**Y eso decide `S-4` sin necesidad de elegir entre las tres opciones.** (b) —sondear dos
+unidades— duplica el costo de una sonda que ya costó 83k tokens, para un eje que `S-3` midió
+que apenas separa (C2 = 1,22 contra C3 = 1,28). (c) —darle a `C4` una regla de cobertura—
+choca contra 8.7: el dominio barato de `C4` es el alcance, y la fracción leída correlaciona
+`+0,018` con la corrección. Verificaría lo que no importa.
+
+Queda **(a)**, y ya no es una resignación: hasta hoy el piso `ELICITED` de A2 era
+**inalcanzable por construcción** (7.12), y ahora hay un camino — que exige **ganarlo con
+calibración medida**, que es exactamente la disciplina del proyecto. Lo que falta no es una
+decisión: es **una corrida en A2 con la sonda encendida**, la primera que produciría un par
+puntuable.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

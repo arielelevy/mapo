@@ -338,9 +338,29 @@ class Study:
         deterministically via a task-id hash rather than sampled, so repeated runs of
         the same study give the same figure.
         """
+        # LA ESCALERA PUEDE NOMBRAR BRAZOS QUE ESTE ESTUDIO NO CORRIO, y eso no es un
+        # error del estudio: el catalogo tiene trece brazos y una corrida mide cinco. El
+        # indexado directo levantaba `KeyError` y volteaba el informe entero — un
+        # `report()` sobre un corpus que no incluye el primer peldano moria en vez de
+        # decir que no puede evaluar la cascada.
+        #
+        # Se declara en vez de suponerse: si el peldano no esta, no hay cascada que
+        # medir, y el resultado LO DICE en lugar de devolver un cero que se lee como
+        # «la cascada no rinde».
+        missing = [p for p in ladder if not any(p in self._by_task[t]
+                                                for t in self.complete_tasks)]
+        if missing:
+            return {
+                "eligible_tasks": 0,
+                "note": (
+                    f"la escalera nombra brazos que este estudio no corrio: {missing}. "
+                    f"No hay cascada que medir — distinto de una cascada que no rinde."
+                ),
+            }
         eligible = [
             t for t in self.complete_tasks
-            if self._by_task[t][ladder[0]].has_oracle
+            if ladder[0] in self._by_task[t]
+            and self._by_task[t][ladder[0]].has_oracle
         ]
         if not eligible:
             return {"eligible_tasks": 0, "note": "no verifiable tasks in this study"}
