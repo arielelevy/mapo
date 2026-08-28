@@ -284,8 +284,21 @@ class Router:
 
         verdict: Verdict = standard_rules(policy).decide(base)
         return self._materialise(
-            verdict, decision, profile, admissible, excluded, best, infeasible
+            verdict, decision, profile, admissible, excluded, best, infeasible,
+            region=region,
         )
+
+    def _cost_key(self, region: str, paradigm: str) -> float:
+        """Lo que ordena la cascada: el costo MEDIDO si hay evidencia, el prior si no.
+
+        Sin evidencia suficiente el prior es lo unico que hay, y se usa. El piso es el
+        mismo que gobierna la confianza de theta: por debajo de el, una media es ruido con
+        nombre de medicion.
+        """
+        stat = self._theta.stat(region, paradigm)
+        if stat.episodes >= MIN_EPISODES_FOR_CONFIDENCE and stat.mean_cost > 0:
+            return stat.mean_cost
+        return self._costs.get(paradigm, 1.0)
 
     def _materialise(
         self,
@@ -296,12 +309,27 @@ class Router:
         excluded: list[str],
         theta_best: str | None,
         infeasible: dict[str, str] | None = None,
+        region: str = "",
     ) -> Plan:
         """Turn a rule action into a concrete plan under the assurance profile."""
         notes: list[str] = []
         infeasible = infeasible or {}
-        cheapest = min(admissible, key=lambda p: self._costs.get(p, 1.0))
-        ladder = sorted(admissible, key=lambda p: self._costs.get(p, 1.0))
+        # EL COSTO MEDIDO SUPERSEDE AL PRIOR, y hasta ahora no lo hacia. El comentario del
+        # constructor decia «measured mean_cost supersedes them once theta has data» y
+        # NADIE lo implementaba: `mean_cost` solo aparecia en `as_dict` y en un formato de
+        # impresion. El prior ordenaba la cascada PARA SIEMPRE.
+        #
+        # Y el prior erra 2-7x (leccion 5.6): `reflection` declara 5,0 y mide 1,6, asi que
+        # la cascada nunca lo probaba primero aunque fuera de los mas baratos. La cascada
+        # es el mecanismo al que se le acredita el 100% de la brecha, y empezar por el
+        # peldaño equivocado es exactamente el costo que la escalera existe para evitar.
+        #
+        # El costo medido ademas no necesita referencia: son tokens absolutos. El prior
+        # esta escalado contra `direct`, que solo es factible donde todo entra en ventana
+        # —7 tareas en 1.008 filas— asi que su escala no tiene base en el regimen que el
+        # producto apunta.
+        cheapest = min(admissible, key=lambda p: self._cost_key(region, p))
+        ladder = sorted(admissible, key=lambda p: self._cost_key(region, p))
 
         fallback = self._fallback
         if fallback not in admissible:

@@ -1944,6 +1944,58 @@ def check_handoff_authorisation(ok: bool) -> bool:
     return ok
 
 
+def check_measured_cost_supersedes_prior(ok: bool) -> bool:
+    """§40: el costo medido supersede al prior, y hasta hoy no lo hacia.
+
+    EL COMENTARIO LO PROMETIA Y NADIE LO IMPLEMENTABA. El constructor del router decia
+    «measured mean_cost supersedes them once theta has data», y `mean_cost` solo aparecia
+    en `as_dict` y en un formato de impresion: el prior ordenaba la cascada PARA SIEMPRE.
+
+    Y el prior erra 2-7x (leccion 5.6). `reflection` declara 5,0 y mide 1,6, asi que la
+    cascada nunca lo probaba primero aunque fuera de los mas baratos — y la cascada es el
+    mecanismo al que el paper le acredita el 100% de la brecha.
+
+    El costo medido ademas no necesita referencia: son tokens absolutos. El prior esta
+    escalado contra `direct`, que solo es factible donde todo entra en ventana.
+    """
+    from app.paradigms import COST_PRIORS
+    from app.policy import MIN_EPISODES_FOR_CONFIDENCE, PolicyBundle, Stat
+    from app.router import Router
+
+    print("\n--- 40. el costo medido supersede al prior ---")
+
+    REGION = "many/oracle/loose"
+    brazos = ["react", "reflection", "dag_strategy"]
+
+    ok &= check("por prior, `react` seria el mas barato",
+                min(brazos, key=lambda p: COST_PRIORS[p]) == "react")
+
+    def orden(bundle) -> list[str]:
+        router = Router(bundle, COST_PRIORS, "react")
+        return sorted(brazos, key=lambda p: router._cost_key(REGION, p))  # noqa: SLF001
+
+    con = PolicyBundle(version=1, created_at="x", fallback="react", tau=0.0, stats={
+        REGION: {
+            "react": Stat(episodes=MIN_EPISODES_FOR_CONFIDENCE, cost_sum=8 * 21000),
+            "reflection": Stat(episodes=MIN_EPISODES_FOR_CONFIDENCE, cost_sum=8 * 16000),
+            "dag_strategy": Stat(episodes=MIN_EPISODES_FOR_CONFIDENCE, cost_sum=8 * 40000),
+        }}).sign()
+    ok &= check("con evidencia, la cascada arranca por el mas barato MEDIDO y no por el "
+                "que el prior dice", orden(con)[0] == "reflection", ", ".join(orden(con)))
+
+    sin = PolicyBundle(version=1, created_at="x", fallback="react", tau=0.0, stats={
+        REGION: {p: Stat(episodes=1, cost_sum=999) for p in brazos}}).sign()
+    ok &= check("bajo el piso de evidencia cae al prior - una media sobre un episodio es "
+                "ruido con nombre de medicion", orden(sin)[0] == "react",
+                ", ".join(orden(sin)))
+
+    vacio = PolicyBundle(version=1, created_at="x", fallback="react", tau=0.0).sign()
+    ok &= check("sin region conocida tambien cae al prior, y no levanta",
+                orden(vacio)[0] == "react")
+
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -2218,6 +2270,7 @@ def main() -> int:
     ok = check_scope_is_a_second_axis(ok)
     ok = check_coverage_trigger(ok)
     ok = check_handoff_authorisation(ok)
+    ok = check_measured_cost_supersedes_prior(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

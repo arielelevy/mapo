@@ -1153,6 +1153,37 @@ caracteres**. Ese conteo daba **4 de 4 retenidas** mientras el texto real caía 
 
 ---
 
+### 5.7 «El costo medido supersede al prior» estaba en un comentario y en ningún lado más · `MEDIDO`
+
+El constructor del router lo dice desde siempre: *«relative priors only… measured
+`mean_cost` supersedes them once theta has data»*. **No lo hacía nadie.** `mean_cost` sólo
+aparecía en `as_dict` y en un formato de impresión; el router ordenaba por el prior y por
+nada más.
+
+O sea que el prior no era transitorio: **ordenaba la cascada para siempre.**
+
+Y el prior erra 2-7× (5.6). Con `reflection` declarado en 5,0 cuando mide 1,6, **la cascada
+nunca lo probaba primero** aunque fuera de los más baratos — y la cascada es el mecanismo al
+que el paper le acredita haber capturado el 100% de la brecha.
+
+Implementado, el orden cambia donde hay evidencia y sólo ahí:
+
+| | primer peldaño |
+|---|---|
+| con evidencia (`episodes ≥ 8`) | **`reflection`** — el más barato medido |
+| bajo el piso de evidencia | `react` — el prior, que es lo único que hay |
+
+**Y el costo medido resuelve además el problema de base.** Son **tokens absolutos**: no
+necesitan referencia. El prior está escalado contra `direct`, que sólo es factible donde
+toda la evidencia entra en ventana —7 tareas en 1.008 filas— así que su escala **no tiene
+base medible en el régimen que el producto apunta**. La medida sí.
+
+> Es el cuarto caso del mismo patrón en un día: **una capacidad completa, declarada en
+> prosa, que ningún camino ejecutaba.** `theta_may_learn_online`, la calibración, las
+> particiones descubiertas — y ahora la supersesión del costo.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una
