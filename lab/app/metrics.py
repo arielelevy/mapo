@@ -55,6 +55,50 @@ class Observation:
     relevant_units_available: int | None = None
 
 
+@dataclass(frozen=True)
+class Tariff:
+    """Precio declarado por millon de tokens. Convierte la escala de costo a plata.
+
+    POR QUE EXISTE. `lambda_cost` barre sobre `cost_tokens`, y eso supone que **un token
+    vale lo mismo en todos los brazos**. Es falso en dos ejes a la vez: entrada y salida
+    tienen precios distintos —tipicamente 4-8x— y los paradigmas se diferencian justo en
+    esa proporcion (`rewoo` planifica largo y contesta corto; `react` al reves). Barrer
+    sobre el total promedia dos precios y le cobra a `rewoo` la salida que no gastó.
+
+    QUE ES Y QUE NO ES. Es un parametro del ANALISIS, igual que `lambda_cost`: los datos
+    crudos no se tocan y el mismo registro se puede interrogar a varios aranceles. **No**
+    se infiere del modelo ni se busca en ningun lado: se declara, porque un precio es un
+    hecho del contrato con el proveedor y no una medicion nuestra.
+    """
+
+    name: str
+    prompt_per_mtok: float
+    completion_per_mtok: float
+
+    def __post_init__(self) -> None:
+        if self.prompt_per_mtok < 0 or self.completion_per_mtok < 0:
+            raise ValueError("Un precio no puede ser negativo.")
+
+    def money(self, obs: "Observation") -> float:
+        """Plata de una observacion. Se NIEGA si el split no esta registrado.
+
+        El default 0 de `prompt_tokens`/`completion_tokens` significa **no registrado**,
+        no «cero tokens de entrada» — que ademas es imposible. Tratarlo como cero le
+        regalaria costo a las filas viejas y las haria ganar la comparacion por no tener
+        el dato: exactamente la falla que el barrido de esta manana busca.
+        """
+        if obs.cost_tokens > 0 and obs.prompt_tokens + obs.completion_tokens == 0:
+            raise ValueError(
+                f"{obs.task_id}/{obs.paradigm}: {obs.cost_tokens} tokens y ningun split. "
+                "Ausente no es cero — esta fila es anterior al split y no se puede "
+                "convertir a plata. Se reporta como no convertible, no como gratis."
+            )
+        return (
+            obs.prompt_tokens * self.prompt_per_mtok
+            + obs.completion_tokens * self.completion_per_mtok
+        ) / 1_000_000
+
+
 @dataclass
 class SelectionTerms:
     """The terms of the Selection Value Theorem, measured rather than assumed.
@@ -101,7 +145,10 @@ class Study:
     """
 
     def __init__(
-        self, observations: Iterable[Observation], lambda_cost: float = 0.0
+        self,
+        observations: Iterable[Observation],
+        lambda_cost: float = 0.0,
+        tariff: Tariff | None = None,
     ) -> None:
         self._obs = list(observations)
         if not self._obs:
@@ -109,6 +156,10 @@ class Study:
         if lambda_cost < 0:
             raise ValueError("lambda_cost must be >= 0.")
         self.lambda_cost = lambda_cost
+        # Con arancel, la escala de costo es PLATA; sin el, tokens. Es la unica decision
+        # de unidad del modulo y vive en `_cost_of`: antes `cost_tokens` se leia en seis
+        # lugares, y una unidad que se decide en seis lugares se decide mal en alguno.
+        self.tariff = tariff
 
         self._by_task: dict[str, dict[str, Observation]] = {}
         for o in self._obs:
@@ -127,14 +178,14 @@ class Study:
         # best fixed paradigm to the worst one and produced a curve that looked
         # plausible and was nonsense. A failed run produced no work, so it is not
         # evidence about what the work costs.
-        self._min_cost: dict[str, int] = {}
+        self._min_cost: dict[str, float] = {}
         self._zero_cost_rows = 0
         for task, row in self._by_task.items():
-            positive = [o.cost_tokens for o in row.values() if o.cost_tokens > 0]
+            positive = [c for c in (self._cost_of(o) for o in row.values()) if c > 0]
             self._zero_cost_rows += len(row) - len(positive)
             # A task where nothing succeeded has no cost scale. Its ratios collapse to
             # 1 so it contributes no cost penalty either way, rather than an invented one.
-            self._min_cost[task] = min(positive) if positive else 0
+            self._min_cost[task] = min(positive) if positive else 0.0
 
         # Only tasks with a complete row can be used: a missing cell would silently
         # bias the oracle downward and inflate every router's apparent skill.
@@ -144,6 +195,14 @@ class Study:
         ]
 
     # -- basic quantities --------------------------------------------------
+
+    def _cost_of(self, obs: Observation) -> float:
+        """EL UNICO lugar del modulo que decide en que unidad se mide el costo."""
+        return self.tariff.money(obs) if self.tariff else float(obs.cost_tokens)
+
+    def cost_unit(self) -> str:
+        """Como se llama la escala. Va al reporte para que no haya que adivinarla."""
+        return f"usd@{self.tariff.name}" if self.tariff else "tokens"
 
     def quality(self, task_id: str, paradigm: str) -> float:
         """Raw measured quality. Never adjusted."""
@@ -159,7 +218,7 @@ class Study:
         floor = self._min_cost[task_id]
         if floor <= 0:
             return 1.0
-        cost = self._by_task[task_id][paradigm].cost_tokens
+        cost = self._cost_of(self._by_task[task_id][paradigm])
         if cost <= 0:
             return 1.0
         return cost / floor
@@ -375,7 +434,7 @@ class Study:
             best_seen = 0.0
             for depth, paradigm in enumerate(ladder):
                 obs = self._by_task[task][paradigm]
-                spent += obs.cost_tokens
+                spent += self._cost_of(obs)
                 current = self.utility(task, paradigm)
                 best_seen = max(best_seen, current)
                 # When every failure so far was DETECTED, the system retains the
@@ -413,7 +472,7 @@ class Study:
         fixed = self.best_fixed()
         fixed_utility = float(np.mean([self.utility(t, fixed) for t in eligible]))
         fixed_cost = float(
-            np.mean([self._by_task[t][fixed].cost_tokens for t in eligible])
+            np.mean([self._cost_of(self._by_task[t][fixed]) for t in eligible])
         )
         oracle = float(
             np.mean([
@@ -501,7 +560,7 @@ class Study:
         """
         curve: list[dict[str, Any]] = []
         for lam in lambdas:
-            view = Study(self._obs, lambda_cost=lam)
+            view = Study(self._obs, lambda_cost=lam, tariff=self.tariff)
             best = view.best_fixed()
             curve.append({
                 "lambda": lam,
@@ -517,16 +576,25 @@ class Study:
         rows = {}
         for paradigm in self.paradigms:
             costs = [
-                self._by_task[t][paradigm].cost_tokens for t in self.complete_tasks
+                self._cost_of(self._by_task[t][paradigm]) for t in self.complete_tasks
             ]
             quals = [self.quality(t, paradigm) for t in self.complete_tasks]
             rows[paradigm] = {
-                "mean_cost": round(float(np.mean(costs)), 1),
+                # En tokens 1 decimal alcanza; en dolares 0,1 es toda la escala y
+                # redondear ahi reporta 0,0 para todo. El digito sigue a la unidad.
+                "mean_cost": round(float(np.mean(costs)), 1 if not self.tariff else 6),
                 "mean_quality": round(float(np.mean(quals)), 5),
             }
         cheapest = min(rows.values(), key=lambda r: r["mean_cost"])["mean_cost"]
+        # `max(1.0, cheapest)` estaba aca para no dividir por cero, y era un PISO: en
+        # tokens nunca se nota porque el mas barato son miles, pero en plata el mas
+        # barato es 8e-05, el piso gana siempre, y todos los multiplos daban 0,0 — el
+        # mismo clamp que en `X-4d` produjo utilidad -463 y una conclusion retirada.
+        # Un guard es «no dividas por cero», no «hace de cuenta que vale 1».
         for r in rows.values():
-            r["cost_multiple"] = round(r["mean_cost"] / max(1.0, cheapest), 2)
+            r["cost_multiple"] = (
+                round(r["mean_cost"] / cheapest, 2) if cheapest > 0 else None
+            )
         return rows
 
     # -- measurement noise -------------------------------------------------
@@ -593,6 +661,7 @@ class Study:
     def summary(self) -> dict[str, Any]:
         return {
             "lambda_cost": self.lambda_cost,
+            "cost_unit": self.cost_unit(),
             "tasks": len(self.tasks),
             "complete_tasks": len(self.complete_tasks),
             "paradigms": self.paradigms,
@@ -602,8 +671,8 @@ class Study:
             "mean_cost": {
                 p: round(
                     float(np.mean([
-                        self._by_task[t][p].cost_tokens for t in self.complete_tasks
-                    ])), 1
+                        self._cost_of(self._by_task[t][p]) for t in self.complete_tasks
+                    ])), 1 if not self.tariff else 6
                 )
                 for p in self.paradigms
             },

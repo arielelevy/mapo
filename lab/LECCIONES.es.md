@@ -1223,6 +1223,73 @@ Las otras cuatro, con lo que cada una enseña:
 
 ---
 
+### 5.7 El orden aguanta, la magnitud no: medir el costo en tokens exagera 2× · `MEDIDO`
+
+`lambda_cost` barre sobre `cost_tokens`, y eso supone que **un token vale lo mismo en
+todos los brazos**. Es falso: la salida cuesta varias veces la entrada, y los paradigmas se
+diferencian **justo en esa proporción**. Convertido a plata, sobre el registro:
+
+| brazo | ×tokens | ×plata | % salida |
+|---|---:|---:|---:|
+| `rewoo` | 1,00 | 1,00 | **8,1%** |
+| `gist_reader` | 22,47 | **9,90** | 0,5% |
+| `map_reduce` | 23,56 | **10,37** | 0,3% |
+| `react` | 25,97 | **11,55** | 0,3% |
+| `dag_strategy` | 59,19 | **30,85** | 2,2% |
+
+**El mejor fijo es el mismo, en las dos unidades y en todo λ.** Así que nada de lo
+publicado sobre *quién* gana cambia. Lo que cambia es **cuánto**: la ventaja del más barato
+se parte casi al medio, porque el más barato es precisamente el que emite salida —`rewoo`
+al 8,1% contra 0,3% de todos los demás—. Cualquier frase de la forma «`react` cuesta 26×
+lo que `rewoo`» está **inflada 2,2×**.
+
+**Y acá está lo que hace publicable a un número que sale de un precio inventado.** El
+arancel es una **referencia**, puesta a mano: si un resultado cambia porque el precio era
+0,05 y no 0,06, ese resultado no existe. Así que en vez de elegir un precio se barre la
+única propiedad que un arancel tiene —cuánto más cara es la salida que la entrada— y se
+mira si el orden aguanta:
+
+| salida/entrada | ×1 | ×2 | ×4 | ×8 | ×16 | ×32 |
+|---|---:|---:|---:|---:|---:|---:|
+| compresión del peor múltiplo | **1,00** | 0,87 | 0,70 | 0,52 | 0,38 | 0,28 |
+
+Monótono, y **el orden no se da vuelta en ningún punto del barrido**. El `1,00` exacto en
+×1 no es decoración: con entrada y salida al mismo precio la plata *tiene* que reproducir
+los tokens, y que lo haga es la prueba de que la conversión no metió nada.
+
+> Lo que se puede afirmar es **lo invariante a la referencia**: «el orden entre paradigmas
+> sobrevive, la magnitud se comprime al doble de rápido cuanto más cara es la salida». Lo
+> que **no** se puede afirmar es un número en dólares.
+
+**Y dos guardas cambiaron por esto, las dos por el mismo motivo.** `max(1.0, cheapest)`
+estaba puesto para no dividir por cero y era un **piso**: en tokens no se nota porque el
+más barato son miles, en plata el más barato es 8·10⁻⁵, gana el piso, y **todos los
+múltiplos daban 0,0** — el mismo clamp que en `X-4d` produjo utilidad −463 y una conclusión
+retirada. Un guard es «no dividas por cero», no «hacé de cuenta que vale 1». Y `bounded()`
+exigía las dos cotas, lo que obligaba a inventar un techo para un múltiplo que sólo tiene
+piso; un techo arbitrario **deja pasar lo que está debajo y levanta contra lo legítimo**.
+
+---
+
+### 5.8 La guarda de mezcla existía y no protegía a nadie que analizara · `MÉTODO`
+
+Las dos guardas de mezcla —decodificación y vocabulario de región, esta última escrita hace
+tres horas— vivían adentro de `Runner`, **la clase que corre**. Todo analizador lee el
+`.jsonl` con `json.loads` a mano. O sea: **ninguna de las dos protegía a quien analiza**, que
+es exactamente donde promediar dos modelos hace daño.
+
+Es la forma que busca el barrido de la lección 7.17, cometida **en la corrección misma**: la
+guarda del vocabulario se escribió hoy para tapar un agujero, y se puso donde no tapa nada.
+`load_rows` pasó a ser función de módulo con `path` explícito, y `Runner.load_rows` delega.
+
+**Y apenas se aplicó, agarró algo.** El barrido de corpus levantó
+`results/nano/beliefs/gold_p17.jsonl` por extensión: 207 líneas que **no son resultados**,
+son el ledger de creencias, con otra forma entera. Se declara el archivo y se excluye
+completo — saltearlo callado es perder un corpus sin enterarse, que es cómo `X-4` llegó a
+publicar 43,4% de algo que era 0%.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

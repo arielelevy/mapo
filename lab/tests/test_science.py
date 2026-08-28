@@ -1944,6 +1944,117 @@ def check_handoff_authorisation(ok: bool) -> bool:
     return ok
 
 
+def check_money_is_a_unit_not_a_number(ok: bool) -> bool:
+    """§41: convertir la escala de costo a plata, y que la referencia no decida.
+
+    EL ARANCEL ES REFERENCIA, NO MEDICION. Es un precio puesto a mano, asi que ninguna
+    conclusion puede depender de su valor. Lo que se testea no son numeros en dolares:
+    son las tres propiedades que hacen que la conversion sea confiable igual.
+
+      identidad     con entrada y salida al MISMO precio, la plata reproduce los tokens.
+                    Si no, la conversion metio algo suyo
+      ausente       una fila sin split registrado no se convierte a cero: se NIEGA. El
+                    default 0 significa «no registrado», y regalarle costo la haria ganar
+      sin piso      el multiplo del mas barato es 1,0 en cualquier unidad. `max(1.0, x)`
+                    era un piso disfrazado de guard, y en plata aplastaba todo a 0,0
+    """
+    from app.metrics import Observation, Study, Tariff
+
+    print("\n--- 41. la plata es una unidad, no un numero ---")
+
+    obs = [
+        Observation("t1", "R", "barato", 1.0, 1000, prompt_tokens=900, completion_tokens=100),
+        Observation("t1", "R", "entrada", 1.0, 3000, prompt_tokens=2900, completion_tokens=100),
+        Observation("t1", "R", "salida", 1.0, 3000, prompt_tokens=1500, completion_tokens=1500),
+    ]
+
+    plano = Tariff(name="ref/x1", prompt_per_mtok=1.0, completion_per_mtok=1.0)
+    en_tokens = Study(obs).cost_spread()
+    en_plano = Study(obs, tariff=plano).cost_spread()
+    ok &= check(
+        "a igual precio de entrada y salida, la plata reproduce los tokens exacto",
+        all(en_tokens[k]["cost_multiple"] == en_plano[k]["cost_multiple"] for k in en_tokens),
+    )
+
+    caro = Tariff(name="ref/x8", prompt_per_mtok=1.0, completion_per_mtok=8.0)
+    en_caro = Study(obs, tariff=caro).cost_spread()
+    ok &= check(
+        "en tokens los dos brazos de 3000 son indistinguibles",
+        en_tokens["entrada"]["cost_multiple"] == en_tokens["salida"]["cost_multiple"],
+    )
+    ok &= check(
+        "con la salida cara se separan, y el que emite salida es el mas caro",
+        en_caro["salida"]["cost_multiple"] > en_caro["entrada"]["cost_multiple"],
+    )
+
+    ok &= check(
+        "el mas barato vale 1,0 en las tres unidades — sin piso que lo aplaste",
+        all(t["barato"]["cost_multiple"] == 1.0 for t in (en_tokens, en_plano, en_caro)),
+    )
+
+    sin_split = [Observation("t2", "R", "vieja", 1.0, 500)]
+    try:
+        Study(sin_split, tariff=caro).cost_ratio("t2", "vieja")
+        ok &= check("una fila sin split se niega a convertirse", False)
+    except ValueError as exc:
+        ok &= check("una fila sin split se NIEGA — ausente no es cero",
+                    "no es cero" in str(exc).lower() or "Ausente" in str(exc))
+
+    ok &= check("el reporte estampa la unidad, con la fecha de la referencia adentro",
+                Study(obs, tariff=caro).summary()["cost_unit"] == "usd@ref/x8"
+                and Study(obs).summary()["cost_unit"] == "tokens")
+
+    from app.tariffs import DEEP, NANO, breakeven
+    ratios = {round(breakeven(NANO, DEEP, r), 6) for r in (0.0, 0.25, 0.5, 1.0)}
+    ok &= check(
+        "NANO y DEEP son proporcionales, asi que la mezcla NO decide entre ellos "
+        f"(un solo valor: {ratios})",
+        len(ratios) == 1,
+    )
+    return ok
+
+
+def check_load_rows_guards_the_analyst(ok: bool) -> bool:
+    """§42: las guardas de mezcla protegen a QUIEN ANALIZA, no solo a quien corre.
+
+    Vivian adentro de `Runner`, y todo analizador lee el `.jsonl` con `json.loads`. Una
+    guarda por un camino que nadie toma es la forma que busca el barrido de la 7.17 —
+    cometida en la correccion misma, porque la del vocabulario se escribio el mismo dia.
+    """
+    import json
+    import tempfile
+    from app.runner import load_rows
+
+    print("\n--- 42. load_rows es del modulo, y guarda al analista ---")
+
+    def escribir(filas):
+        f = Path(tempfile.mkdtemp()) / "r.jsonl"
+        f.write_text("\n".join(json.dumps(x) for x in filas), encoding="utf-8")
+        return f
+
+    base = {"task_id": "t", "paradigm": "p", "fingerprint": "A",
+            "region_vocabulary": "V1"}
+    ok &= check("un archivo coherente se lee sin quejarse",
+                len(load_rows(escribir([base, dict(base, task_id="u")]))) == 2)
+
+    for campo, valor, que in (("fingerprint", "B", "decodificaciones"),
+                              ("region_vocabulary", "V2", "vocabularios")):
+        try:
+            load_rows(escribir([base, dict(base, **{campo: valor})]))
+            ok &= check(f"mezclar {que} levanta", False)
+        except ValueError as exc:
+            ok &= check(f"mezclar {que} levanta, desde el analisis y no solo al correr",
+                        que[:6] in str(exc).lower())
+
+    ok &= check(
+        "las de infra_error se excluyen por defecto y se pueden pedir",
+        len(load_rows(escribir([base, dict(base, infra_error=True)]))) == 1
+        and len(load_rows(escribir([base, dict(base, infra_error=True)]),
+                          include_infra=True)) == 2,
+    )
+    return ok
+
+
 def check_measured_cost_supersedes_prior(ok: bool) -> bool:
     """§40: el costo medido supersede al prior, y hasta hoy no lo hacia.
 
@@ -2271,6 +2382,8 @@ def main() -> int:
     ok = check_coverage_trigger(ok)
     ok = check_handoff_authorisation(ok)
     ok = check_measured_cost_supersedes_prior(ok)
+    ok = check_money_is_a_unit_not_a_number(ok)
+    ok = check_load_rows_guards_the_analyst(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

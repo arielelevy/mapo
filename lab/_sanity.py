@@ -56,17 +56,31 @@ def share(part: float, whole: float, name: str) -> float:
     return part / whole
 
 
-def bounded(value: float, lo: float, hi: float, name: str) -> float:
+def bounded(
+    value: float | None, lo: float | None, hi: float | None, name: str
+) -> float | None:
     """El valor, negandose si sale del rango que su definicion permite.
 
     La cota que habria atajado el -463: la utilidad vive en un rango conocido, asi que
     un valor afuera no es un hallazgo — es una division contra un piso aplastado.
+
+    RANGO SEMIABIERTO. `lo` o `hi` en `None` es «ese lado no tiene cota», y hace falta:
+    una fraccion vive en [0, 1] pero un multiplo de costo solo tiene piso —el mas barato
+    es 1,0 por construccion— y no hay techo que no sea inventado. Exigir las dos cotas
+    obligaba a poner un techo de mentira, que es peor que no tener guarda: un techo
+    arbitrario deja pasar lo que esta debajo y levanta contra lo que es legitimo.
+
+    Y `value` en `None` NO es un error. Es «no calculable» —el multiplo cuando el mas
+    barato es cero— y esa es la respuesta correcta, no un cero. Pasa sin tocarse.
     """
-    if not lo <= value <= hi:
+    if value is None:
+        return None
+    if (lo is not None and value < lo) or (hi is not None and value > hi):
+        rango = f"[{'-inf' if lo is None else lo}, {'+inf' if hi is None else hi}]"
         raise Impossible(
-            f"{name}: {value:,.4f} esta fuera de [{lo}, {hi}], que es lo que su "
-            f"definicion permite. Un valor asi no es un hallazgo: es un calculo roto, "
-            f"y lo mas comun es un divisor recortado a mano."
+            f"{name}: {value:,.4f} esta fuera de {rango}, que es lo que su definicion "
+            f"permite. Un valor asi no es un hallazgo: es un calculo roto, y lo mas "
+            f"comun es un divisor recortado a mano."
         )
     return value
 

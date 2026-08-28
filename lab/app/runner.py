@@ -200,10 +200,83 @@ class Row:
         return self.__dict__.copy()
 
 
+# Un aviso por archivo: repetirlo por fila lo vuelve ruido y deja de leerse.
+_avisados: set[str] = set()
+
+
+def load_rows(
+    path: Path, include_infra: bool = False, expect: str | None = None,
+) -> list[dict[str, Any]]:
+    """Filas para analisis, desde un archivo. Las de `infra_error` se excluyen POR DEFECTO.
+
+    ES FUNCION DE MODULO Y NO METODO, y esa es la correccion. Las dos guardas de mezcla
+    —decodificacion y vocabulario de region— vivian adentro de `Runner`, que es la clase
+    que CORRE. Todo analizador lee el `.jsonl` con `json.loads` a mano, asi que **ninguna
+    de las dos protegia a quien analiza**: la forma que busca el barrido de hoy — una
+    garantia completa por un camino que nadie toma.
+
+    Las de `infra_error` se registran —el archivo las conserva— pero no son mediciones.
+    Excluirlas solo en `study()` las dejaba filtrarse a `episodes()`, `replicates()` y
+    `consolidate()`. Un solo porton, y ahora tambien del lado del analisis.
+    """
+    if not path.exists():
+        return []
+    rows = [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    # DOS COSAS DISTINTAS, y confundirlas fue el primer intento de esta guarda.
+    #
+    # (1) EL ARCHIVO NO PUEDE MEZCLAR. "Nunca mezclar modelos en un mismo archivo de
+    #     resume" era una regla escrita sostenida por convencion de directorio.
+    #     Promediar entre modelos no mide un paradigma: mide el modelo. Eso es un
+    #     error y levanta.
+    #
+    # (2) QUE EL LECTOR COINCIDA es otra pregunta, y para ANALIZAR no hace falta: un
+    #     script que solo promedia filas no llama al modelo, asi que sus ajustes son
+    #     irrelevantes. Levantar ahi obligaria a todo analizador a reconstruir un
+    #     endpoint que no va a usar.
+    #
+    #     Pero AVISA, porque es exactamente la confusion que dejo a R-1 sin concluir:
+    #     un replay sellado reconstruyo `Settings.from_env()` —el primer modelo, que
+    #     quedo congelado— y fallo el 100% de las entradas sin que nada dijera por que.
+    #     Un replay con los ajustes equivocados no puede acertar una sola clave.
+    seen = sorted({r["fingerprint"] for r in rows if r.get("fingerprint")})
+    if len(seen) > 1:
+        raise ValueError(
+            f"{path.name} mezcla decodificaciones: {seen}. Promediar "
+            f"entre modelos no mide un paradigma: mide el modelo. Separa los archivos."
+        )
+    # Y LO MISMO PARA EL VOCABULARIO DE REGION, por la misma razon. Una region es una
+    # etiqueta cuyo significado lo fija el vocabulario que la produjo; dos filas de
+    # vocabularios distintos llevan la misma etiqueta queriendo decir cosas distintas.
+    vocabs = sorted({r["region_vocabulary"] for r in rows
+                     if r.get("region_vocabulary")})
+    if len(vocabs) > 1:
+        raise ValueError(
+            f"{path.name} mezcla vocabularios de region: {vocabs}. Una "
+            f"region significa lo que su vocabulario dice que significa, asi que "
+            f"promediarlas compara etiquetas que no nombran lo mismo."
+        )
+    # `expect` ausente = quien llama no decodifica nada, asi que no hay con
+    # que comparar. No es «coincide»: es «no aplica».
+    if expect and seen and seen[0] != expect and path.name not in _avisados:
+        _avisados.add(path.name)
+        print(
+            f"  [aviso] {path.name} se produjo bajo {seen[0]!r} y esta "
+            f"sesion es {expect!r}. Para ANALIZAR no importa; para un REPLAY SELLADO "
+            f"falla el 100% de las claves, que es como R-1 quedo sin concluir."
+        )
+
+    if include_infra:
+        return rows
+    return [r for r in rows if not r.get("infra_error")]
+
+
 class Runner:
     # Una vez por proceso. Un aviso que se repite por cada lectura se vuelve ruido y deja
     # de leerse, que es la forma en que un aviso deja de ser un aviso.
-    _warned_fingerprint = False
 
     def __init__(
         self,
@@ -680,66 +753,10 @@ class Runner:
     # -- analysis ----------------------------------------------------------
 
     def load_rows(self, include_infra: bool = False) -> list[dict[str, Any]]:
-        """Rows for analysis. `infra_error` rows are excluded BY DEFAULT.
-
-        They are recorded — the file keeps them — but they are not measurements:
-        a 429 that outlived the retry budget says nothing about the paradigm.
-        Excluding them only in `study()` let them leak into `episodes()` (theta
-        learned that a paradigm "fails" wherever the quota ran dry), `replicates()`
-        (zeros inflating the noise floor) and `consolidate()`. One gate, here.
-        """
-        if not self._results_path.exists():
-            return []
-        rows = [
-            json.loads(line)
-            for line in self._results_path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
-        # DOS COSAS DISTINTAS, y confundirlas fue el primer intento de esta guarda.
-        #
-        # (1) EL ARCHIVO NO PUEDE MEZCLAR. "Nunca mezclar modelos en un mismo archivo de
-        #     resume" era una regla escrita sostenida por convencion de directorio.
-        #     Promediar entre modelos no mide un paradigma: mide el modelo. Eso es un
-        #     error y levanta.
-        #
-        # (2) QUE EL LECTOR COINCIDA es otra pregunta, y para ANALIZAR no hace falta: un
-        #     script que solo promedia filas no llama al modelo, asi que sus ajustes son
-        #     irrelevantes. Levantar ahi obligaria a todo analizador a reconstruir un
-        #     endpoint que no va a usar.
-        #
-        #     Pero AVISA, porque es exactamente la confusion que dejo a R-1 sin concluir:
-        #     un replay sellado reconstruyo `Settings.from_env()` —el primer modelo, que
-        #     quedo congelado— y fallo el 100% de las entradas sin que nada dijera por que.
-        #     Un replay con los ajustes equivocados no puede acertar una sola clave.
-        seen = sorted({r["fingerprint"] for r in rows if r.get("fingerprint")})
-        if len(seen) > 1:
-            raise ValueError(
-                f"{self._results_path.name} mezcla decodificaciones: {seen}. Promediar "
-                f"entre modelos no mide un paradigma: mide el modelo. Separa los archivos."
-            )
-        # Y LO MISMO PARA EL VOCABULARIO DE REGION, por la misma razon. Una region es una
-        # etiqueta cuyo significado lo fija el vocabulario que la produjo; dos filas de
-        # vocabularios distintos llevan la misma etiqueta queriendo decir cosas distintas.
-        vocabs = sorted({r["region_vocabulary"] for r in rows
-                         if r.get("region_vocabulary")})
-        if len(vocabs) > 1:
-            raise ValueError(
-                f"{self._results_path.name} mezcla vocabularios de region: {vocabs}. Una "
-                f"region significa lo que su vocabulario dice que significa, asi que "
-                f"promediarlas compara etiquetas que no nombran lo mismo."
-            )
-        mine = self._settings.fingerprint()
-        if seen and seen[0] != mine and not Runner._warned_fingerprint:
-            Runner._warned_fingerprint = True
-            print(
-                f"  [aviso] {self._results_path.name} se produjo bajo {seen[0]!r} y esta "
-                f"sesion es {mine!r}. Para ANALIZAR no importa; para un REPLAY SELLADO "
-                f"falla el 100% de las claves, que es como R-1 quedo sin concluir."
-            )
-
-        if include_infra:
-            return rows
-        return [r for r in rows if not r.get("infra_error")]
+        """Las filas de ESTA corrida. La logica y las guardas son del modulo."""
+        return load_rows(
+            self._results_path, include_infra, expect=self._settings.fingerprint()
+        )
 
     def study(self, lambda_cost: float = 0.0) -> Study:
         """Study over trial-averaged cells.
