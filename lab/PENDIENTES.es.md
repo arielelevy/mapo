@@ -26,6 +26,13 @@
 - [ ] M-4 · corpus natural + segunda familia
 - [ ] M-5 · C3 profundo en nano
 
+**«Anti-RAG» — la máquina existe (REC), le falta una pieza**
+- [ ] **AR-0** · medirlo como **factor** `{con, sin} × {patrones}`, no plegado en cada patrón
+- [ ] **AR-1** · contratos de completitud *(= T-1; la única pieza que falta de verdad)*
+- [ ] AR-2 · cablear rechazo tipado de contrato → `rec.diagnose` *(chico)*
+- [ ] AR-3 · predicción falsable antes de correr
+- [ ] AR-4 · baseline honesto: contra HyDE y RAG plano, no contra nada
+
 **REC — implementado, sin registrar y sin medir**
 - [ ] **REC-1** · preregistrar las seis hipótesis de `PATRON_REC.es.md` §11 *(gratis)*
 - [ ] **REC-2** · congelar política, presupuesto, umbrales y regla ANTES del mundo final
@@ -140,6 +147,117 @@ selección. Es un costo enunciado ahora, no descubierto después.
 | M-3 | Transferencia de θ entre familias de modelos | El colapso de `react` en nano sugiere que parte de lo aprendido es del modelo y no de la tarea. Condiciona la lectura de todo el registro | corrida |
 | M-4 | Corpus natural + segunda familia | Validez externa real. Un segundo generador propio **reformula** la objeción, no la responde. QA numérica sobre documentos largos calza con los contratos | la fase cara |
 | M-5 | C3 profundo en nano | Región abierta: la grilla completa dio u=0,000, y también oráculo-cero en `gold_transfer`. No hay ganador conocido | corrida |
+
+---
+
+## 1c. El «anti-RAG»: generar la pregunta de lo que falta
+
+**La idea** (del autor, 2026-08-27): en vez de recuperar para responder, **detectar qué
+falta y generar la pregunta que lo consigue**.
+
+**La máquina ya existe y es REC** — sólo que apunta a la decisión, no al contenido.
+`rec.py` toma una explicación fallida, calcula el **déficit contrafactual mínimo** (qué
+creencia mínima habría cambiado el plan) y emite una `AcquisitionClause`, que es
+literalmente «qué evidencia acotada comprar y cuándo parar»: `target_proposition`,
+`probe_kind`, `verifier`, `reachable`, `max_reads/calls/tokens`, `safe_exit`. Eso *es* la
+pregunta de lo que falta, en forma ejecutable y tipada.
+
+**En `legacy/` no está, y lo que hay es su COMPLEMENTO, no su versión.** `hyde.py`
+traslada el dominio de la búsqueda semántica a una **respuesta hipotética** en vez de la
+pregunta: genera cómo se vería la respuesta impresa en un documento y la usa como query
+KNN. Tiene sentido porque los documentos contienen respuestas, no preguntas — la consulta
+«direcciones de X» y el texto «Via Carlo Farini 58, piano 4» no se parecen, y la
+conjetura tiende el puente. No detecta un hueco: lo tapa con una conjetura **antes** de
+buscar.
+
+**Y por eso mismo es portable sin romper el invariante, que no es obvio.** HyDE alucina
+en el canal de la CONSULTA, donde una alucinación no puede convertirse en afirmación: una
+query mala cuesta una recuperación mala, nunca un dato falso con procedencia impecable. Es
+el mismo principio que gobierna la sonda — el modelo propone, la regla decide — aplicado
+un paso antes. Vale la pena decirlo como regla general: **la alucinación es admisible
+exactamente donde no puede volverse una afirmación.**
+
+Los dos se reparten el trabajo por lo que uno sabe al empezar:
+
+| | HyDE | anti-RAG (REC) |
+|---|---|---|
+| Punto de partida | «no sé dónde mirar» | «sé exactamente qué proposición falta, y con qué procedencia» |
+| Qué genera | una respuesta hipotética, como puente semántico | una adquisición acotada y verificable |
+| Verificable | no, y no hace falta | **sí, y es obligatorio** |
+| Dónde vive la conjetura | en la consulta | en ningún lado: el déficit es computado |
+
+Lo único cercano a detección de huecos en `legacy/` es un prompt (`agent_config.py:392`)
+que le pide al modelo etiquetar el contexto como `proved`/`insufficient`/`hypothetical`
+— o sea **el modelo como juez de su propia suficiencia**, que es exactamente lo que el
+invariante del producto rechaza. Ese no se porta.
+
+**Lo que falta para que el anti-RAG sea real, y no es un generador de preguntas.**
+Verificado: `lab/app/` tiene **cero** contratos de completitud. Y sin ellos, «qué falta»
+no está definido — cualquier generador de preguntas tendría que inferir de la prosa qué
+debería contener la respuesta, que es parseo de texto libre y está prohibido por regla.
+
+La pieza es **T-1, la semántica formal del contrato**, que ya figura como bloqueante de
+F6. Con ella la cadena cierra sin ninguna pieza nueva:
+
+```
+contrato declara qué proposiciones exige la respuesta
+        ↓
+la base de creencias no las tiene, o no con la procedencia exigida
+        ↓
+rechazo TIPADO  (beliefs.py ya lo produce: ABSENT / PROVENANCE / CREDENCE / …)
+        ↓
+déficit contrafactual mínimo  (rec.py, ya implementado)
+        ↓
+AcquisitionClause = LA PREGUNTA, acotada y certificada  (certify.py, ya implementado)
+```
+
+**O sea: el anti-RAG no es un patrón nuevo — es la superficie de CONTENIDO de la misma
+máquina**, y `CLAUDE.md` ya la nombra («contenido: números slot-filled desde `COMPUTED`,
+citado-o-callado, **contratos de completitud**»). De las cinco etapas, tres están
+implementadas y probadas. Falta la primera, que es teoría, y el cableado.
+
+### Y si aplica a todos los patrones, entonces no es un patrón: es un FACTOR
+
+Observación del autor: esto se podría aplicar a todos los patrones, y serían mejoras.
+Es cierto, y por eso mismo hay que medirlo de otra forma. Tres cosas, en orden de
+importancia.
+
+**1 · Aplicarlo adentro de cada patrón destruye lo que el banco mide.** Si los trece
+patrones llevan la detección de huecos incorporada, la comparación deja de ser «react vs
+dag» y pasa a ser «react-con-anti-RAG vs dag-con-anti-RAG». La diferencia entre patrones
+queda contaminada por una mejora común, y peor: **hay evidencia de que la mejora podría
+tapar la diferencia entera**. Está medido que la brecha de recall de evidencia es **4,2×
+la mayor ventaja entre paradigmas**. Cualquier cosa que mejore el recall de forma pareja
+opera sobre una escala mayor que la que separa a los brazos.
+
+El diseño correcto es **factorial**: `{con, sin} × {patrones}`. Eso mide dos cosas que
+plegarlo adentro confunde en una — el **efecto principal** (¿cuánto compra el anti-RAG?)
+y la **interacción** (¿le sirve más a `react` que a `dag_strategy`?). Y sólo la
+interacción justifica seguir teniendo patrones distintos.
+
+**2 · Va en el entorno, no en el cuerpo de cada patrón.** Es una regla que este repo ya
+tiene escrita: los patrones se distinguen por **estructura de control de flujo**, y las
+mejoras vienen de **señales de entorno** —contables, deterministas—, no de tocar cada
+patrón. La detección de huecos es una señal, así que su lugar es la superficie
+compartida. Aparte de correcto, es lo barato: trece implementaciones de la misma cosa se
+separan solas, que es exactamente la enfermedad que este proyecto extirpó dos veces hoy
+(el loop de tools en la capa congelada, y el ciclo de dos pasos del banco).
+
+**3 · Un riesgo para el claim del producto que conviene enunciar ahora.** El valor del
+ruteo **es la dispersión entre brazos**: si no hay diferencia entre paradigmas, no hay
+nada que rutear. Una mejora transversal que sube a todos **comprime esa dispersión**, y
+por lo tanto **puede reducir la brecha de oráculo del ruteo aunque mejore el sistema
+entero**. Sería el peor resultado posible de leer mal: el producto mejora y su métrica
+estrella empeora. Si el anti-RAG entra, la lectura del ruteo hay que reformularla al
+mismo tiempo, no después.
+
+| # | Qué | Estado |
+|---|---|---|
+| **AR-0** | Medirlo como **factor**, no plegado en cada patrón: `{con, sin} × {patrones}`, reportando efecto principal e interacción | diseño, antes de escribir código |
+| **AR-1** | Contratos de completitud (= T-1) | pizarra — **la única pieza que falta de verdad** |
+| **AR-2** | Cablear rechazo tipado de contrato → `rec.diagnose` | código, chico: la interfaz ya existe |
+| **AR-3** | Predicción falsable antes de correr | gratis, y obligatorio por regla |
+| **AR-4** | Comparar contra el baseline honesto | contra HyDE y contra RAG plano, no contra nada |
 
 ---
 
@@ -290,7 +408,7 @@ que **REC va después de P17, no en paralelo** — y esa dependencia no estaba e
 | # | Qué | Por qué importa |
 |---|---|---|
 | **A-1** | **Arrancar el producto: el motor nuevo no existe** | Es el objetivo declarado del repo — «el producto es el motor MAPO, y todavía no existe como tal; se construye a partir de lo que el banco pruebe». Todo lo demás de esta lista lo sirve, y sin embargo el ítem no estaba. Espera a que el registro esté maduro, que hoy significa: P16 cerrado, P17 corrido, y una decisión sobre si la selección paga |
-| **A-2** | **Decidir qué se porta de `legacy/`** | La capa congelada resolvió cuatro cosas que el banco nunca tuvo que modelar: búsqueda sobre índice real, scoping por permisos, citas verificadas contra el índice, y streaming. `legacy/README.md` es lectura obligatoria antes de portar cualquier pieza, pero **no hay una decisión escrita de qué entra y qué no** |
+| **A-2** | **Decidir qué se porta de `legacy/`** | La capa congelada resolvió cuatro cosas que el banco nunca tuvo que modelar: búsqueda sobre índice real, scoping por permisos, citas verificadas contra el índice, y streaming. `legacy/README.md` es lectura obligatoria antes de portar cualquier pieza, pero **no hay una decisión escrita de qué entra y qué no**. **Primeras dos entradas de esa decisión (2026-08-27)**: `hyde.py` **sí** — alucina en el canal de la consulta, donde una alucinación no puede volverse afirmación, y es el complemento del anti-RAG; el prompt de `agent_config.py:392` que le pide al modelo declarar el contexto `insufficient` **no** — es el modelo como juez de su propia suficiencia |
 | **A-3** | **Separar producto de banco antes de portar, no después** | Es P-11 mirado desde el otro lado: si el motor nuevo arranca copiando `lab/app/` tal como está, se lleva el banco adentro y la mezcla vuelve el día uno |
 
 **Riesgos concretos que nadie estaba mirando.**
