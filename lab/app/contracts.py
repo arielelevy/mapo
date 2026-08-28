@@ -283,3 +283,41 @@ def complete_answer(
         base = BeliefBase()
         base.assert_(Belief(proposition, list(domain_keys), 1.0, Provenance.COMPUTED))
     return complete(addressed(answer, domain_keys), proposition, base)
+
+
+def verify_coverage(task: dict[str, Any], answer: str) -> dict[str, Any] | None:
+    """`C-COMPLETE` sobre una tarea, cuando corresponde. `None` cuando NO corresponde.
+
+    EL DISPARADOR, TIPADO. Son DOS condiciones y ninguna alcanza sola:
+
+      la tarea EXIGE cobertura        `coverage_demanded == "exhaustive"`
+      y su dominio es ENUMERABLE      `completeness_domain == "from_question"`
+
+    La primera sin la segunda es el caso que la leccion 8.7 midio y que no tiene salida:
+    en una celda de dominio `semantic` —«listame todos los que tienen el rol R»— enumerar
+    el dominio ES la extraccion, asi que el contrato no verificaria al paradigma, lo
+    reemplazaria. Y en una de dominio `from_scope` el dominio barato son las unidades,
+    que se midio que NO predice correccion (`+0,018`).
+
+    La segunda sin la primera es una tarea que enumera algo y no pide exhaustividad: ahi
+    exigir cobertura es pagar de mas por nada.
+
+    `None` significa **sin contrato**, y se distingue de un contrato cumplido: un
+    booleano las volveria indistinguibles y son opuestas — «nadie verifico» contra «se
+    verifico y paso».
+
+    RETROCOMPATIBLE POR DISENO. Una tarea de un corpus anterior a `REQUEST_DEMANDS` no
+    declara los ejes; ahi el disparador se cae a la presencia de `domain_keys`, que es lo
+    unico que se puede saber de ella, y NO se supone la demanda.
+    """
+    domain = task.get("domain_keys") or []
+    if not domain:
+        return None
+
+    demanded = task.get("coverage_demanded")
+    enumerable = task.get("completeness_domain")
+    if demanded and enumerable:
+        if demanded != "exhaustive" or enumerable != "from_question":
+            return None
+
+    return complete_answer(answer, list(domain)).as_dict()

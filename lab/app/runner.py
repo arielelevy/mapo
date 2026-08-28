@@ -36,7 +36,7 @@ from .features import measure_continuation
 from .llm import LLMClient, SealedCacheMiss, SeededClient, Usage
 from .metrics import Observation, Study
 from .fsio import exclusive
-from .contracts import complete_answer
+from .contracts import verify_coverage
 from .paradigms import CATALOG, COST_PRIORS, FALLBACK, Infeasible, REGISTRY, RETIRED
 from .embeddings import EmbeddingClient
 from .retrieval import CorpusView, Retriever, build_arms
@@ -563,10 +563,7 @@ class Runner:
             # que la respuesta ATIENDA a cada elemento del dominio declarado, que es
             # comprobable en produccion sin oraculo. Que lo que diga de cada uno sea
             # correcto es otro contrato (`C-CITE`) y necesita el indice.
-            domain = task.get("domain_keys") or []
-            contract = (
-                complete_answer(result.answer, domain).as_dict() if domain else None
-            )
+            contract = verify_coverage(task, result.answer)
             return Row(
                 task_id=task["task_id"],
                 cell=task["cell"],

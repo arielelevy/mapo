@@ -51,13 +51,30 @@ from dataclasses import replace
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+import os
 from app.config import Settings
 from app.llm import SealedCacheMiss, SeededClient
 from app.paradigms import REGISTRY
 from app.runner import Runner
 
 base = Settings.from_env()
-settings = replace(base, results_dir=base.results_dir / "nano")
+# EL MODELO ES PARTE DE LA CLAVE DE CACHE, y `Settings.from_env()` devuelve el PRIMER
+# modelo, que quedo congelado. Reconstruir solo `results_dir` produce la huella
+# `gpt-5-chat|t=model_default` y hace MISS en el 100% de las entradas escritas por
+# `gpt-5.4-nano|t=0.0` — sin que nada en el error lo diga.
+#
+# Esta es exactamente la causa de los 93/112 misses que dejaron a este script sin
+# concluir, y la misma que dejo a R-1 sin concluir hasta que se identifico: un replay con
+# los ajustes equivocados y un cache roto producen el MISMO sintoma.
+settings = replace(
+    base,
+    endpoint=os.environ["MAPO_NANO_ENDPOINT"].rstrip("/"),
+    api_key=os.environ["MAPO_NANO_KEY"],
+    chat_deployment="gpt-5.4-nano",
+    temperature=0.0,
+    results_dir=base.results_dir / "nano",
+)
+print(f"modelo: {settings.fingerprint()}", flush=True)
 
 CORPUS = sys.argv[1] if len(sys.argv) > 1 else "gold_transfer"
 

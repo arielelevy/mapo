@@ -1772,6 +1772,58 @@ def check_scope_is_a_second_axis(ok: bool) -> bool:
     return ok
 
 
+# --- 38. cuando corresponde verificar cobertura, y cuando NO -----------------------------
+#
+# EL DISPARADOR SON DOS CONDICIONES Y NINGUNA ALCANZA SOLA. La tarea tiene que EXIGIR
+# cobertura (`exhaustive`) **y** su dominio tiene que ser ENUMERABLE (`from_question`).
+#
+# La primera sin la segunda es el caso que la leccion 8.7 midio y que no tiene salida: en
+# una celda de dominio `semantic` —«listame todos los que tienen el rol R»— enumerar el
+# dominio ES la extraccion, asi que el contrato no verificaria al paradigma, LO
+# REEMPLAZARIA. Y en una de dominio `from_scope` el dominio barato son las unidades, que se
+# midio que no predice correccion (+0,018): verificaria lo que no importa.
+#
+# La segunda sin la primera es una tarea que enumera algo y no pide exhaustividad — ahi
+# exigir cobertura es pagar de mas por nada.
+def check_coverage_trigger(ok: bool) -> bool:
+    from app.contracts import verify_coverage
+
+    print("\n--- 38. el disparador del contrato ---")
+
+    def task(**kw):
+        return {"domain_keys": ["Ana", "Beto"], **kw}
+
+    fires = verify_coverage(
+        task(coverage_demanded="exhaustive", completeness_domain="from_question"),
+        "solo Ana")
+    ok &= check("exige cobertura Y el dominio esta enunciado: DISPARA",
+                fires is not None and fires["emitted"] is False
+                and fires["missing"] == ["Beto"], str(fires and fires["missing"]))
+
+    for dominio, por_que in (("semantic", "enumerarlo ES resolver la tarea"),
+                             ("from_scope", "verificaria lo que no predice correccion")):
+        out = verify_coverage(
+            task(coverage_demanded="exhaustive", completeness_domain=dominio),
+            "solo Ana")
+        ok &= check(f"exige cobertura pero el dominio es `{dominio}`: NO dispara - "
+                    f"{por_que}", out is None)
+
+    ok &= check("no exige cobertura: NO dispara - forzarla es pagar de mas por nada",
+                verify_coverage(
+                    task(coverage_demanded="sufficient",
+                         completeness_domain="from_question"), "solo Ana") is None)
+
+    ok &= check("sin dominio declarado no hay nada contra que verificar",
+                verify_coverage({}, "cualquier cosa") is None)
+
+    # Retrocompatible: una tarea anterior a los ejes no los declara, y ahi lo unico que
+    # se puede saber de ella es que trae `domain_keys`. NO se supone la demanda.
+    ok &= check("una tarea legacy sin los ejes cae a la presencia de `domain_keys` y no "
+                "supone la demanda", verify_coverage(task(), "solo Ana") is not None)
+
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -2044,6 +2096,7 @@ def main() -> int:
     ok = check_product_leaves_a_trace(ok)
     ok = check_contract_names_its_deficit(ok)
     ok = check_scope_is_a_second_axis(ok)
+    ok = check_coverage_trigger(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1
