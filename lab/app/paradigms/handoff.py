@@ -42,7 +42,7 @@ from ..beliefs import Belief, BeliefBase, Provenance
 from ..llm import LLMClient, Usage
 from ..retrieval import CorpusView
 from ..tools import ToolSurface
-from . import ANSWER_CONTRACT, Result, _run_tool_loop, parse_answer
+from . import ANSWER_CONTRACT, answer_contract, Result, _run_tool_loop, parse_answer
 from .parsing import extract_json
 
 # Cuantos alcances. Dos es el minimo que tiene transferencia; mas alcances multiplican el
@@ -183,7 +183,7 @@ def handoff(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Re
             )
         messages = [{
             "role": "user",
-            "content": f"Task: {task['question']}\n\n{contract}\n\n{ANSWER_CONTRACT}",
+            "content": f"Task: {task['question']}\n\n{contract}\n\n{answer_contract(surface)}",
         }]
 
         completion, sub_usage, sub_transcript, turns = _run_tool_loop(
@@ -228,9 +228,11 @@ def handoff(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Re
         else:
             handed = None
 
-    answer = parse_answer(completion.text if completion else "") or " ".join(partials)
+    crudo = completion.text if completion else ""
+    answer = parse_answer(crudo) or " ".join(partials)
     return Result(
         answer=answer,
+        raw_text=crudo,
         usage=usage,
         transcript=transcript,
         iterations=iterations,

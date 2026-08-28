@@ -1944,6 +1944,94 @@ def check_handoff_authorisation(ok: bool) -> bool:
     return ok
 
 
+def check_absence_and_presupposition(ok: bool) -> bool:
+    """§45: las dos obligaciones que faltaban, y la asimetria que las separa.
+
+    C-ABSENCE. Una ausencia afirmada desde una muestra produce una respuesta que PARECE
+    NORMAL, y ese es el peor modo de falla de la familia: un error de presencia se cae solo
+    —el lector busca el dato y no esta— y uno de ausencia no deja rastro. La regla es la
+    asimetria: presencia con UN testigo, ausencia con el DOMINIO ENTERO.
+
+    C-PRESUPPOSITION. «Cuando renuncio X?» da por sentado que renuncio. Si no renuncio,
+    toda respuesta a la pregunta como esta formulada es falsa, INCLUIDA «no consta»:
+    declinar el dato ratifica la premisa igual que darlo.
+
+    Y NINGUNA DE LAS DOS PARSEA PROSA. La polaridad es un enum de dos valores, y la
+    regex se CONSTRUYE desde el vocabulario, asi que no hay dos listas que se desincronicen.
+    La premisa es una cadena que el agente enuncia y que el codigo NO interpreta: la busca
+    literal en el material, que es la direccion barata.
+    """
+    from app.beliefs import BeliefBase, Provenance
+    from app.contracts import (
+        OBLIGATIONS, POLARITY, absence, declared_polarity, presupposition,
+        verify_obligations,
+    )
+
+    print("\n--- 45. ausencia y presuposicion ---")
+
+    ok &= check("presencia: UN testigo alcanza, no se exige cobertura",
+                absence("present", 3, 40).emitted)
+    ok &= check("ausencia con muestra: NO se emite, y dice por que",
+                not absence("absent", 3, 40).emitted
+                and "sin leer" in (absence("absent", 3, 40).refused or ""))
+    ok &= check("ausencia con el dominio entero: se emite",
+                absence("absent", 40, 40).emitted)
+    ok &= check("dominio vacio: no se afirma nada, ni presencia ni ausencia",
+                not absence("present", 0, 0).emitted)
+    try:
+        absence("maybe", 1, 1)
+        ok &= check("una polaridad fuera del enum levanta", False)
+    except ValueError:
+        ok &= check("una polaridad fuera del enum levanta, no se adivina", True)
+
+    ok &= check("la regex de polaridad se construye DESDE el vocabulario",
+                all(declared_polarity(f"POLARITY: {p}\nANSWER: x") == p for p in POLARITY))
+    ok &= check("no declarada es None, JAMAS `present` — el benigno no es el default",
+                declared_polarity("ANSWER: x") is None
+                and declared_polarity("POLARITY: maybe\nANSWER: x") is None)
+    ok &= check("la ultima gana, igual que ANSWER: un brazo que revisa emite dos veces",
+                declared_polarity("POLARITY: present\nPOLARITY: absent\nA") == "absent")
+
+    docs = {"u1": "Valerio renuncio el 3 de marzo.", "u2": "otra cosa"}
+    base = BeliefBase()
+    v = presupposition("Valerio renuncio", docs, ["u1", "u2"], base)
+    props = {b.proposition: b.provenance for b in base.all()}
+    ok &= check("premisa sostenida: se emite y nombra el testigo",
+                v.emitted and v.witness == "u1")
+    ok &= check("el agente PROPONE elicited y el codigo AUTORIZA computed — no hereda",
+                props.get("presupposition_claimed") is Provenance.ELICITED
+                and props.get("presupposition_supported") is Provenance.COMPUTED)
+
+    base2 = BeliefBase()
+    v2 = presupposition("Valerio fue despedido", docs, ["u1", "u2"], base2)
+    ok &= check("premisa falsa: NO se emite, y el motivo dice que un «no se» la ratifica",
+                not v2.emitted and "ratifica" in (v2.refused or ""))
+    ok &= check("y la propuesta queda asentada sin autorizacion: el registro no la pierde",
+                [b.proposition for b in base2.all()] == ["presupposition_claimed"])
+
+    corto = presupposition("ab", docs, ["u1"], BeliefBase())
+    ok &= check("una premisa de tres caracteres no ratifica nada: guarda de especificidad",
+                not corto.emitted and not [b for b in BeliefBase().all()])
+
+    task = {"task_id": "t", "unit_ids": ["u1", "u2"], "obligations": sorted(OBLIGATIONS)}
+    ok &= check("sin obligaciones declaradas no hay contrato, y None no es «paso»",
+                verify_obligations({"task_id": "t"}, "x", docs, 0, BeliefBase()) is None)
+    try:
+        verify_obligations(task, "   ", docs, 2, BeliefBase())
+        ok &= check("texto crudo vacio levanta", False)
+    except ValueError as exc:
+        ok &= check("sin texto crudo LEVANTA: un fallo de plomeria no se reporta como "
+                    "incumplimiento del modelo", "plomeria" in str(exc))
+
+    r = verify_obligations(
+        task, "POLARITY: absent\nPRESUPPOSES: Valerio renuncio\nANSWER: ninguno",
+        docs, 2, BeliefBase(),
+    )
+    ok &= check("las dos corren en la misma respuesta y no se pisan",
+                r["absence"]["emitted"] and r["presupposition"]["emitted"])
+    return ok
+
+
 def check_model_is_an_action(ok: bool) -> bool:
     """§44: el modelo es ACCION, y el espacio de decision es el par (modelo, paradigma).
 
@@ -2508,6 +2596,7 @@ def main() -> int:
     ok = check_load_rows_guards_the_analyst(ok)
     ok = check_measurement_and_state_are_two_trees(ok)
     ok = check_model_is_an_action(ok)
+    ok = check_absence_and_presupposition(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

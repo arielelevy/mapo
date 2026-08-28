@@ -194,6 +194,8 @@ class Verifier:
             "C7_irreversible": self._c7,
             "C8_currency": self._c8,
             "C9_declared_roster": self._c9,
+            "B2_absence": self._b2,
+            "D1_presupposition": self._d1,
         }.get(cell)
         if handler is None:
             return False, f"no verifier for cell {cell}"
@@ -210,6 +212,83 @@ class Verifier:
             return False, f"unit describes {claim['name']}, question asks {name}"
         if [claim["account"]] != task["oracle"]:
             return False, f"account {claim['account']} != oracle {task['oracle']}"
+        return True, "ok"
+
+    def _b2(self, task: dict[str, Any]) -> tuple[bool, str]:
+        """Ausencia: el mundo tiene que sostener que la respuesta correcta es VACIA.
+
+        Verificar esta celda es lo mismo que resolverla —barrer el alcance entero— y por
+        eso `HONEST_DETECTORS["B2"]` es `False`. Aca eso no es un problema: el verificador
+        del corpus corre una vez, offline y con todo el material, que es exactamente la
+        posicion que en runtime no se tiene.
+
+        TRES CONDICIONES, y la tercera es la que evita el error mas facil de cometer:
+
+          1. el oraculo es la lista vacia — si tuviera items, la celda mide presencia;
+          2. NINGUNA unidad en alcance instancia el rol preguntado. Si una lo hiciera, la
+             respuesta correcta no seria vacia y la etiqueta mentiria;
+          3. `relevant_units` esta vacio. Declarar unidades relevantes en una tarea cuya
+             respuesta no esta en ninguna parte le mentiria al simulador de recuperacion
+             sobre que hay que encontrar, y el brazo degradado dejaria de ser comparable.
+        """
+        if task["oracle"]:
+            return False, f"B2 con oraculo no vacio {task['oracle']}: eso es presencia"
+        rol = re.search(r"role of ([^?]+)\?", task["question"])
+        if not rol:
+            return False, "B2 sin rol en el enunciado: la pregunta no es evaluable"
+        buscado = rol.group(1).strip().lower()
+        presentes = [
+            u["name"] for u in self.units(task)
+            if str(u.get("role", "")).strip().lower() == buscado
+        ]
+        if presentes:
+            return False, (
+                f"{buscado!r} lo instancian {presentes[:3]} en alcance: la respuesta "
+                f"correcta no es vacia y la celda mediria presencia"
+            )
+        if task.get("relevant_units"):
+            return False, (
+                "B2 con `relevant_units` declaradas: no hay unidad que lleve la respuesta, "
+                "y declarar una le miente al simulador de recuperacion"
+            )
+        return True, "ok"
+
+    def _d1(self, task: dict[str, Any]) -> tuple[bool, str]:
+        """Presuposicion: la premisa que la pregunta asume tiene que ser FALSA.
+
+        Si fuera verdadera la celda no mediria nada — contestar la pregunta seria lo
+        correcto—. Y si la premisa fuera sobre alguien que no esta en alcance, la celda
+        pasaria a medir ausencia, que es `B2` y otro eje.
+
+        LA PREMISA ES «la cuenta fue transferida a una sucesora». El generador no emite
+        transferencias en ningun memo, asi que la premisa es falsa por construccion. Esto
+        lo VERIFICA en vez de confiar: si alguien agregara transferencias al generador, la
+        celda quedaria midiendo una premisa verdadera y nada lo diria.
+        """
+        persona = re.search(rf"did ({_NAME}) transfer", task["question"])
+        if not persona:
+            return False, "D1 sin persona en el enunciado: la premisa no es identificable"
+        nombre = persona.group(1)
+        en_alcance = [u for u in self.units(task) if u["name"] == nombre]
+        if not en_alcance:
+            return False, (
+                f"{nombre} no esta en alcance: la respuesta correcta seria «no esta» y la "
+                f"celda mediria ausencia (B2), no presuposicion"
+            )
+        # La palabra se busca en el texto CRUDO de las unidades, no en el memo parseado:
+        # una transferencia agregada por el generador podria no tener campo propio y
+        # aparecer solo en la prosa. Buscar una cadena conocida adentro de un texto es la
+        # direccion barata, la misma que autoriza el handoff.
+        con_transferencia = [
+            u for u in task["unit_ids"]
+            if "transfer" in self.documents.get(u, "").lower()
+        ]
+        if con_transferencia:
+            return False, (
+                f"{con_transferencia[:3]} mencionan una transferencia: la premisa seria "
+                f"verdadera y contestar la pregunta seria lo correcto, asi que la celda "
+                f"no mide presuposicion"
+            )
         return True, "ok"
 
     def _c9(self, task: dict[str, Any]) -> tuple[bool, str]:

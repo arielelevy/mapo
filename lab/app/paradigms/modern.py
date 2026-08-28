@@ -28,7 +28,7 @@ from .parsing import extract_json, well_formed
 from ..fsio import write_atomic
 from ..llm import LLMClient, Usage
 from ..tools import MAX_BATCH_READ, ToolFailure, ToolSurface, _summarise
-from . import ANSWER_CONTRACT, Result, _finish
+from . import ANSWER_CONTRACT, answer_contract, Result, _finish
 
 # Evidence caps. Substituting a full 8k-token unit into a search query would be
 # nonsense; and the solver prompt must stay bounded by construction, not by hope.
@@ -93,7 +93,7 @@ def rewoo(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Resu
     evidence_block = "\n\n".join(f"#{k}:\n{v}" for k, v in evidence.items()) or "(none)"
     solve_prompt = (
         f"Task: {task['question']}\n\n"
-        f"Evidence collected by your plan:\n{evidence_block}\n\n{ANSWER_CONTRACT}"
+        f"Evidence collected by your plan:\n{evidence_block}\n\n{answer_contract(surface)}"
     )
     final = client.complete(messages=[{"role": "user", "content": solve_prompt}])
     usage.merge(final.usage)
@@ -160,7 +160,7 @@ def gist_reader(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -
         f"Task: {task['question']}\n\n"
         f"Gists of all units:\n{gists}\n\n"
         f"Full text of the units you selected:{note}\n" + "\n".join(texts) +
-        f"\n\n{ANSWER_CONTRACT}"
+        f"\n\n{answer_contract(surface)}"
     )
     final = client.complete(messages=[{"role": "user", "content": solve_prompt}])
     usage.merge(final.usage)
@@ -331,7 +331,7 @@ def graph_traverse(
     solve = (
         f"Task: {task['question']}\n\n"
         f"Evidence reached by walking the corpus entity graph from the task's "
-        f"entities:\n" + "\n".join(texts) + f"\n\n{ANSWER_CONTRACT}"
+        f"entities:\n" + "\n".join(texts) + f"\n\n{answer_contract(surface)}"
     )
     final = client.complete(messages=[{"role": "user", "content": solve}])
     usage.merge(final.usage)
@@ -405,7 +405,7 @@ def extract_compute(
         f"code from {len(rows)} raw extractions over all {len(surface.unit_ids())} "
         f"units; the count {len(table)} is exact):\n"
         f"{json.dumps(table, ensure_ascii=False)}\n\n"
-        f"Answer strictly from this table.\n\n{ANSWER_CONTRACT}"
+        f"Answer strictly from this table.\n\n{answer_contract(surface)}"
     )
     final = client.complete(messages=[{"role": "user", "content": solve}])
     usage.merge(final.usage)
@@ -469,7 +469,7 @@ def streaming_scan(
     solve = (
         f"Task: {task['question']}\n\n"
         f"Final registry after scanning all {len(surface.unit_ids())} units exactly "
-        f"once:\n{carry}\n\n{ANSWER_CONTRACT}"
+        f"once:\n{carry}\n\n{answer_contract(surface)}"
     )
     final = client.complete(messages=[{"role": "user", "content": solve}])
     usage.merge(final.usage)
@@ -637,7 +637,7 @@ def pointer_chase(
         f"({' -> '.join(visited) or 'no units reached'}; chase ended: {outcome}):\n"
         f"{facts}\n\n"
         f"Answer strictly from these facts. If they do not contain the answer, say "
-        f"so.\n\n{ANSWER_CONTRACT}"
+        f"so.\n\n{answer_contract(surface)}"
     )
     final = client.complete(messages=[{"role": "user", "content": solve}])
     usage.merge(final.usage)

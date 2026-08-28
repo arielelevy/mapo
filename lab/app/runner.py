@@ -30,13 +30,13 @@ from .llm import RETRYABLE_STATUS
 from .features import REGION_VOCABULARY, FeatureExtractor, Features, payload_for
 from dataclasses import replace as dc_replace
 
-from .beliefs import Provenance
+from .beliefs import BeliefBase, Provenance
 from .decide import decide as decide_once
 from .features import measure_continuation
 from .llm import LLMClient, SealedCacheMiss, SeededClient, Usage
 from .metrics import Observation, Study
 from .fsio import exclusive
-from .contracts import verify_coverage
+from .contracts import verify_coverage, verify_obligations
 from .paradigms import CATALOG, COST_PRIORS, FALLBACK, Infeasible, REGISTRY, RETIRED
 from .embeddings import EmbeddingClient
 from .retrieval import CorpusView, Retriever, build_arms
@@ -178,6 +178,10 @@ class Row:
     # castiga igual una respuesta incompleta que una equivocada; el contrato separa esas
     # dos, que es lo que ninguna metrica de anclaje puede hacer.
     completeness: dict[str, Any] | None = None
+    # `C-ABSENCE` y `C-PRESUPPOSITION`, cuando la tarea las exige. `None` es SIN CONTRATO
+    # y se distingue de un contrato cumplido: un booleano volveria indistinguible «nadie
+    # verifico» de «se verifico y paso», que son opuestos.
+    obligations: dict[str, Any] | None = None
     # EL VECTOR phi, QUE ES LO QUE EL ROUTER TIENE CUANDO DECIDE.
     #
     # No estaba en la fila, y esa ausencia explica P-5 entera: el descubrimiento de
@@ -302,6 +306,7 @@ class Runner:
         stop_on_barren: int = 0,
         offer_read_all: bool = False,
         terse_tools: bool = False,
+        demand_obligations: bool = False,
     ) -> None:
         # Hybrid is the default because it is what a real deployment has. The degraded
         # arms exist to test whether the conclusion depends on retrieval quality, not to
@@ -335,6 +340,11 @@ class Runner:
         # que si es medible con ese N es el RIESGO —si el modelo elige peor herramienta—
         # y ese es el numero por el que el factor existe.
         self.terse_tools = terse_tools
+        # CUARTO FACTOR. `C-ABSENCE` y `C-PRESUPPOSITION` necesitan que el agente declare
+        # dos campos tipados, y pedirselos cambia el prompt de todos los brazos. Apagado
+        # por defecto: las filas medidas hasta hoy NO lo tenian, y mezclarlas mediria el
+        # promedio de dos experimentos.
+        self.demand_obligations = demand_obligations
         self._retriever = arms[retriever_arm]
         # Kept so the surface can expose lexical and dense SEPARATELY alongside the
         # fused entry point. Offering only the fused view took the choice of modality
@@ -366,6 +376,8 @@ class Runner:
             suffix += "_readall"
         if terse_tools:
             suffix += "_terse"
+        if demand_obligations:
+            suffix += "_oblig"
         self._results_path = (
             settings.results_dir / f"{corpus_name}{suffix}_rows.jsonl"
         )
@@ -437,6 +449,7 @@ class Runner:
             stop_on_barren=self.stop_on_barren,
             offer_read_all=self.offer_read_all,
             terse_tools=self.terse_tools,
+            demand_obligations=self.demand_obligations,
         )
 
     def features_for(self, task: dict[str, Any], allow_derived: bool) -> Features:
@@ -675,6 +688,15 @@ class Runner:
             # comprobable en produccion sin oraculo. Que lo que diga de cada uno sea
             # correcto es otro contrato (`C-CITE`) y necesita el indice.
             contract = verify_coverage(task, result.answer)
+            # LAS OBLIGACIONES CORREN SOBRE EL TEXTO COMPLETO, no sobre `result.answer`:
+            # las declaraciones tipadas viven ANTES de la linea `ANSWER:`, asi que el
+            # parseo de la respuesta final ya las descarto. Pasarle la respuesta recortada
+            # daria «no declarada» siempre, y eso se leeria como incumplimiento del modelo
+            # cuando seria un defecto de plomeria.
+            obligations = verify_obligations(
+                task, result.raw_text or result.answer, self._documents,
+                len(surface.units_read), base=BeliefBase(),
+            ) if self.demand_obligations else None
             return Row(
                 task_id=task["task_id"],
                 cell=task["cell"],
@@ -686,6 +708,7 @@ class Runner:
                 prompt_tokens=result.usage.prompt_tokens,
                 completion_tokens=result.usage.completion_tokens,
                 completeness=contract,
+                obligations=obligations,
                 calls=result.usage.calls,
                 wall_seconds=round(time.perf_counter() - started, 3),
                 iterations=result.iterations,

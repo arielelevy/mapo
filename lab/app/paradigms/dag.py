@@ -45,7 +45,7 @@ from .parsing import extract_json, well_formed
 from .blackboard import Blackboard
 from ..llm import LLMClient, Usage
 from ..tools import ToolSurface
-from . import ANSWER_CONTRACT, Result, _run_tool_loop, parse_answer
+from . import ANSWER_CONTRACT, answer_contract, Result, _run_tool_loop, parse_answer
 
 # Typical production values for this topology. Held fixed across the study so the
 # paradigm is measured at one configuration rather than at whichever one happened to
@@ -358,6 +358,7 @@ def dag_strategy(
 
     return Result(
         answer=parse_answer(final.text),
+        raw_text=final.text,
         usage=usage,
         transcript=[{"role": "system", "content": board.render()}],
         iterations=iterations,

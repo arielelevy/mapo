@@ -27,9 +27,23 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable
 
+from ..contracts import OBLIGATIONS_CONTRACT
 from ..llm import Completion, LLMClient, Usage
 from ..cognitive import compact_history, manage_history
 from ..tools import ToolFailure, ToolSurface, specs_for
+
+def answer_contract(surface: Any = None) -> str:
+    """El contrato de respuesta, mas las obligaciones si la corrida las exige.
+
+    UNA SOLA FUNCION Y NO UNA CONSTANTE POR VARIANTE. El addendum de obligaciones es un
+    FACTOR: cambia el prompt de TODOS los brazos por igual, asi que se enciende en un solo
+    lugar y ningun paradigma decide si lo lleva. Un paradigma que pudiera optar convertiria
+    al factor en parte de la topologia, que es justo lo que separa factor de patron.
+    """
+    if surface is not None and getattr(surface, "demand_obligations", False):
+        return ANSWER_CONTRACT + "\n\n" + OBLIGATIONS_CONTRACT
+    return ANSWER_CONTRACT
+
 
 ANSWER_CONTRACT = (
     "End your reply with a single line of the form:\nANSWER: <answer>\n"
@@ -49,6 +63,15 @@ class Result:
     answer: str
     usage: Usage
     transcript: list[dict[str, Any]]
+    # EL TEXTO ANTES DE PARSEAR. Las declaraciones tipadas de obligaciones —`POLARITY`,
+    # `PRESUPPOSES`— viven ANTES de la linea `ANSWER:`, asi que `answer` ya las descarto.
+    # Verificarlas sobre `answer` daria «no declarada» SIEMPRE, y eso se leeria como
+    # incumplimiento del modelo cuando seria un defecto de plomeria — el mismo error que
+    # `retained_units` cometio contando el id en vez del texto.
+    #
+    # Vacio significa que el paradigma NO lo lleva, y el verificador LEVANTA en vez de
+    # reportar un incumplimiento inventado. Un paradigma que no lo carga es deuda visible.
+    raw_text: str = ""
     iterations: int = 0
     # The observable trace of the topology: which modality it reached for, whether it
     # summarised before reading, whether it batched. Two paradigms with the same answer
@@ -185,6 +208,7 @@ def _finish(
 ) -> Result:
     return Result(
         answer=parse_answer(answer_text),
+        raw_text=answer_text,
         usage=usage,
         transcript=transcript,
         iterations=iterations,
@@ -199,7 +223,7 @@ def direct(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Res
     """One call, no tools, no reasoning scaffold."""
     prompt = (
         f"{task['question']}\n\n"
-        f"Material:\n{_units_block(surface)}\n\n{ANSWER_CONTRACT}"
+        f"Material:\n{_units_block(surface)}\n\n{answer_contract(surface)}"
     )
     completion = client.complete(messages=[{"role": "user", "content": prompt}])
     return _finish(
@@ -213,7 +237,7 @@ def cot(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result
     prompt = (
         f"{task['question']}\n\n"
         f"Material:\n{_units_block(surface)}\n\n"
-        f"Reason step by step before answering.\n\n{ANSWER_CONTRACT}"
+        f"Reason step by step before answering.\n\n{answer_contract(surface)}"
     )
     completion = client.complete(messages=[{"role": "user", "content": prompt}])
     return _finish(
@@ -229,7 +253,7 @@ def react(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Resu
         "content": (
             f"{task['question']}\n\n"
             f"There are {len(surface.unit_ids())} units available. Use the search and "
-            f"read tools to gather what you need, then answer.\n\n{ANSWER_CONTRACT}"
+            f"read tools to gather what you need, then answer.\n\n{answer_contract(surface)}"
         ),
     }]
     completion, usage, transcript, iterations = _run_tool_loop(
@@ -264,7 +288,7 @@ def map_reduce(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) ->
     reduce_prompt = (
         f"Task: {task['question']}\n\n"
         f"Per-unit findings:\n" + "\n".join(partials) +
-        f"\n\nCombine them into one answer. De-duplicate.\n\n{ANSWER_CONTRACT}"
+        f"\n\nCombine them into one answer. De-duplicate.\n\n{answer_contract(surface)}"
     )
     final = client.complete(messages=[{"role": "user", "content": reduce_prompt}])
     usage.merge(final.usage)
@@ -311,7 +335,7 @@ def plan_execute(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) 
 
     synth_prompt = (
         f"Task: {task['question']}\n\nSub-findings:\n" + "\n\n".join(findings) +
-        f"\n\n{ANSWER_CONTRACT}"
+        f"\n\n{answer_contract(surface)}"
     )
     final = client.complete(messages=[{"role": "user", "content": synth_prompt}])
     usage.merge(final.usage)
@@ -330,7 +354,7 @@ def reflection(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) ->
         "role": "user",
         "content": (
             f"{task['question']}\n\nUse the search and read tools as needed.\n\n"
-            f"{ANSWER_CONTRACT}"
+            f"{answer_contract(surface)}"
         ),
     }]
     first, first_usage, transcript, iterations = _run_tool_loop(
@@ -360,7 +384,7 @@ def reflection(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) ->
             "role": "user",
             "content": (
                 f"A reviewer raised these defects:\n{critique.text}\n\n"
-                f"Address them. You may use the tools again.\n\n{ANSWER_CONTRACT}"
+                f"Address them. You may use the tools again.\n\n{answer_contract(surface)}"
             ),
         },
     ]

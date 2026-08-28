@@ -398,6 +398,9 @@ class ToolSurface:
     # FACTOR: descripciones cortas. Cambia el payload que el modelo lee para decidir QUE
     # herramienta usar, asi que puede cambiar la eleccion — no es una limpieza.
     terse_tools: bool = False
+    # FACTOR: exigir las obligaciones tipadas (polaridad, presuposicion). Cambia el
+    # contrato que todos los brazos leen, asi que sus filas van a otro archivo.
+    demand_obligations: bool = False
     calls: dict[str, int] = field(default_factory=dict)
     units_read: set[str] = field(default_factory=set)
     hallucinated: int = 0

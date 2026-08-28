@@ -329,6 +329,335 @@ def verify_coverage(task: dict[str, Any], answer: str) -> dict[str, Any] | None:
 # re-emitia con otras palabras el 69% de las veces. Un reintento automatico tiene la misma
 # forma — el sistema gastando presupuesto que nadie autorizo, con la posibilidad de volver
 # a fallar igual. Asi que el codigo PROPONE y el llamador decide.
+# ---------------------------------------------------------------------------
+# C-ABSENCE — afirmar que algo NO esta
+# ---------------------------------------------------------------------------
+#
+# EL DE PEOR RELACION DAÑO/ATENCION de la familia entera. Una ausencia afirmada desde una
+# muestra produce una respuesta que PARECE NORMAL: «no hay ninguna clausula de rescision»
+# se lee igual de segura leyendo 3 unidades que leyendo las 40. Un error de presencia se
+# cae solo —el lector busca el dato y no esta— y uno de ausencia no deja rastro, porque no
+# hay nada que buscar.
+#
+# LA ASIMETRIA ES LA REGLA, y es la unica pieza que hace falta:
+#
+#   presencia   UN testigo alcanza. Encontrada la clausula, el resto del corpus no
+#               cambia el veredicto
+#   ausencia    hace falta el DOMINIO ENTERO. Cualquier unidad sin leer puede contener
+#               justo lo que se esta negando
+#
+# La sonda ya tiene esta asimetria, pero solo del lado del MATERIAL —cuanto queda por
+# recuperar—. Del lado de la RESPUESTA no existia: nada distinguia un enunciado que
+# afirma de uno que niega, asi que los dos se emitian con la misma evidencia.
+#
+# COMO SE SABE QUE LA RESPUESTA NIEGA, SIN PARSEAR PROSA. No se lee el texto. El agente
+# declara la polaridad en un campo TIPADO de vocabulario cerrado, igual que declara
+# `status` en el handoff. Un enum de dos valores no es un parseo: es una eleccion entre
+# opciones enumeradas, y el codigo la trata como proposicion del modelo —o sea ELICITED—
+# mientras que la cobertura contra la que se verifica es aritmetica sobre el registro de
+# lectura, o sea COMPUTED.
+POLARITY = frozenset({"present", "absent"})
+
+# Las obligaciones que una tarea puede EXIGIR. Vocabulario cerrado: una tarea que pide una
+# obligacion que nadie definio es un error de corpus, no una obligacion nueva.
+OBLIGATIONS = frozenset({"absence", "presupposition"})
+
+
+@dataclass
+class AbsenceVerdict:
+    """Si un enunciado de ausencia tiene con que sostenerse."""
+
+    emitted: bool
+    polarity: str
+    units_read: int
+    units_available: int
+    refused: str | None = None
+
+    @property
+    def exhaustive(self) -> bool:
+        return self.units_available > 0 and self.units_read >= self.units_available
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "emitted": self.emitted,
+            "polarity": self.polarity,
+            "units_read": self.units_read,
+            "units_available": self.units_available,
+            "exhaustive": self.exhaustive,
+            "refused": self.refused,
+        }
+
+
+def absence(polarity: str, units_read: int, units_available: int) -> AbsenceVerdict:
+    """La carga de prueba que le toca a esta polaridad.
+
+    FALLA CERRADA, como el resto de la familia: una ausencia sin dominio completo NO se
+    emite con una advertencia al lado. Emitirla anotada le deja al lector la decision que
+    el contrato existe para tomar, y el modo de falla es que el lector no la toma.
+
+    `units_available == 0` es un dominio VACIO, y ahi no se puede afirmar nada —ni
+    presencia ni ausencia—. Es distinto de un dominio leido entero: cero de cero no es
+    exhaustivo, es que no habia con que.
+    """
+    if polarity not in POLARITY:
+        raise ValueError(
+            f"Polaridad {polarity!r} fuera del vocabulario {sorted(POLARITY)}. Es un enum "
+            f"declarado, no texto: un valor nuevo seria una polaridad que nadie definio."
+        )
+    verdict = AbsenceVerdict(
+        emitted=False, polarity=polarity,
+        units_read=units_read, units_available=units_available,
+    )
+    if units_available <= 0:
+        verdict.refused = (
+            "el dominio esta vacio: no se puede afirmar presencia ni ausencia sobre cero "
+            "unidades, y cero de cero no es exhaustivo"
+        )
+        return verdict
+    if polarity == "present":
+        # UN TESTIGO ALCANZA. No se exige cobertura: encontrada la cosa, lo que quede sin
+        # leer no puede desmentirla. Exigir exhaustividad aca seria simetria falsa.
+        verdict.emitted = True
+        return verdict
+    if not verdict.exhaustive:
+        verdict.refused = (
+            f"ausencia afirmada leyendo {units_read} de {units_available} unidades. "
+            f"Cualquier unidad sin leer puede contener justo lo que se niega, asi que "
+            f"esto es una muestra presentada como un hecho sobre el dominio"
+        )
+        return verdict
+    verdict.emitted = True
+    return verdict
+
+
+# ---------------------------------------------------------------------------
+# C-PRESUPPOSITION — la pregunta da algo por sentado
+# ---------------------------------------------------------------------------
+#
+# «Cuando renuncio Valerio?» da por sentado que renuncio. Si no renuncio, TODA respuesta a
+# la pregunta como esta formulada es falsa, incluida «no se»: contestar con una fecha o con
+# un «no consta la fecha» ratifica igual la premisa.
+#
+# ES EL MAS FACIL DE LA FAMILIA Y NO ESTABA, porque una presuposicion YA TIENE FORMA DE
+# PROPOSICION: el mecanismo para verificarla existe entero —es `BeliefBase` con su piso de
+# procedencia— y lo unico que faltaba era extraerla.
+#
+# Y EXTRAERLA NO ES PARSEAR PROSA. Es el patron del handoff, que ya esta medido: el agente
+# PROPONE la presuposicion como una cadena tipada —su lectura, `ELICITED`— y el codigo
+# AUTORIZA verificando que esa cadena aparezca LITERAL en el material, que es un hecho
+# computable, `COMPUTED`. La direccion importa: buscar una cadena conocida adentro de un
+# documento es finito; extraer del documento que cadenas hay es lo otro.
+PRESUPPOSITION_FLOOR_PROPOSAL = Provenance.ELICITED
+PRESUPPOSITION_FLOOR_AUTHORISATION = Provenance.COMPUTED
+
+# Misma guarda de especificidad que la sonda y el handoff: una cadena de tres caracteres
+# aparece en cualquier lado y ratificaria cualquier premisa.
+MIN_PRESUPPOSITION_CHARS = 4
+
+
+@dataclass
+class PresuppositionVerdict:
+    """Si la premisa que la pregunta da por sentada esta sostenida."""
+
+    emitted: bool
+    presupposition: str
+    supported: bool
+    witness: str | None = None
+    refused: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "emitted": self.emitted,
+            "presupposition": self.presupposition,
+            "supported": self.supported,
+            "witness": self.witness,
+            "refused": self.refused,
+        }
+
+
+def presupposition(
+    claim: str, documents: dict[str, str], scope: list[str], base: BeliefBase
+) -> PresuppositionVerdict:
+    """Verificar la premisa ANTES de contestar la pregunta que la asume.
+
+    Deja las dos creencias asentadas con SU procedencia, no con la del que las pidio: la
+    propuesta del agente entra `ELICITED` y la verificacion sobre el material `COMPUTED`.
+    Heredar la del proponente fue el error que `P-4` costo.
+
+    NO SE EMITE si la premisa no esta sostenida, y eso incluye no emitir un «no se»: una
+    respuesta que declina la fecha ratifica igual que hubo renuncia.
+    """
+    verdict = PresuppositionVerdict(
+        emitted=False, presupposition=claim, supported=False
+    )
+    needle = " ".join(claim.lower().split())
+    if len(needle) < MIN_PRESUPPOSITION_CHARS:
+        verdict.refused = (
+            f"la premisa {claim!r} tiene menos de {MIN_PRESUPPOSITION_CHARS} caracteres: "
+            f"una cadena asi aparece en cualquier lado y ratificaria cualquier pregunta"
+        )
+        return verdict
+
+    base.assert_(Belief(
+        proposition="presupposition_claimed",
+        value=claim,
+        credence=0.8,
+        provenance=PRESUPPOSITION_FLOOR_PROPOSAL,
+        evidence=f"el agente declaro que la pregunta da por sentado {claim!r}",
+    ))
+
+    for unit in scope:
+        if needle in " ".join(documents[unit].lower().split()):
+            verdict.supported = True
+            verdict.witness = unit
+            break
+
+    if not verdict.supported:
+        verdict.refused = (
+            f"la pregunta da por sentado {claim!r} y el material no lo sostiene. "
+            f"Contestarla —con un dato o con un «no consta»— ratifica la premisa igual, "
+            f"asi que lo que corresponde es rechazarla, no responderla"
+        )
+        return verdict
+
+    base.assert_(Belief(
+        proposition="presupposition_supported",
+        value=claim,
+        credence=1.0,
+        provenance=PRESUPPOSITION_FLOOR_AUTHORISATION,
+        evidence=f"{claim!r} aparece literal en {verdict.witness}",
+    ))
+    verdict.emitted = True
+    return verdict
+
+
+# ---------------------------------------------------------------------------
+# El puente: como llegan las dos declaraciones desde la respuesta
+# ---------------------------------------------------------------------------
+#
+# LAS DOS SON DECLARACIONES TIPADAS, NO PROSA LEIDA. Y las dos se leen distinto, a
+# proposito:
+#
+#   POLARITY       vocabulario CERRADO de dos valores. Un valor fuera de la lista no se
+#                  corrige ni se adivina: se trata como no declarado
+#   PRESUPPOSES    una cadena que el agente enuncia y que NO se interpreta. Se busca
+#                  LITERAL en el material, que es la direccion barata: buscar una cadena
+#                  conocida adentro de un documento es finito
+#
+# EL CONTRATO EXTENDIDO ES UN FACTOR. Agregar estas lineas cambia el prompt de todos los
+# brazos, asi que sus filas NO son comparables con las de una corrida sin el. Va apagado
+# por defecto, cruzado `{con, sin} x {patrones}`, como `terse_tools` y `offer_read_all`.
+OBLIGATIONS_CONTRACT = (
+    "Before the ANSWER line, declare two things, each on its own line:\n"
+    "POLARITY: present   — if you are asserting that something IS in the material\n"
+    "POLARITY: absent    — if you are asserting that something is NOT there\n"
+    "PRESUPPOSES: <text> — if the question takes something for granted, quote the "
+    "EXACT string from the material that establishes it; omit the line if it takes "
+    "nothing for granted.\n"
+    "Both are looked up mechanically. A paraphrase in PRESUPPOSES finds nothing."
+)
+
+_POLARITY_LINE = re.compile(
+    r"^POLARITY:\s*(" + "|".join(sorted(POLARITY)) + r")\s*$",
+    flags=re.MULTILINE | re.IGNORECASE,
+)
+_PRESUPPOSES_LINE = re.compile(r"^PRESUPPOSES:\s*(.+)$", flags=re.MULTILINE)
+
+
+def declared_polarity(text: str) -> str | None:
+    """La polaridad que la respuesta declara, o `None` si no declaro una valida.
+
+    LA REGEX CORRE SOBRE UN VOCABULARIO ENUMERADO, que es la unica forma que este
+    proyecto acepta: la alternancia se construye desde `POLARITY`, asi que agregar un
+    valor al enum lo agrega al patron y no hay dos listas que se puedan desincronizar.
+
+    `None` es NO DECLARADA, y no es `present`. Caer al valor benigno le regalaria a toda
+    respuesta sin declarar la carga de prueba mas facil, que es exactamente al reves de
+    para que existe el contrato.
+    """
+    found = _POLARITY_LINE.findall(text)
+    # La ultima gana, igual que `ANSWER:`: un paradigma que revisa su respuesta emite la
+    # linea mas de una vez, y la que vale es la que queda.
+    return found[-1].lower() if found else None
+
+
+def declared_presupposition(text: str) -> str | None:
+    """La premisa que la respuesta dice que la pregunta da por sentada, sin interpretar."""
+    found = _PRESUPPOSES_LINE.findall(text)
+    if not found:
+        return None
+    claim = found[-1].strip()
+    return claim or None
+
+
+def verify_obligations(
+    task: dict[str, Any],
+    answer_text: str,
+    documents: dict[str, str],
+    units_read: int,
+    base: BeliefBase,
+) -> dict[str, Any] | None:
+    """Las obligaciones que esta tarea EXIGE, verificadas. `None` cuando no exige ninguna.
+
+    EL DISPARADOR ES TIPADO Y LO DECLARA LA TAREA, igual que en `verify_coverage`. Una
+    tarea declara `obligations` con valores de `OBLIGATIONS`; lo que no esta declarado no
+    se verifica, y no verificarlo se distingue de verificarlo y pasar.
+
+    `None` significa SIN CONTRATO. Un booleano volveria indistinguible «nadie verifico» de
+    «se verifico y paso», que son opuestos.
+    """
+    demanded = [o for o in (task.get("obligations") or []) if o in OBLIGATIONS]
+    if not demanded:
+        return None
+    if not answer_text.strip():
+        raise ValueError(
+            f"{task.get('task_id')}: la tarea exige {demanded} y el texto crudo llego "
+            f"vacio. Un paradigma que no carga `raw_text` haria que TODA respuesta "
+            f"figurara como no declarada, y eso se leeria como incumplimiento del modelo "
+            f"cuando es un defecto de plomeria. Se levanta en vez de inventar el fallo."
+        )
+
+    report: dict[str, Any] = {}
+
+    if "absence" in demanded:
+        polarity = declared_polarity(answer_text)
+        if polarity is None:
+            # NO DECLARADA NO ES `present`. La tarea exigia declararla y la respuesta no
+            # lo hizo, asi que el contrato no se puede evaluar y eso ES el incumplimiento.
+            report["absence"] = {
+                "emitted": False,
+                "polarity": None,
+                "refused": (
+                    "la tarea exige declarar polaridad y la respuesta no declaro una "
+                    "valida. No declarada no es `present`: caer al valor benigno le "
+                    "regala la carga de prueba mas facil a quien no declaro"
+                ),
+            }
+        else:
+            report["absence"] = absence(
+                polarity, units_read, len(task.get("unit_ids") or [])
+            ).as_dict()
+
+    if "presupposition" in demanded:
+        claim = declared_presupposition(answer_text)
+        if claim is None:
+            report["presupposition"] = {
+                "emitted": False,
+                "presupposition": None,
+                "supported": False,
+                "refused": (
+                    "la tarea declara que la pregunta da algo por sentado y la respuesta "
+                    "no enuncio que. Contestarla sin verificar la premisa la ratifica"
+                ),
+            }
+        else:
+            report["presupposition"] = presupposition(
+                claim, documents, list(task.get("unit_ids") or []), base
+            ).as_dict()
+
+    return report or None
+
+
 MAX_DIRECTED_RETRIES = 1
 
 

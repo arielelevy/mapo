@@ -52,6 +52,19 @@ CITIES = [
 ]
 ROLES = ["director", "signatory", "auditor", "beneficial owner", "custodian"]
 
+# ROLES QUE NUNCA SE ASIGNAN, y por eso existe la lista.
+#
+# La primera version de B2 buscaba un rol de `ROLES` que nadie tuviera EN ALCANCE. Anda a
+# width=12 y desaparece a width=40, porque con suficientes personas los cinco roles quedan
+# instanciados. O sea que la celda de ausencia existia solo en el regimen chico — justo el
+# que el producto NO apunta, y justo donde la falla que mide es menos grave: afirmar una
+# ausencia sobre 12 unidades es menos temerario que sobre 400.
+#
+# Estos son nombres de rol legitimos del mismo vocabulario —la pregunta es sensata, no
+# inventada— que el generador nunca le da a nadie. Asi la ausencia es verdadera POR
+# CONSTRUCCION y a cualquier ancho, y para saberlo hay que barrer igual.
+ABSENT_ROLES = ["trustee", "nominee shareholder", "compliance officer"]
+
 _NOTE_ID = re.compile(r"note-\d{3}")
 
 # Stamped into every manifest. A seed alone does not pin a corpus: when the generation
@@ -177,6 +190,11 @@ class Task:
     # Demandas TIPADAS de la pregunta, declaradas por celda (ver REQUEST_DEMANDS). No se
     # infieren de la prosa del enunciado. Son dos porque C5 y C8 son singulares y aun asi
     # exigen cobertura total: la cardinalidad de la respuesta no implica la cobertura.
+    # Obligaciones que la pregunta EXIGE, de vocabulario cerrado (`contracts.OBLIGATIONS`).
+    # Declaradas por celda, jamas inferidas de la prosa del enunciado: inferir "esta
+    # pregunta niega algo" del texto es exactamente el parseo de prosa que este banco no
+    # acepta como sensor.
+    obligations: list[str] = field(default_factory=list)
     answer_cardinality: str = ""
     coverage_demanded: str = ""
     # De donde sale el dominio contra el que se verificaria la completitud. Decide si
@@ -459,6 +477,102 @@ class Generator:
             domain_keys=names,
         )
 
+    def task_b2_absence(self, idx: int, width: int) -> Task:
+        """Ausencia: la respuesta correcta es que NO esta. `O-2`.
+
+        POR QUE ESTA CELDA ES LA DE PEOR RELACION DAÑO/ATENCION de todo el banco. Una
+        ausencia afirmada desde una muestra produce una respuesta que PARECE NORMAL: «no
+        hay ningun memo sobre X» se lee igual de segura leyendo 3 unidades que leyendo 40.
+        Un error de presencia se cae solo —el lector busca el dato y no esta— y uno de
+        ausencia no deja rastro, porque no hay nada que buscar.
+
+        LA CONSTRUCCION. Se pregunta por un rol de `ABSENT_ROLES`: nombres legitimos del
+        mismo vocabulario que el generador NUNCA le asigna a nadie. La pregunta es sensata
+        —el rol es real— y la respuesta correcta es vacia A CUALQUIER ANCHO.
+
+        La primera version buscaba un rol de `ROLES` que nadie tuviera en alcance, y eso
+        anda a width=12 y desaparece a width=40: con suficientes personas los cinco quedan
+        instanciados. O sea que la celda existia solo en el regimen chico, que es el que el
+        producto NO apunta y donde la falla es menos grave — afirmar una ausencia sobre 12
+        unidades es menos temerario que sobre 400.
+
+        Y EL ORACULO ES LA LISTA VACIA, que no es lo mismo que no tener oraculo. Una tarea
+        cuya respuesta correcta es el conjunto vacio SI tiene con que corregirse, y por eso
+        `has_oracle` se declara y no se deriva de `bool(oracle)`: derivarlo mal-etiquetaria
+        como no verificables justo a estas.
+        """
+        # El rol sale de `ABSENT_ROLES`, que el generador NUNCA asigna. Asi la ausencia es
+        # verdadera a cualquier ancho, y no solo donde el sorteo dejo un rol sin usar.
+        ausente = ABSENT_ROLES[idx % len(ABSENT_ROLES)]
+        # LA GUARDA IGUAL SE QUEDA, y no es defensiva: si alguien agregara un rol de
+        # `ABSENT_ROLES` al pool de asignacion, la celda pasaria a medir presencia bajo la
+        # etiqueta de ausencia y NADA lo diria. Es barata y cubre un cambio a dos archivos
+        # de distancia.
+        instanciados = {p.role for p in self.people}
+        if ausente in instanciados:
+            raise ValueError(
+                f"{ausente!r} esta en ABSENT_ROLES y ademas asignado a alguien. La celda "
+                f"B2 mediria presencia con nombre de ausencia, asi que se niega."
+            )
+        units = self._with_distractors(self._memo_ids()[:width])
+        return Task(
+            task_id=f"b2-{idx:03d}-w{width}",
+            cell="B2_absence",
+            question=(
+                f"Which individuals hold the role of {ausente}? "
+                f"If none do, say so explicitly."
+            ),
+            oracle=[],
+            unit_ids=units,
+            # NINGUNA unidad lleva la respuesta, y eso es exacto: la respuesta correcta no
+            # esta en ninguna parte. Declarar unidades relevantes seria mentirle al
+            # simulador de recuperacion sobre lo que hay que encontrar.
+            relevant_units=[],
+            budget_tokens=40_000,
+            truth_n_units=len(units),
+            truth_coupling=0.0,
+            has_oracle=True,
+            obligations=["absence"],
+        )
+
+    def task_d1_presupposition(self, idx: int, width: int) -> Task:
+        """La pregunta da algo por sentado que el material no sostiene. `O-3`.
+
+        «Cuando renuncio X?» da por sentado que renuncio. Si no renuncio, TODA respuesta a
+        la pregunta como esta formulada es falsa, INCLUIDA «no consta la fecha»: declinar
+        el dato ratifica la premisa igual que darlo.
+
+        POR QUE ES EL MAS FACIL DE LA FAMILIA. Una presuposicion ya tiene forma de
+        proposicion, asi que el mecanismo para verificarla existe entero —`BeliefBase` con
+        su piso de procedencia—. Lo unico que faltaba era extraerla, y extraerla es el
+        patron del handoff: el agente la PROPONE tipada y el codigo la AUTORIZA por
+        presencia literal en el material.
+
+        EL ORACULO ES EL RECHAZO DE LA PREMISA, no un dato. Por eso la respuesta correcta
+        nombra la premisa: lo que se corrige es que la haya identificado, no que conteste.
+        """
+        persona = self.people[idx % max(1, min(len(self.people), width))]
+        units = self._with_distractors(self._memo_ids()[:width])
+        return Task(
+            task_id=f"d1-{idx:03d}-w{width}",
+            cell="D1_presupposition",
+            question=(
+                f"On what date did {persona.name} transfer the settlement account to "
+                f"the successor account? Report the date."
+            ),
+            # La transferencia NUNCA ocurre en este corpus: el memo declara una cuenta y
+            # no registra transferencias. Asi que la premisa es falsa por construccion, no
+            # por casualidad de generacion — que es lo que la hace medible.
+            oracle=["no transfer is recorded"],
+            unit_ids=units,
+            relevant_units=[f"memo-{idx % max(1, width):03d}"],
+            budget_tokens=40_000,
+            truth_n_units=len(units),
+            truth_coupling=0.0,
+            has_oracle=True,
+            obligations=["presupposition"],
+        )
+
     def task_c2_bulk_extraction(self, idx: int, width: int) -> Task:
         """High n, independent, oracle. Map-reduce should win; ReAct should miss items."""
         target_role = ROLES[idx % len(ROLES)]
@@ -737,6 +851,14 @@ class Generator:
                 # La unica celda cuyo dominio de completitud viene ENUNCIADO. Reusa los
                 # memos que ya existen: cero documentos nuevos.
                 tasks.append(self.task_c9_roster(i, width))
+                # LAS DOS CELDAS DE OBLIGACION. Reusan los memos que ya existen: cero
+                # documentos nuevos, igual que C9.
+                #
+                # B2 puede no ser generable —si todo rol esta instanciado no hay ausencia
+                # legitima que preguntar— y ahi se DECLARA en vez de degradarla a una
+                # tarea de presencia con nombre de ausencia.
+                tasks.append(self.task_b2_absence(i, width))
+                tasks.append(self.task_d1_presupposition(i, width))
         return tasks
 
 
@@ -750,6 +872,16 @@ class Generator:
 #   C5  unknown horizon: knowing when to stop is the question.         none
 #   C8  currency: verifying a value is current means finding every
 #       filing that could supersede it -- which is the task.               none
+#   B2  absence: checking "nobody holds R" means scanning the whole
+#       domain, which is exactly what solving it costs.                    none
+#   D1  presupposition: the correct answer is that the premise is not
+#       supported, and verifying THAT is the absence problem again.        none
+#
+# Y LAS DOS ULTIMAS TIENEN UNA ASIMETRIA QUE VALE DECIR. Verificar la POLARIDAD OPUESTA
+# si es barato: un testigo literal confirma una presencia, y confirmar una premisa
+# sostenida cuesta una contencion de cadena. Pero el detector se declara para la celda, y
+# la celda pregunta el caso caro. Declararlo `True` por el caso barato pondria la cascada
+# adelante de cada decision y llamaria a eso una medicion de ruteo.
 #
 # This is a claim about the WORLD, not a knob. A deployment that can cheaply check a
 # list is a deployment with an index nobody has; declaring one anyway puts the cascade
@@ -757,6 +889,8 @@ class Generator:
 HONEST_DETECTORS = {
     "C1": True,
     "C7": True,
+    "B2": False,
+    "D1": False,
     "C2": False,
     "C3": False,
     "C4": False,
@@ -829,6 +963,15 @@ REQUEST_DEMANDS: dict[str, tuple[str, str, str]] = {
     "C8": ("singular", "exhaustive", "from_scope"),
     # La UNICA celda `from_question`: el dominio son las personas que el enunciado nombra.
     "C9": ("enumerative", "exhaustive", "from_question"),
+    # AUSENCIA: enumerativa —pide una lista— y EXHAUSTIVA por la asimetria de C-ABSENCE.
+    # Una ausencia se sostiene con el dominio entero o no se sostiene, asi que exigir
+    # `sufficient` aca seria dejar pasar exactamente la falla que la celda existe para
+    # medir. El dominio es `from_scope`: lo que hay que barrer son las unidades.
+    "B2": ("enumerative", "exhaustive", "from_scope"),
+    # PRESUPOSICION: singular —pide una fecha— y `sufficient`, porque lo que se verifica
+    # NO es cobertura sino la premisa. Un testigo literal la sostiene o no la sostiene, y
+    # leer el resto del corpus no cambia ese veredicto.
+    "D1": ("singular", "sufficient", "none"),
 }
 
 
