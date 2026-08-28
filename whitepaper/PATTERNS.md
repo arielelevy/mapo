@@ -905,30 +905,6 @@ produjo el piso de ruido que forzó a retirar otro resultado. Un resultado nulo 
 instrumentado paga.
 **Visto en** — Este harness, brazo `cognitive` del 2026-08-23.
 
-## 4.15 FALLO DE TRANSPORTE PUNTUADO COMO FALLO DE PATRÓN
-**Síntoma** — El harness atrapa toda excepción y puntúa la tarea en cero. Un 429 del
-endpoint, un timeout o una conexión cortada quedan registrados como "el patrón respondió
-mal".
-**Por qué falla** — No es ruido: **es sesgo con dirección**. La exposición a un límite de
-tasa es proporcional a la cantidad de llamadas, así que los patrones que más llaman —
-justamente los que están bajo prueba — absorben más fallos de transporte que los que hacen
-una sola llamada. El control (los que no usan herramientas) queda estructuralmente
-protegido. El resultado es un estudio que penaliza la orquestación por la cuota del
-proveedor y lo reporta como calidad.
-**Medido** — Tres filas de `gold_deep` grabadas con `utility=0,000` por un 429 del endpoint
-de embeddings, todas en paradigmas que usan herramientas: `reflection`, `react`,
-`dag_strategy`. Ninguna en `direct` ni `cot`, que no llaman al retriever.
-**Arreglo** — Clasificar la excepción y **excluir** el fallo de infraestructura de toda
-estadística, grabándolo igual: que ocurrió es parte del registro, pero no es una medición.
-La clasificación tiene que ser **angosta** — 429, 5xx, timeouts, transporte — porque el
-error opuesto (excusar un bug real como un parpadeo de red) favorece al patrón, que es
-exactamente lo que un harness existe para no hacer. Un `KeyError` por unidad alucinada
-sigue sacando cero.
-**Y atacar la causa** — Respetar `Retry-After` hace que la corrida sobreviva cuando otro
-usa la cuota; precalentar el caché en serie hace que uno no sea ese otro. Las dos cosas,
-no una.
-**Visto en** — Este harness, 2026-08-23, primera corrida sobre un corpus de 483k tokens.
-
 # 5. Cómo se mide la aplicabilidad
 
 Un catálogo sin mediciones es otro blog de opiniones. Lo que separa este documento de

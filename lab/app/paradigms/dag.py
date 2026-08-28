@@ -236,7 +236,8 @@ def dag_strategy(
     # de este try — o sea que el paradigma degradaba con un JSON roto y moria con un JSON
     # valido de forma equivocada, que son incoherentes entre si.
     sub_questions = well_formed(
-        extract_json(plan_completion.text, "sub_questions"), "id", "question"
+        extract_json(plan_completion.text, "sub_questions", sink=surface),
+        "id", "question", sink=surface,
     )[:DAG_MAX_SUB_QUESTIONS]
     if not sub_questions:
         # A malformed plan degrades to a single sub-question equal to the query. This
@@ -329,7 +330,8 @@ def dag_strategy(
         # sin `id` mataba la tarea entera, justo despues de que el `except` de arriba
         # decidiera que un replan malformado sólo corta el bucle.
         retries = well_formed(
-            extract_json(replan_completion.text, "sub_questions"), "id", "question"
+            extract_json(replan_completion.text, "sub_questions", sink=surface),
+            "id", "question", sink=surface,
         )
         if not retries:
             break

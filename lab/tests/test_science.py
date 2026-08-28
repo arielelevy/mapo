@@ -627,6 +627,784 @@ def check_ratchet_bound(ok: bool) -> bool:
     return ok
 
 
+# --- 23. las demandas tipadas del request ------------------------------------------------
+#
+# POR QUE ES UN TEST Y NO UN COMENTARIO. `REQUEST_DEMANDS` es una tabla, y una tabla que el
+# generador puede dejar atras es exactamente la falla que `has_oracle` ya costo: una celda
+# nueva tomaba un default silencioso y volvia inmedible lo que la celda existia para medir.
+# Aca el default no existe —`apply_request_demands` levanta— pero el test lo fija: si
+# manana entra C9 y nadie declara su par, esto falla ANTES de generar un corpus.
+#
+# Y fija tambien el hallazgo que hace falta el par: hay celdas SINGULARES que exigen lectura
+# total (C5, C8). Si alguien "simplifica" la tabla a un solo eje, esto lo agarra.
+def check_request_demands(ok: bool) -> bool:
+    from corpus.generate import (
+        CARDINALITY,
+        COMPLETENESS_DOMAIN,
+        COVERAGE,
+        HONEST_DETECTORS,
+        REQUEST_DEMANDS,
+        Generator,
+        apply_request_demands,
+    )
+
+    print("\n--- 23. las demandas tipadas del request ---")
+
+    ok &= check("toda terna declarada usa el vocabulario cerrado",
+                all(c in CARDINALITY and v in COVERAGE and d in COMPLETENESS_DOMAIN
+                    for c, v, d in REQUEST_DEMANDS.values()))
+
+    # Toda celda que el generador PUEDE producir tiene que estar declarada.
+    gen = Generator(seed=1)
+    gen.build_world(12)
+    gen.build_documents()
+    tasks = gen.build_tasks(per_cell=1, widths=(4,))
+    produced = {t.cell.split("_")[0] for t in tasks}
+    undeclared = produced - set(REQUEST_DEMANDS)
+    ok &= check("toda celda que el generador produce declara sus demandas",
+                not undeclared, f"sin declarar: {sorted(undeclared)}" if undeclared
+                else f"{len(produced)} celdas")
+
+    apply_request_demands(tasks)
+    ok &= check("aplicarlas deja los tres campos poblados en toda tarea",
+                all(t.answer_cardinality and t.coverage_demanded
+                    and t.completeness_domain for t in tasks))
+
+    # El hallazgo de O-4: la cardinalidad NO implica la cobertura. Sin al menos una celda
+    # singular-exhaustiva, el par es redundante y alguien lo va a colapsar.
+    singular_exhaustive = [c for c, (card, cov, _) in REQUEST_DEMANDS.items()
+                           if card == "singular" and cov == "exhaustive"]
+    ok &= check("hay celdas SINGULARES que exigen lectura total - por eso son dos ejes "
+                "y no uno", len(singular_exhaustive) >= 1, ", ".join(singular_exhaustive))
+
+    # El quinto punto ciego, y el test que impide que vuelva. Antes de C9 la interseccion
+    # entre "exige cobertura total" y "tiene dominio verificable barato" era VACIA, asi que
+    # `C-COMPLETE` no tenia donde ejercitarse. Si alguien saca C9, esto falla y dice por que.
+    verifiable = {c for c, (_, cov, dom) in REQUEST_DEMANDS.items()
+                  if cov == "exhaustive" and dom == "from_question"}
+    ok &= check("existe al menos una celda que exige cobertura Y cuyo dominio esta "
+                "ENUNCIADO - sin eso C-COMPLETE no se puede medir en ningun lado",
+                bool(verifiable), ", ".join(sorted(verifiable)) or "NINGUNA")
+
+    # Y el eje sigue siendo necesario: `from_scope` es barato de enumerar y 8.6 midio que
+    # no predice correccion. Si todo fuera `from_scope`, el eje seria decorativo.
+    scopes = {dom for _, _, dom in REQUEST_DEMANDS.values()}
+    ok &= check("el eje de dominio distingue mas de un valor entre las celdas",
+                len(scopes) >= 3, ", ".join(sorted(scopes)))
+
+    # `has_oracle` y el dominio de completitud NO son el mismo hecho. C9 no tiene detector
+    # de correccion y si tiene dominio verificable; colapsarlos repetiria la conflacion que
+    # `has_oracle` ya costo una vez.
+    ok &= check("C9 declara dominio verificable SIN declarar detector de correccion - "
+                "verificar completitud y verificar correccion son cosas distintas",
+                REQUEST_DEMANDS["C9"][2] == "from_question"
+                and HONEST_DETECTORS["C9"] is False)
+
+    # Fail-closed, verificado y no supuesto.
+    class _Fake:
+        cell = "C99_invented"
+        answer_cardinality = ""
+        coverage_demanded = ""
+
+    try:
+        apply_request_demands([_Fake()])
+        raised = False
+    except ValueError:
+        raised = True
+    ok &= check("una celda no declarada FALLA en vez de tomar un default", raised)
+
+    return ok
+
+
+# --- 24. C-COMPLETE: la completitud se verifica, no se compra leyendo mas ----------------
+#
+# POR QUE EXISTE ESTA CLASE. `_analyze_demands2.py` midio que sobre celdas de cobertura
+# exigida leer mas NO mejora la utilidad (corr +0,018, mediana -0,055, contra +0,259 donde
+# no se exige). El arreglo intuitivo — "que lea todo" — esta refutado sobre 1.214 filas.
+# Entonces la completitud necesita verificacion estructural, y verificarla es aritmetica.
+#
+# Lo que este test fija es lo que la implementacion NO puede degradar: fallar cerrado y
+# ENTERO, distinguir lo que falta de lo que sobra, y no emitir sobre un dominio supuesto.
+def check_completeness_contract(ok: bool) -> bool:
+    from app.beliefs import Belief, BeliefBase, Provenance
+    from app.contracts import complete
+
+    print("\n--- 24. C-COMPLETE ---")
+
+    base = BeliefBase()
+    domain = "las unidades en alcance"
+    base.assert_(Belief(domain, ["u-01", "u-02", "u-03"], 1.0, Provenance.COMPUTED))
+
+    exact = complete(["u-01", "u-02", "u-03"], domain, base)
+    ok &= check("una enumeracion que cubre el dominio se emite", exact.emitted)
+
+    short = complete(["u-01", "u-02"], domain, base)
+    ok &= check("a la que le falta un item NO se emite - una enumeracion incompleta es "
+                "el modo de falla que PARECE bien formado",
+                not short.emitted and short.missing == ["u-03"], short.refused or "")
+
+    over = complete(["u-01", "u-02", "u-03", "u-99"], domain, base)
+    ok &= check("un item fuera del dominio tampoco emite, y se reporta aparte de lo que "
+                "falta - son dos fallas distintas",
+                not over.emitted and over.extraneous == ["u-99"] and not over.missing)
+
+    # El orden no es informacion: enumerar es un conjunto, no una secuencia.
+    shuffled = complete(["u-03", "u-01", "u-02"], domain, base)
+    ok &= check("el orden no cambia el veredicto", shuffled.emitted)
+
+    # Repetir un item no compra cobertura.
+    dup = complete(["u-01", "u-01", "u-02"], domain, base)
+    ok &= check("repetir un item no cubre lo que falta",
+                not dup.emitted and dup.missing == ["u-03"])
+
+    # --- el piso de procedencia --------------------------------------------------------
+    weak = BeliefBase()
+    weak.assert_(Belief(domain, ["u-01"], 0.9, Provenance.ELICITED))
+    guessed = complete(["u-01"], domain, weak)
+    ok &= check("completitud sobre un dominio SUPUESTO no se emite - lo que el modelo cree "
+                "que estaba en alcance no define el alcance",
+                not guessed.emitted, guessed.refused or "")
+
+    empty = complete(["u-01"], "un dominio sobre el que nadie dijo nada", base)
+    ok &= check("sin creencia que defina el dominio, no hay contrato", not empty.emitted)
+
+    scalar = BeliefBase()
+    scalar.assert_(Belief(domain, 3, 1.0, Provenance.COMPUTED))
+    counted = complete(["u-01", "u-02", "u-03"], domain, scalar)
+    ok &= check("un dominio no enumerable se rechaza - un conteo no es un conjunto y "
+                "coincidir en cardinalidad no es cubrir",
+                not counted.emitted, counted.refused or "")
+
+    # --- el residuo, declarado y no escondido -------------------------------------------
+    #
+    # La misma frontera que `_redteam_binding.py` encontro en C-NUM: la enumeracion cubre
+    # su dominio entero y la ORACION que la envuelve dice lo contrario. "Ninguno de estos
+    # tres figura en el registro" pasa el contrato con los tres items correctos, porque la
+    # negacion vive en la prosa conectiva y la prosa conectiva no ocupa ninguna ranura.
+    ok &= check("el contrato emite igual bajo una envoltura que lo niega - RESIDUO "
+                "declarado, no un test que falla", exact.emitted)
+    ok &= check("y la garantia se declara relativa al dominio, nunca al mundo",
+                exact.scope_is_declared_not_world
+                and exact.as_dict()["scope"] == "dominio declarado, no el mundo")
+
+    return ok
+
+
+# --- 25. el registro es autodescriptivo, y no mezcla modelos -----------------------------
+#
+# LO QUE ESTO CUESTA CUANDO FALTA, MEDIDO. `config.py` dice desde el principio que la
+# huella de decodificacion «goes into every cache key and every result row». En la fila NO
+# ESTABA: lo unico que separaba a `gpt-5-chat` de `gpt-5.4-nano` era en que carpeta habia
+# caido el archivo.
+#
+# R-1 quedo meses como «intentado, no concluyente» por eso. Un replay sellado reconstruyo
+# los ajustes con `Settings.from_env()` —que devuelve el primer modelo, congelado— y fallo
+# el 100% de las claves. La clave de cache es `sha256(fingerprint, payload)`, asi que con
+# otro modelo no acierta una sola entrada aunque el cache este intacto, y nada en el error
+# lo dice. Con la huella EN la fila, el replay la lee del registro en vez de adivinarla.
+#
+# Y hay DOS invariantes distintos, que el primer intento de esta guarda confundio:
+#   (1) un archivo no puede mezclar decodificaciones -> es un error, levanta;
+#   (2) que el LECTOR coincida no hace falta para analizar -> avisa, no levanta.
+def check_record_is_self_describing(ok: bool) -> bool:
+    import json
+    import tempfile
+    from dataclasses import replace
+
+    from app.config import Settings
+    from app.runner import Row, Runner
+
+    print("\n--- 25. el registro dice con que modelo se produjo ---")
+
+    ok &= check("Row declara la huella de decodificacion",
+                "fingerprint" in Row.__dataclass_fields__)
+
+    base = Settings.from_env()
+    with tempfile.TemporaryDirectory() as tmp:
+        scratch = Path(tmp)
+        settings = replace(base, results_dir=scratch)
+        runner = Runner(settings, "gold_p19", retriever_arm="hybrid",
+                        surface_variant="basic")
+        path = scratch / "gold_p19_rows.jsonl"
+
+        def write(fps: list[str]) -> None:
+            path.write_text("\n".join(
+                json.dumps({"task_id": f"t{i}", "paradigm": "react", "trial": 0,
+                            "utility": 1.0, "fingerprint": fp})
+                for i, fp in enumerate(fps)
+            ) + "\n", encoding="utf-8")
+
+        mine = settings.fingerprint()
+        write([mine, mine])
+        ok &= check("un archivo de una sola decodificacion se lee",
+                    len(runner.load_rows()) == 2)
+
+        write([mine, "otro-modelo|otra-version|t=0.0|seed=7|max=4096"])
+        try:
+            runner.load_rows()
+            raised = False
+        except ValueError:
+            raised = True
+        ok &= check("un archivo que MEZCLA decodificaciones levanta - promediar entre "
+                    "modelos no mide un paradigma, mide el modelo", raised)
+
+        # Filas sin huella son anteriores a que se estampara. Negarlas volveria ilegible
+        # todo el registro ya pagado, asi que pasan.
+        path.write_text(json.dumps(
+            {"task_id": "viejo", "paradigm": "react", "trial": 0, "utility": 1.0}
+        ) + "\n", encoding="utf-8")
+        ok &= check("una fila sin huella - anterior al estampado - se sigue leyendo",
+                    len(runner.load_rows()) == 1)
+
+        # Y el caso que costo R-1: el archivo es coherente pero el LECTOR es otro modelo.
+        # No levanta, porque analizar no llama al modelo.
+        Runner._warned_fingerprint = False  # noqa: SLF001
+        write(["gpt-5.4-nano|2025-04-01-preview|t=0.0|seed=7|max=4096"] * 2)
+        try:
+            n = len(runner.load_rows())
+            fine = n == 2
+        except ValueError:
+            fine = False
+        ok &= check("un lector con OTROS ajustes puede analizar igual - avisa, no levanta",
+                    fine)
+
+    return ok
+
+
+# --- 26. el contador de malformaciones tiene que poder dispararse -------------------------
+#
+# POR QUE ESTE TEST EXISTE. El replay sellado del registro completo dio CERO malformaciones
+# en 336 filas y cinco brazos, y ese cero es un resultado util —descarta que algun paradigma
+# pierda utilidad por no acertar el FORMATO en vez de por no resolver la tarea—. Pero un cero
+# de un contador que nunca se cablea es indistinguible de un cero real, y leerlo como
+# hallazgo seria exactamente el error que este banco no comete.
+#
+# Asi que el cero se apoya en dos cosas: que el contador SE DISPARA cuando corresponde, y que
+# los sitios de llamada le pasan la superficie.
+def check_malformation_counter(ok: bool) -> bool:
+    import inspect
+
+    from app.paradigms import dag, modern
+    from app.paradigms.parsing import extract_json, well_formed
+
+    print("\n--- 26. el contador de malformaciones ---")
+
+    class _Sink:
+        def __init__(self):
+            self.malformed = 0
+            self.dropped = 0
+
+        def note_malformed(self):
+            self.malformed += 1
+
+        def note_dropped(self, n):
+            self.dropped += n
+
+    # Se dispara donde el modelo NO entrego la forma.
+    sink = _Sink()
+    extract_json("no hay json aca", sink=sink)
+    extract_json('{"a": 1}', "b", sink=sink)          # clave ausente
+    extract_json("{roto", sink=sink)                   # json invalido
+    extract_json("", sink=sink)                        # respuesta vacia
+    ok &= check("cuenta las cuatro formas de no entregar la forma pedida",
+                sink.malformed == 4, f"conto {sink.malformed}")
+
+    # NO se dispara cuando el modelo si entrego.
+    clean = _Sink()
+    extract_json('{"a": 1}', "a", sink=clean)
+    extract_json('texto y despues {"ok": true} y mas texto', sink=clean)
+    ok &= check("no cuenta cuando el modelo SI entrego la forma", clean.malformed == 0)
+
+    # Los descartados van aparte: forma correcta con elementos incompletos.
+    drop = _Sink()
+    well_formed([{"id": 1, "q": "a"}, {"id": 2}, "no soy dict"], "id", "q", sink=drop)
+    ok &= check("los elementos incompletos se cuentan APARTE de la malformacion",
+                drop.dropped == 2 and drop.malformed == 0, f"dropped={drop.dropped}")
+
+    # Y lo que hace que el cero medido signifique algo: que los sitios de llamada de los
+    # paradigmas que PARSEAN JSON le pasen la superficie. Un sitio sin `sink=` no cuenta
+    # nunca, y su cero no dice nada.
+    unwired = []
+    for module in (dag, modern):
+        src = inspect.getsource(module)
+        for line_no, line in enumerate(src.splitlines(), 1):
+            if "extract_json(" in line and "sink=" not in line and "def " not in line:
+                # Puede estar partido en dos lineas: se mira la siguiente tambien.
+                nxt = src.splitlines()[line_no] if line_no < len(src.splitlines()) else ""
+                if "sink=" not in nxt:
+                    unwired.append(f"{module.__name__}:{line_no}")
+    ok &= check("todo sitio que parsea JSON del modelo pasa la superficie - sin eso su "
+                "cero no significa cero, significa sin instrumentar",
+                not unwired, ", ".join(unwired) if unwired else "todos cableados")
+
+    return ok
+
+
+# --- 27. el dial impone lo que declara ---------------------------------------------------
+#
+# `theta_may_learn_online` vivia en el perfil de garantia y NO LO LEIA NADIE. La invariante
+# «nada aprende adentro de un request» se cumplia porque `Plasticity.apply` solo se llama
+# desde el camino offline — o sea, por casualidad.
+#
+# Una invariante que se cumple por casualidad no es una invariante: es una coincidencia que
+# el proximo cambio rompe sin que nada avise. Y la que esta en juego es la nuclear: si theta
+# aprendiera adentro del request, dos requests identicos decidirian distinto, que es
+# exactamente lo que «misma base de creencias => misma decision» promete que no pasa.
+def check_dial_is_enforced(ok: bool) -> bool:
+    from app.assurance import PROFILES, Assurance
+    from app.policy import (
+        Episode,
+        OnlineLearningRefused,
+        Plasticity,
+        no_online_learning,
+    )
+
+    print("\n--- 27. el dial impone lo que declara ---")
+
+    episode = Episode(task_id="t", region="r", paradigm="react",
+                      utility=1.0, cost_tokens=1, was_best=True)
+
+    stats = {}
+    Plasticity.apply(stats, episode)
+    ok &= check("offline, acumular esta PERMITIDO - es donde el aprendizaje debe ocurrir",
+                bool(stats))
+
+    try:
+        with no_online_learning():
+            Plasticity.apply({}, episode)
+        refused = False
+    except OnlineLearningRefused:
+        refused = True
+    ok &= check("adentro de un request, acumular LEVANTA", refused)
+
+    after = {}
+    Plasticity.apply(after, episode)
+    ok &= check("saliendo del bloque vuelve a permitir - la guarda no es global",
+                bool(after))
+
+    # Y que el perfil siga declarando lo mismo que la guarda impone, o vuelve a haber dos
+    # fuentes de la misma decision.
+    declared = {a: p.theta_may_learn_online for a, p in PROFILES.items()}
+    ok &= check("ningun nivel por encima del mas bajo declara aprendizaje en linea",
+                not any(v for a, v in declared.items() if a is not Assurance.EXPLORATORY),
+                ", ".join(f"{a.name}={v}" for a, v in declared.items()))
+
+    return ok
+
+
+# --- 28. la consolidacion es idempotente, y el peso firmado es el que decide -------------
+#
+# DOS DEFECTOS QUE SE TAPABAN ENTRE SI, y salieron juntos al probar lo primero.
+#
+# (a) `candidate` partia de una copia de las estadisticas del incumbente y le REAPLICABA la
+#     lista entera de episodios, sin saber cuales ya estaban adentro. Correr la
+#     consolidacion dos veces sobre el mismo registro movia el peso el doble hacia su punto
+#     fijo e inflaba `episodes` — que es la cuenta que decide si una region tiene con que
+#     decidir. La evidencia crecia por repetir un proceso, no por haber medido mas.
+#
+# (b) El peso se redondeaba al SERIALIZAR y no al aplicar, asi que lo que se FIRMA no era
+#     lo que DECIDE: un bundle recargado desde disco resolvia con un numero distinto del
+#     que tenia en memoria el proceso que lo escribio. Y como `candidate` copia via
+#     `from_dict(as_dict())`, cada ciclo perdia un poco mas.
+def check_consolidation_is_idempotent(ok: bool) -> bool:
+    from app.policy import Episode, Plasticity, PolicyBundle, Stat
+
+    print("\n--- 28. consolidar dos veces no cuenta dos veces ---")
+
+    episodes = [
+        Episode(task_id=f"t{i}", region="r", paradigm="react",
+                utility=1.0, cost_tokens=10, was_best=True)
+        for i in range(3)
+    ]
+    base = PolicyBundle(version=0, created_at="x", fallback="react", tau=0.0).sign()
+    once = Plasticity.candidate(base, episodes, tau=0.0)
+    twice = Plasticity.candidate(once, episodes, tau=0.0)
+
+    a, b = once.stat("r", "react"), twice.stat("r", "react")
+    ok &= check("el peso no se mueve al reaplicar el mismo registro",
+                a.weight == b.weight, f"{a.weight} vs {b.weight}")
+    ok &= check("la cuenta de evidencia tampoco - es la que decide si una region puede "
+                "decidir", a.episodes == b.episodes == 3, f"{a.episodes} vs {b.episodes}")
+    ok &= check("y el bundle DECLARA que salteo", "already absorbed" in twice.notes,
+                twice.notes)
+
+    # Un episodio NUEVO si entra: la guarda no puede congelar el aprendizaje.
+    fresh = episodes + [Episode(task_id="t9", region="r", paradigm="react",
+                                utility=1.0, cost_tokens=10, was_best=True)]
+    third = Plasticity.candidate(twice, fresh, tau=0.0)
+    ok &= check("un episodio NUEVO si se absorbe - la guarda no congela el aprendizaje",
+                third.stat("r", "react").episodes == 4)
+
+    # Lo firmado es lo que decide.
+    ok &= check("el peso round-tripea EXACTO por su propia serializacion",
+                Stat.from_dict(a.as_dict()).weight == a.weight)
+
+    return ok
+
+
+# --- 29. la promocion decide sobre un intervalo ------------------------------------------
+#
+# LA GUARDA COMPARABA DOS PUNTOS, y eso no es una guarda: es una moneda con sesgo. Sobre un
+# holdout chico, un candidato que gana por 0,001 gana por RUIDO la mitad de las veces — y
+# una vez promovido queda como incumbente que el siguiente ciclo tiene que superar, asi que
+# el error se hereda en vez de corregirse.
+#
+# Y HAY UNA TRAMPA AL PROBARLO, que este test evita a proposito: si el ruido se agrega igual
+# a los dos bundles, el bootstrap PAREADO lo cancela — correctamente— y el intervalo colapsa
+# a un punto. Para poner a prueba la guarda, lo que tiene que variar por episodio es la
+# DIFERENCIA entre los dos, no el nivel de cada uno.
+def check_promotion_has_an_interval(ok: bool) -> bool:
+    import random
+
+    from app.policy import Episode, PolicyBundle, promote
+
+    print("\n--- 29. la promocion decide sobre un intervalo ---")
+
+    holdout = [
+        Episode(task_id=f"t{i}", region="r", paradigm="react",
+                utility=1.0, cost_tokens=10, was_best=True)
+        for i in range(20)
+    ]
+    incumbent = PolicyBundle(version=1, created_at="x", fallback="react", tau=0.0).sign()
+    candidate = PolicyBundle(version=2, created_at="x", fallback="react", tau=0.0).sign()
+
+    def valuer(gains):
+        def fn(bundle, sample):
+            if bundle.version == 1:
+                return 0.0
+            return sum(gains[e.task_id] for e in sample) / len(sample)
+        return fn
+
+    rng = random.Random(7)
+    noisy = {e.task_id: rng.gauss(0.02, 0.5) for e in holdout}
+    solid = {e.task_id: 0.02 + abs(rng.gauss(0, 0.005)) for e in holdout}
+
+    v_noise = promote(incumbent, candidate, holdout, valuer(noisy))
+    ok &= check("una ganancia que se da en promedio pero se pierde en muchos episodios "
+                "NO promueve", not v_noise.accepted,
+                f"[{v_noise.gain_low:+.4f}, {v_noise.gain_high:+.4f}]")
+    ok &= check("y el intervalo cruza el cero, que es la razon",
+                v_noise.gain_low is not None and v_noise.gain_low < 0 < v_noise.gain_high)
+
+    v_real = promote(incumbent, candidate, holdout, valuer(solid))
+    ok &= check("una ganancia chica pero presente en TODOS los episodios SI promueve",
+                v_real.accepted,
+                f"[{v_real.gain_low:+.4f}, {v_real.gain_high:+.4f}]")
+    ok &= check("y su intervalo no toca el cero", v_real.gain_low > 0)
+
+    # Deterministico: promover tiene que ser tan reproducible como rutear.
+    again = promote(incumbent, candidate, holdout, valuer(solid))
+    ok &= check("dos corridas sobre el mismo holdout dan el MISMO intervalo",
+                (again.gain_low, again.gain_high) == (v_real.gain_low, v_real.gain_high))
+
+    # Sin holdout no se promueve nada, y sin intervalo se DICE.
+    empty = promote(incumbent, candidate, [], valuer(solid))
+    ok &= check("sin holdout se rechaza: no se promueve politica sin verificar",
+                not empty.accepted)
+    one = promote(incumbent, candidate, holdout[:1], valuer(solid))
+    ok &= check("con un solo episodio no hay intervalo, y la razon LO DICE",
+                one.gain_low is None and "SIN INTERVALO" in one.reason, one.reason)
+
+    return ok
+
+
+# --- 30. la regla de parada -------------------------------------------------------------
+#
+# HOY EL ESTANCAMIENTO ES UNA NOTA AL MODELO: «las ultimas 3 busquedas no trajeron nada,
+# considera leer». Eso es persuasion, y el invariante del producto dice que el LLM es sensor
+# y NO maneja flujo de control. Un rechazo tipado si es flujo de control decidido por
+# codigo.
+#
+# Lo que este test fija es que el rechazo sea QUIRURGICO: quita la accion que el registro
+# muestra que no compra nada —buscar otra vez cuando ya no aparece nada nuevo— y deja
+# intactas las productivas. Un rechazo que ademas bloqueara leer convertiria una regla de
+# ahorro en una regla de fallar.
+def check_stopping_rule(ok: bool) -> bool:
+    import json
+
+    from app.retrieval import LexicalRetriever
+    from app.tools import CorpusView, ToolSurface
+
+    print("\n--- 30. la regla de parada ---")
+
+    docs = {f"u-{i}": f"unidad {i} sin nada que ver con la consulta" for i in range(4)}
+    view = CorpusView(task_id="t", documents=docs, unit_ids=list(docs),
+                      relevant_units=[])
+    lex = LexicalRetriever()
+
+    def surface(limit: int) -> ToolSurface:
+        return ToolSurface(view=view, hybrid=lex, semantic=lex, lexical=lex,
+                           variant="basic", budget_tokens=60_000,
+                           stop_on_barren=limit)
+
+    # Apagada: el default no cambia nada, que es lo que deja intacto el registro ya pagado.
+    off = surface(0)
+    for _ in range(6):
+        off.dispatch("search", {"query": "zzzz-inexistente"})
+    ok &= check("apagada por defecto, nada se rechaza", off.barren_refusals == 0)
+
+    # Encendida: rechaza a partir del umbral.
+    on = surface(2)
+    results = [on.dispatch("search", {"query": "zzzz-inexistente"}) for _ in range(5)]
+    refused = [r for r in results if '"refused"' in r]
+    ok &= check("encendida, rechaza cuando la busqueda dejo de traer nada nuevo",
+                on.barren_refusals > 0, f"{on.barren_refusals} rechazos de 5 busquedas")
+
+    if refused:
+        body = json.loads(refused[0])
+        ok &= check("el rechazo DICE la alternativa - uno que no la dice deja al modelo "
+                    "reintentando lo mismo con otras palabras, que es el mismo gasto",
+                    "read" in body.get("available", []), str(body.get("available")))
+        ok &= check("y dice QUE queda sin leer, no solo cuanto",
+                    isinstance(body.get("unread_unit_ids"), list))
+
+    # Quirurgico: leer y responder siguen disponibles.
+    try:
+        on.dispatch("read", {"unit_ids": "u-0"})
+        reads = True
+    except Exception:  # noqa: BLE001 — cualquier fallo aca es el defecto que se busca
+        reads = False
+    ok &= check("leer sigue disponible despues del rechazo - la regla ahorra, no falla",
+                reads)
+
+    # Las tres busquedas quedan cubiertas: rechazar solo una deja la fuga abierta.
+    for tool in ("keyword_search", "semantic_search"):
+        probe = surface(1)
+        probe.dispatch("search", {"query": "zzzz-inexistente"})
+        out = probe.dispatch(tool, {"query": "zzzz-inexistente"})
+        ok &= check(f"`{tool}` tambien queda cubierto", '"refused"' in out)
+
+    # Y la llamada rechazada QUEDA en la secuencia: el modelo la pidio.
+    ok &= check("una busqueda rechazada sigue en la secuencia - una traza que solo guarda "
+                "lo que se ejecuto describe una politica que nadie tomo",
+                on.sequence.count("search") == 5, str(on.sequence.count("search")))
+
+    return ok
+
+
+# --- 31. disponibilidad y guarda son cosas distintas -------------------------------------
+#
+# DOS PREGUNTAS QUE SE MEZCLABAN. «¿Esta tool EXISTE en esta variante?» y «¿esta llamada
+# CABE?» son distintas y se resuelven en lugares distintos: la primera es una funcion, la
+# segunda es aritmetica sobre el presupuesto declarado.
+#
+# La primera estaba decidida en tres `if self.variant ...` desparramados adentro de
+# `dispatch`, cada uno con su forma y ninguno cerca de `specs_for`, que es quien decide que
+# se le OFRECE al modelo. El comentario de `ACCOUNTING_VARIANTS` ya advertia que las dos
+# listas podian separarse; una advertencia en prosa no lo impide y este test si.
+def check_availability_and_guard(ok: bool) -> bool:
+    import json
+
+    from app.retrieval import LexicalRetriever
+    from app.tools import (
+        VARIANTS,
+        CorpusView,
+        ToolFailure,
+        ToolSurface,
+        available,
+        specs_for,
+    )
+
+    print("\n--- 31. disponibilidad y guarda ---")
+
+    # (1) Lo ofrecido ES lo despachable, en TODA variante. Ofrecer una tool que dispatch
+    #     despues rechaza le hace gastar al modelo una vuelta en algo que nunca iba a
+    #     andar, y el brazo paga ese token como si fuera suyo.
+    drift = []
+    for variant in VARIANTS:
+        offered = sorted(t["function"]["name"] for t in specs_for(variant))
+        dispatchable = [n for n in offered if available(n, variant)]
+        if offered != dispatchable:
+            drift.append(f"{variant}: {sorted(set(offered) - set(dispatchable))}")
+    ok &= check("en toda variante, lo ofrecido es exactamente lo despachable",
+                not drift, "; ".join(drift) if drift else f"{len(VARIANTS)} variantes")
+
+    # (2) Llamar a lo no ofrecido es un error DEL MODELO, no del harness: `ToolFailure`,
+    #     que el loop compartido atrapa. Con `ValueError` la misma llamada mataba la tarea
+    #     en unos paradigmas y degradaba en otros — dos brazos puntuados distinto por el
+    #     mismo error del modelo.
+    docs = {"u-0": "texto corto"}
+    view = CorpusView(task_id="t", documents=docs, unit_ids=["u-0"], relevant_units=[])
+    lex = LexicalRetriever()
+    basic = ToolSurface(view=view, hybrid=lex, semantic=lex, lexical=lex,
+                        variant="basic", budget_tokens=60_000)
+    try:
+        basic.dispatch("read_all", {})
+        typed = False
+    except ToolFailure:
+        typed = True
+    except Exception:  # noqa: BLE001
+        typed = False
+    ok &= check("una tool no ofrecida levanta ToolFailure, no una excepcion del harness",
+                typed)
+
+    # (3) LA GUARDA es otra cosa: donde la tool existe, decide GRANULARIDAD por tamano.
+    small = ToolSurface(view=view, hybrid=lex, semantic=lex, lexical=lex,
+                        variant="accounting", budget_tokens=60_000)
+    body = json.loads(small.dispatch("read_all", {}))
+    ok &= check("documento chico: la guarda deja pasar el texto completo",
+                body["granularity"] == "full_text", body["granularity"])
+
+    big_docs = {f"u-{i}": "x" * 40_000 for i in range(20)}
+    big_view = CorpusView(task_id="t", documents=big_docs, unit_ids=list(big_docs),
+                          relevant_units=[])
+    big = ToolSurface(view=big_view, hybrid=lex, semantic=lex, lexical=lex,
+                      variant="accounting", budget_tokens=8_000)
+    body = json.loads(big.dispatch("read_all", {}))
+    ok &= check("documento grande: NO trunca en silencio - devuelve resumenes de TODAS "
+                "las unidades y dice por que",
+                body["granularity"] == "summaries"
+                and len(body["units"]) == len(big_docs)
+                and "reason" in body)
+    ok &= check("y el rechazo de granularidad queda CONTADO",
+                big.bulk_read_refusals == 1)
+
+    return ok
+
+
+# --- 32. la confianza en credencia elicitada es politica, y va FIRMADA -------------------
+#
+# EL ROUTER RECIBIA UN OBJETO QUE NADIE LE PASABA. Cinco sitios construyen `Router` y
+# ninguno pasaba `calibration`, asi que `trustworthy` era False siempre.
+#
+# Y el efecto no era neutro. Sin confianza, el piso derivado sube a OBSERVED en A2+: o sea
+# que **A2 con piso ELICITED era inalcanzable por construccion**. La evidencia para ganarlo
+# se computaba desde el log, se persistia, y se tiraba.
+#
+# La correccion no fue pasar el parametro en los cinco sitios: un parametro se puede
+# olvidar, y se olvido en los cinco. Vive en el BUNDLE FIRMADO, por la misma razon que los
+# pisos aprendidos — cambia lo que un request puede hacer, asi que es politica, tiene que
+# estar versionada y firmada, y no debe poder instalarse por fuera de la promocion.
+def check_trust_is_signed_policy(ok: bool) -> bool:
+    import copy
+    import json
+    import tempfile
+    from pathlib import Path as _Path
+
+    from app.policy import PolicyBundle
+
+    print("\n--- 32. la confianza elicitada es politica firmada ---")
+
+    bundle = PolicyBundle(version=1, created_at="x", fallback="react", tau=0.0,
+                          trusts_elicited=True).sign()
+    ok &= check("un bundle con confianza ganada firma y verifica", bundle.verify())
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = _Path(tmp) / "theta.json"
+        path.write_text(json.dumps(bundle.as_dict(), ensure_ascii=False),
+                        encoding="utf-8")
+        back = PolicyBundle.load(path)
+        ok &= check("sobrevive el round-trip por disco y sigue verificando",
+                    back.trusts_elicited is True and back.verify())
+
+    tampered = copy.deepcopy(bundle)
+    tampered.trusts_elicited = False
+    ok &= check("editarla INVALIDA la firma - no se puede bajar la confianza sin pasar "
+                "por la promocion", not tampered.verify())
+
+    # El default es NO confiar: la confianza se gana, no se supone.
+    fresh = PolicyBundle(version=1, created_at="x", fallback="react", tau=0.0).sign()
+    ok &= check("por defecto NO se confia - se gana, no se supone",
+                fresh.trusts_elicited is False)
+
+    # Y el router la lee de ahi, no de un parametro que se pueda olvidar.
+    import inspect
+
+    from app.router import Router
+
+    sig = inspect.signature(Router.__init__)
+    ok &= check("el router ya NO toma la confianza por parametro - la lee del bundle",
+                "calibration" not in sig.parameters
+                and "trusts_elicited" not in sig.parameters,
+                ", ".join(sig.parameters))
+
+    return ok
+
+
+# --- 33. el horizonte tiene evidencia propia ---------------------------------------------
+#
+# `horizon_unknown` llevaba la credencia Y la procedencia de `coupling`. El propio texto lo
+# decia: «estimated alongside coupling». Dos consecuencias, y la segunda es una violacion
+# del reticulo:
+#
+#   (1) El horizonte no tenia evidencia propia. La calibracion es POR PROPOSICION
+#       justamente porque un modelo puede ser confiable sobre una cosa y pesimo sobre otra,
+#       y compartir credencia vuelve esa distincion inexpresable.
+#
+#   (2) Tras una sonda, `coupling_provenance` es OBSERVED — y el horizonte lo heredaba. Una
+#       proposicion que NADIE midio alcanzaba el piso que las acciones irreversibles exigen.
+#       La sonda lee una unidad para testear ACOPLAMIENTO: no toca el horizonte.
+#
+# Y el eje importa: P15 senalo al horizonte como la dimension que le faltaba a la region.
+# Construirlo sobre una credencia prestada lo vuelve inmedible.
+def check_horizon_has_its_own_evidence(ok: bool) -> bool:
+    from app.assurance import Assurance, resolve
+    from app.beliefs import Provenance
+    from app.rules import ELICITED_PRIOR_CREDENCE, BeliefPolicy, sense
+
+    print("\n--- 33. el horizonte tiene evidencia propia ---")
+
+    task = {
+        "task_id": "t", "question": "q", "unit_ids": ["u-0"],
+        "budget_tokens": 60_000, "has_oracle": True,
+    }
+    policy = BeliefPolicy.from_trust(False, 0.05)
+
+    # El caso que importa: la sonda OBSERVO el acoplamiento y NO el horizonte.
+    base = sense(
+        task, policy,
+        coupling=0.9, coupling_provenance=Provenance.OBSERVED, coupling_credence=0.95,
+        horizon_unknown=True,
+        horizon_provenance=Provenance.ELICITED,
+        horizon_credence=ELICITED_PRIOR_CREDENCE,
+    )
+    ok &= check("el acoplamiento queda OBSERVED - la sonda si lo midio",
+                base.provenance("coupling_tight") is Provenance.OBSERVED)
+    ok &= check("el horizonte NO sube a OBSERVED con la evidencia de la sonda",
+                base.provenance("horizon_unknown") is Provenance.ELICITED,
+                base.provenance("horizon_unknown").value)
+    ok &= check("y su credencia es la suya, no la de la sonda",
+                base.credence("horizon_unknown") == ELICITED_PRIOR_CREDENCE,
+                f"{base.credence('horizon_unknown')} vs sonda 0.95")
+
+    # Sin credencia propia no se asienta: una credencia prestada era peor que ninguna.
+    silent = sense(
+        task, policy,
+        coupling=0.9, coupling_provenance=Provenance.OBSERVED, coupling_credence=0.95,
+        horizon_unknown=True, horizon_credence=0.0,
+    )
+    ok &= check("sin credencia propia, el horizonte NO se asienta - una prestada era "
+                "peor que ninguna", silent.current("horizon_unknown") is None)
+
+    # Y el prior elicitado es una constante DECLARADA, no un numero suelto.
+    ok &= check("el prior elicitado esta declarado con nombre y esta por debajo de 1",
+                0.0 < ELICITED_PRIOR_CREDENCE < 1.0, str(ELICITED_PRIOR_CREDENCE))
+
+    # LO QUE HACE LEGITIMO AL PRIOR, y ata P-3 con P-4: el piso EFECTIVO, no el
+    # declarado. `PROFILES[ACCOUNTABLE].derived_floor` ES `ELICITED` — a proposito: ese
+    # nivel admite credencia elicitada CUANDO la calibracion se gano. Sin ganarla,
+    # `resolve` lo sube a OBSERVED, que es exactamente el mecanismo de P-3.
+    #
+    # Chequear el perfil estatico habria dado un falso negativo sobre el codigo correcto.
+    for trusted, expected in ((False, Provenance.OBSERVED), (True, Provenance.ELICITED)):
+        decision = resolve(base, requested=Assurance.ACCOUNTABLE,
+                           calibration_trustworthy=trusted)
+        ok &= check(
+            f"en ACCOUNTABLE con calibracion {'ganada' if trusted else 'sin ganar'}, "
+            f"el piso efectivo es {expected.value.upper()}",
+            decision.profile.derived_floor is expected,
+            decision.profile.derived_floor.value,
+        )
+    certified = resolve(base, requested=Assurance.CERTIFIED,
+                        calibration_trustworthy=True)
+    ok &= check("y en CERTIFIED no admite ELICITED ni con calibracion ganada - una "
+                "estadistica sobre evidencia no es evidencia",
+                certified.profile.derived_floor.rank > Provenance.ELICITED.rank,
+                certified.profile.derived_floor.value)
+
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -884,6 +1662,17 @@ def main() -> int:
     ok = check_continuation_axis(ok)
     ok = check_decision_cycle(ok)
     ok = check_ratchet_bound(ok)
+    ok = check_request_demands(ok)
+    ok = check_completeness_contract(ok)
+    ok = check_record_is_self_describing(ok)
+    ok = check_malformation_counter(ok)
+    ok = check_dial_is_enforced(ok)
+    ok = check_consolidation_is_idempotent(ok)
+    ok = check_promotion_has_an_interval(ok)
+    ok = check_stopping_rule(ok)
+    ok = check_availability_and_guard(ok)
+    ok = check_trust_is_signed_policy(ok)
+    ok = check_horizon_has_its_own_evidence(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

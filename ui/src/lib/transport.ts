@@ -30,7 +30,14 @@ export interface AnswerRequest {
 }
 
 /* ═════════════════════════════════════════════════════════════════════════
-   MOTOR REAL — los eventos tipados de ARQUITECTURA.es.md §6
+   API PROPUESTA — los eventos tipados de ARQUITECTURA.es.md §6, que está
+   rotulado PROPUESTA y todavía no existe.
+
+   Contra el motor de hoy (`lab/app/main.py`) esto falla, y no por el nombre
+   del endpoint: `POST /answer` es síncrono, devuelve un dict, y recibe
+   `documents: dict[str, str]` —los textos completos— en lugar de ids de
+   unidades. Mandar ids presupone un índice y workspaces que no existen.
+   Ver ui/README.md §"Los tres desajustes".
    ═════════════════════════════════════════════════════════════════════════ */
 
 export async function* liveEvents(
@@ -213,6 +220,19 @@ export async function* demoEvents(
 
   if (plan.terminal === "deferred") yield { type: "deferred", plan };
 
+  yield* demoExecute(plan, req, signal);
+  if (plan.terminal === "done") yield { type: "done", plan };
+}
+
+/**
+ * Sólo la ejecución. Se usa dos veces: dentro del flujo normal, y cuando una persona
+ * autoriza un gate — donde la decisión ya está tomada y lo único que falta es correr.
+ */
+export async function* demoExecute(
+  plan: Plan,
+  req: AnswerRequest,
+  signal: AbortSignal,
+): AsyncGenerator<StreamEvent> {
   yield { type: "paradigm.step", label: `${plan.pick} · ejecutando` };
 
   for (const word of PROSE.split(" ")) {
@@ -230,5 +250,4 @@ export async function* demoEvents(
     probes: plan.assurance !== "A0" ? 1 : 0,
     ms: 1180,
   };
-  if (plan.terminal === "done") yield { type: "done", plan };
 }

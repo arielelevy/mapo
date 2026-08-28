@@ -57,10 +57,15 @@ export default function TopBar() {
         className={s.mode}
         data-live={live}
         onClick={toggleLive}
-        title="Alternar entre el motor real y trazas generadas local"
+        title={
+          live
+            ? "Apunta a POST /v1/answer, que es una API PROPUESTA: el motor de hoy no streamea y recibe los textos, no ids de unidades"
+            : "Trazas generadas local, sin motor y sin gastar tokens"
+        }
       >
         <i className={s.dot} />
-        {live ? "motor · /v1/answer" : "demo · sin motor"}
+        {/* No decir "/v1/answer" a secas: implicaría que existe. */}
+        {live ? "motor · API propuesta" : "demo · sin motor"}
       </button>
     </header>
   );

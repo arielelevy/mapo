@@ -277,37 +277,7 @@ llamaba transferencia.
 leyó»: mismo histograma, dos políticas distintas. La **secuencia** es lo único que permite
 aprender asociaciones entre pares.
 
-### 7.5 Fallar cerrado es lo que convierte un bug caro en uno gratis · `MEDIDO`
-
-`has_runtime_detector` levanta excepción si la tarea no declara el campo, en vez de asumir
-`True`. Al aplicarlo, P17 **murió al instante con cero tokens gastados**: tres sitios
-construían el payload de features a mano y dos descartaban el campo.
-
-Con un default, esos dos habrían pasado silenciosamente y la corrida habría gastado ~14M
-tokens midiendo lo de siempre. **El default no era una comodidad: era el bug.**
-
-### 7.6 Una decisión que vive en dos implementaciones se separa sola · `MEDIDO`
-
-Pasó dos veces en el mismo día. El loop de herramientas tenía **tres copias divergentes**; y
-`probe_then_decide` nombra **dos pasos** que un llamador daba y el otro no — con detectores
-honestos, eso son **14 de 26 tareas** puntuando un placeholder como si fuera una decisión.
-
----
-
 ## 8. Sobre la frontera entre el producto y el modelo
-
-### 7.7 El producto tenía la semántica correcta; el banco la rompió · `MEDIDO`
-
-En el producto, `oracle` es un criterio de verificación **que aporta el llamador**, y su
-presencia es lo que hace admisible a la cascada. Ahí derivar el detector de `bool(oracle)`
-es correcto: el llamador tiene con qué verificar, o no tiene.
-
-El banco reusó el mismo nombre para el **gold**, que es otra cosa entera — y de esa
-reutilización salió la pre-empción que impidió medir selección durante toda la
-investigación.
-
-> Cuando un banco y un producto comparten un nombre para dos conceptos distintos, el que
-> pierde la distinción es el banco, y lo que se pierde es la capacidad de medir.
 
 ### 8.1 El invariante se cumple entre patrones y se rompe adentro de cada uno · `MEDIDO`
 
@@ -366,80 +336,49 @@ sobre todo, **enumerable**.
 
 ---
 
-### 7.8 Arreglar el corrector deja el registro internamente inconsistente · `MEDIDO`
+### 7.8 Lo que es función de un registro se recomputa; sólo lo irreducible se guarda · `MÉTODO`
 
-M9 arregló el corrector —los ítems sin contenido normalizado dejan de contar— y eso cambió
-el F1 de respuestas con puntuación suelta. Las filas escritas **antes** del arreglo
-conservan su utilidad vieja, así que el registro pasó a tener dos correctores adentro sin
-que nada lo dijera.
+Una fila es el registro de lo que pasó. Pero **la utilidad no es lo que pasó: es una función
+de lo que pasó**, igual que la región es una función de los features (7.3).
 
-Encontrado de rebote, re-puntuando el registro entero para verificar que otra refactorización
-fuera pura: **4 filas de 780** difieren. El corrimiento por celda es de **0,0044** en
-`gold_transfer` y **0,0172** en `gold_p16`, contra pisos de ruido de 0,0573 y 0,0339 — o
-sea **adentro del ruido en los dos casos**, así que ningún veredicto se mueve.
+Congelar una función adentro de la fila tiene una consecuencia que no se ve hasta que es
+tarde: el día que la función cambia, el registro queda partido en dos épocas y **nada en el
+archivo dice a cuál pertenece cada fila**. Dos filas con la misma utilidad escrita pueden
+haber sido puntuadas por reglas distintas.
 
-Lo que importa no es la magnitud sino la clase de error:
+> **La regla: lo derivado se recomputa al leer, no se guarda al escribir.** Si el costo
+> obliga a guardarlo, hay que guardar **también la versión de la función** que lo produjo —
+> que es lo mismo que exige la huella de decodificación para el modelo.
 
-> Una fila es el registro de lo que pasó, pero **la utilidad no es lo que pasó: es una
-> función de lo que pasó**. Congelarla adentro de la fila hace que arreglar el corrector
-> parta el registro en dos épocas, y nada en el archivo dice a cuál pertenece cada fila.
+Vale para las tres capas donde el banco guarda algo derivado: la utilidad, la región, y el
+vector de features.
 
-Es la misma forma que 7.3 con las regiones. La regla general: **lo que es función de un
-registro se recomputa; sólo lo irreducible se guarda.** Si por costo hay que guardarlo,
-guardar también la versión de la función que lo produjo.
+### 7.9 Un null tiene que respetar la estructura de bloque, y un test sin potencia no mide · `MÉTODO`
 
----
+Dos chequeos que deciden si un `p` significa algo, y ninguno de los dos es opcional.
 
-### 7.9 Un null mal especificado se pasa por resultado · `MEDIDO`
+**El null tiene que romper sólo la hipótesis.** Al probar si el orden de llamadas lleva
+señal, la unidad de resultado es la **fila**: una fila tiene una utilidad y todas sus
+transiciones heredan la misma etiqueta, así que están perfectamente correlacionadas.
+Permutar **por transición** rompe ese bloque y le regala al azar más variación independiente
+de la que existe — el null sale más disperso de lo que corresponde y el test se vuelve
+imposible de pasar *por una razón que no es la señal*. El null correcto permuta **qué filas**
+salieron bien, conservando cada fila con sus transiciones.
 
-Al probar si el orden de llamadas lleva señal, la primera permutación barajaba las
-etiquetas de éxito **por transición**. Pero el resultado es de la **fila**: una fila tiene
-una utilidad y todas sus transiciones heredan la misma etiqueta, así que están
-perfectamente correlacionadas. Barajar por transición **rompe ese bloque** y le regala al
-azar más variación independiente de la que existe — el null sale más disperso de lo que
-corresponde y el test se vuelve imposible de pasar *por una razón que no es la señal*.
+**Y hay que chequear la potencia antes de leer el `p`.** Con `n` filas de las que `k`
+salieron bien hay `C(n,k)` asignaciones, así que el `p` mínimo alcanzable es `1/C(n,k)`. Si
+ese piso ya supera 0,05, el estrato **no puede** dar significativo aunque la señal fuera
+perfecta, y leerlo como «no hay efecto» confunde ausencia de potencia con ausencia de
+efecto.
 
-Con el null corregido —permutar **qué filas** salieron bien, conservando cada fila con sus
-transiciones— los observados pasaron de parecer irrelevantes a quedar **cerca** de los
-nulos (0,1427 contra 0,1237). El veredicto cambió de «no hay nada» a «no alcanza para
-decidir».
+Esto no es teórico: es lo que separó a la tesis Hebbiana de un veredicto falso en las dos
+direcciones. Con `n=3` el piso por celda era `1/C(3,k) ≥ 1/3` —ninguna celda podía dar
+significativa— y además el criterio se satisfacía por azar en 7 de 13 celdas. Con `n=9` el
+piso bajó a 0,008 y el null cayó a 0 (ver 4.6).
 
-Y hace falta un segundo chequeo que casi nunca se hace: **potencia**. Con `n` filas de las
-que `k` salieron bien hay `C(n,k)` asignaciones, así que el `p` mínimo alcanzable es
-`1/C(n,k)`. Si ese piso ya supera 0,05, el estrato **no puede** dar significativo aunque la
-señal fuera perfecta. Acá 4 de 8 estratos tenían potencia; los otros 4 no, y leerlos como
-«no hay efecto» habría sido confundir ausencia de potencia con ausencia de efecto.
-
-> Un test que no puede rechazar **no está midiendo**, está decorando. Y un null que rompe
-> la estructura de correlación de los datos produce números perfectamente publicables sobre
-> una hipótesis que nadie puso a prueba.
-
----
-
-### 7.10 Una guarda sin recuperación se convierte en la falla que evitaba · `MEDIDO`
-
-El lock que impide dos corridas sobre el mismo archivo (M18) hizo justo lo que tenía que
-hacer, y **bloqueó la reanudación de P17**: la corrida anterior la mataron a las 336 filas
-y dejó el lock puesto, con un PID que ya no existía.
-
-Sin recuperación de huérfanos, un `Ctrl-C` bloquea **todas** las corridas siguientes hasta
-que alguien borre un archivo oculto a mano — y se descubre en el peor momento posible,
-justo cuando se quiere retomar lo que se cortó.
-
-Y el arreglo casi no funciona por una segunda razón: **`os.kill(pid, 0)` en Windows no
-levanta `ProcessLookupError` para un PID inexistente**, levanta `OSError` con
-`winerror 87`. El catch genérico lo leía como «vivo», así que el huérfano nunca se
-reclamaba: el arreglo sobrevivía al arreglo.
-
-> Una guarda contra la corrupción tiene que decir también **cómo se sale de ella**. Si no,
-> deja de ser una guarda y pasa a ser un modo de falla nuevo — con la agravante de que
-> nadie lo prueba, porque probarlo exige matar un proceso.
-
-La asimetría que ordena la decisión: **ante la duda, «sigue tomado»**. Reclamar el lock de
-una corrida viva duplicaría celdas, que es el daño exacto que el lock existe para impedir.
-Errar hacia «tomado» cuesta un borrado manual; errar hacia «libre» corrompe el registro.
-
----
+> Un test que no puede rechazar **no está midiendo**. Y un null que rompe la estructura de
+> correlación de los datos produce números perfectamente publicables sobre una hipótesis que
+> nadie puso a prueba.
 
 ### 8.3b El acoplamiento es una propiedad de la PREGUNTA, y todos los ejes computables miden el MATERIAL · `MEDIDO`
 
@@ -535,6 +474,396 @@ la forma de la pregunta.**
 
 > Las demandas que el diseño olvida son las que el lenguaje ya expresa sin decirlas. Y son
 > justamente las que un sistema sin gold no puede recuperar después.
+
+---
+
+### 8.6 La cardinalidad no implica la cobertura, y leer más no compra la exhaustividad · `MEDIDO`
+
+Al tipar la demanda por celda —vocabulario cerrado, declarado, sin parsear el enunciado—
+apareció que **un eje no alcanza**. El corpus ya tenía los contraejemplos:
+
+| celda | cardinalidad de la respuesta | cobertura que exige |
+|---|---|---|
+| C1 «cuál es la cuenta de X» | singular | **suficiente** — parar en el acierto es correcto |
+| C5 «nombrá al único con datos contradictorios» | **singular** | **exhaustiva** — la contradicción puede estar en cualquier unidad |
+| C8 «cuál es el domicilio vigente» | **singular** | **exhaustiva** — hay que ver el memo base *y* la enmienda |
+
+En C5 y C8 la cardinalidad dice «una sola» y la lectura correcta es total. Así que el tipo
+es un **par**: `(answer_cardinality, coverage_demanded)`, y `coverage` es la que decide si
+parar temprano es un atajo legítimo o una respuesta que **parece bien formada y está mal**.
+
+**Tres preguntas, registradas antes de computar, sobre 1.214 filas ya pagadas de cinco
+corpus.** Las tres se miden **controlando dentro de tarea** y contra un **null que permuta a
+nivel celda**, por lo que 7.9 exige: sin lo primero, las clases se comparan con
+denominadores distintos —las celdas suficientes tienen pocas unidades y las exhaustivas
+corren sobre anchos 4/16/48—; sin lo segundo, un eje de cuatro clases parece separar más que
+uno de dos por pura granularidad.
+
+**(a) Leer más ayuda donde la cobertura se exige.** `p = 0,028` — **y al revés de lo
+predicho.** Controlando dentro de tarea, la correlación entre fracción leída y utilidad es
+`+0,259` en las celdas **suficientes** y `+0,018` en las **exhaustivas** (mediana `−0,055`).
+
+> Sobre una tarea de cobertura suficiente, leer más rastrea el éxito porque leer *es*
+> buscar. Sobre una exhaustiva **no compra nada**: lo difícil no es haber visto, es
+> **componer** lo visto.
+
+Y eso mata el arreglo obvio. Frente a una enumeración incompleta la reacción natural es
+«que lea todo», y el registro dice que **no funciona**: la exhaustividad no se satisface
+leyendo más. Necesita una verificación **estructural** —un contrato de completitud, no un
+presupuesto de lectura más grande. Es la misma forma que P18a encontró en C8, y resulta
+que no era de C8.
+
+**(b) Ninguno de los dos ejes sirve para elegir paradigma.** Contra su propio null
+—permutando la etiqueta a nivel celda, que es donde vive el bloque— cobertura da `p = 1,000`
+y cardinalidad `p = 0,447`. El ranking de paradigmas **no se reordena** entre clases más de
+lo que se reordena por azar. La diferencia cruda que parecía favorecer a la cardinalidad
+(2,56 contra 2,25) era el artefacto de tener 4 clases en vez de 2.
+
+**(c) Y sin embargo es información que la región no tiene.** De 22 regiones observadas,
+**5 mezclan las dos clases de cobertura** — `few/oracle/loose`, `many/oracle/loose`,
+`many/oracle/mixed` y dos más. La región no la determina.
+
+> **Una demanda puede ser información nueva y aun así no ser una feature de ruteo.** La
+> cobertura no dice *qué paradigma elegir*: dice **qué hace falta verificar antes de
+> emitir**. Es una precondición de contrato, no un eje del selector — y meterla en el
+> vector de features habría sido gastar una llamada por request para no mover nada.
+
+Es el resultado que decide `U-3`: elicitar la demanda **no se paga** con mejor ruteo. Se
+paga, si se paga, con `C-COMPLETE` — la promoción que `U-4` ya enunciaba y que ahora tiene
+la única justificación que le servía.
+
+---
+
+### 8.7 El contrato que la medición justificó no se puede medir en este corpus · `MEDIDO`
+
+`C-COMPLETE` verifica una enumeración contra un **dominio que el código enumera**. Cruzando
+las dos tablas declaradas del corpus —quién tiene detector barato y quién exige cobertura
+total— la intersección es **vacía**:
+
+| celda | detector barato | cobertura |
+|---|---|---|
+| C1, C7 | **sí** | suficiente |
+| C2, C4, C5, C8 | **no** | **exigida** |
+
+No es coincidencia, y una vez visto es aritmética: **exigir cobertura total y tener un
+verificador barato son casi contradictorios.** Si el código pudiera enumerar el dominio de
+la respuesta más barato que resolver la tarea, la tarea no sería exhaustiva — sería una
+consulta. Para C2 —«listame todos los que tienen el rol R»— enumerar el dominio **es** la
+extracción: el contrato no verificaría al paradigma, lo reemplazaría.
+
+**Y el dominio que sí es barato es el que no sirve.** `view.unit_ids` se enumera gratis, así
+que `C-COMPLETE` sobre unidades corre hoy. Pero es exactamente lo que 8.6 midió que **no
+predice corrección**: en celdas exhaustivas la fracción leída correlaciona `+0,018` con la
+utilidad. Verificar que leíste todo verifica lo que no importa.
+
+| dominio | ¿lo enumera el código barato? | ¿predice corrección? |
+|---|---|---|
+| las unidades en alcance | **sí** | **no** (`+0,018`) |
+| los ítems de la respuesta | **no** — enumerarlo es resolver | sí, por definición |
+
+> **Quinto punto ciego del corpus, y de la misma familia que los otros cuatro:** ser
+> gradeable implicaba tener detector; una forma canónica por entidad hacía trivial resolver
+> entidades; el turno único borraba toda demanda conversacional; la ingesta no se modelaba.
+> Ahora: **la demanda de cobertura y la disponibilidad de detector están perfectamente
+> anti-correlacionadas**, así que el contrato que la propia medición justificó no tiene
+> dónde ejercitarse.
+
+**Lo destraba una celda, está escrita, y fue barata.** `C9_declared_roster`
+(2026-08-28): el dominio de la respuesta es **estructural y está en el enunciado**, no
+semántico y descubierto — «para cada una de estas cinco personas, la cuenta de
+liquidación». Las cinco nombradas son el dominio: `COMPUTED`, enumerable, sin resolver
+nada, y a una respuesta que trae cuatro **le falta una de una forma que el código ve**.
+Reutiliza los memos que ya existen: **cero documentos nuevos**.
+
+**Dos restricciones de construcción, y las dos cambian qué mide la celda:**
+
+| restricción | qué mediría sin ella |
+|---|---|
+| el roster se toma **con paso**, no consecutivo | localidad del índice: un bloque contiguo de memos se recupera por vecindad y no por nombre |
+| el roster sale de **las unidades en alcance** | ausencia (O-2), otro eje: un nombre fuera de alcance hace que la respuesta correcta sea «no está» |
+
+El verificador exige tres cosas, y cada una bloquea una forma distinta de que el dominio
+deje de serlo: cada nombre **literal** en el enunciado; cada nombre con su memo **en
+alcance**; y el oráculo re-derivado con la **misma cardinalidad** que el dominio — si dos
+compartieran cuenta, el F1 de conjuntos no separaría faltar de sobrar.
+
+**Y hubo que agregar un tercer eje para poder declararla.** `has_oracle` no alcanzaba: C9
+**no** tiene detector de corrección —saber qué cuenta le toca a cada nombre sigue costando
+la búsqueda— y **sí** tiene dominio verificable. Son hechos distintos, y colapsarlos habría
+repetido exactamente la conflación que `has_oracle` ya costó una vez. De ahí
+`completeness_domain ∈ {none, from_question, from_scope, semantic}`.
+
+Es la misma maniobra con la que C8 entró sobre la enmienda de C5, y por la misma razón: un
+punto ciego se cierra con la celda que lo interroga, no con un párrafo que lo admite.
+Predicciones P19a-d registradas en `README.md` antes de que exista una fila; **sin correr**.
+
+---
+
+### 7.11 El registro se replaya sellado, y eso es lo que sostiene la palabra «determinismo» · `MEDIDO`
+
+La garantía del producto tiene una sola forma: **misma base de creencias ⟹ misma decisión.**
+Del lado del banco eso descansa sobre una propiedad que hasta ahora estaba **supuesta**: que
+una fila ya pagada se puede volver a producir sin llamar al modelo.
+
+**Medido.** Replayando por el camino del runner —misma clase, mismos argumentos, modo
+sellado— sobre 27 celdas de `gold_p17`:
+
+| | |
+|---|---|
+| llamadas vivas | **0** |
+| celdas comparadas | 27 |
+| discrepancias en utilidad, respuesta y costo | **0** |
+
+Que no haya *miss* demuestra que el caché alcanzó. Que la fila **coincida** demuestra que el
+camino entero es determinista, y no son la misma cosa: un paradigma podría consumir las
+mismas completions y componer otra respuesta.
+
+**Y hay una condición sin la cual el replay no es posible, que conviene enunciar como
+requisito y no como anécdota.** La clave de caché es `sha256(huella, payload)`, y la huella
+lleva el modelo. Entonces:
+
+> **El registro tiene que decir bajo qué decodificación se produjo cada fila.** Sin eso, un
+> replay reconstruye los ajustes **adivinando**, y con el modelo equivocado no puede acertar
+> **una sola clave** — un síntoma idéntico al de un caché dañado, con arreglos opuestos.
+
+Por eso la huella se estampa en la fila y no sólo en la clave, con dos invariantes que son
+distintos: un archivo **no puede mezclar** decodificaciones (error), pero que el **lector**
+coincida no hace falta para analizar (aviso) — analizar no llama al modelo.
+
+### 6.3 El formato no explica nada: los paradigmas fallan en la tarea, no en la forma · `MEDIDO`
+
+Una explicación cómoda para una utilidad baja es que al modelo **no le sale el formato**:
+devuelve prosa donde se le pidió JSON, o un objeto sin la clave, el código cae al valor por
+defecto, y el paradigma queda puntuado como si no hubiera resuelto. Las dos cosas dan la
+misma utilidad y piden arreglos opuestos — una se arregla en el prompt o en el esquema, la
+otra retirando el brazo.
+
+**Medido sobre el registro completo**, replayado sellado sin gastar un token:
+
+| paradigma | filas | malformadas | descartadas | utilidad |
+|---|---:|---:|---:|---:|
+| `dag_strategy` | 78 | **0** | 0 | 0,610 |
+| `gist_reader` | 78 | **0** | 0 | 0,429 |
+| `map_reduce` | 24 | **0** | 0 | 0,625 |
+| `react` | 78 | **0** | 0 | 0,422 |
+| `rewoo` | 78 | **0** | 0 | 0,547 |
+
+> **Cero.** Ninguna de las 336 filas factibles perdió nada por la forma. Las diferencias de
+> utilidad entre brazos —y son grandes, de 0,422 a 0,625— son sobre la **tarea**.
+
+**Y un cero sólo vale si el contador podía no serlo.** Un contador que nadie cablea da cero
+igual, y leerlo como hallazgo sería el error que este banco existe para no cometer. Por eso
+el test verifica dos cosas separadas: que el contador **se dispare** en las cuatro formas de
+no entregar (sin JSON, JSON roto, clave ausente, respuesta vacía), y que **todo** sitio que
+parsea salida del modelo pase la superficie.
+
+Dos cosas se cuentan aparte, porque no son la misma falla: **malformada** —el modelo no
+entregó la forma— y **descartada** —entregó la forma con elementos incompletos adentro—.
+
+---
+
+### 3.5 Un paradigma que construye índice adentro de un request mezcla dos economías · `MEDIDO`
+
+Se suponía que la ingesta es asíncrona, se hace una vez, y es **independiente del patrón** —
+por eso no contamina la comparación entre brazos. **Es falso para un brazo:**
+`graph_traverse` construye y persiste su propio índice de entidades **adentro de un
+request**, una llamada corta por unidad, pagada por la primera tarea que lo necesita.
+
+Eso tiene dos consecuencias, y son distintas:
+
+**La económica.** El costo del índice cae entero sobre una fila arbitraria y las demás lo
+reciben gratis. Promediar el brazo mezcla **dos economías**: la de amortizar sobre todas las
+consultas futuras, y la de responder una. No son comparables con un brazo que sólo responde.
+
+**La de instrumentación**, que es la que casi se cuela sin verse: la construcción lee cada
+unidad con la misma llamada que registra lecturas, así que **la fila que paga el índice
+carga `units_read` y `fraction_read` del corpus entero** — y `fraction_read` es la variable
+sobre la que se midió 8.6.
+
+**Y acá el registro refuta la preocupación, que es lo que había que verificar antes de
+corregir nada.** Sobre 1.214 filas:
+
+| | |
+|---|---|
+| filas de `graph_traverse` | 6 |
+| su `fraction_read` | **0,000** — el índice ya estaba en disco, no se construyó |
+| su costo | 188–268 tokens, mediana 250 |
+| 8.6 con todas | brecha `−0,241` |
+| 8.6 sin ese brazo | brecha `−0,242` |
+
+> **El mecanismo es real y ninguna medición del registro está contaminada.** No porque la
+> fuga no exista, sino porque **ninguna fila de este registro la ejerció**: el índice se
+> construyó antes y las seis filas lo recibieron hecho.
+
+Lo que deja es una regla de producto, no una corrección:
+
+> **Si la ingesta es asíncrona, de una sola vez y compartida, ningún paradigma debería
+> construir estado derivado propio adentro de un request.** Levantar ese índice a la etapa
+> de ingesta cambia la economía del paradigma por completo — y lo vuelve comparable, que hoy
+> no lo es.
+
+---
+
+### 5.3 Un tercio del gasto se va en no saber cuándo parar, y la señal para saberlo existe · `MEDIDO`
+
+En los brazos con bucle, quién decide seguir o parar es **el modelo**. El código no impone
+ninguna cota que dependa de lo que ya se vio.
+
+**El premio se mide sin gastar nada.** Dentro de una misma celda `(tarea, paradigma)` las
+réplicas resuelven la misma tarea con el mismo brazo. Si dos llegan a la **misma utilidad**
+y una cuesta la mitad, la diferencia no es dificultad: es cuándo cada una paró.
+
+| brazo | celdas | gastado | evitable | | peor celda |
+|---|---:|---:|---:|---:|---:|
+| `dag_strategy` | 81 | 9.465.396 | 4.633.145 | **49%** | 90% |
+| `react` | 78 | 2.785.139 | 556.286 | 20% | 75% |
+| `rewoo` | 82 | 221.852 | 73.157 | 33% | 67% |
+| `gist_reader` | 85 | 2.239.829 | 132.375 | 6% | 95% |
+| `map_reduce` | 31 | 645.636 | 1.488 | 0% | 3% |
+| **total** | | **17.068.519** | **5.698.802** | **33%** | |
+
+> **Un tercio del gasto compra exactamente cero utilidad.** Y no está repartido parejo:
+> los brazos con más autonomía de bucle son los que más pierden — `map_reduce`, cuyo
+> fan-out lo fija el código, pierde **0%**.
+
+**Y la señal para gobernarlo existe, pero no llegaba a la fila.** Dos defectos distintos,
+que estaban dando el mismo síntoma:
+
+| señal | por qué no servía |
+|---|---|
+| `barren_searches` | es un **medidor** que se reinicia al primer acierto, y la fila guardaba el valor final: casi siempre 0. No es que no pase — es que no se guarda |
+| `stall_warnings` | sólo incrementa en variantes de superficie con contabilidad, y **todo estudio medido corrió en `basic`**. Su cero dice que el aviso no existe ahí, no que el sistema no se estanque |
+
+Recuperados el **pico** y el **total** —que sí sobreviven al request— la señal discrimina:
+
+| | réplica barata | réplica cara |
+|---|---:|---:|
+| `barren_peak` | 1,17 | **2,28** |
+| `barren_total` | 1,24 | **2,40** |
+
+Casi el doble. Y es del tipo que este proyecto prefiere: **contable, determinista, del
+entorno** — no una instrucción más en el prompt.
+
+**Lo que NO sirve, y hay que decirlo porque parece que sirve.** `units_read` e `iterations`
+también difieren (+1,15 y +1,86), y son **el costo con otro nombre**: «hizo más» cuesta más
+por definición. Una regla de parada sobre eso es circular.
+
+> **Ausente no es cero.** La primera lectura tomó la ausencia de `barren_searches` en la
+> fila por un cero medido y concluyó que la señal no discriminaba. Un `.get(clave, 0)`
+> vuelve indistinguibles «se midió y dio cero» de «nunca se guardó», y son diagnósticos
+> opuestos: uno cierra la línea, el otro dice que hay que instrumentar.
+
+---
+
+### 7.13 Una regla que no se puede evaluar al decidir no es una regla · `MÉTODO`
+
+Dos pendientes distintos resultaron ser el mismo hecho: **«las particiones descubiertas no
+gobiernan el router»** y **«algunas usan variables posteriores a la ejecución»**. El segundo
+**explica** al primero, y verlo así lo cierra en vez de dejarlo como dos misterios.
+
+El descubrimiento de particiones buscaba umbrales sobre cuatro ejes, y **ninguno de los
+cuatro** es evaluable en el momento de decidir:
+
+| eje | por qué no sirve |
+|---|---|
+| `truth_coupling` | es el **oráculo** del extractor de features. El corpus lo declara: *«NEVER fed to the router: it is the answer key»* |
+| `iterations` | sólo existe **después** de correr. «Si iteraciones > 3, usar X» no se puede evaluar antes de decidir cuántas iteraciones habrá |
+| `cost_tokens` | ídem |
+| `cross_unit_lookups` | ídem |
+
+> Nadie consultaba las particiones descubiertas porque **no se podían consultar**. La regla
+> existía y era inaplicable por construcción — no por falta de cableado.
+
+**Y la causa de fondo estaba una capa más abajo: el vector φ no llegaba a la fila.** Lo
+único que el registro guardaba de la decisión era `region`, que ya es φ **discretizado**:
+partir sobre una etiqueta categórica no encuentra el umbral, encuentra la grilla que alguien
+eligió antes. Así que el descubrimiento sólo podía partir sobre lo que quedaba — el oráculo
+y tres variables posteriores.
+
+Cerrado en tres piezas:
+
+1. **φ va a la fila** (`n_units`, `phi_coupling`, `phi_horizon_unknown`, `phi_continuation`),
+   conservando `None` como «no establecido» y nunca como cero.
+2. **Los ejes quedan tipados**: `DECISION_TIME` gobierna, `POSTERIOR` **diagnostica** —«los
+   casos caros comparten esto» sigue siendo útil— y `FORBIDDEN` **levanta**.
+3. **El test ponía la señal sobre el oráculo.** Verificaba que el descubrimiento encontrara
+   una partición que el router jamás podría evaluar: encontraba la regla y la regla no
+   servía, y el test pasaba igual. Ahora la señal va sobre la **estimación**, que es lo que
+   el router ve — y sigue encontrándola, con umbral 0,522 y 0,89 de separación retenida
+   fuera de muestra.
+
+> **Un test puede verificar exactamente lo que se le pide y aun así no verificar nada útil,
+> si lo que se le pidió es que encuentre algo inaplicable.**
+
+---
+
+### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
+
+Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una
+sigue viva.
+
+**(a) Como selector de paradigma: redundante, y es aritmética.** En el punto fijo
+`w* = 1,6p − 0,6`, monótona en la tasa de victorias, que es por lo que el router ya ordena.
+Una transformación monótona no cambia un argmax. No hace falta medirlo y ningún tuneo lo
+arregla.
+
+**(b) Como reloj de decaimiento: vivo y gobernando.** Es con lo que `consolidation.py`
+poda las stats sin episodios, y nunca poda por peso solo. Funciona. Es trabajo de
+conserjería, no la tesis.
+
+**(c) Como asociación entre pares: la única dirección donde (a) no aplica**, porque una
+asociación `(a → b)` no es una estadística marginal de un brazo. Cuatro intentos de
+medirla, en orden de fuerza creciente:
+
+| test | qué controla | resultado |
+|---|---|---|
+| dispersión de tasas por transición | nada | 0,18 — **confundido con dificultad de tarea** |
+| estratificado por celda, permutación por fila | celda | 2 de 12 con potencia, **ninguno sobrevive a Benjamini-Hochberg** |
+| largo de secuencia, pareado dentro de celda | tarea **y** paradigma | 6 contra 7, **p = 1,000** |
+| transición que separa éxito de fallo, dentro de celda, **n=3** | tarea **y** paradigma | 10 contra 7 de mediana nula, p = 0,055 — **y el null delataba el problema** |
+| **la misma, con n=9** (`P-2f`) | tarea **y** paradigma | **3 contra 0 de mediana nula, p = 0,0078** |
+
+Los dos últimos comparan réplicas de **la misma celda**, así que tarea y paradigma quedan
+fijos por diseño. La diferencia entre ellos es sólo `n`, y cambia el veredicto.
+
+**Lo que el `n=3` estaba midiendo era el azar, y su propio null lo decía.** Con 3 réplicas,
+«presente en todas las exitosas y en ninguna fallida» se satisface por casualidad casi
+siempre: **la mediana nula era 7 de 13**. Un observado de 10 contra un null de 7 es una
+diferencia chica entre dos números grandes, y los dos venían del mismo lugar.
+
+Con **9 réplicas** el criterio se vuelve exigente y las dos cifras se separan:
+
+| | n=3 | n=9 |
+|---|---|---|
+| celdas con transición separadora | 10 de 13 | **3 de 13** |
+| mediana nula | **7** | **0** |
+| `p` | 0,055 | **0,0078** |
+| celdas con potencia (`1/C(n,k) < 0,05`) | 0 de 13 | **10 de 13** |
+
+El observado **bajó** de 10 a 3, y por eso el resultado vale: lo que se cayó era el ruido.
+
+> **La tesis Hebbiana sobre orden de herramientas queda ESTABLECIDA** — `p = 0,0078`, en
+> el único de sus tres sentidos que no se deduce de la aritmética. Y queda establecida
+> **débil**: 3 celdas de 13, un corpus, un modelo. Existe; no es general.
+
+**Y hay un test previo que es lo que la hace ser sobre la TRANSICIÓN.** El largo de la
+secuencia, pareado dentro de celda, dio `p = 1,000`: cuánto hizo el paradigma no predice si
+acertó. Sin eso, «los éxitos tienen secuencias más largas y por lo tanto más transiciones»
+explicaría el resultado entero. Con eso, no queda esa salida.
+
+**Lo que compró P-2f, en una línea:** con `n=3` y `k` éxitos, el `p` mínimo alcanzable por
+celda es `1/C(3,k) ≥ 1/3` — **ninguna celda podía dar significativa aunque la señal fuera
+perfecta**. Seis réplicas más sobre 13 celdas elegidas bajaron ese piso a `0,008`.
+
+**Y hay una condición previa que resultó cumplirse contra mi pronóstico.** Supuse que con
+`t=0` + seed la secuencia estaría determinada por (paradigma, tarea) y no habría nada que
+medir. Falso: **60% de las celdas tienen secuencia variable entre réplicas**, y de las 27
+donde el resultado varía, 17 varían también la secuencia. Hay señal disponible; lo que
+falta es `n`.
+
+**Y la condición previa se cumplió del todo**: las 13 celdas elegidas siguen mostrando
+resultado variable con 9 réplicas, así que el gasto fue donde había señal y en ningún otro
+lado. 78 filas nuevas, no 1.170.
 
 ---
 

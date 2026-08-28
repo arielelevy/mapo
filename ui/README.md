@@ -3,10 +3,12 @@
 Interfaz para ejercitar el motor: workspaces con corpus, ingesta asincrónica, contexto
 curado por request, y la decisión a la vista **antes** que la respuesta.
 
-**Estado: propuesta ejecutable.** Corre y se puede usar hoy, pero el modo `motor` habla
-con endpoints que todavía no existen (`../lab/ARQUITECTURA.es.md` §6). El modo `demo`
-genera localmente los mismos eventos tipados, así que la interfaz se trabaja sin gastar
-un token. El selector está arriba a la derecha y dice en cuál estás.
+**Estado: sólo el modo demo funciona.** El modo `motor` apunta a una API **propuesta**
+(`../lab/ARQUITECTURA.es.md` §6) que el motor no tiene: hoy no hay streaming en ninguna
+parte y `POST /answer` recibe los textos de los documentos, no ids de unidades. Ver
+[Los tres desajustes](#los-tres-desajustes-en-orden-de-tamaño). El modo `demo` genera
+localmente los mismos eventos tipados, así que la interfaz se trabaja sin gastar un
+token y sin depender de que esa API exista.
 
 ---
 
@@ -87,6 +89,29 @@ creencias promete un hecho.
 > El arreglo no fue una regex mejor. Era la interfaz contradiciendo el contrato del
 > producto.
 
+### El replay es ejercitable, no un cartel
+
+Cada veredicto imprime su digest de θ y el de su plan. Hacé clic ahí y se abre el
+**EXPLAIN**: las entradas fijadas, la sonda si corrió, y un botón que **rederiva el plan
+y compara digests**. Sin red, sin modelo.
+
+La garantía que se verifica es la que el producto promete y ninguna otra: *misma base de
+creencias ⟹ misma decisión*. Nunca *mismo prompt ⟹ misma respuesta* — el texto puede
+variar y no integra la garantía.
+
+Al pie, el EXPLAIN lista **lo que todavía le falta** para un replay integral
+(`DISENO.es.md` §4.7): el vector y la región completos, factibilidad estructurada,
+digest de reglas y perfiles, identidad de contenido, historia pre/post sonda, certificado
+de promoción. Esa lista no es un TODO decorativo: es la diferencia entre explicar una
+decisión y poder reconstruirla, y esconderla convertiría una propuesta en una capacidad.
+
+### Aprobar un gate no borra el gate
+
+*Aprobar y ejecutar* corre el paradigma que el plan ya había elegido — **no reabre la
+decisión**, porque el plan estaba tomado y firmado antes de que apareciera el humano. Y
+el terminal sigue siendo `gated` después de aprobar: el registro tiene que mostrar los
+dos hechos, que hubo gate **y** que alguien lo autorizó. Ninguno reemplaza al otro.
+
 ### La ingesta muestra el veredicto del sensor
 
 Antes de parsear se mide la cobertura de la capa de texto, y **eso** decide OCR. El
@@ -101,7 +126,12 @@ serializa nada.
 
 ## El contrato con el motor
 
-La consola consume **SSE tipado**, no un chorro de tokens. El backend tiene que emitir
+> **Este contrato es una propuesta, no la API del motor.** Sale de
+> `../lab/ARQUITECTURA.es.md` §6, que está rotulado PROPUESTA. Hoy el motor **no tiene
+> streaming en ninguna parte** y su API no se parece a esto. Lo de abajo es lo que la
+> consola necesita que exista; lo de la sección siguiente es lo que existe.
+
+La consola consume **SSE tipado**, no un chorro de tokens. El backend tendría que emitir
 frames con `event:` y `data:` en JSON. Los tipos están en `src/types.ts` (`StreamEvent`).
 
 `POST /v1/answer` → `text/event-stream`
@@ -143,6 +173,47 @@ Dos reglas que el backend tiene que respetar:
 2. En A3, no emitir `token` hasta que las citas verifiquen. Streamear antes contradice
    "citado-o-callado" (`../lab/ARQUITECTURA.es.md` §6.1).
 
+### Lo que el motor tiene hoy
+
+De `../lab/app/main.py`. Ninguno de estos endpoints streamea, y ninguno lleva prefijo
+`/v1`:
+
+| Endpoint real | Forma |
+|---|---|
+| `POST /answer` | Síncrono, devuelve JSON. Toma **`documents: dict[str, str]`**, `budget_tokens`, `irreversible`, `shared_writes`, `regulated`, `oracle`, `assurance`, `probe`. |
+| `POST /decide` | Decide sin ejecutar, pero pide `corpus` + `task_id`: tiene forma de banco, no de producto. |
+| `GET /health` · `GET /corpus/{name}` · `POST /run` · `GET /report/{corpus}` · `GET /policy` · `POST /policy/promote` | Banco y política. |
+
+### Los tres desajustes, en orden de tamaño
+
+**1. La consola manda `unit_ids`; el motor toma `documents`.** El real recibe los textos
+completos del caller. Mandar ids presupone que hay un índice y que hay workspaces, y no
+hay ninguna de las dos cosas. Ese es el hueco grande: es toda la capa de ingesta e índice
+que `ARQUITECTURA.es.md` propone y que nada implementa. No se cierra renombrando un
+campo.
+
+**2. No hay streaming.** `POST /answer` es `def`, no `async def`, y devuelve un dict. La
+escalera que se dibuja por etapas y los tokens que llegan de a uno son la propuesta §6,
+no una capacidad. Contra el motor de hoy, el modo `motor` de esta consola falla.
+
+**3. La consola no manda `oracle` ni `probe`.** `oracle` no es decorativo: su presencia
+es lo que hace **admisible una cascada** —escalar ante un fallo observado necesita un
+detector de fallo barato—. Omitirlo cambia calladamente qué puede elegir el motor.
+`probe` decide si se paga una llamada de sonda, y quien la paga debería ser quien la pide.
+
+### Endpoints que la consola necesitaría, y no existen
+
+| Endpoint | Para qué |
+|---|---|
+| `POST /v1/answer` (SSE) | Decidir y ejecutar con la decisión emitida primero. |
+| `POST /v1/replay` | Rederivar un plan **en el motor** y devolver su digest. |
+| `POST /v1/workspaces/{id}/documents` | Ingesta real. |
+| `GET /v1/workspaces/{id}/ingest` (SSE) | Progreso por documento. |
+
+El más importante es `/v1/replay`: mientras no exista, el botón de rederivar prueba que
+**la derivación** es determinista, no que el motor reproduzca. Son dos afirmaciones
+distintas y sólo una está verificada.
+
 ---
 
 ## Estructura
@@ -155,6 +226,7 @@ src/
   lib/transport.ts      SSE contra el motor + generador de trazas demo
   lib/tokens.ts         estimador barato y formateo
   components/           TopBar · WorkspacePanel · ContextTray · Composer · ExchangeView
+                        ExplainDrawer (el certificado) · ErrorBoundary · Blank
   styles/tokens.css     la paleta y las tres semánticas de color
 ```
 
@@ -164,6 +236,22 @@ una estimación con una decisión.
 
 Los multiplicadores de costo ahí adentro son **priors, no mediciones**. Los números
 reales están en `../lab/results/`.
+
+> **Obligación de sincronía.** `lib/feasibility.ts` tiene un espejo del `CATALOG` de
+> `../lab/app/paradigms/__init__.py`, con el mismo `Status` tipado
+> (`active` / `retired` / `standby` / `infeasible` / `under_review`). Cuando se mueve un
+> brazo allá, se mueve acá. Ya driftearon una vez: la consola tachaba `gist_reader` como
+> "falsificado" cuando el catálogo lo tiene ACTIVE y único mejor en 9 celdas, y trataba
+> `plan_execute` como candidato vivo después de que se retirara.
+>
+> El espejo existe **sólo para que el modo demo no mienta**. En modo `motor` los estados
+> tienen que venir en el evento `decision`, y esa es la salida definitiva a este
+> problema: la consola no debería tener opinión propia sobre el catálogo.
+>
+> Y las diferencias de estado importan, no son sinónimos de "no corre": `standby` tiene
+> condiciones escritas para revivir, `retired` es una decisión con su motivo, e
+> `infeasible` **no se bloquea acá** — lo poda la aritmética de costo y queda registrado,
+> porque la infactibilidad ES el resultado.
 
 ---
 
@@ -187,7 +275,22 @@ reales están en `../lab/results/`.
 Responsive hasta 1000px (los tres paneles se apilan), foco de teclado visible en todo lo
 interactivo, `prefers-reduced-motion` respetado, y las barras de ingesta son
 `role="progressbar"` con sus valores. Doble clic en una unidad la manda al contexto sin
-arrastrar.
+arrastrar; `Escape` cierra el EXPLAIN.
+
+**La escalera es accesible.** Es el contenido principal, y la tachadura que la hace
+legible es puramente visual: un lector de pantalla oía el nombre y el motivo sin saber
+que el motivo **era** un rechazo. Cada fila lleva `aria-label` con la lectura completa
+—*"map_reduce, excluido: cardinalidad"*— y las etapas llevan roles de tabla.
+
+**El scroll no le pelea al usuario.** Mientras algo streamea, el panel sigue el final:
+antes los tokens llegaban abajo del fold y no se veían. Pero si scrolleaste para arriba a
+leer una decisión anterior, deja de seguirte hasta que volvés al final. Una pregunta nueva
+arranca arriba, porque lo primero que hay que ver es la decisión, no la respuesta.
+
+**Un error de render no se lleva puesta la sesión.** `ErrorBoundary` envuelve el stream:
+un evento con una forma que `types.ts` no espera deja un cartel con el mensaje y un botón
+para reintentar, en vez de una pantalla en blanco cuyo único rastro está en la consola del
+navegador — justo donde no vas a mirar mientras probás el motor.
 
 ---
 
@@ -196,6 +299,10 @@ arrastrar.
 - Las tipografías se cargan desde Google Fonts. Para on-prem hay que self-hostearlas: es
   la única dependencia de red que queda fuera del motor.
 - No hay router. Con más de dos workspaces conviene que el activo viva en la URL.
-- El botón **Ver EXPLAIN** de un gate no abre nada todavía. Necesita `/v1/replay`.
 - La ingesta en modo `motor` no está cableada: hoy siempre simula. Falta
   `POST /v1/workspaces/{id}/documents` y un canal de progreso.
+- **El replay rederiva con el `buildPlan` local**, que es el mismo que genera las trazas
+  demo. Eso prueba que la derivación es determinista, no que el motor reproduzca: para
+  eso hace falta `POST /v1/replay` y comparar contra el plan que devuelve el motor. Lo
+  que hay hoy es la mitad honesta del claim.
+- Nada persiste. Recargar pierde workspaces, unidades e intercambios.

@@ -216,6 +216,27 @@ def main() -> None:
         if floor_p <= 0.05:
             powered += 1
 
+    # MULTIPLICIDAD, y saltearla seria la inconsistencia que este proyecto castiga en
+    # otros: son una docena de tests y `_analyze_statistics.py` ya aplica
+    # Benjamini-Hochberg sobre la familia de predicciones registradas. Con 12 contrastes
+    # a alpha=0,05 se esperan ~0,6 falsos positivos por azar, asi que "dos dieron
+    # significativo" no es un hallazgo hasta que sobreviva la correccion.
+    ps = sorted((body["p"], key) for key, body in strat_out.items()
+                if body.get("min_p", 1.0) <= 0.05)
+    m = len(ps)
+    survivors_bh = []
+    if m:
+        k_star = 0
+        for k, (pv, _) in enumerate(ps, start=1):
+            if pv <= k * 0.05 / m:
+                k_star = k
+        survivors_bh = [name for _, name in ps[:k_star]]
+        print("")
+        print(f"  Benjamini-Hochberg q=0,05 sobre los {m} contrastes CON potencia:")
+        for k, (pv, name) in enumerate(ps[:4], start=1):
+            print(f"    {name:<22} p={pv:.3f}   umbral rango {k}: {k * 0.05 / m:.4f}")
+        print(f"  sobreviven a la correccion: {survivors_bh or 'NINGUNO'}")
+
     print("")
     print(f"  estratos evaluables (con variacion de resultado): {tested}")
     print(f"  de esos, con POTENCIA para alcanzar p<=0,05     : {powered}")
@@ -233,6 +254,15 @@ def main() -> None:
         print("  Ningun estrato tiene variacion de resultado adentro de la celda: o todo")
         print("  sale bien o todo sale mal, y entonces no hay nada que una transicion")
         print("  pueda explicar. No es evidencia en contra de P-2c: es falta de contraste.")
+    elif not survivors_bh:
+        print(f"  LECTURA: {survive} de {powered} estratos con potencia superan al azar")
+        print("  SIN corregir, y NINGUNO sobrevive a Benjamini-Hochberg. Con doce")
+        print("  contrastes a 0,05 se esperan ~0,6 falsos positivos por azar, asi que")
+        print("  dos hits no son un hallazgo — son lo que la multiplicidad predice.")
+        print("")
+        print("  La condicion necesaria de P-2c queda SIN ESTABLECER: ni refutada ni")
+        print("  confirmada. Y la dispersion sin estratificar (0,18) sigue sin poder")
+        print("  leerse como senal, que es lo unico firme de todo este analisis.")
     elif survive == 0:
         print(f"  LECTURA: de los {powered} estratos CON potencia, ninguno supera al azar.")
         print("  Eso inclina en contra de P-2c y no lo refuta: con seis o siete filas por")

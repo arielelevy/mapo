@@ -1,4 +1,11 @@
-import { PARADIGMS, type Assurance, type Paradigm, type Strike } from "../types";
+import {
+  PARADIGMS,
+  RUNNABLE,
+  type Assurance,
+  type Paradigm,
+  type Status,
+  type Strike,
+} from "../types";
 
 /**
  * Espejo LOCAL de la poda aritmética de `lab/app/feasibility.py`.
@@ -39,14 +46,32 @@ const COST_PRIOR: Record<Paradigm, (ctx: number, units: number) => number> = {
 };
 
 /**
- * Veredictos ya cerrados del banco. No son poda por request: son catálogo, y por eso
- * el motivo cita la predicción que los cerró (`lab/README.md` §Findings).
+ * Espejo del CATALOG de `lab/app/paradigms/__init__.py`.
+ *
+ * OBLIGACIÓN DE SINCRONÍA: esta tabla se mueve cuando se mueve la de allá. El motor es
+ * la autoridad y en modo `motor` los estados vienen en el evento `decision`; esta copia
+ * existe sólo para que el modo demo no mienta.
+ *
+ * No es una lista de "falsificados". El estado es tipado y las diferencias importan:
+ * `standby` tiene condiciones escritas de revivir, `retired` es una decisión, e
+ * `infeasible` no se bloquea acá — lo poda la aritmética de costo, más abajo.
+ *
+ * Última sincronización: 2026-08-28.
  */
-const CLOSED: Partial<Record<Paradigm, string>> = {
-  cot: "retirado · control nulo",
-  gist_reader: "falsificado P13",
-  graph_traverse: "falsificado P10a",
-  pointer_chase: "falsificado P14a",
+const CATALOG: Record<Paradigm, { status: Status; reason: string }> = {
+  react: { status: "active", reason: "" },
+  dag_strategy: { status: "active", reason: "" },
+  rewoo: { status: "active", reason: "" },
+  gist_reader: { status: "active", reason: "" },
+  map_reduce: { status: "active", reason: "" },
+  reflection: { status: "active", reason: "" },
+  direct: { status: "active", reason: "" },
+  extract_compute: { status: "infeasible", reason: "" },
+  streaming_scan: { status: "infeasible", reason: "" },
+  cot: { status: "retired", reason: "retirado · dominado por direct" },
+  pointer_chase: { status: "retired", reason: "retirado · P14a" },
+  plan_execute: { status: "retired", reason: "retirado · dominado en 14 celdas" },
+  graph_traverse: { status: "standby", reason: "standby · P10a" },
 };
 
 export interface FeasibilityInput {
@@ -61,8 +86,9 @@ export function feasibilityStrikes({
   budget,
 }: FeasibilityInput): Strike[] {
   return PARADIGMS.map((paradigm): Strike => {
-    const closed = CLOSED[paradigm];
-    if (closed) return { paradigm, reason: closed };
+    // Primero el catálogo: un brazo que no puede correr no se evalúa por aritmética.
+    const entry = CATALOG[paradigm];
+    if (!RUNNABLE.includes(entry.status)) return { paradigm, reason: entry.reason };
 
     // `direct` es el caso degenerado: sólo existe cuando TODA la evidencia entra en
     // ventana. Con un corpus real eso deja de pasar, y no es un candidato del catálogo.

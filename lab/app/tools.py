@@ -180,15 +180,30 @@ VARIANTS = ("basic", "accounting", "cognitive", "managed")
 ACCOUNTING_VARIANTS = ("accounting", "cognitive")
 
 
-def specs_for(variant: str) -> list[dict[str, Any]]:
+def specs_for(variant: str, offer_read_all: bool = False) -> list[dict[str, Any]]:
     """The tool list for a surface variant.
+
+    `offer_read_all` es un FACTOR, apagado por defecto. `read_all` vive en las specs de
+    contabilidad, asi que en `basic` —la variante de TODOS los estudios medidos— no
+    existe: el modelo nunca pudo pedir el material entero aunque entrara comodo en su
+    presupuesto. Eso no es una decision que alguien tomo midiendo; es una consecuencia de
+    en que lista quedo la tool.
+
+    Encenderlo lo ofrece SIN traer el resto de la contabilidad, para que lo que se mida
+    sea `read_all` y no el paquete. La guarda de tamano no cambia: si el material no entra
+    en su porcion del presupuesto, devuelve resumenes de todas las unidades y dice por que.
+    
 
     Cumulative on purpose: `cognitive` includes the accounting tools, because the two
     address different failures and a variant that removed accounting to add notes would
     confound them. Each rung adds; none replaces.
     """
+    read_all_spec = [
+        t for t in ACCOUNTING_TOOL_SPECS if t["function"]["name"] == "read_all"
+    ] if offer_read_all else []
+
     if variant == "basic":
-        return list(TOOL_SPECS)
+        return list(TOOL_SPECS) + read_all_spec
     if variant == "accounting":
         return list(TOOL_SPECS) + list(ACCOUNTING_TOOL_SPECS)
     if variant == "cognitive":
@@ -202,8 +217,45 @@ def specs_for(variant: str) -> list[dict[str, Any]]:
         # model CAN call but what the harness DOES to the history. The cognitive arm
         # measured that voluntary self-management does not happen (1 note, 1 compaction,
         # 0 plans in 28 rows); `managed` moves the bookkeeping to the environment.
-        return list(TOOL_SPECS)
+        return list(TOOL_SPECS) + read_all_spec
     raise ValueError(f"Unknown surface variant {variant!r}. Use one of {VARIANTS}.")
+
+
+# QUE TOOL ESTA DISPONIBLE EN QUE VARIANTE — como funcion, y en UN solo lugar.
+#
+# Estaba decidido en tres `if self.variant ...` desparramados adentro de `dispatch`, cada
+# uno con su forma —uno con `not in`, otro con `!=`, otro con `in`— y ninguno cerca de
+# `specs_for`, que es quien decide que se le OFRECE al modelo. El propio comentario de
+# `ACCOUNTING_VARIANTS` advertia el riesgo: «cualquier cosa gateada por "tiene
+# contabilidad" tiene que nombrar a las dos o el modelo recibe una tool que dispatch
+# despues rechaza». Una advertencia en prosa no lo impide; una tabla mas un test si.
+#
+# Y ADEMAS HAY GUARDA ARITMETICA, que es otra cosa y no la reemplaza. La disponibilidad
+# dice si la tool EXISTE para esta variante; la guarda dice si la llamada CABE. `read_all`
+# es el caso claro: existe donde se ofrece, y adentro decide granularidad segun el tamano
+# contra el presupuesto declarado — texto completo si entra, resumenes de TODAS las
+# unidades si no. Nunca trunca en silencio, que seria lo peor: el agente creeria haber
+# visto todo y responderia desde un prefijo.
+AVAILABLE_IN: dict[str, tuple[str, ...]] = {
+    "read_all": ACCOUNTING_VARIANTS,
+    "coverage": ACCOUNTING_VARIANTS,
+    "note": ("cognitive",),
+    "notes": ("cognitive",),
+    "plan": ("cognitive",),
+    "advance": ("cognitive",),
+}
+
+
+def available(name: str, variant: str, offer_read_all: bool = False) -> bool:
+    """Si `name` esta disponible en `variant`. Lo no listado esta en todas.
+
+    El factor `offer_read_all` entra ACA tambien y no solo en `specs_for`: si la
+    disponibilidad no siguiera a la oferta, encender el factor le ofreceria al modelo una
+    tool que dispatch despues rechaza — que es exactamente la separacion que §31 impide.
+    """
+    if name == "read_all" and offer_read_all:
+        return True
+    return variant in AVAILABLE_IN.get(name, VARIANTS)
 
 
 class ToolFailure(Exception):
@@ -255,6 +307,27 @@ class ToolSurface:
     budget_tokens: int = 60_000
     lexical: Retriever = field(default_factory=LexicalRetriever)
     variant: str = "basic"
+    # LA REGLA DE PARADA, COMO FACTOR Y NO COMO PATRON. `0` la apaga, que es el default.
+    #
+    # POR QUE EXISTE. Medido el 2026-08-28: entre replicas de la MISMA celda con la MISMA
+    # utilidad, el 33% del gasto es evitable —49% en el brazo con mas autonomia de bucle,
+    # 0% en el que tiene el fan-out fijado por codigo—. Y la senal discrimina: el pico de
+    # busquedas esteriles da 1,17 en la replica barata contra 2,28 en la cara.
+    #
+    # POR QUE UN RECHAZO Y NO UNA NOTA. Hoy el estancamiento produce un NOTE al modelo:
+    # «las ultimas 3 busquedas no trajeron nada, considera leer». Eso es persuasion, y el
+    # invariante del producto dice que el LLM es sensor y no maneja flujo de control. Un
+    # rechazo tipado SI es flujo de control decidido por codigo — y deja intactas las
+    # acciones productivas: se puede seguir leyendo y se puede responder. Lo unico que se
+    # quita es la accion que el registro muestra que no compra nada.
+    #
+    # POR QUE APAGADO POR DEFECTO. Es un FACTOR (`PATRON_O_FACTOR.es.md`): se aplica o no
+    # a TODOS los brazos, asi que se mide cruzado `{con, sin} x {patrones}` y no plegado
+    # adentro de uno. Y encendido por defecto invalidaria el replay sellado del registro
+    # ya pagado, que es la unica verificacion de reproducibilidad que hay.
+    stop_on_barren: int = 0
+    # Factor: ofrecer `read_all` donde no vive. Ver `specs_for`.
+    offer_read_all: bool = False
     calls: dict[str, int] = field(default_factory=dict)
     units_read: set[str] = field(default_factory=set)
     hallucinated: int = 0
@@ -271,13 +344,60 @@ class ToolSurface:
     # aprendizaje Hebbiano tiene contenido propio: una asociacion entre PARES no se
     # reduce a una estadistica marginal de un brazo.
     sequence: list[str] = field(default_factory=list)
+    # `barren_searches` es un MEDIDOR, no un contador: se reinicia en cuanto una busqueda
+    # trae algo nuevo, porque lo que interesa para avisar es la RACHA. Pero la fila guarda
+    # el valor final, y el valor final de un medidor que se reinicia es casi siempre 0 —
+    # asi que la senal existe adentro del request y no sobrevive al registro.
+    #
+    # Medido (D-1, 2026-08-28): en 292 pares de replicas con la misma utilidad y distinto
+    # gasto, `barren_searches` da 0,00 en las dos mitades. No es que no pase: es que no se
+    # guarda. Por eso se acumulan ademas el PICO y el TOTAL, que si sobreviven.
     barren_searches: int = 0
+    barren_peak: int = 0
+    barren_total: int = 0
+    # OJO: `stall_warnings` solo incrementa en las variantes de superficie con contabilidad,
+    # y TODO estudio medido corrio en `basic`. Su cero en el registro no dice que el sistema
+    # no se estanque — dice que en `basic` el aviso no existe. Son cosas distintas.
     stall_warnings: int = 0
     bulk_read_refusals: int = 0
+    # QUE EL MODELO DEVUELVA ALGO INSERVIBLE ES UN DATO DEL EXPERIMENTO, no un error del
+    # harness — `paradigms/parsing.py` lo declara y devuelve el default. Pero no se
+    # anotaba, y sin eso la utilidad baja sin decir por que.
+    #
+    # Son dos hechos distintos y piden arreglos distintos:
+    #   malformed_json  el modelo no entrego la FORMA pedida (ni JSON, o sin la clave)
+    #   dropped_items   entrego la forma pero con elementos incompletos adentro
+    #
+    # Un paradigma con utilidad 0,4 y 40% de malformed no es "no sirve para esta tarea":
+    # es "no le sale el formato", y eso se arregla en el prompt o en el esquema, no
+    # retirando el brazo.
+    malformed_json: int = 0
+    dropped_items: int = 0
+    # Cuantas busquedas rechazo la regla de parada. Sin esto, una corrida con la regla
+    # encendida y una sin ella se distinguen solo por el costo, y no se podria decir si
+    # la diferencia vino de la regla o de otra cosa.
+    barren_refusals: int = 0
+    # LLAMADAS QUE LLEVAN LA DECLARACION DE TOOLS ENCIMA, que NO son todas.
+    #
+    # De 27 sitios que llaman al modelo, UNO pasa `tools`: el bucle compartido. Los demas
+    # —planificar, triar, sintetizar, criticar— llaman sin declaracion. Estimar el
+    # sobrecosto como `calls x tokens_de_spec` lo infla por un factor grande, y en algunas
+    # celdas da un numero IMPOSIBLE: mas declaracion que prompt entero.
+    #
+    # Sin este contador el sobrecosto no se puede atribuir, y `calls` no sirve de proxy.
+    tooled_calls: int = 0
     # Shared across every agent working on the task: a note written by one sub-agent is
     # readable by the next. That persistence is the point — a synthesis prompt cannot
     # recover what a sub-agent knew and did not write down.
     state: WorkingState = field(default_factory=WorkingState)
+
+    def note_malformed(self) -> None:
+        """El modelo no entrego la forma pedida. Lo llama `parsing.py`, no el paradigma."""
+        self.malformed_json += 1
+
+    def note_dropped(self, n: int) -> None:
+        """Elementos que llegaron incompletos adentro de una forma correcta."""
+        self.dropped_items += n
 
     def unit_ids(self) -> list[str]:
         return list(self.view.unit_ids)
@@ -304,6 +424,8 @@ class ToolSurface:
             self.barren_searches = 0
             return ""
         self.barren_searches += 1
+        self.barren_total += 1
+        self.barren_peak = max(self.barren_peak, self.barren_searches)
         if self.barren_searches < 3 or self.variant not in ACCOUNTING_VARIANTS:
             return ""
         self.stall_warnings += 1
@@ -411,6 +533,26 @@ class ToolSurface:
                 f"{tool}: '{key}' tiene que ser un entero, llego {raw!r}."
             ) from None
 
+    def _stopped(self, name: str) -> str | None:
+        """El motivo tipado, si la regla de parada cierra la busqueda. `None` si no."""
+        if not self.stop_on_barren or self.barren_searches < self.stop_on_barren:
+            return None
+        self.barren_refusals += 1
+        unread = [u for u in self.view.unit_ids if u not in self.units_read]
+        return json.dumps({
+            "refused": name,
+            "reason": (
+                f"las ultimas {self.barren_searches} busquedas no trajeron ninguna "
+                f"unidad nueva. Buscar de nuevo no esta disponible en esta tarea."
+            ),
+            # Lo que SI se puede hacer. Un rechazo que no dice la alternativa deja al
+            # modelo reintentando lo mismo con otras palabras, que es el mismo gasto.
+            "available": ["read", "answer"] + (["read_all"] if self.variant not in
+                                               ("basic", "managed") else []),
+            "unread_unit_ids": unread[:40],
+            "unread_count": len(unread),
+        })
+
     def dispatch(self, name: str, args: dict[str, Any]) -> str:
         self.calls[name] = self.calls.get(name, 0) + 1
         # Se registra ANTES de despachar, a proposito: una llamada que falla igual fue
@@ -418,16 +560,21 @@ class ToolSurface:
         # una politica que nadie ejecuto.
         self.sequence.append(name)
 
+        # UNA sola comprobacion, y levanta `ToolFailure` y no `ValueError`. Llamar a una
+        # tool que no se ofrecio es un error DEL MODELO —igual que omitir un argumento
+        # obligatorio— y `ToolFailure` es lo que el loop compartido atrapa. Con
+        # `ValueError` la misma llamada mataba la tarea en unos paradigmas y degradaba en
+        # otros, asi que dos brazos se puntuaban distinto por el mismo error del modelo.
+        if not available(name, self.variant, self.offer_read_all):
+            raise ToolFailure(
+                f"{name} no esta disponible en la superficie {self.variant}. "
+                f"Disponibles: {sorted(t['function']['name'] for t in specs_for(self.variant, self.offer_read_all))}"
+            )
+
         if name == "coverage":
-            if self.variant not in ACCOUNTING_VARIANTS:
-                raise ValueError(
-                    f"coverage is not available on the {self.variant} surface."
-                )
             return json.dumps(self._coverage())
 
         if name in ("note", "notes", "plan", "advance"):
-            if self.variant != "cognitive":
-                raise ValueError(f"{name} is not available on the {self.variant} surface.")
             if name == "note":
                 units = [
                     u.strip() for u in str(args.get("unit_ids", "")).split(",")
@@ -451,9 +598,18 @@ class ToolSurface:
             )
 
         if name == "read_all":
-            if self.variant in ("basic", "managed"):
-                raise ValueError(f"read_all is not available on the {self.variant} surface.")
+            # La disponibilidad ya se resolvio arriba. Lo que queda es la GUARDA: si el
+            # material entra en su porcion del presupuesto vuelve texto completo, y si no
+            # vuelve resumenes de TODAS las unidades con el motivo dicho.
             return json.dumps(self._read_all())
+
+        if name in ("search", "keyword_search", "semantic_search"):
+            # La regla se evalua ANTES de gastar la busqueda, y despues de registrar la
+            # llamada: el modelo la pidio, y una secuencia que solo guarda lo que se
+            # ejecuto describe una politica que nadie tomo.
+            stopped = self._stopped(name)
+            if stopped is not None:
+                return stopped
 
         if name == "search":
             ranked = self.hybrid.rank(
@@ -550,8 +706,19 @@ class ToolSurface:
             "batched_reads": self.batched_reads,
             "hallucinated_units": self.hallucinated,
             "relevant_units_read": len(self.units_read & self.view.relevant),
+            # La racha final, el pico y el total. El primero es casi siempre 0 y se
+            # guarda igual para que no parezca que la definicion cambio; los otros dos son
+            # los que sobreviven al request y pueden gobernar una regla de parada.
+            "barren_searches": self.barren_searches,
+            "barren_peak": self.barren_peak,
+            "barren_total": self.barren_total,
+            "barren_refusals": self.barren_refusals,
+            "tooled_calls": self.tooled_calls,
+            "stop_on_barren": self.stop_on_barren,
             "stall_warnings": self.stall_warnings,
             "bulk_read_refusals": self.bulk_read_refusals,
+            "malformed_json": self.malformed_json,
+            "dropped_items": self.dropped_items,
             "cognitive": self.state.as_dict(),
             "fraction_read": (
                 round(len(self.units_read) / len(self.view.unit_ids), 3)

@@ -245,6 +245,91 @@ afirmaciones distintas, y confundirlas es una falla de seguridad y no de calidad
 
 ---
 
+## F. Lo que está aguas arriba de todos los ejes
+
+### F1 · La ingesta, que no se mide en absoluto
+
+| | |
+|---|---|
+| **forma** | no es un eje de la pregunta: es lo que **define el espacio** donde todos los demás se miden |
+| **falla** | una unidad mal cortada convierte una tarea de una unidad en una de tres, o al revés — y ningún número lo dice |
+| **procedencia** | `COMPUTED` si el extractor conserva procedencia (página, bbox); hoy no existe |
+| **¿medible acá?** | **NO, y es el agujero más grande** |
+
+El corpus entra al banco como `{unit_id: texto}`: **ya parseado, ya troceado en unidades, y
+limpio**. No hay extracción, ni decisión de OCR, ni troceado, ni deduplicación, ni índice.
+`ARQUITECTURA.es.md` propone una pila entera de ingesta —Docling, un sensor barato que
+decide OCR antes de la primera pasada, procedencia página+bbox— y **ninguna de esas piezas
+está medida ni ejecutada.**
+
+**Y no es un eje más: está aguas arriba de todos.** El troceado decide el espacio de
+features en el que se mide todo lo demás:
+
+| lo que se midió | lo que la ingesta decide por debajo |
+|---|---|
+| `n_units` como feature, y la región que sale de ella | qué es una unidad |
+| el eje de continuidad — recurrencia de clave **entre unidades** | dónde caen los cortes |
+| cobertura y exhaustividad | el **denominador** |
+| la sonda, que lee **una** unidad | cuánta información cabe en una |
+| el acoplamiento, que es «la respuesta vive en otra unidad» | si «otra» existe |
+
+### F2 · «La ingesta es independiente del patrón» — verificado, y es FALSO
+
+El autor preguntó si esa independencia se mide o se supone. Se suponía. Verificado el
+2026-08-28:
+
+| | |
+|---|---|
+| las **unidades** (bordes y texto) | **sí** son compartidas: las declara la tarea, no el paradigma |
+| el **estado derivado** | **no**: `graph_traverse` construye su propio índice de entidades, lo persiste en disco y lo reusa entre tareas. Es el único |
+
+O sea que **un paradigma hace ingesta adentro del request**, y le costó ~280k tokens. La
+predicción registrada de P10a decía «index excluded, reported separately» — una decisión
+razonable *si* el índice amortiza, que es justo el argumento de F1. Pero entonces ese costo
+hay que compararlo **como costo de ingesta**, no excluirlo de la comparación y dejarlo sin
+comparar con nada.
+
+**Y eso cambia la lectura de su falsación.** Su propio docstring afirma que la travesía
+cuesta «2 llamadas + una caminata que no cuesta nada»: el precio está **entero** en el
+índice. Si el índice se levanta a la etapa de ingesta —asíncrona, una vez, amortizada sobre
+todas las consultas— el paradigma pasa a ser barato por construcción y su economía deja de
+parecerse a la que se midió.
+
+> `graph_traverse` parecía caro porque **su ingesta se facturaba por corrida**. Eso no
+> revierte la falsación —dio u=0,000 con las aristas puestas— pero sí dice que se lo midió
+> con un modelo de costos que no es el que tendría en producción.
+
+**La regla de producto que sale de acá**: si la ingesta es asíncrona, de una vez y
+compartida, entonces **ningún paradigma debería construir estado derivado propio adentro de
+un request**. Lo que hoy hace `graph_traverse` es trabajo de la etapa de ingesta, y ahí es
+donde amortiza.
+
+**Precisión importante (autor, 2026-08-28), porque acota bastante lo anterior.** La
+ingesta es **asíncrona, se hace una sola vez, y es independiente del patrón**: todos los
+brazos leen exactamente las mismas unidades. De ahí salen tres consecuencias que conviene
+separar, porque mezclarlas exagera el problema:
+
+| | |
+|---|---|
+| **NO contamina la comparación entre paradigmas** | todos comparten la misma ingesta, así que las diferencias entre brazos se sostienen tal cual |
+| **SÍ condiciona lo absoluto** | «C4 es difícil», «esta tarea tiene 48 unidades», «la cobertura es 7/20» — todo eso depende de dónde cayeron los cortes |
+| **Y su economía es OTRA** | se paga **una vez** y se amortiza sobre todas las consultas futuras |
+
+Esa tercera es la que más cambia las decisiones. λ mide preferencia de costo **por
+request**, y el resultado medido —que cualquier precio realista borra la ventaja del
+ruteo— **no aplica a la ingesta**: un costo pagado una vez contra N consultas es una
+decisión distinta, y es exactamente el argumento a favor de gastar ahí y no en el request.
+
+> Un costo por request compite con la respuesta. Un costo de ingesta compite consigo
+> mismo, dividido por todas las preguntas que vengan después.
+
+Así que no es «el cuarto punto ciego que invalida el registro»: es **una dimensión del
+producto que el banco no modela**, cuyo efecto sobre las comparaciones es nulo y sobre las
+afirmaciones absolutas es total. Los otros tres puntos ciegos vuelven inmedible un eje;
+éste **fija el espacio** en el que los demás se miden, sin haber sido elegido a la vista.
+
+---
+
 ## Qué sale de mirar la tabla entera
 
 **1. Casi todo tope en `ELICITED`, y eso es estructural, no una debilidad del diseño.** El

@@ -287,6 +287,9 @@ class LLMClient:
     def __init__(self, settings: Settings, sealed: bool = False) -> None:
         self._settings = settings
         self._sealed = sealed
+        # Claves cuya entrada existia y estaba rota. Se separan de las que nunca
+        # estuvieron porque son diagnosticos distintos con arreglos distintos.
+        self._corrupt: set[str] = set()
         # Namespaced by account: a deployment name is not a model identity, and the
         # keys themselves do not carry the endpoint (see Settings._account_tag).
         self._cache_dir: Path = settings.cache_dir / settings.account_tag()
@@ -328,10 +331,20 @@ class LLMClient:
             return None
         try:
             return json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError) as exc:
             # A truncated entry (crash mid-write, before writes were atomic) must be
             # a MISS, not a poisoned key: left in place, it turned every future run —
             # resumed and sealed included — into a paradigm failure at this key.
+            #
+            # PERO NO EN SILENCIO. Borrar una entrada ya pagada y seguir como si nada
+            # esconde dos cosas distintas y caras: en vivo, que se va a volver a pagar
+            # esa llamada; sellado, que "esto no se puede replayar" — que es la misma
+            # conclusion que produce un replay con los ajustes equivocados, y ya sabemos
+            # cuanto cuesta no poder distinguirlas (R-1).
+            self._corrupt.add(key)
+            print(f"  [aviso] entrada de cache corrupta, se borra y cuenta como miss: "
+                  f"{path.name} ({type(exc).__name__}). En vivo se vuelve a pagar; "
+                  f"sellado va a fallar en esta clave.")
             path.unlink(missing_ok=True)
             return None
 
@@ -376,9 +389,21 @@ class LLMClient:
             return self._to_completion(cached, from_cache=True)
 
         if self._sealed:
+            # DOS HECHOS DISTINTOS, y confundirlos es lo que hace indiagnosticable a un
+            # replay fallido: que la entrada NUNCA estuvo, o que estaba y estaba rota.
+            # El primero puede ser ajustes mal reconstruidos —el modelo va en la clave—;
+            # el segundo es dano en el disco. El mensaje tiene que decir cual.
+            if key in self._corrupt:
+                raise SealedCacheMiss(
+                    f"La entrada {key} EXISTIA y estaba corrupta: se borro al leerla. "
+                    "Esto no es un problema de reconstruccion de ajustes — es dano en "
+                    "el cache, y esta celda hay que volver a pagarla sin sellar."
+                )
             raise SealedCacheMiss(
                 f"Sealed replay requires cache entry {key} which is absent. "
-                "Run the same experiment in an unsealed mode first."
+                f"Huella de esta sesion: {self._settings.fingerprint()!r}. Si el registro "
+                f"se produjo con OTRO modelo, la clave no puede acertar nunca: el "
+                f"deployment va adentro de la huella y la huella adentro de la clave."
             )
 
         started = time.perf_counter()

@@ -27,7 +27,17 @@ def _claim(lock: Path, owner: str) -> int:
     try:
         os.write(fd, f"pid={os.getpid()} {owner}".strip().encode("utf-8"))
     except OSError:
-        pass
+        # UN LOCK SIN DUENIO NO ES UN LOCK. Sin el pid adentro, `_alive("")` devuelve True
+        # —correctamente, hacia el lado seguro— y el archivo queda tomado PARA SIEMPRE:
+        # ninguna corrida puede reclamarlo y el mensaje dice "origen desconocido" sin que
+        # nadie pueda saber por que. Tragarlo convertia un fallo de escritura en un
+        # bloqueo permanente diagnosticable solo a mano.
+        #
+        # Y el `pass` ademas dejaba el descriptor colgado: el llamador solo cierra `fd` si
+        # `_claim` retorna.
+        os.close(fd)
+        lock.unlink(missing_ok=True)
+        raise
     return fd
 
 
@@ -91,11 +101,17 @@ def exclusive(path: Path, owner: str = ""):
     except OSError as exc:
         if exc.errno != errno.EEXIST:
             raise
+        # No poder LEER el lock no es lo mismo que un lock vacio, y las dos cosas caian
+        # en la misma variable. `_alive("")` devuelve True, asi que el efecto es el
+        # seguro; lo que se perdia era el motivo, y sin motivo el mensaje de abajo manda
+        # a borrar un archivo sin decir por que no se pudo leer.
         held = ""
         try:
             held = lock.read_text(encoding="utf-8").strip()
-        except OSError:
-            pass
+        except OSError as read_exc:
+            print(f"  [aviso] no se pudo leer {lock}: {read_exc}. Se trata como TOMADO, "
+                  f"que es el lado seguro: reclamar el lock de una corrida viva "
+                  f"duplicaria celdas.")
         # HUERFANO. Una corrida que muere —matada, cortada, o el proceso que se cae—
         # deja el lock puesto, y sin esto un `Ctrl-C` bloquea TODAS las corridas
         # siguientes hasta que alguien borre un archivo oculto a mano. Eso convierte
@@ -121,8 +137,12 @@ def exclusive(path: Path, owner: str = ""):
     finally:
         try:
             lock.unlink()
-        except OSError:
-            pass
+        except OSError as exc:
+            # No se levanta: estamos en `finally` y tapar la excepcion original con esta
+            # perderia la causa real. Pero callarlo deja un lock huerfano que bloquea la
+            # proxima corrida sin que nada explique de donde salio.
+            print(f"  [aviso] no se pudo liberar {lock}: {exc}. La proxima corrida lo va "
+                  f"a ver como huerfano y lo va a reclamar; si no, borrarlo a mano.")
 
 
 def write_atomic(path: Path, text: str) -> None:

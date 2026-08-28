@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -15,6 +15,8 @@ import ContextTray from "./components/ContextTray";
 import Composer from "./components/Composer";
 import ExchangeView from "./components/ExchangeView";
 import Blank from "./components/Blank";
+import ExplainDrawer from "./components/ExplainDrawer";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { useMapo } from "./store";
 import s from "./App.module.css";
 
@@ -23,6 +25,42 @@ export default function App() {
   const units = useMapo((st) => st.units);
   const addToContext = useMapo((st) => st.addToContext);
   const [dragging, setDragging] = useState<string | null>(null);
+
+  // Los tokens llegan abajo del fold y no se ven. Se sigue el final del stream
+  // mientras haya algo streameando, pero SIN pelearle al usuario: si scrolleó para
+  // arriba a leer una decisión anterior, se lo respeta.
+  const streamRef = useRef<HTMLDivElement>(null);
+  const streaming = useMapo((st) => st.exchanges.some((x) => x.streaming));
+  const answerChars = useMapo((st) =>
+    st.exchanges.reduce((n, x) => n + x.answer.length, 0),
+  );
+  const pinned = useRef(true);
+
+  useEffect(() => {
+    const el = streamRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const el = streamRef.current;
+    if (el && streaming && pinned.current) el.scrollTop = el.scrollHeight;
+  }, [streaming, answerChars]);
+
+  // Una pregunta nueva arranca arriba: lo primero que hay que ver es la decisión.
+  const count = exchanges.length;
+  useEffect(() => {
+    if (!count) return;
+    pinned.current = true;
+    streamRef.current?.querySelector("article:last-of-type")?.scrollIntoView({
+      block: "start",
+      behavior: "smooth",
+    });
+  }, [count]);
 
   // El teclado tiene que poder hacer lo mismo que el puntero: por eso dnd-kit y no
   // el drag-and-drop nativo, que no es operable sin mouse.
@@ -50,12 +88,14 @@ export default function App() {
           <WorkspacePanel />
 
           <main className={s.main}>
-            <div className={s.stream}>
-              {exchanges.length === 0 ? (
-                <Blank />
-              ) : (
-                exchanges.map((x) => <ExchangeView key={x.id} exchange={x} />)
-              )}
+            <div className={s.stream} ref={streamRef}>
+              <ErrorBoundary>
+                {exchanges.length === 0 ? (
+                  <Blank />
+                ) : (
+                  exchanges.map((x) => <ExchangeView key={x.id} exchange={x} />)
+                )}
+              </ErrorBoundary>
             </div>
             <Composer />
           </main>
@@ -63,6 +103,8 @@ export default function App() {
           <ContextTray />
         </div>
       </div>
+
+      <ExplainDrawer />
 
       <DragOverlay dropAnimation={null}>
         {draggedUnit ? (

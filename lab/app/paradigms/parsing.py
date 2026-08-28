@@ -29,13 +29,24 @@ from typing import Any
 _OPEN, _CLOSE = "{", "}"
 
 
-def extract_json(text: str | None, key: str | None = None, default: Any = None) -> Any:
+def extract_json(
+    text: str | None,
+    key: str | None = None,
+    default: Any = None,
+    sink: Any = None,
+) -> Any:
     """El objeto JSON adentro de `text`, o `default` si no hay uno usable.
 
     Con `key`, devuelve ese campo del objeto. La clave ausente NO es distinta de un JSON
     roto: en los dos casos el modelo no entrego lo que se le pidio.
+
+    `sink` — la superficie — se ANOTA cuando hay malformacion. No cambia nada de lo que
+    esta funcion decide: sigue devolviendo el default. Lo que cambia es que deja de ser
+    invisible, y sin eso la utilidad de un paradigma baja sin que el registro distinga
+    "no sirve para esta tarea" de "no le sale el formato".
     """
     if not text:
+        _note(sink)
         return default
     try:
         raw = text.strip()
@@ -43,15 +54,24 @@ def extract_json(text: str | None, key: str | None = None, default: Any = None) 
         payload = json.loads(raw)
     except (ValueError, TypeError):
         # ValueError cubre json.JSONDecodeError y el .index() que no encuentra llave.
+        _note(sink)
         return default
     if key is None:
         return payload
     if not isinstance(payload, dict) or key not in payload:
+        _note(sink)
         return default
     return payload[key]
 
 
-def well_formed(items: Any, *required: str) -> list[dict[str, Any]]:
+def _note(sink: Any) -> None:
+    """Anotar en la superficie si hay una. Sin `sink` no pasa nada: los tests y los
+    scripts llaman a `extract_json` sin superficie y no tienen donde anotar."""
+    if sink is not None:
+        sink.note_malformed()
+
+
+def well_formed(items: Any, *required: str, sink: Any = None) -> list[dict[str, Any]]:
     """Sólo los elementos que son dicts y traen TODAS las claves requeridas.
 
     Filtrar en vez de levantar es deliberado: un plan con tres pasos de los cuales uno
@@ -60,8 +80,15 @@ def well_formed(items: Any, *required: str) -> list[dict[str, Any]]:
     por un elemento roto y degradar por un documento roto, que son incoherentes entre si.
     """
     if not isinstance(items, list):
+        if items:  # algo llego y no era una lista: eso es malformacion, no vacio
+            _note(sink)
         return []
-    return [
+    kept = [
         item for item in items
         if isinstance(item, dict) and all(k in item for k in required)
     ]
+    # Los descartados se cuentan APARTE: una forma correcta con elementos incompletos no
+    # es lo mismo que una forma incorrecta, y el arreglo de cada una es distinto.
+    if sink is not None and len(kept) < len(items):
+        sink.note_dropped(len(items) - len(kept))
+    return kept

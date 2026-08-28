@@ -193,6 +193,7 @@ class Verifier:
             "C5_unknown_horizon": self._c5,
             "C7_irreversible": self._c7,
             "C8_currency": self._c8,
+            "C9_declared_roster": self._c9,
         }.get(cell)
         if handler is None:
             return False, f"no verifier for cell {cell}"
@@ -210,6 +211,48 @@ class Verifier:
         if [claim["account"]] != task["oracle"]:
             return False, f"account {claim['account']} != oracle {task['oracle']}"
         return True, "ok"
+
+    def _c9(self, task: dict[str, Any]) -> tuple[bool, str]:
+        """Roster declarado: el dominio esta EN la pregunta, y tiene que cerrar tres veces.
+
+        Las tres condiciones son lo que hace utilizable a la celda, y cada una bloquea una
+        forma distinta de que el dominio deje de ser un dominio:
+
+          1. cada nombre del dominio aparece LITERAL en el enunciado — si no, el dominio no
+             esta enunciado y la celda no es `from_question`, que es su unica razon de ser;
+          2. cada nombre tiene su memo ENTRE LAS UNIDADES en alcance — si faltara, la
+             respuesta correcta seria "no esta" y la celda mediria ausencia, otro eje;
+          3. el oraculo se re-deriva de los documentos y tiene el mismo tamano que el
+             dominio — si dos del roster compartieran cuenta, el F1 de conjuntos no podria
+             distinguir faltar de sobrar y la celda dejaria de medir completitud.
+        """
+        domain = task.get("domain_keys") or []
+        if not domain:
+            return False, "C9 sin `domain_keys`: el dominio tiene que estar registrado"
+
+        question = task["question"]
+        missing_in_q = [n for n in domain if n not in question]
+        if missing_in_q:
+            return False, f"el enunciado no nombra a {missing_in_q}"
+
+        claims = {c["name"]: c for c in self.units(task)}
+        missing_units = [n for n in domain if n not in claims]
+        if missing_units:
+            return False, f"sin memo en alcance para {missing_units}"
+
+        recomputed = sorted({claims[n]["account"] for n in domain})
+        if recomputed != sorted(task["oracle"]):
+            return False, f"recomputed {recomputed} != oracle {sorted(task['oracle'])}"
+        if len(recomputed) != len(domain):
+            return False, (
+                f"{len(domain)} nombres colapsan en {len(recomputed)} cuentas: el F1 de "
+                f"conjuntos no podria distinguir faltar de sobrar"
+            )
+
+        return True, (
+            f"ok (dominio de {len(domain)} enunciado sobre {len(task['unit_ids'])} "
+            f"unidades; una respuesta incompleta es visible para el codigo)"
+        )
 
     def _c2(self, task: dict[str, Any]) -> tuple[bool, str]:
         role = re.search(r"role is '([^']+)'", task["question"]).group(1)

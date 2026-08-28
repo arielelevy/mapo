@@ -36,6 +36,8 @@ from app.beliefs import (  # noqa: E402
     Rule,
 )
 from app.consolidation import (  # noqa: E402
+    DECISION_TIME_ATTRIBUTES,
+    POSTERIOR_ATTRIBUTES,
     audit_propositions,
     discover_partitions,
     homeostasis,
@@ -59,7 +61,13 @@ def check(label: str, condition: bool, detail: str = "") -> bool:
 
 
 def make_rows(signal: bool, n_tasks: int = 40, seed: int = 11) -> list[dict]:
-    """Build a record with, or without, a real dependence on truth_coupling.
+    """Build a record with, or without, a real dependence on the ESTIMATED coupling.
+
+    La senal va sobre `phi_coupling` —lo que el router VE cuando decide— y NO sobre
+    `truth_coupling`, que es el oraculo del extractor. Antes iba sobre el oraculo, asi que
+    el test verificaba que el descubrimiento encontrara una particion que el router jamas
+    podria evaluar: la regla existia y no se podia usar. Eso es P-5 y P-6 en el mismo
+    lugar. `truth_coupling` se sigue escribiendo para que la guarda tenga que rechazarlo.
 
     With signal: coupling > 0.5 favours plan_execute, otherwise map_reduce. Noise is
     added so the effect has to be found, not read off.
@@ -88,6 +96,10 @@ def make_rows(signal: bool, n_tasks: int = 40, seed: int = 11) -> list[dict]:
                 "iterations": rng.randint(1, 6),
                 "cross_unit_lookups": rng.randint(0, 5),
                 "has_oracle": True,
+                "n_units": 4 + (i % 9),
+                "budget_tokens": 60_000,
+                "phi_coupling": coupling,
+                "phi_continuation": round(rng.random(), 3),
                 "truth_coupling": coupling,
             })
     return rows
@@ -399,15 +411,15 @@ def main() -> int:
     search = [r for r in rows if r["task_id"] in set(tasks[:a])]
     validate = [r for r in rows if r["task_id"] in set(tasks[a:b])]
 
-    found = discover_partitions(search, validate, ("truth_coupling", "cost_tokens",
-                                                   "iterations", "cross_unit_lookups"))
+    found = discover_partitions(search, validate, DECISION_TIME_ATTRIBUTES)
     survivors = [f for f in found if f.survives]
     ok &= check("something survived validation", bool(survivors),
                 f"{len(survivors)} of {len(found)} candidates")
     if survivors:
         top = survivors[0]
-        ok &= check("the surviving split is on truth_coupling",
-                    top.attribute == "truth_coupling", top.attribute)
+        ok &= check("the surviving split is on phi_coupling - lo que el router VE, no "
+                    "el oraculo del extractor",
+                    top.attribute == "phi_coupling", top.attribute)
         ok &= check("its threshold is near 0.5",
                     0.35 <= top.threshold <= 0.65, f"{top.threshold:.3f}")
         ok &= check("and it flips the winning paradigm",
@@ -423,13 +435,26 @@ def main() -> int:
     nsearch = [r for r in noise if r["task_id"] in set(ntasks[:na])]
     nvalidate = [r for r in noise if r["task_id"] in set(ntasks[na:nb])]
     spurious = [
-        f for f in discover_partitions(
-            nsearch, nvalidate,
-            ("truth_coupling", "cost_tokens", "iterations", "cross_unit_lookups"))
+        f for f in discover_partitions(nsearch, nvalidate, DECISION_TIME_ATTRIBUTES)
         if f.survives
     ]
     ok &= check("no spurious proposition survives", not spurious,
                 f"{len(spurious)} survived" if spurious else "clean")
+
+    print("\n2b. Un eje que el router no puede evaluar NO es un eje")
+    for axis in ("truth_coupling", "utility"):
+        try:
+            discover_partitions(search, validate, (axis,))
+            raised = False
+        except ValueError:
+            raised = True
+        ok &= check(f"partir sobre `{axis}` LEVANTA - es el oraculo, no una feature",
+                    raised)
+    ok &= check("los posteriores estan tipados aparte, no borrados - sirven para "
+                "DIAGNOSTICAR, no para gobernar",
+                set(POSTERIOR_ATTRIBUTES) == {"iterations", "cost_tokens",
+                                              "cross_unit_lookups"},
+                ", ".join(sorted(POSTERIOR_ATTRIBUTES)))
 
     print("\n3. Replay is ordered by surprise, not chronology")
     cold = PolicyBundle.cold_start(fallback="react", tau=0.3)

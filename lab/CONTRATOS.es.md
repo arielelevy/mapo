@@ -82,6 +82,30 @@ El modelo emite una **plantilla con ranuras**; el código sustituye desde la bas
   (eso es C-CITE), y que el **alcance** coincida con el mundo. Completitud sobre lo
   recuperado no es completitud sobre lo que existe.
 
+**IMPLEMENTADA el 2026-08-28** — `app.contracts.complete()`, probada en
+`tests/test_science.py` §24. Y llegó con una justificación medida, no por completar la
+tabla: sobre 1.214 filas de cinco corpus, en celdas de cobertura exigida **leer más no
+mejora la utilidad** (corr `+0,018`, mediana `−0,055`, contra `+0,259` donde la cobertura
+no se exige; `p = 0,028` controlando dentro de tarea, lección 8.6).
+
+> El arreglo intuitivo frente a una enumeración incompleta es «que lea todo». Está
+> **refutado**. Lo difícil no es haber visto: es componer lo visto. Por eso la completitud
+> necesita verificarse, y verificarla es aritmética sobre un dominio declarado.
+
+Cuatro decisiones de la implementación que el test fija:
+
+| decisión | por qué |
+|---|---|
+| falla **entera**, nunca recortada ni con advertencia al lado | el modo de falla de una enumeración incompleta es que **parece completa**; dejarle la decisión al lector es no tomarla |
+| lo que **falta** y lo que **sobra** se reportan aparte | son dos fallas distintas: cobertura y pertenencia |
+| un dominio a `ELICITED` **no emite** | completitud sobre un alcance supuesto no es completitud |
+| un dominio **no enumerable** se rechaza | coincidir en cardinalidad no es cubrir: un conteo no es un conjunto |
+
+**Y el residuo es el mismo que el de C-NUM**, declarado en el test en vez de escondido:
+una enumeración puede cubrir su dominio entero mientras la oración que la envuelve dice lo
+contrario («ninguno de estos tres figura en el registro»). La negación vive en la prosa
+conectiva, y la prosa conectiva no ocupa ninguna ranura.
+
 ---
 
 ## 3. El residuo, que es el ataque y hay que buscarlo nosotros

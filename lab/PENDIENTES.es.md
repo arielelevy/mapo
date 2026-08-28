@@ -1,18 +1,87 @@
 # Pendientes — MAPO
 
-> **Fuente única de "qué falta".** Recopilado el 2026-08-27 juntando el artefacto del
-> plan de tesis, `DISENO.es.md` §5 y §8, `code-review-2026-08-27.md`, `ARQUITECTURA.es.md`,
-> `CLAUDE.md` y lo que salió midiendo hoy. Lo que está acá no está hecho.
+> **Fuente única de «qué falta».** Recopilado el 2026-08-27; **última sincronización
+> 2026-08-28**.
 >
-> **Cómo se usa**: cuando algo se cierra, se saca de acá y se registra dónde
-> corresponda (`README.md` §Findings si es un hallazgo, el commit si es código). Un
-> pendiente que se completa y se queda en esta lista es peor que no tenerla.
+> **Cómo se usa.** Un `[x]` se queda acá **con el resultado adentro**, no se borra: la
+> mitad de lo cerrado esta semana resultó estar **mal diagnosticado**, y saber qué decía
+> el pendiente antes de medirlo es lo que permite ver eso. Lo que sí se saca es el
+> pendiente que ya no significa nada.
+>
+> **Un defecto de construcción puede ser una tarea acá, nunca un hallazgo.** Un bug, un
+> lock roto, un límite de tasa: se arreglan y se registran como trabajo. No entran a
+> `LECCIONES.es.md` ni a los papers, y no son premisa de ninguna conclusión.
+
+---
+
+## Qué sigue, en orden
+
+> **El criterio del orden es uno solo: qué desbloquea más cosas por token gastado.** No es
+> importancia — `A-1` (arrancar el producto) es lo más importante de la lista y va último,
+> porque el autor decidió que se construye a partir de lo que el banco pruebe.
+>
+> **Sincronizado 2026-08-28.** Los tres primeros de la versión anterior ya se hicieron: la
+> regla de parada está impuesta, `C-COMPLETE` está cableado, y de los dos lo que queda es
+> **correrlos**. El cuello se movió de «no está construido» a «no está medido».
+
+**Ahora, y no cuesta tokens**
+
+1. **`X-4d` — descontar la declaración de tools del costo comparado.** El único pendiente
+   que puede **cambiar un resultado ya publicado**, y sale de replayar sellado el registro y
+   recomputar. Su primera corrida quedó retirada: partía de un sobrecosto estimado por
+   `calls` que resultó falso, y el recorte de piso inflaba los ratios.
+2. **`S-4` — el techo del acoplamiento.** Tres opciones de diseño escritas, ninguna elegida.
+   Bloquea el cierre de la sonda, y es el único de los tres «ahora» que necesita una
+   **decisión del autor** y no trabajo.
+3. **`U-4` — que `coverage_demanded` dispare el contrato.** Hoy lo dispara que la tarea
+   declare `domain_keys`, que coincide para `C9` y no para `C2`/`C4`. Cablearlo es la parte
+   fácil; lo que sigue abierto es que en `C2` el dominio es **semántico** y enumerarlo **es**
+   resolver la tarea.
+
+**Las corridas, en orden de lo que decide más por token**
+
+4. **`P20` — la regla de parada, con el factor encendido.** El premio está medido (**33%**
+   del gasto) y la señal también (`barren_peak` 1,17 contra 2,28). `P20b` es la que puede
+   matarla: si la utilidad cae más que el piso de ruido, ahorrar tokens contestando peor no
+   es ahorrar.
+5. **`U-6` — P19 sobre `C9`.** `P19d` es un control que **puede matar a la celda**: con
+   `width=4` el dominio declarado y las unidades en alcance coinciden, así que si C9 se
+   comporta igual en `w=4` y `w=48`, la distinción no compra nada. Corpus verificado 38/38.
+6. **`P21` — ofrecer `read_all` en `basic`.** No existía en la variante de **todos** los
+   estudios, y nadie lo decidió midiendo. `P21a` puede volverlo irrelevante: si los modelos
+   lo ignoran, queda al lado de las tools de memoria de trabajo — ofrecidas y sin usar.
+7. **`F-2` — descontaminar «el efecto `dag_strategy`».** La pizarra está soldada adentro de
+   ese brazo, así que su ventaja mezcla dos cosas que nadie separó.
+8. **`M-1` — el brazo en prosa (E1).** Implementado, sin correr, ~26 llamadas: el control
+   más barato que queda.
+
+**Lo que sigue abierto y no tiene camino escrito**
+
+9. **`P-7` — el producto no cierra el bucle.** El último de la familia P, y conviene mirarlo
+   con lo aprendido: `P-3`, `P-5` y `P-6` resultaron ser todos **la misma forma** — una
+   capacidad completa que nadie podía usar porque el dato no llegaba a donde se decide.
+10. **`K-6` — corpus con entidades de verdad.** Condición (a) para revivir el patrón de
+    grafo, y donde vive el quinto punto ciego del corpus.
+11. **`G-2` — la plataforma.** `ARQUITECTURA.es.md` propone la pila entera y **ninguna
+    pieza está ejecutada ni medida**.
+12. **`A-1` — arrancar el producto.** Lo más grande. Va después de que el registro madure,
+    por decisión del autor.
+
+**Y una que no es técnica**
+
+- **`R-5` — 29 commits locales sin pushear.** Repo privado; no se pushea sin confirmación.
 
 ---
 
 ## Resumen — todo de un vistazo
 
-`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **P16 cerró el 2026-08-27, ya no hay nada bloqueado por ella**
+`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **59 abiertos · 16 en curso · 52 cerrados** (2026-08-28)
+
+> **Las dos tesis que el autor pidió sostener quedaron cerradas el 2026-08-28.**
+> **Hebbiana**: establecida en su único sentido vivo —asociación entre pares sobre el
+> orden de herramientas— con `p = 0,0078`, y **débil**: 3 celdas de 13, un corpus, un
+> modelo. **Determinismo**: 390 de 390 filas replayadas selladas, 0 llamadas vivas y 0
+> discrepancias en utilidad, respuesta y costo.
 
 **Bloqueantes**
 - [x] **B1** · veredicto de P16 — **P16a REFUTADA** (−1,2888), **P16c decisiva**: +0,1211 con λ=0 y adentro del ruido en λ=0,02 · P16d 26/26 · 0 infra · 13,95M tokens
@@ -27,10 +96,10 @@
 
 **Catálogo — la misma vara que a los candidatos nuevos**
 - [x] K-3 · **la falsación de `graph_traverse` (P10a) sobrevive a su objeción más seria**: el índice está 100% anclado en el texto y las dos cadenas C3 están conectadas — la travesía tenía las aristas y aun así dio u=0,000. Riesgo de diseño registrado aparte: el índice **no exige** anclaje, así que otro corpus podría envenenarlo en silencio
-- [ ] **K-5** · **`graph_traverse` pasa a STANDBY, no retirado** (decisión del autor, 2026-08-28). La falsación vale «donde resolver entidades es gratis», que no es lo mismo que «vale». Revivirlo exige (a) un corpus con resolución de entidades real y (b) un índice con la disciplina de la sonda
+- [x] **K-5** · `graph_traverse` **en `standby`**, no retirado, con sus dos condiciones de revival escritas en el ejecutable: (a) un corpus con resolucion de entidades real y (b) un indice con la disciplina de la sonda. La falsacion vale «donde resolver entidades es gratis», que no es lo mismo que «vale»
 - [ ] **K-6** · **Corpus con entidades de verdad**: variantes de superficie, abreviaturas, anáfora, correferencia entre documentos. Sin eso, **ningún patrón de grafo se puede medir donde tiene sentido** — y es el mismo agujero estructural que el detector heredado del gold
-- [ ] **K-4** · `RETIRED` sólo bloquea un brazo por código, mientras `pointer_chase` y `graph_traverse` están falsificados **sólo en un documento**. Una decisión que vive en prosa y no en el ejecutable es la misma deriva que se viene cerrando todo el día
-- [ ] **K-1** · **`plan_execute` está DOMINADO** (0 únicos mejores, 0 más barato al empatar, sobre 14 celdas): retirarlo por el mismo criterio con el que se retiró el único brazo retirado hasta hoy. Salvedad: aquél cayó sobre *toda* celda medida y esto son 14
+- [x] **K-4** · **el catálogo vive en el ejecutable**: `CATALOG` con cinco estados —activo, retirado, standby, infactible, en revisión— cada uno con su **razón** y su **condición de revival**. `pointer_chase` y `graph_traverse` dejan de estar disponibles; el rechazo trae el porqué en vez de mandar a buscarlo a un documento
+- [x] **K-1** · `plan_execute` **retirado** por decision del autor (2026-08-28). Vive en el `CATALOG` con estado `retired`, su razon y su condicion de revival, y `RETIRED` se deriva de ahi — no hay lista paralela que pueda driftear
 - [x] K-2 · `map_reduce` **no** está dominado — gana una celda. Reemplazarlo por handoff cambiaría cobertura medida por un brazo sin medir: van **uno contra otro**, no uno en lugar del otro
 
 **Mediciones**
@@ -47,30 +116,38 @@
 - [ ] **H-1** · portarlo como rama paralela fusionada por RRF, **no como herramienta**
 - [ ] **H-2** · exponerlo como brazo `hybrid_hyde` — la dimensión ya existe en el banco
 - [ ] **H-3** · medir `{hybrid, hybrid_hyde}` **con el costo cobrado** *(P16c: sin λ el número no significa nada)*
-- [ ] **F-4** · escribir qué dimensión define un patrón y cuál es un factor *(gratis)*
+- [x] **F-4** · **escrito**: `PATRON_O_FACTOR.es.md`. La prueba es una — un patron se distingue por su ESTRUCTURA DE CONTROL DE FLUJO, y se decide con cuatro preguntas (cuantas llamadas y quien las decide; quien elige la proxima accion; si hay estado compartido y quien lo escribe; si un paso puede cambiar el plan). Contraprueba: si la diferencia se describe sin dibujar otro grafo de control, no es un patron. Incluye la clasificacion de todo lo que hay hoy y los tres factores que siguen **soldados adentro de un brazo**, que es lo que impide atribuirles nada
 
 **«Anti-RAG» — la máquina existe (REC), le falta una pieza**
 - [ ] **AR-0** · medirlo como **factor** `{con, sin} × {patrones}`, no plegado en cada patrón
-- [ ] **AR-1** · contratos de completitud *(= T-1; la única pieza que falta de verdad)*
+- [x] **AR-1** · contratos de completitud — **implementado** como `C-COMPLETE` en `app/contracts.py`. Lo que queda no es escribirlo sino **cablearlo**: ningun paradigma lo invoca todavia, y quien declara el dominio enumerable es una decision de producto (ver `U-4`)
 - [ ] AR-2 · cablear rechazo tipado de contrato → `rec.diagnose` *(chico)*
 - [ ] AR-3 · predicción falsable antes de correr
 - [ ] AR-4 · baseline honesto: contra HyDE y RAG plano, no contra nada
 
+**El agujero aguas arriba de todo**
+- [ ] **G-1** · **la ingesta no se mide**, y es **asíncrona, de una sola vez, e independiente del patrón**. Por eso **no contamina la comparación entre brazos** — pero sí fija el espacio: `n_units`, la región, el denominador de cobertura, cuánto ve la sonda. Y su economía es otra: se amortiza sobre todas las consultas futuras, así que el resultado de λ —que el costo por request borra la ventaja— **no le aplica**
+- [x] **G-3** · **medido, y la preocupacion quedo refutada por el registro.** El mecanismo es real —`graph_traverse` construye y persiste su indice adentro del request, leyendo cada unidad con la llamada que REGISTRA lecturas, asi que la fila que lo paga carga `fraction_read` del corpus entero—. Pero **ninguna fila del registro lo ejercio**: las 6 filas del brazo tienen `fraction_read = 0,000` y costo 188-268 tokens porque el indice ya estaba en disco. La leccion 8.6 da `-0,241` con todas y `-0,242` sin el brazo. Nada que corregir; queda la regla `G-4`
+- [ ] **G-4** · **regla de producto, ahora con la medicion que la respalda** (leccion 3.5): si la ingesta es asincrona, de una vez y compartida, **ningun paradigma deberia construir estado derivado propio adentro de un request**. Dos razones separadas: **economica** —el costo del indice cae sobre una fila arbitraria y promediar el brazo mezcla amortizar con responder— y **de instrumentacion** —construir lee, y leer se registra—. Falta implementarlo: levantar el indice de `graph_traverse` a la etapa de ingesta, que es tambien la condicion (b) de su revival en `K-5`
+- [ ] **G-2** · `ARQUITECTURA.es.md` propone la pila entera (Docling, sensor de OCR, procedencia página+bbox) y **ninguna pieza está ejecutada ni medida**
+
 **Ontología de la pregunta** (`ONTOLOGIA_PREGUNTAS.es.md`, pizarra)
 - [~] **O-1** · **medido: la supersesión está en el material y NINGUNA pregunta la interroga** (`_analyze_supersession.py`). 5 cuentas enmendadas, 0 preguntas sobre domicilio, 0 golds en un valor vigente. Las enmiendas son **sólo distractor**: cuestan tokens y no miden nada — y pueden estar deprimiendo utilidades por un eje que el registro no declara medir
 - [x] **O-1b** · **celda C8 implementada y verificada 6/6**, reusando las enmiendas de C5: **+32 tareas, +0 documentos**. Separa falla de recuperación de falla de **vigencia**, que ninguna otra celda distingue
-- [ ] **O-1c** · **correr P18** (a: los que leen todo resuelven la supersesión · b: el valor superado es el error más común · c: C8 no se predice desde C5). Predicciones registradas antes de existir una sola fila
+- [x] **O-1c** · **P18 corrida** (78 filas de C8, `p18_verdict.json`). **P18a REFUTADA**: leer mas NO resuelve la supersesion (brecha +0,071 contra criterio 0,25) — y O-4a despues mostro que no era de C8, es general. **P18b CONFIRMADA**: el 100% de los errores son el valor SUPERADO, no una dispersion de ciudades. **P18c CONFIRMADA**: C8 no se predice desde C5 (r=+0,114 sobre 26 pares) — detectar un conflicto y resolverlo son capacidades distintas
 - [ ] **O-2** · **B2 ausencia y negación** — el de peor relación daño/atención: afirmar una ausencia desde una muestra produce una respuesta que *parece normal*. La asimetría ya existe en la sonda, pero sólo del lado del material
 - [ ] **O-3** · **D1 presuposición** — el más fácil y no está: una presuposición ya tiene forma de proposición, así que el mecanismo para verificarla existe entero. Falta extraerla
-- [ ] **O-4** · **A1 cardinalidad de respuesta**: medible hoy (C1 singular, C2 enumerativa, C4 agregada) y **no medido**
+- [x] **O-4** · **MEDIDO, y dos de tres predicciones cayeron** (`_analyze_demands.py` + `_analyze_demands2.py`, 1.214 filas de 5 corpus). La cardinalidad **no implica** la cobertura: C5 y C8 son singulares y exigen lectura total, asi que el tipo es el par `(answer_cardinality, coverage_demanded)`, declarado por celda en `REQUEST_DEMANDS` con vocabulario cerrado. **(a)** Leer mas ayuda donde la cobertura NO se exige (`+0,259` contra `+0,018`, `p=0,028` controlado dentro de tarea) — **la exhaustividad no se compra leyendo mas**. **(b)** Ninguno de los dos ejes reordena el ranking de paradigmas mas que su propio null (`p=1,000` / `p=0,447`). **(c)** Pero **5 de 22 regiones mezclan** clases de cobertura: es informacion que la region no tiene
 - [ ] **O-5** · cuatro ejes bloqueados **por el generador y no por el diseño** — B3 entidades, C1 conversación, A2 precisión, D2 subjetividad. Enumerados **antes** de pagar el cuarto caso
 
 **La fase de entendimiento — la mitad que S-3 declaró faltante**
-- [ ] **U-1** · fase que emite **demandas tipadas** del request, no un float de conclusión. **Lo que se tipa es la CARDINALIDAD DE LA RESPUESTA**, implícita en la forma del pedido y no binaria: singular («cuál fue el arma») / enumerativa («listame los nombres») / agregada («cuántos X»). Cada una falla distinto y sólo dos piden exhaustividad
-- [ ] **U-2** · que **la regla** combine demanda × material — resuelve los 4 falsos positivos de C4 sin heurísticas nuevas
-- [ ] **U-3** · entran como `ELICITED`: el modelo lee la pregunta, no puede superar ese rango
-- [ ] **U-4** · `requires_exhaustive` se **verifica** con C-COMPLETE — el único camino a promoverla
-- [ ] **U-5** · medirla contra λ: cuesta una llamada por request
+- [x] **U-1** · **tipado y declarado** (`REQUEST_DEMANDS` en `corpus/generate.py`, campos `answer_cardinality` / `coverage_demanded` en `Task`, falla cerrado si una celda no declara). Son DOS ejes, no uno, y el corpus tenia el contraejemplo adentro
+- [ ] **U-2** · que **la regla** combine demanda x material — sigue en pie para los 4 falsos positivos de C4, pero **ya no como feature de ruteo**: O-4b midio que la demanda no reordena paradigmas. Entra como precondicion, no como eje del selector
+- [x] **U-3** · **DESCARTADO por medicion** (O-4b): elicitar la demanda cuesta una llamada por request y el ranking de paradigmas **no se mueve** contra su propio null (`p = 1,000` / `p = 0,447`). Si alguna vez se elicita, es para `C-COMPLETE` — no para el router
+- [~] **U-4** · `coverage_demanded` todavia no DISPARA el contrato: hoy lo dispara que la tarea declare `domain_keys`, que es lo mismo para `C9` y no para `C2`/`C4`. Cerrarlo es la parte facil; lo que sigue abierto es que en `C2` el dominio es **semantico** y enumerarlo ES resolver la tarea (leccion 8.7)
+- [ ] **U-6** · **correr P19** — predicciones a-d registradas en `README.md` antes de existir una fila. `P19d` es el control que puede matar a la celda: con `width=4` el dominio declarado y las unidades en alcance **coinciden**, asi que si C9 se comporta igual en w=4 y w=48, la distincion entre los dos dominios no compra nada y la celda solo mide ancho. Costo **sin estimar**
+- [~] **U-7** · **cableado**, y la decision de producto se resolvio por precedente: **el dominio lo declara el caller**, igual que `irreversible` — deducirlo del enunciado seria construir el sensor sobre prosa libre. `Request.completeness_domain` viaja a la tarea, y cada fila guarda el veredicto de `C-COMPLETE` **aparte de la utilidad**: el F1 castiga igual una respuesta incompleta que una equivocada, y el contrato las separa. `None` significa **sin contrato**, no «cumplido». Falta lo unico que cambia semantica visible: **que terminal corresponde a una respuesta retenida** — no es `gated` (no hay accion irreversible) ni `deferred` (theta si tuvo margen)
+- [x] **U-5** · **sin objeto**: medirla contra λ presupone un efecto de ruteo que O-4b midio que no existe, asi que el costo de la llamada no compite contra nada. Vuelve a tener sentido cuando `C-COMPLETE` este cableado (`U-7`)
 
 **REC — implementado, sin registrar y sin medir**
 - [ ] **REC-1** · preregistrar las seis hipótesis de `PATRON_REC.es.md` §11 *(gratis)*
@@ -84,17 +161,18 @@
 - [ ] P-1 · que la sonda sense **recuperabilidad** (hoy sensa acoplamiento)
 - [x] **P-2** · ~~sacarlo del camino activo~~ — **decisión revertida el 2026-08-27, y la revisión estaba mal planteada.** Lo demostrado es estrecho: el peso no puede mejorar la **selección de paradigma**, porque en el punto fijo es una transformación monótona de la tasa de victorias. Eso **no dice nada** sobre aprender asociaciones entre pares, que es a donde va (P-2c, P-2d, D-4). Y además ya gobierna algo: es el **reloj de decaimiento** con el que `consolidation.py:286` poda las stats sin episodios — nunca poda por peso solo, porque una stat con episodios es evidencia. Ese ciclo de vida —acotado, decae, piso, poda— es justo la maquinaria que una tabla de asociaciones necesita. **No se saca: se reusa.**
 - [ ] P-2b · reintroducirlo como **detector de no estacionariedad** *(drift medido: 80%)*
-- [~] **P-2c** · **la condición necesaria NO se sostiene al estratificar.** Sin estratificar la dispersión de tasas por transición daba 0,18; controlando por celda —y conservando el bloque de fila, que es la unidad de resultado— **cae a lo que produce el azar**: 0 de 4 estratos con potencia superan al null. No lo refuta (con 6-7 filas por celda, no detectar es compatible con un efecto chico), pero **la dispersión sin estratificar no puede leerse como señal**. Se re-mide cuando P17 cierre: triplica las secuencias
-- [ ] P-2d · asociaciones aprendidas como creencias *(necesita un rango bajo OBSERVED)*
+- [x] **P-2c** · **ESTABLECIDA** con `P-2f` (`_analyze_p2f.py`): **3 de 13 celdas** tienen una transicion presente en todas las replicas exitosas y ausente en todas las fallidas, contra **mediana nula 0**, `p = 0,0078`. El `p = 0,055` anterior estaba medido con `n=3`, donde la **mediana nula era 7 de 13** — el criterio se satisfacia por casualidad. Con `n=9` el observado BAJA de 10 a 3 y el null cae a 0: lo que se cayo era el ruido. Debil y real: un corpus, un modelo, 3 celdas
+- [x] **P-2f** · corrida completa: 13 celdas x 9 trials en `gold_p17b` (gemelo byte-identico, para no tocar el veredicto congelado de P17). **117 filas**, y el piso de `p` por celda bajo de `>= 1/3` —donde ninguna celda podia dar significativa aunque la senal fuera perfecta— a `0,008` en 10 de 13
+- [ ] **P-2d** · asociaciones aprendidas como creencias — **ahora tiene con que**: P-2c quedo establecida, asi que hay un hecho que sostener. Sigue faltando el rango: una asociacion medida sobre 3 celdas de 13 no llega a `OBSERVED`, y meterla como `ELICITED` la dejaria por debajo de todo piso que decida algo
 - [ ] P-2e · componer el patrón en vez de elegirlo *(el techo)*
-- [ ] P-3 · calibración por proposición al router activo
-- [ ] P-4 · horizonte con evidencia propia
-- [ ] P-5 · las particiones descubiertas no gobiernan el router
-- [ ] P-6 · particiones que usan truth de evaluación
+- [x] **P-3** · **cerrado, y el efecto no era neutro.** El router recibia un objeto `Calibration` que **ninguno de los cinco sitios de construccion pasaba**, asi que `trustworthy` era False siempre — y sin confianza el piso derivado sube a `OBSERVED` en A2+, o sea que **A2 con piso `ELICITED` era inalcanzable por construccion**. La evidencia para ganarlo se computaba, se persistia y se tiraba. La correccion **no** fue pasar el parametro en los cinco: vive en el **bundle firmado**, por la misma razon que los pisos aprendidos — cambia lo que un request puede hacer, asi que es politica. Un parametro se puede olvidar; adentro del bundle no hay donde. `test_science.py` §32
+- [x] **P-4** · **cerrado, y habia una violacion del reticulo adentro.** `horizon_unknown` llevaba la credencia **y la procedencia** de `coupling` —el codigo lo decia: «estimated alongside coupling»—. Dos consecuencias: el horizonte no tenia evidencia propia (y la calibracion es **por proposicion** justamente porque un modelo puede ser confiable sobre una cosa y pesimo sobre otra), y **tras una sonda heredaba `OBSERVED`** — o sea que una proposicion que nadie midio alcanzaba el piso que las acciones irreversibles exigen. La sonda lee una unidad para testear **acoplamiento**. Ahora el horizonte declara lo suyo y la sonda no lo toca. Y el `0.8` inventado pasa a `ELICITED_PRIOR_CREDENCE`, declarado: no es una medicion, es un **prior**, y existe la maquinaria que puede desmentirlo. `test_science.py` §33
+- [x] **P-5** · **cerrado, y era el mismo defecto que P-6.** Nadie consultaba las particiones descubiertas porque **no se podian consultar**: los cuatro ejes de particion eran inevaluables al decidir. La causa de fondo estaba mas abajo — **el vector φ no llegaba a la fila**, y lo unico que quedaba era `region`, que ya es φ **discretizado**. Ahora la fila lleva `n_units`, `phi_coupling`, `phi_horizon_unknown` y `phi_continuation`, con `None` = no establecido
+- [x] **P-6** · **ejes tipados, con guarda.** `DECISION_TIME` gobierna; `POSTERIOR` (`iterations`, `cost_tokens`, `cross_unit_lookups`) **diagnostica** y no se tira — «los casos caros comparten esto» sigue sirviendo; `FORBIDDEN` (`truth_coupling`, `utility`) **levanta**: partir sobre la respuesta no descubre una regla, describe el gold. Y el test de consolidacion **ponia la senal sobre el oraculo**, asi que verificaba que se encontrara una particion que el router jamas podria evaluar. Corregido: la senal va sobre la estimacion y se sigue encontrando (umbral 0,522, 0,89 de separacion retenida)
 - [ ] P-7 · el producto no cierra el bucle
-- [ ] P-8 · promoción sin incertidumbre
-- [ ] P-9 · repetir consolidación reaplica historia
-- [ ] P-10 · flags declarativos del dial A0–A3
+- [x] **P-8** · **la promocion decide sobre un INTERVALO, no sobre un punto.** Comparar dos estimadores puntuales no es una guarda: sobre un holdout chico, un candidato que gana por 0,001 gana por ruido la mitad de las veces — y una vez promovido queda como incumbente que el ciclo siguiente tiene que superar, asi que el error **se hereda**. Ahora hay bootstrap **pareado** sobre los episodios de holdout (1.000 remuestras, 95%, semilla fija: promover tiene que ser tan reproducible como rutear) y se exige que el borde inferior supere el piso. Probado en §29 con los dos casos que importan — una ganancia que se da en promedio pero se pierde en muchos episodios **no** promueve; una chica y uniforme **si**
+- [x] **P-9** · **idempotente, y salio un segundo defecto que se tapaba con el primero.** (a) `candidate` reaplicaba la lista entera sobre el incumbente sin saber que ya estaba adentro: dos ciclos sobre el mismo registro movian el peso el doble e inflaban `episodes`, que es la cuenta que decide si una region puede decidir. Ahora el bundle lleva una **marca de agua firmada** de lo absorbido y declara cuanto salteo. (b) el peso se redondeaba al SERIALIZAR y no al aplicar, asi que **lo firmado no era lo que decide** — un bundle recargado resolvia con otro numero. Alineado. `test_science.py` §28
+- [x] **P-10** · **el dial ya impone lo que declara.** `theta_may_learn_online` vivia en el perfil y **no lo leia nadie**: la invariante «nada aprende adentro de un request» se cumplia porque `Plasticity.apply` solo se llama offline — o sea, **por casualidad**, y una invariante casual la rompe el proximo cambio sin que nada avise. Ahora `serve.py` envuelve el request ENTERO en `no_online_learning()` y `apply` levanta ahi adentro. Probado en `test_science.py` §27, incluido que la guarda no sea global y que el perfil declare lo mismo que la guarda impone
 - [x] **P-11** · dependencia invertida: `app/verify.py` es el verificador del **producto** y `grading` es la cara del **banco** sobre el mismo primitivo. Relocación pura, verificada re-puntuando 390 filas: **0 discrepancias**
 
 **Lo más grande, y no estaba en la lista**
@@ -105,18 +183,25 @@
 
 **Apareció al aplicar B2**
 - [x] **X-1** · un solo constructor `payload_for(task)` en `features.py` — los tres sitios lo usan
-- [ ] **X-2** · el ledger de costo no es convertible a plata *(falta el split prompt/completion y la tarifa)*
+- [x] **X-3** · **cableado y medido: CERO.** El contador vive en la superficie (`malformed_json` y `dropped_items`, separados porque piden arreglos distintos) y lo anota `parsing.py`. Sobre el registro completo de `gold_p17` replayado sellado — **336 filas, cinco brazos** — no hay una sola malformacion. **Ningun paradigma pierde utilidad por el formato**; la pierde por la tarea. Y el cero significa cero: `test_science.py` §26 verifica que el contador se dispare y que **todo** sitio que parsea JSON pase la superficie
+- [~] **X-4** · **la declaración de tools se re-envía, pero mucho menos de lo que parecía — y la primera estimación era falsa.** Estimarlo como `llamadas × tokens_de_spec` supone que toda llamada lleva la declaración, y **de 27 sitios que llaman al modelo, UNO pasa `tools`**: el bucle compartido. Los demás —planificar, triar, sintetizar, criticar— llaman sin ella. El absurdo lo delató: en 7 celdas la estimación daba **más declaración que prompt entero**. Instrumentado `tooled_calls`, la medición real sobre 27 celdas da `dag_strategy` **8,0%** (estimado 12,2%), `react` **4,5%** (exacto: todas sus llamadas llevan tools) y `rewoo` **0,0%** — no 43%, **cero**: nunca usa el bucle de tools. **Total 6,7%.** Y la dirección se invierte: el que más carga es el brazo **más caro**, no el más barato
+- [ ] **X-4a** · **lo lazy NO aplica acá, y conviene decirlo antes de intentarlo.** El patrón de 2026 —diferir las definiciones detrás de una tool de búsqueda— reporta ahorros de 80-95% y mejoras de acierto (49%→74%), pero **sobre catálogos de 100+ tools**; la regla publicada es que **por debajo de ~10 tools el sobrecosto de la búsqueda no se paga**. MAPO tiene **4** en `basic` y **10** en `cognitive`. Y el gateo por variante **ya es** divulgación progresiva: `basic` no ofrece las seis de contabilidad. Fuentes en `notes/`
+- [ ] **X-4b** · **caché de prompt del proveedor, y hoy no se usa.** `llm.py` no manda ninguna directiva. Pero con el sobrecosto real en **6,7%** —y concentrado en un solo brazo— el premio es chico, así que primero hay que **verificar** si el caché del endpoint cubre el campo `tools`; si no lo cubre, esta vía no existe y se dice
+- [ ] **X-4c** · **acortar las descripciones es un FACTOR, no una limpieza.** Cambia el payload que el modelo lee, así que puede cambiar qué tool elige. Entra cruzado, con predicción registrada, y con la guarda de siempre: si baja la utilidad más que el piso de ruido, ahorrar tokens eligiendo peor no es ahorrar
+- [ ] **X-4d** · **veredicto RETIRADO hasta regenerar el registro.** Corrió sobre el sobrecosto estimado por `calls`, que quedó refutado. Y su resultado tenía un segundo defecto propio: al descontar de más, el costo de las celdas baratas se aplastaba contra el piso de `max(...,1)` y los `cost_ratio` explotaban —`dag_strategy` daba utilidad **−463**—, así que la «brecha que cae a cero» era un artefacto del recorte y no un hallazgo. Rehacerlo con `tooled_calls` es gratis: **replayar sellado el registro y recomputar**. La pregunta sigue viva y sigue siendo la primera de la familia
+- [x] **X-2** · **el diagnostico estaba mal y el arreglo era otro.** El split prompt/completion **existia** en `Usage` desde siempre; lo que pasaba es que la FILA guardaba solo el total y la informacion se tiraba al escribir. Ya lo lleva. Y el gasto acumulado esta medido desde el cache (`_analyze_spend.py`): **66,4M tokens**, de los cuales la salida es el **1,7%** — eso valida que barrer lambda sobre el total sea un proxy razonable ACA. La tarifa se declara por entorno (`MAPO_PRICE_IN_PER_M` / `_OUT_PER_M`) y **no se inventa**: un precio inventado produce un numero que parece una medicion
 
 **Riesgos que nadie estaba mirando**
-- [~] **R-1** · verificar el replay sellado — *intentado y **no concluyente**: el replay de secuencias da 93/112 misses, pero es mucho más probable que sea el replay y no el caché. Hace falta un test que replaye una celda por el MISMO camino que el runner*
+- [x] **R-1** · **CONCLUIDA A ESCALA** (`_replay_full.py`): **390 de 390 filas** de `gold_p17` replayadas selladas por el camino del runner, **0 llamadas vivas** y **0 discrepancias** en utilidad, respuesta y costo. No 27 celdas: el registro entero. La causa del fracaso anterior era que la fila no decia con que modelo se produjo; cerrado estampando la huella, con guarda de mezcla (`test_science.py` §25)
 - [ ] R-2 · celdas † de la grilla congelada `gpt-5-chat`
 - [~] **R-3** · barrido del paper: §1.3 y §5.2 ahora dicen que **la rama `v=0` de la propia partición nunca se ejercitó**, y por qué es estructural. Falta el resto del barrido
 - [x] R-4 · `lab/ui/index.html` — **es la UI de prueba del autor**; se adopta
-- [ ] R-5 · 11 commits locales sin pushear
+- [ ] **R-5** · **22 commits locales sin pushear** (al 2026-08-28). Repo privado; no se pushea sin confirmacion del autor
 
 **Decisiones dinámicas que hoy no gobierna nadie**
-- [ ] D-1 · cuándo parar de iterar *(el más barato: las señales ya existen)*
-- [~] D-2 · qué herramienta sigue — *secuencia instrumentada; el replay **no funciona**: 93/112 misses sellados, causa sin identificar (`_replay_sequences.py`)*
+- [~] **D-1** · **la regla existe y esta impuesta por codigo** (`stop_on_barren` en `ToolSurface`, `test_science.py` §30). Reemplaza la NOTA al modelo —«considera leer»— por un **rechazo tipado**: pasado el umbral, buscar no esta disponible; leer y responder quedan intactos. Entra como **factor**, apagado por defecto y con archivo de resultados propio, porque se aplica a todos los brazos por igual. El premio (33%) y la senal (1,17 contra 2,28) estan medidos y **P20a-d registradas antes de que exista una fila**. **Falta correrla** — es lo unico que queda
+- [~] **D-1b** · **`read_all` no existe en `basic`**, que es la variante de TODOS los estudios medidos: el modelo nunca pudo pedir el material entero aunque entrara comodo en su presupuesto, y eso **nadie lo decidio midiendo** — es consecuencia de en que lista quedo la tool. Expuesto como factor `offer_read_all`, apagado por defecto, ofreciendolo **sin** arrastrar el resto de la contabilidad. La guarda de tamano ya estaba y es lo que lo hace seguro. **P21a-d registradas**; falta correrlo
+- [~] D-2 · qué herramienta sigue — secuencia instrumentada. **El replay ya no es el bloqueo**: los 93/112 misses de `_replay_sequences.py` son casi con seguridad la misma causa que R-1 acaba de identificar (ajustes reconstruidos con el modelo congelado, que falla el 100% de las claves). Falta re-correrlo con los ajustes correctos
 - [ ] D-3 · la descomposición en DAG
 - [ ] D-4 · challenger multi-agente con handoff por contrato
 - [ ] D-5 · la «Constant Soup» en general
@@ -135,10 +220,10 @@
 - [x] **M14** · `paradigms/parsing.py`: **cero copias**, un solo contrato de excepciones (había cinco tuplas distintas)
 - [x] **M15** · loop de calibración deduplicado en `beliefs.score_calibration` — y las contradicciones, que sólo estaban en una copia, ahora se persisten en las dos
 - [x] **M16** · un solo filtro de `None`: una fila legacy volteaba la consolidación entera
-- [ ] pip-audit nunca corrido
+- [x] **pip-audit corrido, y lo primero que encontro fue un problema de metodo.** MAPO **no tenia archivo de dependencias**, asi que la auditoria corria contra el interprete GLOBAL y devolvia vulnerabilidades de paquetes que el proyecto ni importa — un resultado que parece un hallazgo sobre MAPO y es un hallazgo sobre la maquina. Con `requirements.txt` declarado (seis paquetes, derivados de los imports): **sin vulnerabilidades conocidas**. Queda una brecha REAL: el interprete global tiene `starlette 0.52.1` clavado por un paquete ajeno al proyecto, mientras el conjunto de MAPO resuelve a `1.6.0`. Correr sobre el global usa la version vulnerable — que es exactamente lo que cierra el on-prem/Docker de `ARQUITECTURA.es.md`
 
 **Teoría — pizarra, bloquea a F6**
-- [~] **T-1** · **semántica escrita y C-NUM implementada** (`app/contracts.py`) (`CONTRATOS.es.md`): tres clases con su proposición exacta, y el residuo formalizado como `⟦o⟧ ∖ π_C(o)` — que es donde vive el mis-binding. Falta implementar `π_C` para al menos una clase
+- [~] **T-1** · **DOS de las tres clases implementadas**: `C-NUM` (`fill()`) y **`C-COMPLETE` (`complete()`, 2026-08-28)**, las dos en `app/contracts.py`, probadas en `tests/test_science.py` §24. `C-COMPLETE` llego con justificacion medida, no por completar la tabla (leccion 8.6). Falta `C-CITE`, que necesita el indice vivo — es infraestructura de producto, no de esta capa
 - [x] **T-2** · red-team hecho por nosotros: **5 de 5 familias sobreviven, residuo 100%** (`_redteam_binding.py`). Las cinco comparten forma: lo que falsea la oración vive en la **prosa conectiva**, que no ocupa ranura
 - [ ] T-3 · teorema de soundness del ensamblador
 - [~] **T-4** · **cota nativa derivada y verificada** (`COTA_RATCHET.es.md`, test §22): daño total ≤ 2 subidas por región **para siempre**; la replicación es fuerte lejos del umbral (1 en 39.613) y **débil cerca** (1 en 3,7). Falta medir la pérdida de cobertura por endurecimiento (Parte 3)
@@ -186,7 +271,7 @@ selección. Es un costo enunciado ahora, no descubierto después.
 
 | # | Qué | Detalle | Costo |
 |---|---|---|---|
-| M-1 | Brazo en PROSA (E1) | Los dos brazos implementados y sin correr: el clasificador de producción tal cual y el router en prosa más fuerte construible. Espera a que P16 libere la cuota | ~26 llamadas |
+| M-1 | Brazo en PROSA (E1) | Los dos brazos implementados y sin correr: el clasificador de producción tal cual y el router en prosa más fuerte construible. **DESBLOQUEADO**: P16 y P17 ya cerraron. Es la medición más barata que queda, y puede cambiar la tesis — si la prosa empata a θ, la maquinaria determinística es decoración cara | ~26 llamadas |
 | M-2 | Instrumentar retención de verdad | El recall de evidencia ya está medido y manda (ver §Findings). Falta el **segundo eslabón**: cuánta de la evidencia recuperada sobrevive hasta la llamada que responde. Eso sí necesita código y corrida | código + corrida |
 | M-3 | Transferencia de θ entre familias de modelos | El colapso de `react` en nano sugiere que parte de lo aprendido es del modelo y no de la tarea. Condiciona la lectura de todo el registro | corrida |
 | M-4 | Corpus natural + segunda familia | Validez externa real. Un segundo generador propio **reformula** la objeción, no la responde. QA numérica sobre documentos largos calza con los contratos | la fase cara |
@@ -428,17 +513,17 @@ por donde el mecanismo debería actuar — no sobre la grilla completa.
 | P-1 | **Que la sonda sense recuperabilidad** | La sonda existe para convertir una variable invisible en observada, y hoy sensa *acoplamiento*. Medido: el recall de evidencia predice fuera de muestra al 60% desde el paradigma, y la región apenas al 3,8%. La variable que conviene sensar es **si la evidencia se va a encontrar** |
 | P-2 | **NO sacarlo: reusarlo.** Lo demostrado es que no puede mejorar la selección de paradigma; el peso además es el reloj de decaimiento de la poda | Demostrado, no medido: en el punto fijo `w* = 1,6p − 0,6`, monótona en la tasa de victorias, y `theta_assertions` ya ordena por esa tasa. Una transformación monótona **no puede** cambiar un argmax, así que como selector es redundante por construcción y ningún tuneo lo arregla |
 | P-2b | **Reintroducirlo como detector de no estacionariedad** | El drift está medido: **4 de 5 regiones cambian de ganador (80%)**. Donde el peso y la tasa discrepan sobre el mejor brazo, la región está en transitorio, y la acción correcta es **bajar la confianza y abstenerse** — maquinaria que el producto ya tiene. Requiere antes arreglar la parametrización: el piso 0,01 aplasta todos los brazos débiles, salir de él cuesta ~5 victorias, y con ~6 updates por clave contra un horizonte de ~20 el estimador nunca sale del prior. Predicción falsable registrada ANTES de correr |
-| P-2c | **Hebbiano sobre el ORDEN de llamada a tools** (idea del autor) | La dirección más prometedora, y por dos razones. Restaura lo que hace distintivo al aprendizaje Hebbiano — **asociación entre pares** — de modo que la prueba de monotonía no aplica: un peso de transición (tool_i → tool_j) no es una estadística marginal de un brazo. Y apunta al blanco correcto: un paradigma **es** mecánicamente una política sobre secuencias de tools, y elegir paradigma predice el 60% del recall de evidencia fuera de muestra, así que el orden es el canal por donde actúa la palanca dominante. **Bloqueado por instrumentación**: `tools.py:375` guarda `calls[name] += 1`, un conteo sin secuencia — el orden no se registra. Loguearlo es el primer paso barato |
+| ~~P-2c~~ | ~~Hebbiano sobre el ORDEN de llamada a tools~~ | **ESTABLECIDA 2026-08-28**, `p = 0,0078`. Tres de 13 celdas tienen una transición presente en **todas** las réplicas exitosas y ausente en **todas** las fallidas, contra mediana nula 0. El `p = 0,055` previo estaba medido con `n=3`, donde la mediana nula era 7 de 13 — el criterio se cumplía por azar. Con `n=9` el observado **baja** de 10 a 3 y el null cae a 0: lo que se cayó era el ruido. Débil y real: un corpus, un modelo, 3 celdas |
 | P-2d | **Asociaciones aprendidas como creencias** (idea del autor) | Se puede, con una restricción que no se negocia. El retículo es `ASSUMED < ELICITED < OBSERVED < COMPUTED` y las acciones irreversibles exigen `COMPUTED`/`OBSERVED` **justamente** para dejar afuera a la estadística y a la opinión. Una asociación aprendida es aritmética sobre un ledger, así que *parece* COMPUTED — y si entrara con ese rango, una regularidad estadística podría gatear una acción irreversible, que es exactamente lo que el piso existe para impedir. No es una observación sobre ESTE request: es un prior sobre requests parecidos. Necesita un rango estrictamente por debajo de OBSERVED, y **el retículo hoy no tiene ese casillero** |
 | P-2e | **Componer el patrón en vez de elegirlo** (idea del autor) | La conclusión lógica de P-2c, y la más grande. Si las asociaciones de orden se aprenden, el paradigma deja de ser una entrada de catálogo y pasa a **sintetizarse por request**: el catálogo se vuelve un *prior*, no el espacio de acción. Encaja con lo que E2 ya midió — «donde la cascada dispara, la elección no produce el valor: la estructura de la acción lo produce». **Y abre dos tensiones que hay que resolver antes, no después**: (1) el banco mide paradigmas que son funciones async planas, y un patrón sintetizado no está en el catálogo, así que la comparación contra brazos fijos deja de estar definida — hace falta una respuesta de diseño, no una mano; (2) A2 y A3 restringen los patrones admisibles al catálogo (A2 con profundidad ≤ 3, A3 a un subconjunto certificado), así que un patrón sintetizado **no puede correr bajo A2+** sin una historia de certificación. Los dos son problemas de diseño reales, y son la razón por la que esto va después de P-2c y no antes |
-| P-3 | Calibración por proposición al router activo | Hoy se persiste pero los routers se crean sin leerla |
-| P-4 | Horizonte con evidencia propia | `coupling` y `horizon_unknown` comparten credencia en algunos caminos — y el horizonte es el eje que P15 señaló |
-| P-5 | Las particiones descubiertas no gobiernan el router | Se persisten en `store.py` y nadie las consulta |
-| P-6 | Particiones que usan truth de evaluación | Algunas usan variables posteriores a la ejecución: fuga |
-| P-7 | El producto no cierra el bucle | No persiste de manera completa resultados y creencias, así que el aprendizaje no se realimenta de producción |
-| P-8 | Promoción sin incertidumbre | Usa puntos estimados, sin intervalo ni certificado autenticado |
-| P-9 | Repetir consolidación reaplica historia | Ya absorbida por el incumbente: el replay no es idempotente |
-| P-10 | Flags declarativos del dial A0–A3 | `theta_may_learn_online` y el sellado de A3 están declarados y no impuestos |
+| ~~P-3~~ | ~~Calibración por proposición al router activo~~ | **CERRADO 2026-08-28.** Cinco sitios construyen `Router` y **ninguno** pasaba la calibración, así que `trustworthy` era False siempre — y con eso **A2 con piso `ELICITED` era inalcanzable por construcción**. Vive ahora en el **bundle firmado**, por la misma razón que los pisos: cambia lo que un request puede hacer. §32 |
+| ~~P-4~~ | ~~Horizonte con evidencia propia~~ | **CERRADO 2026-08-28**, y adentro había una violación del retículo: tras una sonda el horizonte heredaba `OBSERVED`, o sea que una proposición que **nadie midió** alcanzaba el piso de lo irreversible. La sonda mide **acoplamiento**. §33 |
+| ~~P-5~~ | ~~Las particiones descubiertas no gobiernan el router~~ | **CERRADO 2026-08-28.** Nadie las consultaba porque **no se podían consultar**: el vector φ no llegaba a la fila, y lo único que quedaba era `region` — que ya es φ **discretizado** |
+| ~~P-6~~ | ~~Particiones que usan truth de evaluación~~ | **CERRADO 2026-08-28.** Ejes tipados: `DECISION_TIME` gobierna, `POSTERIOR` **diagnostica**, `FORBIDDEN` levanta. Y el test **ponía la señal sobre el oráculo**: verificaba que se encontrara una partición que el router jamás podría evaluar |
+| **P-7** | **El producto no cierra el bucle** | No persiste de manera completa resultados y creencias, así que el aprendizaje no se realimenta de producción. **Es el último de esta familia que queda**, y conviene mirarlo con lo aprendido: P-3, P-5 y P-6 resultaron ser todos la **misma forma** |
+| ~~P-8~~ | ~~Promoción sin incertidumbre~~ | **CERRADO 2026-08-28.** Bootstrap **pareado** sobre el holdout (1.000 remuestras, 95%, semilla fija) y el criterio es el **borde inferior**. Comparar dos puntos no era una guarda: un candidato que gana por 0,001 gana por ruido la mitad de las veces, y promovido queda como incumbente que el ciclo siguiente debe superar — el error **se heredaba**. `test_science.py` §29 |
+| ~~P-9~~ | ~~Repetir consolidación reaplica historia~~ | **CERRADO 2026-08-28**, y salió un segundo defecto tapado por el primero: el peso se redondeaba al **serializar** y no al aplicar, así que **lo firmado no era lo que decide**. El bundle lleva marca de agua firmada de lo absorbido. `test_science.py` §28 |
+| ~~P-10~~ | ~~Flags declarativos del dial A0–A3~~ | **CERRADO 2026-08-28** para `theta_may_learn_online`: `serve.py` envuelve el request entero y `Plasticity.apply` levanta ahí adentro. Se cumplía **por casualidad** —`apply` sólo se llama offline— y una invariante casual la rompe el próximo cambio. **Falta el sellado de A3**, que sigue declarado y no impuesto. `test_science.py` §27 |
 | P-11 | **Separar producto de banco en `lab/app/`** | Hoy conviven. La regla que evita que se vuelvan a mezclar: **el banco importa al producto; el producto jamás sabe que el banco existe**. Concreto: `serve.py` todavía importa `grading` |
 
 ---
@@ -458,8 +543,8 @@ actuó sobre eso.
 
 | # | La decisión | Quién la toma hoy | Qué habilitaría gobernarla |
 |---|---|---|---|
-| **D-1** | **Cuándo parar de iterar** | Un tope constante en código (`max_iterations=20` para react, `4` para plan-execute, `paradigms/__init__.py:211,282`) **o el modelo**, que corta emitiendo una respuesta sin `tool_calls`. Las dos son flujo de control decidido fuera de la capa de decisión | **El mejor candidato de todos, y el más barato.** Es la decisión atada *directo* al costo, y las señales contables para gobernarla **ya existen y ya se registran**: `stall_warnings` (el recuperador se secó), `coverage`, `relevant_units_read`. El loop de `paradigms/__init__.py:81` **no consulta ninguna**. Son deterministas y contables ⇒ entran como creencias `COMPUTED` sin violar nada |
-| **D-2** | **Qué herramienta sigue** | El modelo, en cada vuelta | Es P-2c: asociación (tool_i → tool_j). Bloqueado por la misma instrumentación — `tools.py:375` guarda un conteo sin secuencia |
+| **D-1** | **Cuándo parar de iterar** | Un tope constante en código o el modelo, que corta emitiendo una respuesta sin `tool_calls`. Las dos son flujo de control decidido fuera de la capa de decisión | **MEDIDO 2026-08-28, las dos mitades.** El premio: **33% del gasto es evitable** a igual utilidad — 49% en `dag_strategy`, **0%** en `map_reduce`, cuyo fan-out lo fija el código. La señal: `barren_peak` da **1,17 en la réplica barata contra 2,28 en la cara**. Corrección de lo que decía este renglón: las señales **no** estaban registradas — `barren_searches` era un medidor que se reinicia y la fila guardaba el valor final; `stall_warnings` sólo incrementa en variantes con contabilidad y **todo estudio corrió en `basic`**. Arreglado. **Falta la regla**: umbral, imponerla en los brazos con bucle, medirla contra λ |
+| **D-2** | **Qué herramienta sigue** | El modelo, en cada vuelta | Es P-2c, y **ya no está bloqueado**: la secuencia se registra y la tesis quedó **establecida** (`p = 0,0078`). Lo que falta no es evidencia sino **rango**: una asociación medida sobre 3 celdas de 13 no llega a `OBSERVED`, y el retículo no tiene casillero por debajo (ver P-2d) |
 | **D-3** | **La descomposición en DAG** | El modelo: produce `sub_questions` con sus dependencias declaradas, y `_assign_waves` sólo topologiza lo que el modelo dijo (`dag.py:186`). O sea, **el modelo dibuja el grafo de control** | Gobernar la forma —cuántos nodos, qué profundidad de replan— con creencias sobre el request en vez de con la propuesta del modelo. Es la versión estructural de D-1 |
 | **D-4** | **La partición de `map_reduce`** | Fija por construcción | **Challenger multi-agente (idea del autor)**: agentes con alcance propio y handoffs con contrato, en vez de una partición fija y un fold. Los handoffs (agente_i → agente_j) son exactamente las asociaciones que P-2c aprende, y el contrato del handoff es exactamente dónde viven las creencias tipadas. **Encaja con el alcance declarado del producto** — `CLAUDE.md` ya lista «acciones … handoffs con contrato» como una de las cuatro superficies. Califica como patrón legítimo y no como prompting, porque la diferencia es **estructural**: alcances independientes y transferencia explícita. Entra al catálogo como candidato **con predicción falsable registrada antes de correr**, como todos |
 | **D-5** | **La «Constant Soup» en general** | Una docena de umbrales a mano en `dag.py` | Derivarlos, que es lo que el propio módulo dice que habría que hacer. D-1 y D-3 son los dos primeros |

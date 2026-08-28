@@ -40,7 +40,14 @@ class Observation:
     paradigm: str
     utility: float
     cost_tokens: int
-    has_oracle: bool
+    # El SPLIT, porque entrada y salida no valen lo mismo y los brazos se diferencian
+    # justo en esa proporcion. `cost_tokens` sigue siendo el total y es sobre lo que
+    # barre lambda; el split existe para poder convertir a plata sin promediar precios.
+    # Con default 0: los estudios armados antes de que la fila lo guardara no lo tienen,
+    # y ahi 0 significa "no registrado" — se reporta como tal, no como cero medido.
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    has_oracle: bool = True
     # How many answer-bearing units the paradigm actually read, and how many existed.
     # Optional because studies assembled before the tool trace existed do not have it;
     # absent values are reported as unattributable rather than guessed at.

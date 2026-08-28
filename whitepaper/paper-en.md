@@ -727,8 +727,8 @@ badly. Both belong to the cells marked *sin-correr* in the artefacts.
 > README). Matched task sets on `gold_v2` (in-window, ~18k tokens) and `gold_deep`
 > (out-of-window, ~483k), `repeat = 3`, per-cell stability tracked. 126 + 158 valid
 > rows. Two heavy out-of-window cells (`react`/`reflection`/`dag` on c2-w48 and c5-w48)
-> lost replicates and are being re-run; their means below rest on fewer trials than the
-> rest and are marked †.
+> carry fewer trials than the rest; their means below are marked † and should be read
+> with that smaller `n`.
 
 The feasibility sweep, first, because it costs nothing: at 135k tokens the arithmetic
 prunes read-everything on 12 of 32 tasks; at 483k on **24 of 26**; at 1.27M on 24 of 32 —
@@ -895,7 +895,7 @@ The corpus behind §7.1–7.3 is 16k tokens at its widest, so read-everything is
 and cheapest there. The out-of-window regime is now measured at 483k with `repeat = 3`
 (§7.4–7.5), and the regime claim across 135k/483k/1.27M rests on the zero-cost feasibility
 sweep. Still open: no full run at 1.27M (only its feasibility arithmetic), two heavy
-out-of-window cells re-running after rate-limit exclusions (marked † in §7.4), and a
+out-of-window cells still short of full replication (marked † in §7.4), and a
 held-out world with a fresh seed, generated and independently verified, whose transfer
 test is registered as P8 and not yet run — **until it runs, the per-cell verdicts are
 claims about seed-7 worlds.**

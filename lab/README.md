@@ -640,6 +640,137 @@ Ground truth is re-derived independently by `corpus/verify.py::_c8`, which also 
 task whose superseded value is absent from the material — without it, a wrong answer would
 only mean "not found", which the other cells already measure.
 
+### P21 registered (2026-08-28, before a single row exists) — `read_all` as a factor
+
+**What was true and nobody decided.** `read_all` lives in the accounting tool specs, so on
+`basic` — the variant **every measured study used** — it does not exist. The model could
+never ask for the whole material even where it fit comfortably inside its own budget. That
+is not a decision someone made while measuring; it is a consequence of which list the tool
+ended up in.
+
+**And there is already a guard, which is what makes offering it safe.** `_read_all` returns
+full text only if the material fits its share of the declared budget; over that it returns
+**summaries of every unit** plus the reason, and never truncates silently — a silent cut is
+the worst outcome, because the agent believes it saw everything and answers from a prefix.
+
+Availability and the guard are **different questions** and now live in different places: a
+declared predicate says whether the tool exists for a variant, arithmetic says whether the
+call fits. `test_science.py` §31 holds both, and holds the invariant the old comment only
+warned about: **what is offered is exactly what dispatches**, in every variant.
+
+It ships as a factor, off by default, and offers `read_all` **without** dragging in the rest
+of the accounting tools — so what gets measured is `read_all` and not the bundle.
+
+**Registered predictions.**
+
+- **P21a (it gets used where it fits).** On tasks whose material fits the budget share,
+  `read_all` is called at least once in the **majority** of rows. Falsified if the models
+  mostly ignore it — which would put this next to the working-memory tools, offered and
+  unused, and make the whole factor moot.
+- **P21b (it helps exactly where coverage is demanded).** Utility rises on `exhaustive`
+  cells and does **not** rise on `sufficient` ones. Falsified if it rises on both — that
+  would mean it is buying something other than coverage.
+- **P21c (and it must not be free).** Cost per cell rises. Falsified if it does not, which
+  would mean the tool is not actually pulling the material and P21a is measuring a call
+  that returns summaries.
+- **P21d (the guard is what carries it).** On tasks over the allowance, utility does **not**
+  drop relative to the same cells without the factor. Falsified if it drops: that would mean
+  the summaries path misleads more than not offering the tool at all, and the honest move is
+  to refuse rather than summarise.
+
+**Not yet run.**
+
+### P20 registered (2026-08-28, before a single row exists) — the stopping rule as a factor
+
+**The prize is measured.** Between replicates of the *same* cell reaching the *same*
+utility, **33% of tokens are avoidable** — 49% on `dag_strategy`, and **0%** on
+`map_reduce`, whose fan-out is fixed by code rather than by the model. That is not a
+proposal; it is what the record already contains.
+
+**The signal is measured too.** On 72 tied pairs, the peak run of barren searches is
+**1.17 in the cheap replicate against 2.28 in the expensive one**. It is countable and
+deterministic — the kind of environment signal this project prefers over prompt scaffolding.
+
+**What changes.** Today a stall produces a NOTE to the model: *"the last 3 searches
+surfaced nothing new, consider reading instead."* That is persuasion, and the product
+invariant says the LLM is a sensor and never handles control flow. The rule replaces the
+note with a **typed refusal**: past the threshold, search is unavailable; reading and
+answering are untouched.
+
+It ships as a **factor**, off by default, crossed `{on, off} × {paradigms}` — per
+`PATRON_O_FACTOR.es.md`, a change that applies to every arm equally is not a pattern. Rows
+go to their own file: a factor that changes what a paradigm *can do* is a different
+experiment, not more samples of the same one.
+
+**Registered predictions.**
+
+- **P20a (the prize is real).** With the rule on, mean cost per cell drops by **at least
+  10%** against the same cells with it off. Falsified if the drop is under 10% — that would
+  mean the avoidable third is not reachable by this rule, whatever else is true.
+- **P20b (it must not cost utility).** Mean utility per cell does **not** drop by more than
+  the per-cell noise floor. Falsified if it does — a rule that saves tokens by answering
+  worse is not a saving, and this is the prediction that can kill the factor.
+- **P20c (it bites where the autonomy is).** The cost reduction is larger on the arms whose
+  loop the model controls than on `map_reduce`, whose fan-out is fixed by code. Falsified if
+  `map_reduce` drops as much — that would mean the rule is cutting something other than the
+  stall it targets.
+- **P20d (the refusal is used, not dodged).** After a refusal, the next tool call is a read
+  or an answer in the **majority** of cases. Falsified if the models mostly re-issue a
+  search with different wording: that would make this a rule that renames the waste instead
+  of removing it.
+
+**Cost.** One re-run of the affected cells with the factor on. Not yet estimated, not yet
+launched.
+
+### P19 registered (2026-08-28, before a single row exists) — C9, the declared roster
+
+**Why this cell had to exist.** `C-COMPLETE` was implemented on 2026-08-28 because a
+measurement justified it: across 1,214 rows from five corpora, on cells that *demand* full
+coverage, reading more does **not** improve utility (corr `+0.018`, median `-0.055`, versus
+`+0.259` where coverage is not demanded; `p = 0.028` controlling within task). Exhaustiveness
+is not bought with a bigger reading budget — it has to be verified.
+
+**And then the contract had nowhere to run.** Crossing the corpus's own two declared tables,
+the intersection is **empty**:
+
+| cells | cheap detector | coverage |
+|---|---|---|
+| C1, C7 | **yes** | sufficient |
+| C2, C4, C5, C8 | **no** | **demanded** |
+
+Once seen it is arithmetic, not coincidence: if the code could enumerate the answer's domain
+more cheaply than solving the task, the task would not be exhaustive — it would be a lookup.
+And the domain that *is* cheap (`view.unit_ids`) is exactly the one measured not to predict
+correctness.
+
+**C9 breaks it by putting the domain in the question.** "For each of the following
+individuals, report the settlement account on file: A, B, C, D, E." The domain is the five
+named people — `COMPUTED`, enumerable, and verifying completeness costs nothing. It reuses
+existing memos: **zero new documents**.
+
+Three properties `corpus/verify.py::_c9` enforces, each blocking a different way the domain
+stops being a domain: every name appears *literally* in the prompt; every name has a memo
+*in scope* (otherwise the cell measures absence, a different axis); and the re-derived oracle
+has the same cardinality as the domain (otherwise set F1 cannot separate missing from extra).
+
+**Registered predictions.**
+
+- **P19a (the point of the cell).** On C9 the dominant error is an **incomplete** answer —
+  a strict subset of the oracle — not a wrong account. Falsified if wrong-but-complete
+  answers outnumber incomplete ones.
+- **P19b (what 8.6 predicts here).** Utility on C9 does **not** rise with `fraction_read`,
+  same as the other exhaustive cells. Falsified if the within-task correlation exceeds
+  `+0.20`.
+- **P19c (the contract earns its cost).** `C-COMPLETE` applied to C9 refuses exactly the
+  incomplete answers and emits every complete one — no false refusals. Falsified if it
+  refuses any answer whose item set equals the oracle.
+- **P19d (the width-4 control).** At `width=4` the declared domain and the units in scope
+  **coincide**, so `from_question` and `from_scope` are the same set. If C9 behaves the same
+  at w=4 and w=48, the distinction between the two domains buys nothing here and the cell is
+  only measuring width.
+
+**Not yet run.** Cost is not estimated and the cell is not in any launched study.
+
 ### P17 verdict (2026-08-28, run complete: 390 rows / 130 cells, 0 infra, 12.69M tokens)
 
 First corpus where the selection rule could fire at all. Verdict script committed before

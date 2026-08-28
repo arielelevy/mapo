@@ -36,7 +36,8 @@ from .features import measure_continuation
 from .llm import LLMClient, SealedCacheMiss, SeededClient, Usage
 from .metrics import Observation, Study
 from .fsio import exclusive
-from .paradigms import COST_PRIORS, FALLBACK, Infeasible, REGISTRY, RETIRED
+from .contracts import complete_answer
+from .paradigms import CATALOG, COST_PRIORS, FALLBACK, Infeasible, REGISTRY, RETIRED
 from .embeddings import EmbeddingClient
 from .retrieval import CorpusView, Retriever, build_arms
 from .tools import VARIANTS, ToolSurface
@@ -130,12 +131,70 @@ class Row:
     # endpoint says nothing about the topology, so these rows are recorded and
     # then excluded from every statistic rather than scored as a wrong answer.
     infra_error: bool = False
+    # CON QUE DECODIFICACION SE PRODUJO ESTA FILA. `config.py` dice desde siempre que la
+    # huella «goes into every cache key and every result row», y en la fila NO ESTABA: el
+    # registro no decia con que modelo se pago, y lo unico que separaba a `gpt-5-chat` de
+    # `gpt-5.4-nano` era en que carpeta habia caido el archivo.
+    #
+    # Eso costo caro y se midio (R-1, 2026-08-28). Un replay sellado reconstruyo los
+    # ajustes desde `Settings.from_env()` —que devuelve el primer modelo, congelado— y
+    # fallo el 100% de las entradas sin que nada dijera por que: la clave de cache es
+    # `sha256(fingerprint, payload)`, asi que un modelo distinto hace miss en todo aunque
+    # el cache este intacto. Con la huella EN la fila, el replay la lee del registro en
+    # vez de adivinarla, y `load_rows` puede negarse a mezclar.
+    fingerprint: str = ""
+    # EL SPLIT, y no es un detalle contable. `Usage` lo lleva desde siempre; la fila
+    # guardaba solo el total, asi que la informacion se tiraba al escribir.
+    #
+    # Entrada y salida NO valen lo mismo —el precio de salida es varias veces el de
+    # entrada— y los paradigmas se diferencian justo en esa proporcion: uno que relee el
+    # contexto en cada vuelta gasta casi todo en entrada, uno que genera planes largos
+    # gasta en salida. Sumarlos y multiplicar por un precio promedio borra la diferencia
+    # que decide cual es mas barato DE VERDAD.
+    #
+    # Medido sobre el cache entero (`_analyze_spend.py`, 2026-08-28): la salida es el
+    # 1,7% de los tokens. Eso valida que barrer lambda sobre el total sea un proxy
+    # razonable ACA — no lo vuelve cierto en general, y sin el split por fila no se
+    # puede saber si algun paradigma se sale de esa proporcion.
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    # VEREDICTO DE `C-COMPLETE`, cuando la tarea declara un dominio enumerable.
+    #
+    # `None` = la tarea no declara dominio, o sea que NO HAY CONTRATO — distinto de un
+    # contrato que se cumplio. Las dos cosas se ven igual en un booleano y son opuestas:
+    # una dice «nadie verifico», la otra «se verifico y paso».
+    #
+    # Se registra aparte de `utility` a proposito. La utilidad es F1 contra el gold y
+    # castiga igual una respuesta incompleta que una equivocada; el contrato separa esas
+    # dos, que es lo que ninguna metrica de anclaje puede hacer.
+    completeness: dict[str, Any] | None = None
+    # EL VECTOR phi, QUE ES LO QUE EL ROUTER TIENE CUANDO DECIDE.
+    #
+    # No estaba en la fila, y esa ausencia explica P-5 entera: el descubrimiento de
+    # particiones solo podia partir sobre lo que la fila guardaba —el oraculo del
+    # extractor y tres variables posteriores— asi que ninguna particion descubierta era
+    # EVALUABLE en el momento de decidir, y por eso nadie las consultaba.
+    #
+    # `region` ya estaba, pero es una funcion de estos valores y ya discretizada: partir
+    # sobre una etiqueta categorica no encuentra el umbral, encuentra la grilla que
+    # alguien eligio antes.
+    #
+    # `None` en un derivado significa NO ESTABLECIDO, nunca cero — es el contrato de
+    # `Features` y se conserva al escribirlo.
+    n_units: int = 0
+    phi_coupling: float | None = None
+    phi_horizon_unknown: bool | None = None
+    phi_continuation: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
 
 
 class Runner:
+    # Una vez por proceso. Un aviso que se repite por cada lectura se vuelve ruido y deja
+    # de leerse, que es la forma en que un aviso deja de ser un aviso.
+    _warned_fingerprint = False
+
     def __init__(
         self,
         settings: Settings,
@@ -143,6 +202,8 @@ class Runner:
         sealed: bool = False,
         retriever_arm: str = "hybrid",
         surface_variant: str = "basic",
+        stop_on_barren: int = 0,
+        offer_read_all: bool = False,
     ) -> None:
         # Hybrid is the default because it is what a real deployment has. The degraded
         # arms exist to test whether the conclusion depends on retrieval quality, not to
@@ -161,6 +222,14 @@ class Runner:
             )
         self.surface_variant = surface_variant
         self.retriever_arm = retriever_arm
+        # FACTOR, no patron: se aplica o no a TODOS los brazos por igual, asi que se mide
+        # cruzado `{con, sin} x {patrones}`. `0` lo apaga, que es el default — encenderlo
+        # cambia lo que los paradigmas pueden hacer, asi que sus filas NO son comparables
+        # con las de una corrida sin el y van a otro archivo.
+        self.stop_on_barren = stop_on_barren
+        # Mismo razonamiento: cambia lo que el paradigma PUEDE hacer, asi que es
+        # factor, apagado por defecto, y sus filas van a otro archivo.
+        self.offer_read_all = offer_read_all
         self._retriever = arms[retriever_arm]
         # Kept so the surface can expose lexical and dense SEPARATELY alongside the
         # fused entry point. Offering only the fused view took the choice of modality
@@ -183,6 +252,13 @@ class Runner:
         suffix = "" if retriever_arm == "hybrid" else f"_{retriever_arm}"
         if surface_variant != "basic":
             suffix += f"_{surface_variant}"
+        # Un factor que cambia lo que el paradigma PUEDE hacer separa archivos, por la
+        # misma razon que los separa el brazo de recuperacion: promediar dos condiciones
+        # en un mismo `.jsonl` mide el promedio de dos experimentos, no uno.
+        if stop_on_barren:
+            suffix += f"_stop{stop_on_barren}"
+        if offer_read_all:
+            suffix += "_readall"
         self._results_path = (
             settings.results_dir / f"{corpus_name}{suffix}_rows.jsonl"
         )
@@ -249,6 +325,8 @@ class Runner:
             lexical=self._arms["lexical"],
             variant=self.surface_variant,
             budget_tokens=int(task["budget_tokens"]),
+            stop_on_barren=self.stop_on_barren,
+            offer_read_all=self.offer_read_all,
         )
 
     def features_for(self, task: dict[str, Any], allow_derived: bool) -> Features:
@@ -315,10 +393,20 @@ class Runner:
         if repeat < 1:
             raise ValueError("repeat must be >= 1")
         if paradigms:
-            retired = sorted(set(paradigms) & RETIRED)
-            if retired:
+            blocked = sorted(set(paradigms) & RETIRED)
+            if blocked:
+                # La razon Y la condicion de revival viajan con el rechazo. Un error que
+                # solo dice "no se corre" obliga a ir a buscar por que a un documento —
+                # que es exactamente como una decision empieza a vivir en dos lados.
+                lines = []
+                for name in blocked:
+                    entry = CATALOG[name]
+                    line = f"  {name} [{entry.status.value}]: {entry.reason}"
+                    if entry.revives_when:
+                        line += f"\n    revive si: {entry.revives_when}"
+                    lines.append(line)
                 raise ValueError(
-                    f"Paradigmas retirados, no se corren mas: {retired}. "
+                    f"Estos paradigmas no se corren:\n{chr(10).join(lines)}\n"
                     "Su dato historico se replaya desde las filas ya pagadas."
                 )
         selected = paradigms or sorted(set(REGISTRY) - RETIRED)
@@ -391,6 +479,10 @@ class Runner:
                         completed += 1
                         seen = completed
                     with sink_lock:
+                        # Un solo punto de escritura, asi que un solo lugar donde
+                        # estampar la huella: ninguna fila puede salir sin decir bajo que
+                        # decodificacion se produjo.
+                        row.fingerprint = self._settings.fingerprint()
                         sink.write(json.dumps(row.as_dict(), ensure_ascii=False) + "\n")
                         sink.flush()
                     status = row.error or f"u={row.utility:.3f}"
@@ -448,6 +540,10 @@ class Runner:
             has_oracle=bool(task.get("has_oracle", True)),
             answer="",
             truth_coupling=task.get("truth_coupling", 0.0),
+            n_units=features.n_units,
+            phi_coupling=features.coupling,
+            phi_horizon_unknown=features.horizon_unknown,
+            phi_continuation=getattr(features, "continuation", None),
         )
 
     def _run_one(
@@ -463,6 +559,14 @@ class Runner:
         try:
             result = REGISTRY[paradigm](client, surface, task)
             utility = grading.score(result.answer, task["oracle"])
+            # El contrato corre sobre la respuesta, no sobre el gold: lo que verifica es
+            # que la respuesta ATIENDA a cada elemento del dominio declarado, que es
+            # comprobable en produccion sin oraculo. Que lo que diga de cada uno sea
+            # correcto es otro contrato (`C-CITE`) y necesita el indice.
+            domain = task.get("domain_keys") or []
+            contract = (
+                complete_answer(result.answer, domain).as_dict() if domain else None
+            )
             return Row(
                 task_id=task["task_id"],
                 cell=task["cell"],
@@ -471,6 +575,9 @@ class Runner:
                 region=features.region(),
                 utility=utility,
                 cost_tokens=result.usage.total_tokens,
+                prompt_tokens=result.usage.prompt_tokens,
+                completion_tokens=result.usage.completion_tokens,
+                completeness=contract,
                 calls=result.usage.calls,
                 wall_seconds=round(time.perf_counter() - started, 3),
                 iterations=result.iterations,
@@ -485,6 +592,10 @@ class Runner:
                 has_oracle=bool(task.get("has_oracle", True)),
                 answer=result.answer[:500],
                 truth_coupling=task.get("truth_coupling", 0.0),
+                n_units=features.n_units,
+                phi_coupling=features.coupling,
+                phi_horizon_unknown=features.horizon_unknown,
+                phi_continuation=getattr(features, "continuation", None),
             )
         except Infeasible as reason:
             # Recorded as a distinct outcome. It scores no utility — nothing was
@@ -509,6 +620,10 @@ class Runner:
                 has_oracle=bool(task.get("has_oracle", True)),
                 answer="",
                 truth_coupling=task.get("truth_coupling", 0.0),
+                n_units=features.n_units,
+                phi_coupling=features.coupling,
+                phi_horizon_unknown=features.horizon_unknown,
+                phi_continuation=getattr(features, "continuation", None),
             )
         except SealedCacheMiss:
             # Never swallowed: a sealed replay that silently went live would not be a
@@ -533,6 +648,8 @@ class Runner:
                 region=features.region(),
                 utility=0.0,
                 cost_tokens=spent.total_tokens,
+                prompt_tokens=spent.prompt_tokens,
+                completion_tokens=spent.completion_tokens,
                 calls=spent.calls,
                 wall_seconds=round(time.perf_counter() - started, 3),
                 iterations=0,
@@ -544,6 +661,10 @@ class Runner:
                 has_oracle=bool(task.get("has_oracle", True)),
                 answer="",
                 truth_coupling=task.get("truth_coupling", 0.0),
+                n_units=features.n_units,
+                phi_coupling=features.coupling,
+                phi_horizon_unknown=features.horizon_unknown,
+                phi_continuation=getattr(features, "continuation", None),
                 error=f"{type(exc).__name__}: {exc}"[:300],
                 infra_error=infra,
             )
@@ -566,6 +687,37 @@ class Runner:
             for line in self._results_path.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
+        # DOS COSAS DISTINTAS, y confundirlas fue el primer intento de esta guarda.
+        #
+        # (1) EL ARCHIVO NO PUEDE MEZCLAR. "Nunca mezclar modelos en un mismo archivo de
+        #     resume" era una regla escrita sostenida por convencion de directorio.
+        #     Promediar entre modelos no mide un paradigma: mide el modelo. Eso es un
+        #     error y levanta.
+        #
+        # (2) QUE EL LECTOR COINCIDA es otra pregunta, y para ANALIZAR no hace falta: un
+        #     script que solo promedia filas no llama al modelo, asi que sus ajustes son
+        #     irrelevantes. Levantar ahi obligaria a todo analizador a reconstruir un
+        #     endpoint que no va a usar.
+        #
+        #     Pero AVISA, porque es exactamente la confusion que dejo a R-1 sin concluir:
+        #     un replay sellado reconstruyo `Settings.from_env()` —el primer modelo, que
+        #     quedo congelado— y fallo el 100% de las entradas sin que nada dijera por que.
+        #     Un replay con los ajustes equivocados no puede acertar una sola clave.
+        seen = sorted({r["fingerprint"] for r in rows if r.get("fingerprint")})
+        if len(seen) > 1:
+            raise ValueError(
+                f"{self._results_path.name} mezcla decodificaciones: {seen}. Promediar "
+                f"entre modelos no mide un paradigma: mide el modelo. Separa los archivos."
+            )
+        mine = self._settings.fingerprint()
+        if seen and seen[0] != mine and not Runner._warned_fingerprint:
+            Runner._warned_fingerprint = True
+            print(
+                f"  [aviso] {self._results_path.name} se produjo bajo {seen[0]!r} y esta "
+                f"sesion es {mine!r}. Para ANALIZAR no importa; para un REPLAY SELLADO "
+                f"falla el 100% de las claves, que es como R-1 quedo sin concluir."
+            )
+
         if include_infra:
             return rows
         return [r for r in rows if not r.get("infra_error")]
@@ -599,6 +751,12 @@ class Runner:
                 paradigm=paradigm,
                 utility=sum(x["utility"] for x in rows) / len(rows),
                 cost_tokens=int(sum(x["cost_tokens"] for x in rows) / len(rows)),
+                prompt_tokens=int(
+                    sum(x.get("prompt_tokens", 0) for x in rows) / len(rows)
+                ),
+                completion_tokens=int(
+                    sum(x.get("completion_tokens", 0) for x in rows) / len(rows)
+                ),
                 has_oracle=rows[0]["has_oracle"],
                 # Max across replicates, not mean: the question is whether the paradigm
                 # was ever in a position to answer, and one trial that reached the
@@ -691,7 +849,11 @@ class Runner:
         fitted_dir = self.store.policy_dir / "fitted"
         fitted_dir.mkdir(parents=True, exist_ok=True)
         learned.save(fitted_dir)
-        router = Router(learned, COST_PRIORS, FALLBACK)
+        # La calibracion se recomputa desde el log y se persiste; el router la
+        # consultaba a traves de un objeto que nadie le pasaba. Ahora la lee de la
+        # unica fuente que la guarda.
+        router = Router(learned, COST_PRIORS, FALLBACK,
+                        trusts_elicited=self.store.trusts_elicited())
         profile = PROFILES[assurance]
 
         rows_by_task: dict[str, dict[str, Any]] = {}

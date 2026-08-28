@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { estimateTokens } from "./lib/tokens";
-import { demoEvents, liveEvents, type AnswerRequest } from "./lib/transport";
+import {
+  buildPlan,
+  demoEvents,
+  demoExecute,
+  liveEvents,
+  type AnswerRequest,
+} from "./lib/transport";
 import type {
   Assurance,
   ContextEntry,
@@ -68,6 +74,24 @@ interface State {
 
   ask: (question: string) => Promise<void>;
   cancel: () => void;
+
+  /** Qué intercambio tiene el EXPLAIN abierto. */
+  explainFor: string | null;
+  openExplain: (exchangeId: string) => void;
+  closeExplain: () => void;
+
+  /** Rederiva el plan desde las entradas fijadas y compara digests. Sin red. */
+  replay: (exchangeId: string) => ReplayResult;
+
+  /** Una persona autoriza un gate. El gate NO se borra del registro. */
+  approveGate: (exchangeId: string) => Promise<void>;
+}
+
+export interface ReplayResult {
+  ok: boolean;
+  original: string;
+  rebuilt: string;
+  differs: string[];
 }
 
 let inflight: AbortController | null = null;
@@ -189,6 +213,8 @@ export const useMapo = create<State>((set, get) => ({
       )
         .filter(([, on]) => on)
         .map(([label]) => label),
+      contextTokens,
+      approvedAt: null,
       plan: null,
       probe: null,
       answer: "",
@@ -271,6 +297,106 @@ export const useMapo = create<State>((set, get) => ({
   cancel: () => {
     inflight?.abort();
     set({ running: false });
+  },
+
+  explainFor: null,
+  openExplain: (exchangeId) => set({ explainFor: exchangeId }),
+  closeExplain: () => set({ explainFor: null }),
+
+  /* ── replay sin red ────────────────────────────────────────────────────
+     La garantía tiene una sola forma: misma base de creencias ⟹ misma
+     decisión. Nunca "mismo prompt ⟹ misma respuesta" — el texto puede variar
+     y no integra la garantía. Así que esto rederiva el PLAN y compara, sin
+     tocar el modelo ni la red.                                            */
+  replay: (exchangeId) => {
+    const x = get().exchanges.find((e) => e.id === exchangeId);
+    if (!x?.plan) return { ok: false, original: "—", rebuilt: "—", differs: ["sin plan"] };
+
+    const rebuilt = buildPlan({
+      question: x.question,
+      units: x.unitIds,
+      contextTokens: x.contextTokens,
+      assurance: x.assurance,
+      budget: x.budget,
+      irreversible: x.declared.includes("irreversible"),
+      sharedWrites: x.declared.includes("escrituras compartidas"),
+      regulated: x.declared.includes("regulado"),
+    });
+
+    const differs: string[] = [];
+    if (rebuilt.region !== x.plan.region) differs.push("región");
+    if (rebuilt.pick !== x.plan.pick) differs.push("paradigma");
+    if (rebuilt.verdict !== x.plan.verdict) differs.push("veredicto");
+    if (rebuilt.terminal !== x.plan.terminal) differs.push("terminal");
+    if (rebuilt.digest !== x.plan.digest) differs.push("digest");
+
+    return {
+      ok: differs.length === 0,
+      original: x.plan.digest,
+      rebuilt: rebuilt.digest,
+      differs,
+    };
+  },
+
+  /* ── autorización de un gate ───────────────────────────────────────────
+     Aprobar no reabre la decisión: el plan ya está tomado y firmado. Lo
+     único que pasa es que ahora corre. Y el terminal sigue siendo `gated`,
+     porque el registro tiene que mostrar los dos hechos: hubo gate, y
+     alguien lo autorizó.                                                  */
+  approveGate: async (exchangeId) => {
+    const s = get();
+    const x = s.exchanges.find((e) => e.id === exchangeId);
+    if (!x?.plan || x.plan.terminal !== "gated" || x.approvedAt) return;
+
+    const patch = (fn: (e: Exchange) => Exchange) =>
+      set((st) => ({
+        exchanges: st.exchanges.map((e) => (e.id === exchangeId ? fn(e) : e)),
+      }));
+
+    patch((e) => ({
+      ...e,
+      approvedAt: new Date().toISOString(),
+      streaming: true,
+      answer: "",
+    }));
+    set({ running: true });
+
+    inflight = new AbortController();
+    const { signal } = inflight;
+
+    try {
+      const req: AnswerRequest = {
+        question: x.question,
+        units: x.unitIds,
+        contextTokens: x.contextTokens,
+        assurance: x.assurance,
+        budget: x.budget,
+        irreversible: false,
+        sharedWrites: false,
+        regulated: false,
+      };
+      for await (const ev of demoExecute(x.plan, req, signal)) {
+        if (signal.aborted) break;
+        if (ev.type === "token") patch((e) => ({ ...e, answer: e.answer + ev.text }));
+        else if (ev.type === "citation")
+          patch((e) => ({
+            ...e,
+            citations: [
+              ...e.citations,
+              { unit: ev.unit, page: ev.page, chunk: ev.chunk, offset: e.answer.length },
+            ],
+          }));
+        else if (ev.type === "usage")
+          patch((e) => ({
+            ...e,
+            usage: { tokens: ev.tokens, probes: ev.probes, ms: ev.ms },
+          }));
+      }
+    } finally {
+      patch((e) => ({ ...e, streaming: false }));
+      set({ running: false });
+      inflight = null;
+    }
   },
 }));
 

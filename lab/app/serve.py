@@ -37,6 +37,7 @@ from .config import Settings
 from .features import FeatureExtractor, measure_continuation, payload_for
 from .llm import LLMClient, Usage
 from .paradigms import COST_PRIORS, FALLBACK, REGISTRY
+from .policy import no_online_learning
 from .policy import PolicyBundle
 from .beliefs import Provenance
 from .decide import decide as decide_once
@@ -70,6 +71,13 @@ class Request:
     # An exact-match oracle, when the caller has one. Its presence is what makes the
     # cascade admissible: escalating on observed failure needs a cheap failure detector.
     oracle: list[str] = field(default_factory=list)
+    # EL DOMINIO SOBRE EL QUE LA RESPUESTA TIENE QUE SER COMPLETA, si el caller lo tiene.
+    # Se declara, como `irreversible`: deducirlo del enunciado seria construir el sensor
+    # sobre prosa libre, que es exactamente lo que la capa de creencias no acepta.
+    #
+    # Vacio = sin contrato de completitud, no «completitud trivialmente satisfecha». Las
+    # dos cosas se ven igual en la salida y son opuestas, asi que el veredicto lo dice.
+    completeness_domain: list[str] = field(default_factory=list)
     request_id: str = ""
 
     def identity(self) -> str:
@@ -92,6 +100,7 @@ class Request:
             "irreversible": self.irreversible,
             "shared_writes": self.shared_writes,
             "regulated": self.regulated,
+            "domain_keys": list(self.completeness_domain),
         }
 
 
@@ -162,10 +171,30 @@ def answer(
     probe: bool = True,
 ) -> Answer:
     """Decide, then execute what was decided — and record both."""
+    # EL DIAL DECLARABA UNA GARANTIA QUE NADIE IMPONIA. `theta_may_learn_online` vivia en
+    # el perfil y no lo leia ningun camino: la invariante «nada aprende adentro de un
+    # request» se cumplia porque `Plasticity.apply` solo se llama offline — o sea, por
+    # casualidad. Una invariante que se cumple por casualidad la rompe el proximo cambio
+    # sin que nada avise.
+    #
+    # Se impone acá, alrededor del request ENTERO, y no adentro de cada paradigma: el
+    # punto es que NADA en este tramo pueda acumular, venga de donde venga.
+    with no_online_learning():
+        return _answer(request, settings, bundle, requested, probe)
+
+
+def _answer(
+    request: Request,
+    settings: Settings,
+    bundle: PolicyBundle,
+    requested: Assurance,
+    probe: bool,
+) -> Answer:
     task = request.as_task()
     client = LLMClient(settings)
     surface = _surface(request, settings)
-    router = Router(bundle, COST_PRIORS, FALLBACK)
+    router = Router(bundle, COST_PRIORS, FALLBACK,
+                    trusts_elicited=_trusts_elicited(settings))
 
     # Computable features only. The derived ones cost a call and the probe below is the
     # honest way to pay for evidence: an estimate that nothing checks would enter the

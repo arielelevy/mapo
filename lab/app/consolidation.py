@@ -175,6 +175,14 @@ def discover_partitions(
     """
     candidates: list[CandidateSplit] = []
 
+    forbidden = sorted(set(attributes) & set(FORBIDDEN_ATTRIBUTES))
+    if forbidden:
+        raise ValueError(
+            f"Ejes prohibidos: {forbidden}. `truth_coupling` es el oraculo del extractor "
+            f"de features y `utility` es el resultado — partir sobre la respuesta no "
+            f"descubre una regla, describe el gold."
+        )
+
     for attribute in attributes:
         # Se filtra UNA vez y los dos usos parten de la misma lista. Antes `values`
         # descartaba los `None` y los splits de abajo no, asi que una fila legacy sin el
@@ -374,12 +382,45 @@ class DreamReport:
         }
 
 
-SPLIT_ATTRIBUTES = (
-    "truth_coupling",
-    "cross_unit_lookups",
+# EJES DE PARTICION, TIPADOS POR CUANDO SE CONOCEN. P-5 y P-6 eran el mismo defecto
+# visto desde dos lados: «las particiones descubiertas no gobiernan el router» y
+# «algunas usan variables posteriores a la ejecucion». Lo segundo EXPLICA lo primero.
+#
+# Una regla solo puede gobernar al router si se puede EVALUAR en el momento de decidir.
+# Los cuatro ejes originales fallaban eso, por dos razones distintas que conviene no
+# mezclar:
+#
+#   `truth_coupling`                     es el ORACULO del extractor de features. El
+#                                        propio corpus lo declara «NEVER fed to the
+#                                        router: it is the answer key». Partir sobre el
+#                                        es partir sobre la respuesta.
+#   `iterations`, `cost_tokens`,         son POSTERIORES: solo existen despues de correr.
+#   `cross_unit_lookups`                 Una regla «si iteraciones > 3 usar X» no se puede
+#                                        evaluar antes de decidir cuantas iteraciones
+#                                        habra.
+#
+# Los posteriores NO se tiran: sirven para DIAGNOSTICAR —«los casos caros comparten
+# esto»— y eso es util. Lo que no pueden hacer es convertirse en regla, y ahora el tipo
+# lo dice en vez de que se descubra al intentar cablearlas.
+DECISION_TIME_ATTRIBUTES = (
+    # Del vector phi, que es lo que el router tiene cuando decide.
+    "n_units",
+    "budget_tokens",
+    "phi_coupling",
+    "phi_continuation",
+)
+
+POSTERIOR_ATTRIBUTES = (
     "iterations",
     "cost_tokens",
+    "cross_unit_lookups",
 )
+
+# El oraculo del extractor. Ni regla ni diagnostico: partir sobre la respuesta no explica
+# nada, describe el gold.
+FORBIDDEN_ATTRIBUTES = ("truth_coupling", "utility")
+
+SPLIT_ATTRIBUTES = DECISION_TIME_ATTRIBUTES
 
 
 def _task_of(record: dict[str, Any]) -> str:

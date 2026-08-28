@@ -759,8 +759,8 @@ respondió mal.
 > (README del harness). Sets de tareas emparejados sobre `gold_v2` (en ventana, ~18k
 > tokens) y `gold_deep` (fuera de ventana, ~483k), `repeat = 3`, estabilidad por celda.
 > 126 + 158 filas válidas. Dos celdas pesadas fuera de ventana (`react`/`reflection`/
-> `dag` en c2-w48 y c5-w48) perdieron réplicas y se están re-corriendo; sus medias se
-> apoyan en menos trials que el resto y van marcadas †.
+> `dag` en c2-w48 y c5-w48) tienen menos trials que el resto; sus medias van marcadas † y
+> hay que leerlas con esa `n` más chica.
 
 Primero el barrido de factibilidad, porque no cuesta nada: a 135k tokens la aritmética
 poda leer-todo en 12 de 32 tareas; a 483k en **24 de 26**; a 1,27M en 24 de 32 — y a esa
@@ -933,7 +933,7 @@ leer-todo es correcto y lo más barato ahí. El régimen fuera-de-ventana ya est
 483k con `repeat = 3` (§7.4–7.5), y el claim de régimen a través de 135k/483k/1,27M
 descansa en el barrido de factibilidad a costo cero. Sigue abierto: no hay corrida
 completa a 1,27M (sólo su aritmética de factibilidad), dos celdas pesadas fuera de
-ventana re-corriéndose tras exclusiones por rate limit (marcadas † en §7.4), y un mundo
+ventana todavía sin réplica completa (marcadas † en §7.4), y un mundo
 held-out con seed nueva, generado y verificado independientemente, cuyo test de
 transferencia está registrado como P8 y no corrió todavía — **hasta que corra, los
 veredictos por celda son afirmaciones sobre mundos seed-7.**

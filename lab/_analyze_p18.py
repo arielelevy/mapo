@@ -71,8 +71,18 @@ def main() -> None:
     runner = Runner(settings, "gold_p18", retriever_arm="hybrid", surface_variant="basic")
     docs = json.load(open("corpus/gold_p18/documents.json", encoding="utf-8"))
     tasks = {t["task_id"]: t for t in runner._tasks}  # noqa: SLF001
+    # CORRECCION DE INSTRUMENTO (2026-08-28), no de valuacion. La primera version no
+    # excluia las filas INFACTIBLES, y map_reduce es infactible en 12 de las 90: la
+    # aritmetica lo poda a costo cero y la fila queda con utilidad 0 y respuesta vacia.
+    # Contarlas como errores hacia que 12 de 15 "errores" fueran podas, y P18b quedaba
+    # refutada por una razon que no es la que la prediccion enuncia.
+    #
+    # Un plan infactible NUNCA SE INTENTA — es una garantia del producto, no un fallo.
+    # Confundirlo con una respuesta incorrecta invierte el signo de la unica garantia
+    # que la capa de factibilidad da.
     rows = [r for r in runner.load_rows()
-            if r["task_id"].startswith("c8") and not r.get("infra_error")]
+            if r["task_id"].startswith("c8")
+            and not r.get("infra_error") and not r.get("infeasible")]
 
     if not rows:
         print("Sin filas de C8 todavia.")
@@ -87,19 +97,32 @@ def main() -> None:
     print()
 
     # --- P18a: ¿leer todo resuelve la supersesion? -------------------------------------
-    print("--- P18a: ¿el que lee TODO resuelve la supersesion? ---")
-    buckets = {"lee todo (>=0,95)": [], "lee parcial": []}
+    print("--- P18a: ¿el que lee MAS resuelve la supersesion? ---")
+    # CRITERIO CORREGIDO, y la correccion es un reconocimiento de que la prediccion
+    # estaba mal enunciada. `fraction_read` no pasa de 0,20 en NINGUNA fila: sobre una
+    # tarea de anchos 4/16/48 con una sola unidad relevante, leerlo todo no hace falta y
+    # nadie lo hace. Un umbral de 0,95 dejaba el grupo vacio por construccion, asi que
+    # P18a no podia decidirse — no por falta de senal, por un criterio irrealizable.
+    #
+    # Se parte por la MEDIANA observada, que es la pregunta que la prediccion queria
+    # hacer: entre los que leen mas y los que leen menos, ¿hay diferencia?
+    fracs = sorted(
+        f for f in ((r.get("tool_usage") or {}).get("fraction_read") for r in rows)
+        if f is not None
+    )
+    cut = fracs[len(fracs) // 2] if fracs else 0.0
+    buckets = {f"lee mas (>{cut:.2f})": [], f"lee menos (<={cut:.2f})": []}
     for r in rows:
         frac = (r.get("tool_usage") or {}).get("fraction_read")
         if frac is None:
             continue
-        key = "lee todo (>=0,95)" if frac >= 0.95 else "lee parcial"
+        key = f"lee mas (>{cut:.2f})" if frac > cut else f"lee menos (<={cut:.2f})"
         buckets[key].append(r["utility"])
     for key, vals in buckets.items():
         if vals:
             print(f"  {key:<20} n={len(vals):>3}  utilidad media {sum(vals)/len(vals):.3f}")
-    full = buckets["lee todo (>=0,95)"]
-    part = buckets["lee parcial"]
+    keys = list(buckets)
+    full, part = buckets[keys[0]], buckets[keys[1]]
     if full and part:
         gap = sum(full) / len(full) - sum(part) / len(part)
         verdict_a = "CONFIRMADA" if gap > 0.25 else "REFUTADA"

@@ -191,10 +191,14 @@ def _select_unit(surface: Any, task: dict[str, Any], scope: list[str]) -> str:
     lexical = getattr(surface, "lexical", None)
     view = getattr(surface, "view", None)
     if lexical is not None and view is not None:
-        try:
-            ranked = lexical.rank(view, task.get("question", ""), 1)
-        except Exception:  # noqa: BLE001 — a ranking failure must not kill the probe
-            ranked = []
+        # SIN RED. Un fallo de ranking hacia caer a `scope[0]` en silencio: la sonda leia
+        # OTRA unidad, la creencia salia con la procedencia de una lectura correcta, y
+        # nada en el registro decia que el ranking se habia caido. La medida de la sonda
+        # es exactamente "que unidad leyo", asi que ese fallback falsificaba lo medido.
+        #
+        # Que no haya ranking util —lista vacia, o un id fuera de alcance— NO es un error:
+        # es un resultado, y ahi si corresponde el primero en alcance.
+        ranked = lexical.rank(view, task.get("question", ""), 1)
         if ranked and ranked[0] in set(scope):
             return ranked[0]
     return scope[0]

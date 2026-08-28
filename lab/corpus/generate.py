@@ -174,6 +174,17 @@ class Task:
     truth_n_units: int = 0
     truth_coupling: float = 0.0
     truth_horizon_unknown: bool = False
+    # Demandas TIPADAS de la pregunta, declaradas por celda (ver REQUEST_DEMANDS). No se
+    # infieren de la prosa del enunciado. Son dos porque C5 y C8 son singulares y aun asi
+    # exigen cobertura total: la cardinalidad de la respuesta no implica la cobertura.
+    answer_cardinality: str = ""
+    coverage_demanded: str = ""
+    # De donde sale el dominio contra el que se verificaria la completitud. Decide si
+    # `C-COMPLETE` es APLICABLE, que no es lo mismo que si la cobertura se exige.
+    completeness_domain: str = ""
+    # Las claves del dominio, cuando la pregunta lo enumera. Vacio en toda otra celda —
+    # NO se infiere del enunciado: se registra al construir la tarea, que es donde se sabe.
+    domain_keys: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -389,6 +400,63 @@ class Generator:
             budget_tokens=8_000,
             truth_n_units=1,
             truth_coupling=0.0,
+        )
+
+    def task_c9_roster(self, idx: int, width: int) -> Task:
+        """Dominio ENUNCIADO: las personas que la pregunta nombra.
+
+        POR QUE EXISTE (leccion 8.7). Es la unica celda donde `C-COMPLETE` es aplicable
+        sin reemplazar al paradigma. En C2 enumerar el dominio es la extraccion misma; en
+        C4/C5/C8 el dominio barato son las unidades, y la fraccion leida no predice
+        correccion. Aca el dominio son cinco nombres dados: `COMPUTED`, enumerable, y una
+        respuesta a la que le falta uno esta incompleta de una forma que el codigo VE.
+
+        Y la falla es la cara: contestar cuatro de cinco produce una respuesta que parece
+        bien formada, cada item citado es real, y ninguna metrica de anclaje la toca.
+        """
+        # DOS RESTRICCIONES, y las dos cambian lo que la celda mide.
+        #
+        # (a) El roster sale de `people[:width]`, no del padron entero: si nombrara a
+        #     alguien cuyo memo no esta en alcance, la respuesta correcta seria "no esta"
+        #     y la celda pasaria a medir ausencia — que es otro eje (O-2), no completitud.
+        # (b) Se toman con PASO, no consecutivos. Indices seguidos son memos adyacentes, y
+        #     un bloque contiguo vuelve barata la recuperacion por vecindad en vez de por
+        #     nombre: la celda mediria localidad del indice y no cobertura del dominio.
+        pool = self.people[:width]
+        size = min(5, len(pool))
+        stride = 7 if len(pool) > 7 else 1
+        chosen: list[Person] = []
+        k = 0
+        while len(chosen) < size and k < len(pool) * 2:
+            person = pool[(idx + k * stride) % len(pool)]
+            if person.name not in {c.name for c in chosen}:
+                chosen.append(person)
+            k += 1
+        roster = chosen
+        names = [p.name for p in roster]
+        units = self._with_distractors(self._memo_ids()[:width])
+        relevant = [
+            f"memo-{i:03d}" for i, p in enumerate(self.people[:width])
+            if p.name in set(names)
+        ]
+        return Task(
+            task_id=f"c9-{idx:03d}-w{width}",
+            cell="C9_declared_roster",
+            question=(
+                "For each of the following individuals, report the settlement account "
+                "on file: " + ", ".join(names) + ". "
+                "Return one account per individual, in any order."
+            ),
+            # `sorted(set(...))` y no una lista: el corrector es F1 de conjuntos. Si dos
+            # del roster compartieran cuenta el dominio y el oraculo tendrian tamanos
+            # distintos, y el verificador lo rechaza en vez de dejarlo pasar.
+            oracle=sorted({p.account for p in roster}),
+            unit_ids=units,
+            relevant_units=relevant,
+            budget_tokens=40_000,
+            truth_n_units=len(units),
+            truth_coupling=0.0,
+            domain_keys=names,
         )
 
     def task_c2_bulk_extraction(self, idx: int, width: int) -> Task:
@@ -666,6 +734,9 @@ class Generator:
                 tasks.append(self.task_c5_contradiction(i, width))
                 # Despues de C5, que es quien planta la enmienda que esta reusa.
                 tasks.append(self.task_c8_currency(i, width))
+                # La unica celda cuyo dominio de completitud viene ENUNCIADO. Reusa los
+                # memos que ya existen: cero documentos nuevos.
+                tasks.append(self.task_c9_roster(i, width))
         return tasks
 
 
@@ -691,7 +762,93 @@ HONEST_DETECTORS = {
     "C4": False,
     "C5": False,
     "C8": False,
+    # C9 NO tiene detector de correccion: saber que cuenta le toca a cada nombre sigue
+    # costando la busqueda. Lo que tiene es un detector de COMPLETITUD, y son cosas
+    # distintas — por eso el eje es `completeness_domain` y no un `has_oracle` mas
+    # generoso. Colapsarlos volveria a hacer lo que `has_oracle` ya hizo una vez.
+    "C9": False,
 }
+
+
+# -- demandas tipadas del request (U-1 / O-4) ------------------------------------------
+#
+# QUE SE TIPA, Y POR QUE SON DOS EJES Y NO UNO. El eje propuesto era la CARDINALIDAD DE
+# LA RESPUESTA: «cual fue el arma homicida» espera exactamente una y no pide exhaustividad;
+# «listame los nombres» espera varias y la pide implicita, sin decirla nunca.
+#
+# Pero el corpus ya contiene los contraejemplos de que ese eje solo no alcanza. C5 pide UN
+# individuo —cardinalidad singular— y sin embargo no se puede contestar sin haber barrido
+# todo, porque la contradiccion puede estar en cualquier unidad. C8 pide UNA ciudad y
+# tampoco: hay que ver el memo base Y la enmienda, o no se sabe cual vale. En las dos, la
+# cardinalidad de la respuesta dice «singular» y la lectura correcta es exhaustiva.
+#
+# Entonces el tipo es un PAR:
+#
+#   cardinality  cuantos valores tiene la respuesta bien formada
+#   coverage     que hace falta haber visto para que sea correcta
+#
+# `sufficient` significa que parar en el primer acierto ES CORRECTO — no es un atajo que
+# el paradigma se toma, es lo que la pregunta permite. `exhaustive` significa que parar
+# temprano produce una respuesta que PARECE bien formada y esta mal, que es el modo de
+# falla caro.
+#
+# Ninguna de las dos se infiere del texto de la pregunta: se DECLARAN por celda, con
+# vocabulario cerrado y falla si la celda no esta en la tabla. Parsear la prosa del
+# enunciado para adivinarlas seria construir el sensor sobre exactamente lo que este
+# proyecto no acepta como sensor.
+
+# DE DONDE SALE EL DOMINIO CONTRA EL QUE SE VERIFICA LA COMPLETITUD. Es un tercer eje y
+# no un detalle de `coverage_demanded`, porque decide si `C-COMPLETE` es APLICABLE:
+#
+#   from_question  el dominio esta enunciado en la pregunta (una lista de nombres dados).
+#                  Es `COMPUTED`, enumerable, y verificarlo NO cuesta resolver la tarea.
+#   from_scope     el dominio son las unidades en alcance. Tambien gratis de enumerar,
+#                  pero 8.6 midio que la fraccion leida NO predice correccion en celdas
+#                  exhaustivas (+0,018): verifica lo que no importa.
+#   semantic       el dominio se descubre resolviendo. Enumerarlo ES la extraccion, asi
+#                  que el contrato no verificaria al paradigma: lo reemplazaria.
+#   none           la pregunta no enumera nada.
+#
+# EL HALLAZGO QUE LO HIZO NECESARIO (leccion 8.7). Antes de C9, ninguna celda era
+# `from_question`, y las tablas del corpus dejaban a `cobertura exigida` y `detector barato`
+# PERFECTAMENTE anti-correlacionadas — la interseccion era vacia. Asi que el contrato que la
+# medicion justifico no tenia donde ejercitarse.
+COMPLETENESS_DOMAIN = frozenset({"none", "from_question", "from_scope", "semantic"})
+
+CARDINALITY = frozenset({"singular", "enumerative", "aggregate", "boolean"})
+COVERAGE = frozenset({"sufficient", "exhaustive"})
+
+REQUEST_DEMANDS: dict[str, tuple[str, str, str]] = {
+    # celda    cardinalidad     cobertura       dominio de completitud
+    "C1": ("singular", "sufficient", "none"),
+    "C2": ("enumerative", "exhaustive", "semantic"),
+    "C3": ("singular", "sufficient", "none"),
+    "C4": ("aggregate", "exhaustive", "from_scope"),
+    "C5": ("singular", "exhaustive", "from_scope"),
+    "C7": ("boolean", "sufficient", "none"),
+    "C8": ("singular", "exhaustive", "from_scope"),
+    # La UNICA celda `from_question`: el dominio son las personas que el enunciado nombra.
+    "C9": ("enumerative", "exhaustive", "from_question"),
+}
+
+
+def apply_request_demands(tasks: list[Task]) -> list[Task]:
+    """Declarar el par (cardinalidad, cobertura) por celda. Falla si falta la celda."""
+    for task in tasks:
+        prefix = task.cell.split("_")[0]
+        if prefix not in REQUEST_DEMANDS:
+            raise ValueError(
+                f"La celda {task.cell!r} no declara demandas de request. Una celda sin "
+                f"declarar tomaria un default, y el default silencioso es lo que hizo "
+                f"inmedible al detector — asi que falla."
+            )
+        card, cov, dom = REQUEST_DEMANDS[prefix]
+        assert card in CARDINALITY and cov in COVERAGE, (card, cov)
+        assert dom in COMPLETENESS_DOMAIN, dom
+        task.answer_cardinality = card
+        task.coverage_demanded = cov
+        task.completeness_domain = dom
+    return tasks
 
 
 def apply_honest_detectors(tasks: list[Task]) -> list[Task]:
@@ -746,6 +903,10 @@ def main() -> None:
     tasks = generator.build_tasks(per_cell=args.per_cell, widths=widths)
     if args.honest_detectors:
         tasks = apply_honest_detectors(tasks)
+    # SIEMPRE, sin flag: las demandas son verdad sobre la celda y NO cambian lo que la
+    # capa de decision recibe — se registran como se registra `truth_n_units`, para que
+    # el estudio pueda preguntar si el eje importa ANTES de pagar por elicitarlo.
+    tasks = apply_request_demands(tasks)
 
     max_width = max(widths)
     if max_width > args.people:

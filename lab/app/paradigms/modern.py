@@ -64,12 +64,12 @@ def rewoo(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Resu
 
     # A malformed plan is a real failure of this paradigm on this task: degrada a cero
     # pasos, no explota.
-    declared = extract_json(plan.text, "steps")
+    declared = extract_json(plan.text, "steps", sink=surface)
     steps = declared[:MAX_PLAN_STEPS] if isinstance(declared, list) else []
 
     # La forma, no sólo el parseo: `steps` podia ser una lista de strings y `step.get`
     # levantaba AttributeError fuera de todo try.
-    steps = well_formed(steps, "tool")
+    steps = well_formed(steps, "tool", sink=surface)
 
     evidence: dict[str, str] = {}
     for i, step in enumerate(steps, start=1):
@@ -125,7 +125,7 @@ def gist_reader(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -
     usage.merge(triage.usage)
 
     # `json.loads` puede devolver una lista y entonces `.get` explota fuera del try.
-    decision = extract_json(triage.text, default={})
+    decision = extract_json(triage.text, default={}, sink=surface)
     if not isinstance(decision, dict):
         decision = {}
 
@@ -234,7 +234,7 @@ def _entity_graph(
             max_tokens=GRAPH_INDEX_MAX_TOKENS,
         )
         usage.merge(completion.usage)
-        payload = extract_json(completion.text)
+        payload = extract_json(completion.text, sink=surface)
         if not isinstance(payload, dict):
             continue
         ents = [
@@ -285,7 +285,7 @@ def graph_traverse(
         messages=[{"role": "user", "content": q_prompt}], max_tokens=300
     )
     usage.merge(q.usage)
-    entities = extract_json(q.text, "entities")
+    entities = extract_json(q.text, "entities", sink=surface)
     if isinstance(entities, list):
         seeds = [str(e).strip().lower() for e in entities]
     else:
@@ -360,7 +360,7 @@ def extract_compute(
         messages=[{"role": "user", "content": schema_prompt}], max_tokens=300
     )
     usage.merge(schema.usage)
-    declared = extract_json(schema.text, "fields")
+    declared = extract_json(schema.text, "fields", sink=surface)
     if isinstance(declared, list):
         fields = [str(f) for f in declared][:8] or ["value"]
     else:
@@ -379,14 +379,16 @@ def extract_compute(
             messages=[{"role": "user", "content": prompt}], max_tokens=600
         )
         usage.merge(completion.usage)
-        try:
-            payload = extract_json(completion.text, default={})
-            for row in payload["rows"]:
-                if isinstance(row, dict):
-                    row["_unit"] = unit_id
-                    rows.append(row)
-        except (ValueError, KeyError, TypeError):
-            continue
+        # `extract_json` YA devuelve {} ante cualquier malformacion — ese es su contrato.
+        # El try que envolvia esto ademas tapaba el bucle: un TypeError del harness en
+        # `rows.append` o en la asignacion caia en el mismo `continue` que un JSON roto
+        # del modelo, y las dos cosas se leian igual en el registro. Son distintas: una es
+        # un dato del experimento y la otra es un defecto.
+        payload = extract_json(completion.text, default={}, sink=surface)
+        emitted = payload.get("rows") if isinstance(payload, dict) else None
+        for row in well_formed(emitted, sink=surface):
+            row["_unit"] = unit_id
+            rows.append(row)
 
     # The reduce, in code: exact dedupe over the declared fields, exact count.
     distinct: dict[str, dict[str, Any]] = {}
@@ -538,7 +540,7 @@ def pointer_chase(
         )
         usage.merge(pick.usage)
         iterations += 1
-        picked = extract_json(pick.text, "start")
+        picked = extract_json(pick.text, "start", sink=surface)
         if picked is not None:
             start = str(picked).strip()
         else:
@@ -576,7 +578,7 @@ def pointer_chase(
             fact, nxt = "", ""
             try:
                 raw = step.text.strip()
-                payload = extract_json(raw, default={})
+                payload = extract_json(raw, default={}, sink=surface)
                 fact = str(payload.get("fact") or "").strip()
                 nxt = str(payload.get("next") or "").strip()
             except (ValueError, TypeError):

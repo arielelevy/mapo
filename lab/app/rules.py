@@ -215,6 +215,20 @@ def standard_rules(policy: BeliefPolicy) -> Governance:
     )
 
 
+# CREDENCIA DE UNA ESTIMACION ELICITADA SIN CONFIANZA DECLARADA.
+#
+# El extractor pide `{"coupling": float, "horizon_unknown": bool}` y NO pide una
+# confianza, asi que el llamador tenia que poner una. Estaba puesta a mano —`0.8`— en el
+# unico sitio que la usaba, que es la version silenciosa de inventar un numero.
+#
+# Se declara acá, con nombre, y con la unica cosa que la vuelve legitima: NO es una
+# medicion, es un PRIOR, y existe exactamente la maquinaria para desmentirlo. La
+# calibracion por proposicion mide si la credencia elicitada predice acierto, y
+# `trusts_elicited` decide si se le permite gobernar. Un prior que su propia capa puede
+# refutar no es lo mismo que un numero suelto.
+ELICITED_PRIOR_CREDENCE = 0.8
+
+
 def sense(
     task: dict[str, Any],
     policy: BeliefPolicy,
@@ -224,6 +238,8 @@ def sense(
     coupling_provenance: Provenance = Provenance.ELICITED,
     coupling_credence: float = 0.0,
     horizon_unknown: bool | None = None,
+    horizon_provenance: Provenance = Provenance.ELICITED,
+    horizon_credence: float = 0.0,
     base: BeliefBase | None = None,
 ) -> BeliefBase:
     """Populate a belief base from a task and whatever else is known.
@@ -321,16 +337,27 @@ def sense(
         ),
     ))
 
-    # Asserted only when the same estimate that produced coupling actually carries
-    # credence. `coupling_credence or 0.5` invented a number out of nothing: a latent
-    # belief nothing backs, at exactly the strength that decides rules.
-    if horizon_unknown is not None and coupling_credence > 0.0:
+    # EVIDENCIA PROPIA, Y ESA ES LA CORRECCION. `horizon_unknown` llevaba la credencia
+    # Y la procedencia de `coupling` — el propio texto lo decia: «estimated alongside
+    # coupling». Dos consecuencias, y la segunda es una violacion del reticulo:
+    #
+    # (1) El horizonte no tenia evidencia propia. La calibracion es POR PROPOSICION
+    #     justamente porque un modelo puede ser confiable sobre una cosa y pesimo sobre
+    #     otra, y compartir credencia hace esa distincion inexpresable.
+    #
+    # (2) Peor: tras una sonda, `coupling_provenance` es OBSERVED — y el horizonte lo
+    #     heredaba. Asi que una proposicion que NADIE midio alcanzaba el piso que las
+    #     acciones irreversibles exigen. La sonda lee una unidad para testear
+    #     ACOPLAMIENTO; no toca el horizonte y no puede promoverlo.
+    #
+    # Ahora el horizonte declara lo suyo, y quien lo estima dice a que procedencia.
+    if horizon_unknown is not None and horizon_credence > 0.0:
         base.assert_(Belief(
             proposition="horizon_unknown",
             value=horizon_unknown,
-            credence=coupling_credence,
-            provenance=coupling_provenance,
-            evidence="estimated alongside coupling",
+            credence=horizon_credence,
+            provenance=horizon_provenance,
+            evidence=f"horizonte estimado a {horizon_provenance.value}",
         ))
 
     if theta_best:

@@ -24,6 +24,19 @@ export const PARADIGMS = [
 
 export type Paradigm = (typeof PARADIGMS)[number];
 
+/**
+ * Espejo de `Status` en `lab/app/paradigms/__init__.py`.
+ *
+ * Los trece siguen en el REGISTRY a propósito: borrar una función volvería
+ * irreproducible el registro que la midió. El estado es lo que dice si puede correr.
+ *
+ * `INFEASIBLE` NO se bloquea: la aritmética lo poda a costo cero y registra la razón,
+ * que es más informativo que negarse a correrlo. La infactibilidad ES el resultado.
+ */
+export type Status = "active" | "retired" | "standby" | "infeasible" | "under_review";
+
+export const RUNNABLE: readonly Status[] = ["active", "infeasible", "under_review"];
+
 /* ── ingesta ────────────────────────────────────────────────────────────── */
 
 /** Los pasos de `lab/ARQUITECTURA.es.md` §3. El sensor decide OCR antes de parsear. */
@@ -139,6 +152,13 @@ export interface Exchange {
   budget: number;
   /** Lo que el caller declaró. Queda en el registro junto a la decisión. */
   declared: string[];
+  /** Los tokens de contexto con que se decidió. Hace falta para replay. */
+  contextTokens: number;
+  /**
+   * Si una persona autorizó un gate. No borra el gate: el registro tiene que mostrar
+   * que hubo gate Y que alguien lo aprobó, porque son dos hechos distintos.
+   */
+  approvedAt: string | null;
   plan: Plan | null;
   probe: { unit: string; result: string; provenance: Provenance } | null;
   answer: string;

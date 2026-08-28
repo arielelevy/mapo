@@ -1,5 +1,6 @@
 import { PARADIGMS, type Exchange, type Plan, type Strike } from "../types";
 import { formatTokens } from "../lib/tokens";
+import { useMapo } from "../store";
 import s from "./ExchangeView.module.css";
 
 /* Las etapas son una secuencia real: el orden carga información. */
@@ -40,7 +41,9 @@ export default function ExchangeView({ exchange }: { exchange: Exchange }) {
           </p>
         )}
 
-        {plan?.terminal !== "gated" && (exchange.answer || exchange.streaming) && (
+        {/* Un gate no muestra respuesta porque no hubo. Si alguien lo autorizó, sí. */}
+        {(plan?.terminal !== "gated" || exchange.approvedAt) &&
+          (exchange.answer || exchange.streaming) && (
           <section className={s.answer}>
             <span className="eyebrow">Respuesta</span>
             <div className={s.answerText}>
@@ -69,8 +72,8 @@ export default function ExchangeView({ exchange }: { exchange: Exchange }) {
                 <span>{exchange.usage.ms} ms</span>
               </div>
             )}
-          </section>
-        )}
+            </section>
+          )}
 
         {exchange.error && (
           <div className={`${s.notice} ${s.noticeHalt}`}>
@@ -148,13 +151,15 @@ function Stage({
   children: React.ReactNode;
 }) {
   return (
-    <section className={s.stage}>
+    <section className={s.stage} aria-label={`Etapa ${stage.n}: ${stage.name}. ${note}`}>
       <header className={s.stageHead}>
         <span className={s.stageN}>{stage.n}</span>
         <span className={s.stageName}>{stage.name}</span>
         <span className={s.stageNote}>{note}</span>
       </header>
-      <div className={s.rows}>{children}</div>
+      <div className={s.rows} role="table">
+        {children}
+      </div>
     </section>
   );
 }
@@ -165,41 +170,84 @@ function StrikeRow({ strike, index }: { strike: Strike; index: number }) {
     <div
       className={`${s.row} ${out ? s.rowOut : s.rowIn}`}
       style={{ animationDelay: `${index * 26}ms` }}
+      role="row"
+      // La tachadura es visual. Sin esto un lector de pantalla oye el nombre y el
+      // motivo sin saber que el motivo ES un rechazo.
+      aria-label={
+        out ? `${strike.paradigm}, excluido: ${strike.reason}` : `${strike.paradigm}, admisible`
+      }
     >
-      <span className={s.rowName}>{strike.paradigm}</span>
-      <span className={s.rowWhy}>{strike.reason ?? ""}</span>
-      <span className={s.rowVal}>{out ? "" : "✓"}</span>
+      <span className={s.rowName} role="cell">
+        {strike.paradigm}
+      </span>
+      <span className={s.rowWhy} role="cell">
+        {strike.reason ?? ""}
+      </span>
+      <span className={s.rowVal} role="cell" aria-hidden>
+        {out ? "" : "✓"}
+      </span>
     </div>
   );
 }
 
 /* ── veredicto: los tres terminales son estructuralmente distintos ───────── */
 function Verdict({ plan, exchange }: { plan: Plan; exchange: Exchange }) {
+  const openExplain = useMapo((st) => st.openExplain);
+  const approveGate = useMapo((st) => st.approveGate);
+  const running = useMapo((st) => st.running);
+
   return (
     <div className={s.verdict}>
       <div className={s.verdictLine}>
         <span className={s.verdictTag}>04 {plan.verdict}</span>
         <span className={s.verdictWhat}>
-          {plan.terminal === "gated" ? "nada se ejecutó" : plan.pick}
+          {plan.terminal === "gated" && !exchange.approvedAt
+            ? "nada se ejecutó"
+            : plan.pick}
         </span>
-        <span className={s.verdictMeta}>
+        <button
+          type="button"
+          className={s.verdictMeta}
+          onClick={() => openExplain(exchange.id)}
+          title="Ver el certificado de esta decisión"
+        >
           θ {plan.thetaVersion} · {plan.digest}
           <br />
-          plan {plan.region} · replay sin red
-        </span>
+          plan {plan.region} · <u>ver EXPLAIN</u>
+        </button>
       </div>
 
       {plan.terminal === "gated" && (
         <div className={`${s.notice} ${s.noticeHalt}`}>
-          <b>Requiere revisión humana</b>
-          La solicitud declara una acción irreversible o de escritura compartida. El plan
-          quedó registrado y ningún paradigma corrió. Un gate no es una respuesta segura:
-          es una decisión que le corresponde a una persona.
+          <b>{exchange.approvedAt ? "Gate autorizado" : "Requiere revisión humana"}</b>
+          {exchange.approvedAt ? (
+            <>
+              Una persona autorizó este gate y el plan corrió. El gate queda en el
+              registro: son dos hechos distintos y ninguno reemplaza al otro.
+            </>
+          ) : (
+            <>
+              La solicitud declara una acción irreversible o de escritura compartida. El
+              plan quedó registrado y ningún paradigma corrió. Un gate no es una respuesta
+              segura: es una decisión que le corresponde a una persona.
+            </>
+          )}
           <div className={s.noticeActs}>
-            <button type="button" className={s.btn}>
-              Aprobar y ejecutar
-            </button>
-            <button type="button" className={s.btn}>
+            {!exchange.approvedAt && (
+              <button
+                type="button"
+                className={s.btn}
+                disabled={running}
+                onClick={() => void approveGate(exchange.id)}
+              >
+                Aprobar y ejecutar {plan.pick}
+              </button>
+            )}
+            <button
+              type="button"
+              className={s.btn}
+              onClick={() => openExplain(exchange.id)}
+            >
               Ver EXPLAIN
             </button>
           </div>

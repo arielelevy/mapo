@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Callable
 
 from ..llm import Completion, LLMClient, Usage
@@ -80,8 +81,12 @@ def _run_tool_loop(
 
     for _ in range(max_iterations):
         iterations += 1
+        # Se cuenta ACA porque este es el unico sitio del repo que manda la declaracion:
+        # los otros 26 sitios que llaman al modelo lo hacen sin `tools`.
+        surface.tooled_calls += 1
         completion = client.complete(
-            messages=messages, tools=specs_for(surface.variant)
+            messages=messages,
+            tools=specs_for(surface.variant, getattr(surface, "offer_read_all", False))
         )
         usage.merge(completion.usage)
 
@@ -352,15 +357,112 @@ def reflection(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) ->
 
 ParadigmFn = Callable[[LLMClient, ToolSurface, dict[str, Any]], Result]
 
-# Retirados: siguen en el REGISTRY porque su dato historico se replaya y las filas ya
-# pagadas hay que poder leerlas, pero NINGUNA corrida nueva los incluye.
+# -- estado del catalogo -------------------------------------------------------------
 #
-# `cot` esta retirado por decision escrita (2026-08-26): quedo dominado por `direct` en
-# toda celda medida — misma utilidad, nunca mas barato — y la ingenieria de prompts no
-# es un patron. Se conserva como control nulo: es la evidencia de que el andamiaje por
-# prompt no compra nada. El default de `run_cross_product` lo excluye, y pedirlo por
-# nombre levanta excepcion en vez de correrlo callado.
-RETIRED: frozenset[str] = frozenset({"cot"})
+# POR QUE ESTO ES CODIGO Y NO UN DOCUMENTO. Habia decisiones tomadas y registradas que
+# el ejecutable no conocia: dos brazos falsificados por prediccion registrada seguian
+# disponibles en el default, y el unico bloqueo por codigo cubria uno solo. Una decision
+# que vive en prosa y no en el programa se deriva sola — es la misma falla que este
+# proyecto viene cerrando en cada capa.
+#
+# Y NO ES UN SOLO BALDE. Un brazo puede estar afuera por razones que no son la misma, y
+# tratarlas igual pierde justamente lo que hace falta para revivir uno: la CONDICION.
+# `graph_traverse` no esta retirado — esta en espera, y lo que lo revive esta escrito.
+#
+# Todos siguen en el REGISTRY: las filas ya pagadas hay que poder leerlas, y borrar la
+# funcion volveria irreproducible el registro que la midio.
+
+
+class Status(str, Enum):
+    ACTIVE = "active"
+    RETIRED = "retired"
+    STANDBY = "standby"
+    INFEASIBLE = "infeasible"
+    UNDER_REVIEW = "under_review"
+
+
+@dataclass(frozen=True)
+class CatalogEntry:
+    """Por que un brazo esta donde esta, y que lo movería."""
+
+    status: Status
+    reason: str
+    revives_when: str = ""
+
+    @property
+    def runnable(self) -> bool:
+        # INFEASIBLE no se bloquea: la aritmetica de factibilidad ya lo poda a costo
+        # cero y REGISTRA la exclusion con su razon, que es mas informativo que negarse
+        # a correrlo. La infactibilidad ES el resultado.
+        return self.status in (Status.ACTIVE, Status.INFEASIBLE, Status.UNDER_REVIEW)
+
+
+CATALOG: dict[str, CatalogEntry] = {
+    "react": CatalogEntry(Status.ACTIVE, "fallback general del catalogo"),
+    "dag_strategy": CatalogEntry(Status.ACTIVE, "unico mejor en 8 celdas de 96"),
+    "rewoo": CatalogEntry(Status.ACTIVE, "unico mejor en 10, y el mas barato al empatar en 46"),
+    "gist_reader": CatalogEntry(Status.ACTIVE, "unico mejor en 9"),
+    "map_reduce": CatalogEntry(
+        Status.ACTIVE,
+        "gana una celda de 33 en las que compite; infactible en 180 filas de 270, "
+        "pero eso lo decide la aritmetica y no una lista",
+    ),
+    "reflection": CatalogEntry(Status.ACTIVE, "unico mejor en 1 de 14: delgado, no dominado"),
+    "direct": CatalogEntry(
+        Status.ACTIVE,
+        "caso degenerado que la factibilidad elige sola cuando la evidencia entra en "
+        "ventana; fuera de ventana se poda a costo cero",
+    ),
+    "cot": CatalogEntry(
+        Status.RETIRED,
+        "dominado en toda celda medida: misma utilidad que direct, nunca mas barato. "
+        "La ingenieria de prompts no es un patron",
+        revives_when="nunca por diseno: los patrones se distinguen por estructura de "
+                     "control de flujo, jamas por fraseo",
+    ),
+    "pointer_chase": CatalogEntry(
+        Status.RETIRED,
+        "FALSIFICADO por prediccion registrada (P14a): nunca toco una unidad relevante, "
+        "la semilla de recuperacion es el eslabon debil. Sus frenos P14b si se "
+        "confirmaron y el mecanismo sobrevive: un loop guiado por codigo elimina la "
+        "loteria de costo",
+        revives_when="un anclaje que no dependa de una sola semilla lexica",
+    ),
+    "graph_traverse": CatalogEntry(
+        Status.STANDBY,
+        "u=0,000 en las dos celdas acopladas (P10a), y la falsacion sobrevivio su "
+        "objecion mas seria — el indice estaba 100% anclado y las cadenas conectadas. "
+        "Pero corrio donde resolver entidades es GRATIS: el corpus tiene cero "
+        "abreviaturas, cero anafora, una forma canonica por entidad",
+        revives_when="(a) un corpus con resolucion de entidades real y (b) un indice "
+                     "con la disciplina de la sonda: aceptar una entidad solo donde "
+                     "aparece literal, y guardar el span",
+    ),
+    "extract_compute": CatalogEntry(
+        Status.INFEASIBLE,
+        "infactible bajo presupuesto de produccion; la infactibilidad ES el resultado "
+        "(P11 no-evaluable). No se bloquea: la aritmetica lo poda y lo registra",
+    ),
+    "streaming_scan": CatalogEntry(
+        Status.INFEASIBLE,
+        "infactible bajo presupuesto de produccion (P12 no-evaluable). Idem",
+    ),
+    "plan_execute": CatalogEntry(
+        Status.RETIRED,
+        "DOMINADO: 0 unicos mejores y 0 veces el mas barato al empatar, sobre las 14 "
+        "celdas en que compitio. Retirado por decision del autor (2026-08-28) con el "
+        "mismo criterio que el control nulo por prompting. La salvedad queda en el "
+        "registro y no se borra: aquel cayo sobre TODA celda medida y este sobre 14, "
+        "asi que es la misma regla aplicada con menos evidencia — dicho, no escondido",
+        revives_when="una sola celda donde sea unico mejor, o donde empate siendo el "
+                     "mas barato",
+    ),
+}
+
+# Compatibilidad: lo que ninguna corrida nueva puede incluir.
+RETIRED: frozenset[str] = frozenset(
+    name for name, entry in CATALOG.items() if not entry.runnable
+)
 
 REGISTRY: dict[str, ParadigmFn] = {
     "direct": direct,

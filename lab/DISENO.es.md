@@ -300,6 +300,7 @@ camino disolvería la única garantía que hace que registrar una predicción va
 | `COTA_RATCHET.es.md` | La cota nativa del ratchet (T-4): terminación acotada en vez de varianza. |
 | `CONTRATOS.es.md` | Semántica de los contratos de afirmación (T-1). **Pizarra**, no implementado. |
 | `ONTOLOGIA_PREGUNTAS.es.md` | Qué exige un request, por eje, y cuáles el corpus puede medir. **Pizarra**. |
+| `MEDICION.es.md` | El mecanismo de medición, definido por lo que se niega a hacer. |
 | `DISENO.es.md` | Arquitectura lógica, decisiones, garantías y deuda. |
 | `ARQUITECTURA.es.md` | Arquitectura de plataforma: orquestación, ingesta, persistencia y backend. **Propuesta.** |
 | `PATRON_REC.es.md` | Patrón implementado (`rec.py`, `certify.py`) y protocolo de investigación. |

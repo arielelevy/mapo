@@ -21,6 +21,8 @@ from .llm import LLMClient
 from .policy import Plasticity, PolicyBundle, promote
 from . import serve
 from .probe import probe_coupling
+from .rules import ELICITED_PRIOR_CREDENCE
+from .beliefs import Provenance
 from .router import Router
 from .runner import Runner
 
@@ -126,8 +128,16 @@ def decide(request: DecideRequest) -> dict[str, Any]:
         region=features.region(),
         requested=request.assurance,
         coupling=features.coupling,
-        coupling_credence=0.8 if features.coupling is not None else 0.0,
+        coupling_credence=(
+            ELICITED_PRIOR_CREDENCE if features.coupling is not None else 0.0
+        ),
         horizon_unknown=features.horizon_unknown,
+        # Del MISMO acto de habla del modelo, pero declarado aparte: el horizonte no
+        # hereda nada del acoplamiento, ni credencia ni procedencia.
+        horizon_provenance=Provenance.ELICITED,
+        horizon_credence=(
+            ELICITED_PRIOR_CREDENCE if features.horizon_unknown is not None else 0.0
+        ),
     )
 
     # probe_then_decide, executed rather than merely planned.
@@ -156,6 +166,12 @@ def decide(request: DecideRequest) -> dict[str, Any]:
             coupling_provenance=reading.provenance,
             coupling_credence=reading.credence,
             horizon_unknown=features.horizon_unknown,
+            # La sonda midio ACOPLAMIENTO. El horizonte conserva lo que dijo el
+            # extractor y NO sube a OBSERVED con evidencia que no lo tocó.
+            horizon_provenance=Provenance.ELICITED,
+            horizon_credence=(
+                ELICITED_PRIOR_CREDENCE if features.horizon_unknown is not None else 0.0
+            ),
         )
         explained = replanned.explain()
         explained["probe"] = {

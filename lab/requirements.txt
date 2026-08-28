@@ -1,0 +1,28 @@
+# Dependencias de MAPO — el conjunto REAL, derivado de los imports, no de lo que hay
+# instalado en la maquina.
+#
+# POR QUE ESTE ARCHIVO NO EXISTIA Y POR QUE HACE FALTA. Sin un conjunto declarado, dos
+# cosas son imposibles: reproducir el entorno, y auditarlo. La primera auditoria de
+# seguridad corrio contra el interprete GLOBAL y devolvio vulnerabilidades de paquetes
+# que MAPO ni siquiera importa — un resultado que parece un hallazgo sobre el proyecto y
+# es un hallazgo sobre la maquina.
+#
+# EL CONJUNTO ES CHICO A PROPOSITO. El banco es SIN FRAMEWORK de agentes por diseno: mide
+# paradigmas en proceso, y si el ejecutor necesitara un runtime para correr, dejaria de
+# medir lo que produccion ejecuta. Nada de LangGraph, nada de orquestadores.
+
+# --- el motor y el banco ---------------------------------------------------------------
+httpx==0.28.1            # unico cliente HTTP; el reintento con presupuesto de tiempo va encima
+python-dotenv==1.2.2     # carga de configuracion; NO aporta defaults, los faltantes levantan
+numpy==2.4.3             # aritmetica de embeddings y estadistica del banco
+
+# --- la superficie HTTP (`app/serve.py`) -----------------------------------------------
+# Solo hace falta para servir la capa de decision. El banco corre sin nada de esto.
+fastapi==0.135.1
+pydantic==2.12.5
+uvicorn==0.42.0
+
+# --- auditoria -------------------------------------------------------------------------
+# No es dependencia de ejecucion. Se declara para que la auditoria sea reproducible:
+#   py -m pip_audit -r requirements.txt
+pip-audit==2.9.0

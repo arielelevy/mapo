@@ -33,7 +33,7 @@ from .assurance import (
     restrict,
 )
 from . import feasibility
-from .beliefs import BeliefBase, Calibration, Provenance, Verdict
+from .beliefs import BeliefBase, Provenance, Verdict
 from .policy import MIN_EPISODES_FOR_CONFIDENCE, PolicyBundle
 from .rules import (
     ACTION_CASCADE,
@@ -92,7 +92,6 @@ class Router:
         bundle: PolicyBundle,
         paradigm_costs: dict[str, float],
         fallback: str,
-        calibration: Calibration | None = None,
         region_backoff: bool = False,
     ) -> None:
         if not bundle.verify():
@@ -107,7 +106,21 @@ class Router:
         # episodes exist, and measured mean_cost supersedes them once theta has data.
         self._costs = paradigm_costs
         self._fallback = fallback
-        self._calibration = calibration
+        # SI LA CREDENCIA ELICITADA SE GANO EL DERECHO A DECIDIR — un booleano, no un
+        # objeto. El router recibia un `Calibration` que NADIE construia: cinco sitios lo
+        # instancian y ninguno pasaba el parametro, asi que `trustworthy` era False
+        # siempre.
+        #
+        # Y el efecto no era neutro: sin calibracion el piso sube a OBSERVED en A2+, o sea
+        # que **A2 con piso ELICITED era inalcanzable por construccion**. La evidencia para
+        # ganarlo se computaba, se persistia, y se tiraba.
+        #
+        # El booleano y no el objeto porque quien SABE calcularlo es la capa de creencias
+        # (`Calibration.is_trustworthy`) y quien lo TIENE guardado es el store. El router
+        # no deberia saber como se computa: recibir el objeto lo ataba a una de las dos
+        # fuentes y dejaba a la otra sin camino.
+        # Se lee del bundle FIRMADO, no de un parametro: un parametro se puede
+        # olvidar en un sitio de construccion, y se olvido en los cinco.
 
     # -- theta as a sensor -------------------------------------------------
 
@@ -195,6 +208,8 @@ class Router:
         coupling_provenance: Provenance = Provenance.ELICITED,
         coupling_credence: float = 0.0,
         horizon_unknown: bool | None = None,
+        horizon_provenance: Provenance = Provenance.ELICITED,
+        horizon_credence: float = 0.0,
         prior_beliefs: list[dict[str, Any]] | None = None,
     ) -> Plan:
         """`prior_beliefs` continues a recorded history (a first plan's base) so that a
@@ -217,7 +232,7 @@ class Router:
                 )
             candidates = runnable
 
-        trustworthy = bool(self._calibration and self._calibration.is_trustworthy())
+        trustworthy = self._theta.trusts_elicited
 
         # First pass: a provisional base, only to derive the assurance floor. The
         # floor depends on COMPUTED beliefs about the request, so a cheap policy is
@@ -262,6 +277,8 @@ class Router:
             coupling_provenance=coupling_provenance,
             coupling_credence=coupling_credence,
             horizon_unknown=horizon_unknown,
+            horizon_provenance=horizon_provenance,
+            horizon_credence=horizon_credence,
             base=history,
         )
 
@@ -382,6 +399,8 @@ class Router:
                 coupling=coupling,
                 coupling_provenance=Provenance.OBSERVED,
                 coupling_credence=credence,
+                # La sonda midio ACOPLAMIENTO. El horizonte no se toca: promoverlo aca
+                # seria darle procedencia OBSERVED a algo que nadie observo.
             )
             # An unmeasured pick is still a pick. Skipping the task made `counted`
             # depend on WHICH paradigm each bundle chose, so incumbent and candidate

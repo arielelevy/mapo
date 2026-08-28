@@ -30,14 +30,56 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Iterator, Any, Iterable
 
 # Hebbian hyperparameters. Kept at the v1 whitepaper's recommended values so the
 # lab and the paper cannot silently disagree: eta = 0.1 sits inside the stability
 # bound of Corollary 11.1 with margin.
+# --- la guarda que vuelve exigible al dial ------------------------------------------
+#
+# `theta_may_learn_online` estaba DECLARADO en el perfil de garantia (`assurance.py`) y no
+# lo leia nadie. La invariante «nada aprende adentro de un request» se cumplia por
+# casualidad —`apply` solo se llama desde el camino offline— y una invariante que se
+# cumple por casualidad no es una invariante: es una coincidencia que el proximo cambio
+# rompe sin que nada avise.
+#
+# Ahora se impone. `no_online_learning()` marca el tramo que corre ADENTRO de un request,
+# y `apply` levanta si alguien intenta acumular ahi. Por defecto esta permitido, porque el
+# camino offline —consolidacion, promocion, los scripts del banco— es donde el aprendizaje
+# DEBE ocurrir.
+_ONLINE_LEARNING_BLOCKED = ContextVar("mapo_online_learning_blocked", default=False)
+
+
+class OnlineLearningRefused(RuntimeError):
+    """Se intento acumular un episodio adentro de un request."""
+
+
+@contextmanager
+def no_online_learning() -> Iterator[None]:
+    """Bloquea el aprendizaje mientras dure el bloque. Reentrante y seguro entre hilos."""
+    token = _ONLINE_LEARNING_BLOCKED.set(True)
+    try:
+        yield
+    finally:
+        _ONLINE_LEARNING_BLOCKED.reset(token)
+
+
+# Los pesos se guardan y se firman con esta precision, asi que se APLICAN con ella: lo
+# que esta firmado tiene que ser lo que decide.
+WEIGHT_PRECISION = 5
+
+# La guarda de promocion decide sobre un INTERVALO, no sobre un punto. Fijos y con
+# semilla: la decision de promover tiene que ser tan reproducible como la de rutear.
+PROMOTION_RESAMPLES = 1000
+PROMOTION_CONFIDENCE = 0.95
+PROMOTION_SEED = 11
+
 LEARNING_RATE = 0.1
 DECAY = 0.05
 WEIGHT_MIN = 0.01
@@ -74,7 +116,7 @@ class Stat:
 
     def as_dict(self) -> dict[str, Any]:
         return {
-            "weight": round(self.weight, 5),
+            "weight": round(self.weight, WEIGHT_PRECISION),
             "episodes": self.episodes,
             "mean_utility": round(self.mean_utility, 5),
             "mean_cost": round(self.mean_cost, 2),
@@ -139,11 +181,33 @@ class PolicyBundle:
     # value, the router interprets it. The alternative -- importing Assurance here --
     # would make the thing that is signed depend on the thing that reads it.
     floors: dict[str, int] = field(default_factory=dict)
+    # SI LA CREDENCIA ELICITADA SE GANO EL DERECHO A DECIDIR.
+    #
+    # Va acá por la MISMA razón que `floors`, y no al lado: **cambia lo que un request
+    # puede hacer** —con confianza ganada, A2 opera con piso ELICITED; sin ella el piso
+    # sube a OBSERVED— así que es política, tiene que estar versionada y firmada, y no
+    # debe poder instalarse por fuera del camino de promoción.
+    #
+    # Antes era un parámetro del router que NINGUNO de los cinco sitios pasaba, así que
+    # valía False siempre y **A2 con piso ELICITED era inalcanzable por construcción**: la
+    # evidencia para ganarlo se computaba, se persistía, y se tiraba. Como parámetro,
+    # además, cada sitio podía olvidarlo; adentro del bundle no hay dónde olvidarlo.
+    trusts_elicited: bool = False
     # Promoted acquisition clauses (REC F4), as recorded dicts. Inside the SIGNED
     # payload on purpose: production reads clauses from here and nowhere else, and the
     # only path that appends is certify.install_clause, which refuses drafts, refuses
     # rejected certificates, and refuses certificates that name a different clause.
     clauses: list[dict] = field(default_factory=list)
+    # QUE EPISODIOS YA ESTAN ADENTRO. Sin esto, correr la consolidacion dos veces sobre
+    # el mismo registro cuenta cada episodio DOS VECES: `candidate` parte de una copia de
+    # las estadisticas del incumbente y le reaplica la lista entera, sin saber cuales ya
+    # estaban. El peso se mueve el doble hacia su punto fijo, `episodes` se duplica, y la
+    # cuenta de evidencia —que es la que decide si una region tiene con que decidir—
+    # queda inflada por repetir un proceso, no por haber medido mas.
+    #
+    # Va ADENTRO del payload firmado: es parte de lo que el bundle afirma sobre si mismo,
+    # y un bundle que mintiera sobre que absorbio no seria auditable.
+    absorbed: list[str] = field(default_factory=list)
     signature: str = ""
     notes: str = ""
 
@@ -166,6 +230,7 @@ class PolicyBundle:
             "created_at": self.created_at,
             "fallback": self.fallback,
             "tau": self.tau,
+            "trusts_elicited": self.trusts_elicited,
             "stats": {
                 region: {p: s.as_dict() for p, s in sorted(paradigms.items())}
                 for region, paradigms in sorted(self.stats.items())
@@ -193,6 +258,7 @@ class PolicyBundle:
             "created_at": self.created_at,
             "fallback": self.fallback,
             "tau": self.tau,
+            "trusts_elicited": self.trusts_elicited,
             "signature": self.signature,
             "notes": self.notes,
             "stats": {
@@ -219,6 +285,7 @@ class PolicyBundle:
             created_at=raw["created_at"],
             fallback=raw["fallback"],
             tau=float(raw["tau"]),
+            trusts_elicited=bool(raw.get("trusts_elicited", False)),
             stats={
                 region: {p: Stat.from_dict(s) for p, s in paradigms.items()}
                 for region, paradigms in raw["stats"].items()
@@ -311,6 +378,13 @@ class Plasticity:
         Off by default. Turning it on changes what a bundle asserts, so it belongs to a
         prediction registered under it — not to a router already being measured.
         """
+        if _ONLINE_LEARNING_BLOCKED.get():
+            raise OnlineLearningRefused(
+                "Se intento acumular un episodio adentro de un request. El aprendizaje es "
+                "offline y copy-on-write: aprender en linea haria que dos requests "
+                "identicos decidieran distinto, que es exactamente lo que la garantia "
+                "«misma base de creencias => misma decision» promete que no pasa."
+            )
         for level in cls._levels(episode.region, hierarchical):
             cls._apply_at(stats, level, episode)
 
@@ -329,11 +403,32 @@ class Plasticity:
         stat = region.setdefault(episode.paradigm, Stat())
 
         updated = (1.0 - DECAY) * stat.weight + LEARNING_RATE * cls.delta(episode)
-        stat.weight = max(WEIGHT_MIN, min(WEIGHT_MAX, updated))
+        # SE REDONDEA AL APLICAR, no solo al serializar, y esa es la diferencia que
+        # importa: `as_dict` redondeaba a 5 decimales para firmar y para ser legible,
+        # mientras la copia en memoria seguia con el float entero. Entonces lo que se
+        # FIRMA no era lo que DECIDE, y un bundle recargado desde disco resolvia con un
+        # peso distinto del que tenia en el proceso que lo escribio.
+        #
+        # Ademas `candidate` copia via `from_dict(as_dict())`, asi que cada ciclo de
+        # consolidacion perdia precision: dos ciclos sobre el mismo registro daban
+        # 0,5713125 y 0,57131. Un desvio chico, pero acumulativo y silencioso, y basta
+        # con que cruce un umbral de comparacion para cambiar una decision.
+        stat.weight = round(max(WEIGHT_MIN, min(WEIGHT_MAX, updated)), WEIGHT_PRECISION)
         stat.episodes += 1
         stat.utility_sum += episode.utility
         stat.cost_sum += episode.cost_tokens
         stat.wins += 1 if episode.was_best else 0
+
+    @staticmethod
+    def episode_key(episode: Episode) -> str:
+        """Identidad estable de un episodio, para no absorberlo dos veces.
+
+        `(task_id, region, paradigm)` — la celda. Dos replicas de la misma celda YA
+        vienen promediadas en un solo `Episode` antes de llegar aca (`runner.episodes`
+        promedia por celda), asi que la celda ES la unidad de evidencia y repetirla es
+        siempre doble conteo, nunca dato nuevo.
+        """
+        return f"{episode.task_id}|{episode.region}|{episode.paradigm}"
 
     @classmethod
     def candidate(
@@ -349,8 +444,15 @@ class Plasticity:
             region: {p: Stat.from_dict(s.as_dict()) for p, s in paradigms.items()}
             for region, paradigms in incumbent.stats.items()
         }
-        for episode in episodes:
+        # Lo ya absorbido NO se reaplica. Un episodio repetido no es evidencia nueva: es
+        # el mismo hecho contado dos veces, y contarlo dos veces mueve el peso y la cuenta
+        # de evidencia por repetir un proceso.
+        already = set(incumbent.absorbed)
+        fresh = [e for e in episodes if cls.episode_key(e) not in already]
+        skipped = len(episodes) - len(fresh)
+        for episode in fresh:
             cls.apply(stats, episode, hierarchical=hierarchical)
+        absorbed = sorted(already | {cls.episode_key(e) for e in fresh})
 
         return PolicyBundle(
             version=incumbent.version + 1,
@@ -362,11 +464,19 @@ class Plasticity:
             # not about which regions refuse elicited evidence. The floors are learned
             # from the belief log, in their own stage, under their own guard.
             floors=dict(incumbent.floors),
+            # Misma razón que floors: replayar episodios enseña sobre utilidad, nunca
+            # sobre si la credencia elicitada es confiable. Eso se aprende del log de
+            # creencias, en su propia etapa y bajo su propia guarda.
+            trusts_elicited=incumbent.trusts_elicited,
             # Same reason as floors: replaying episodes teaches theta about utility,
             # never about which acquisitions are authorised. Clauses only change
             # through certify.install_clause.
             clauses=[dict(c) for c in incumbent.clauses],
-            notes=notes or f"promoted from v{incumbent.version} on {len(episodes)} episodes",
+            absorbed=absorbed,
+            notes=notes or (
+                f"promoted from v{incumbent.version} on {len(fresh)} new episodes"
+                + (f" ({skipped} already absorbed, skipped)" if skipped else "")
+            ),
         ).sign()
 
 
@@ -376,6 +486,15 @@ class PromotionVerdict:
     incumbent_value: float
     candidate_value: float
     reason: str
+    # El intervalo de la DIFERENCIA, no de cada valor por separado: lo que decide la
+    # promocion es si el candidato mejora, y esa es una cantidad pareada. Un intervalo
+    # por brazo se solaparia casi siempre y no diria nada sobre la diferencia.
+    #
+    # `None` significa que no se estimo (bootstrap desactivado), y se distingue de un
+    # intervalo que dio cero: son cosas distintas.
+    gain_low: float | None = None
+    gain_high: float | None = None
+    resamples: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -393,6 +512,9 @@ def promote(
     holdout: list[Episode],
     router_value_fn,
     min_gain: float = 0.0,
+    resamples: int = PROMOTION_RESAMPLES,
+    confidence: float = PROMOTION_CONFIDENCE,
+    seed: int = PROMOTION_SEED,
 ) -> PromotionVerdict:
     """Install `candidate` only if it does not regress on held-out episodes.
 
@@ -400,6 +522,20 @@ def promote(
     the promotion rule cannot quietly depend on the routing implementation. The
     guard is the reason "self-optimising" is safe to say here: a bundle that would
     make things worse never reaches production, and the verdict is recorded.
+
+    LA GUARDA COMPARABA DOS PUNTOS, y eso no es una guarda: es una moneda con sesgo.
+    Sobre un holdout chico, un candidato que gana por 0,001 gana por RUIDO la mitad de
+    las veces, y una vez promovido queda como incumbente que el siguiente ciclo tiene que
+    superar. El error se hereda.
+
+    Ahora la decision es sobre un INTERVALO de la diferencia, estimado por bootstrap
+    pareado sobre los episodios de holdout: se remuestrea el holdout con reposicion, se
+    evalua a los dos bundles sobre CADA remuestra —asi el par comparte la muestra, que es
+    lo que hace pareada a la comparacion— y se exige que el borde inferior supere
+    `min_gain`. Es la misma disciplina que el banco ya aplica a sus propios veredictos.
+
+    Deterministico: semilla fija. Dos corridas sobre el mismo holdout promueven o no
+    promueven igual, que es lo que la garantia del producto exige de cualquier decision.
     """
     if not holdout:
         return PromotionVerdict(
@@ -411,21 +547,50 @@ def promote(
 
     incumbent_value = router_value_fn(incumbent, holdout)
     candidate_value = router_value_fn(candidate, holdout)
+    observed = candidate_value - incumbent_value
 
-    if candidate_value >= incumbent_value + min_gain:
+    low = high = None
+    if resamples > 0 and len(holdout) > 1:
+        rng = random.Random(seed)
+        n = len(holdout)
+        diffs = []
+        for _ in range(resamples):
+            sample = [holdout[rng.randrange(n)] for _ in range(n)]
+            diffs.append(router_value_fn(candidate, sample)
+                         - router_value_fn(incumbent, sample))
+        diffs.sort()
+        alpha = (1.0 - confidence) / 2.0
+        low = diffs[min(len(diffs) - 1, int(alpha * len(diffs)))]
+        high = diffs[min(len(diffs) - 1, int((1.0 - alpha) * len(diffs)))]
+
+    # El criterio es el BORDE INFERIOR, no el punto. Si no se estimo intervalo —holdout
+    # de un solo episodio, o bootstrap apagado— se cae al punto y se DICE en la razon,
+    # para que nadie lea una promocion sin intervalo como si lo tuviera.
+    decisive = low if low is not None else observed
+    if decisive >= min_gain:
         return PromotionVerdict(
             accepted=True,
             incumbent_value=incumbent_value,
             candidate_value=candidate_value,
-            reason=f"candidate v{candidate.version} does not regress on holdout",
+            gain_low=low, gain_high=high, resamples=resamples if low is not None else 0,
+            reason=(
+                f"candidate v{candidate.version} gains {observed:+.5f} "
+                + (f"[{low:+.5f}, {high:+.5f}] al {confidence:.0%} sobre {resamples} "
+                   f"remuestras" if low is not None
+                   else "SIN INTERVALO (holdout de 1 episodio o bootstrap apagado)")
+            ),
         )
 
     return PromotionVerdict(
         accepted=False,
         incumbent_value=incumbent_value,
         candidate_value=candidate_value,
+        gain_low=low, gain_high=high, resamples=resamples if low is not None else 0,
         reason=(
-            f"candidate v{candidate.version} regresses by "
-            f"{incumbent_value - candidate_value:.5f}; keeping v{incumbent.version}"
+            f"candidate v{candidate.version} no supera el piso: gana {observed:+.5f} "
+            + (f"pero el borde inferior es {low:+.5f} al {confidence:.0%} — la mejora "
+               f"no se distingue del ruido del holdout" if low is not None
+               else f"y {observed:+.5f} < {min_gain}")
+            + f"; se mantiene v{incumbent.version}"
         ),
     )
