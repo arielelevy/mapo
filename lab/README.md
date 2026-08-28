@@ -551,6 +551,75 @@ two-step rule). Only the first is an artifact; the second is the layer working; 
 is the one to fix, and it costs a model call per task — which is precisely the governance
 cost the thesis says should be priced rather than assumed away.
 
+### The Hebbian weight cannot be a better selector, and that is a proof, not a measurement (2026-08-27, `_analyze_hebbian.py`, zero tokens)
+
+`policy.py` updates `w ← (1−DECAY)·w + LEARNING_RATE·δ` with δ = +0.5 if the paradigm was
+best on that task and −0.3 otherwise. That is an exponential moving average of `was_best`
+— **a recency-weighted win rate.** And `theta_assertions` already ranks by the win rate,
+unweighted.
+
+**At the fixed point, for a constant win rate p:**
+
+```
+w* = η·(0.5p − 0.3(1−p)) / DECAY = 0.1(0.8p − 0.3)/0.05 = 1.6p − 0.6
+```
+
+Strictly increasing in p over the unclipped range. **A monotone transform of the same
+statistic cannot change an argmax.** So the recorded "all three selectors pick identically"
+(0.5263 for weight, mean utility and win rate) is not an empirical coincidence and not a
+mistuned hyperparameter — it is *forced*. The only place the two can differ is the
+**transient**, which requires the estimated quantity to be moving.
+
+**And it IS moving.** Best paradigm per region, across corpora: **4 of 5 comparable
+regions change winner (80%)**. `many/oracle/loose/flat` runs `dag_strategy` →
+`dag_strategy` → `dag_strategy` → `rewoo`; `many/oracle/tight/flat` starts at `direct` and
+becomes `dag_strategy`. P15's verified mechanism said the same thing from another angle:
+`dag_strategy`, dominated by `react` out-of-window in the prior record (P4), became the
+best fixed on seed 47.
+
+**But the current parameterisation cannot track it, and the reasons are specific:**
+
+- below p ≈ 0.375 the weight pins to the floor 0.01, so **every weak arm becomes
+  indistinguishable from every other weak arm** — the moment an arm is demoted it loses
+  its ordering information entirely;
+- climbing off the floor costs ~5 consecutive wins to reach a mid-range value, so the
+  tracker **lags exactly when it should lead**;
+- 140 episodes over ~22 (region, paradigm) keys is ~6 updates per key against an EWMA
+  horizon of ~1/DECAY = 20. **The estimator never leaves its prior.**
+
+Fitting both estimators on the same episodes in the same order and selecting on
+`gold_transfer`: **identical, +0.0000.** Not for want of drift — for want of an estimator
+that can see it.
+
+**The only job the mathematics leaves it: a non-stationarity DETECTOR.** Where the weight
+and the win rate disagree about the best arm, the region is in transient — and the right
+action is not to route differently but to **lower confidence and abstain**, which is
+machinery the product already has. Today that fires on exactly 1 region, and that region
+does flip. **n=1 is an anecdote, not evidence**, and it is recorded as one.
+
+**Two directions worth more than the repair (author's, 2026-08-27), and why.**
+
+1. **Hebbian over tool-call ORDER, not over paradigms.** This restores what makes Hebbian
+   learning distinctive and what the current use throws away: **association between pairs**.
+   A (tool_i → tool_j) transition weight is not a marginal statistic of one arm, so the
+   monotonicity proof above simply does not apply to it. It also aims at the right target:
+   a paradigm mechanically *is* a policy over tool-call sequences, and paradigm choice
+   predicts evidence recall at 60% out-of-sample — so the call order is the channel the
+   dominant lever acts through. Learning it attacks that 60% instead of picking among five
+   pre-baked orderings. **Blocked on instrumentation**: `tools.py:375` keeps
+   `calls[name] += 1`, a count dict with no sequence. The order is not logged, so the idea
+   is not yet testable — which makes logging it the cheap first step.
+
+2. **Learned associations as beliefs — yes, with one constraint that must not be waived.**
+   The lattice is `ASSUMED < ELICITED < OBSERVED < COMPUTED`, and irreversible actions
+   require `COMPUTED`/`OBSERVED` precisely to keep statistics and opinion out of them. A
+   learned association is arithmetic over a ledger, so it *looks* COMPUTED — and if it
+   entered at that rank, a statistical regularity could gate an irreversible action, which
+   destroys the reason the floor exists. A learned association is not an observation about
+   THIS request; it is a prior over requests like it. So it needs a rank strictly below
+   OBSERVED, and the lattice has no slot for it today. Naming that gap is worth more than
+   papering over it.
+
 ### Evidence recall dwarfs the paradigm gap (2026-08-27, `_analyze_retention.py`, zero tokens)
 
 The pending "context retention" item asked whether a paradigm's advantage survives
