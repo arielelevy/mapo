@@ -1502,6 +1502,101 @@ dominio que nadie recorrió**.
 
 ---
 
+### 5.14 El dial tiene cuatro posiciones y dos de sus tres saltos no hacen nada · `MEDIDO`
+
+`T-5` preguntaba quién fija el dial. La respuesta estaba en el código y no escrita:
+
+```
+nivel efectivo = max( pedido , piso_de_creencias , piso_aprendido )
+```
+
+**`max` no es conveniencia: es la única composición donde cada fuente sólo puede
+endurecer.** Con `min` o un promedio, agregar una fuente podría ablandar el resultado, y
+entonces una fuente nueva sería un riesgo en vez de una garantía. Verificado sobre las 16
+combinaciones: **bajar lo pedido nunca sube el nivel efectivo**.
+
+El llamador puede **subir** porque sabe cosas que no están en el material —esto va a un
+informe regulatorio, hay un auditor mirando—. No puede bajar, porque el piso sale de
+propiedades **del request mismo**: un llamador que pudiera bajarlo declararía una acción
+irreversible y después pediría tratarla como exploratoria.
+
+**Y hay una cuarta fuente que no es un nivel.** A2 admite creencias `ELICITED`, pero sólo con
+la calibración ganada; sin ella, `resolve()` **no baja el nivel: endurece el piso de
+procedencia dentro del nivel**. Misma idea, otro eje.
+
+**Lo que apareció al marginalizar sobre las posiciones** —que es como hay que evaluar un
+parámetro de despliegue, no fijándolo—: **A0, A1 y A2 declaran `admissible_patterns=None`**.
+Ninguno filtra un solo paradigma. Toda la restricción de catálogo del dial vive en **un
+escalón**, y ahí cuesta 60% de los brazos.
+
+> El dial no es inerte en A1→A2 —cambian `require_signed_theta`, `log_belief_base`,
+> `max_composition_depth` y el piso de procedencia—. Es inerte **en la dimensión que la
+> tabla mide**. Decir cuál es cuál es el punto entero de marginalizar en vez de reportar un
+> número a una posición fija.
+
+---
+
+### 5.15 Un teorema de soundness sirve por lo que excluye · `EJECUTADO`
+
+`T-3` pedía el teorema del ensamblador. Escrito, es corto:
+
+> Si `fill` emite `R`, entonces para toda ranura existe una creencia **vigente** sobre la
+> proposición asignada, con procedencia ≥ piso, y la subcadena emitida es exactamente
+> `str(valor)`. Y `R` no contiene nada que no venga de la plantilla o de esos valores.
+
+La demostración es por construcción y depende de **una línea**: la sustitución ocurre después
+de comprobar que la lista de rechazos está vacía. Falla cerrada y **entera** — una sola
+ranura floja retiene la salida completa. Emitir *«El saldo es ___»* no es más honesto que
+emitir un número inventado; es el mismo acto con mejor caligrafía.
+
+**Lo que hace útil al teorema son los cuatro límites, y van adentro del enunciado.** El más
+duro: **el alcance es la ranura, no la oración.** Una plantilla que diga *«el saldo NO supera
+{x}»* con `x` correcto produce una salida **sound y falsa**. Eso está en el test, como caso
+que debe pasar.
+
+> Todo el aparato —procedencia tipada, pisos por acción, base con historia— existe para
+> poder terminar en un enunciado así. Sin él, la procedencia es **contabilidad**: se
+> registra, se muestra en el EXPLAIN, y nadie puede decir qué compra.
+
+Verificado sobre el producto cartesiano entero de procedencias × pisos, 16 puntos. **Elegir
+casos es donde se esconde el que falta**, y este espacio es lo bastante chico para no elegir.
+
+---
+
+### 5.16 El modelo dibujaba el grafo de control con dos constantes fijas · `EJECUTADO`
+
+`D-3`: el planificador proponía `sub_questions` con sus dependencias y `_assign_waves` sólo
+topologizaba lo que el modelo dijo. Los topes eran **4 y 3**, iguales para una tarea de 3
+unidades y para una de 400. Es la versión estructural de `D-1`: el invariante dice que el
+modelo es sensor y no maneja flujo de control, y **un grafo de control es flujo de control**.
+
+Ahora la forma se deriva antes de preguntar, por aritmética:
+
+| n unidades | ramas | replans | llamadas |
+|---:|---:|---:|---:|
+| 1 | **1** | 3 | 42 |
+| 2 | 2 | 3 | 83 |
+| 4 | 4 | 3 | 165 |
+| 400 | 4 | 3 | 165 |
+
+Con una unidad da **una rama**: un DAG de un nodo, dicho en vez de fingir que hubo
+descomposición. Antes daba cuatro ramas sobre una unidad, que no descompone nada — reparte
+la misma unidad en cuatro preguntas.
+
+**Y la cota es la misma que la factibilidad ya impone, con la misma fórmula.** Iba a inventar
+un `EST_CALL_TOKENS` y no hacía falta: `feasibility` proyecta `4·10·4 + 4 + 1`, así que
+`projected_calls(ramas, replans)` es esa cuenta parametrizada. Si la forma se derivara con
+aritmética propia, podría elegir un grafo que la factibilidad declara infactible — **un
+paradigma admitido corriendo una forma que su propia cota prohíbe**.
+
+> **Lo que no gobierna, y es lo que más importaría.** El acoplamiento decide si las ramas
+> pueden correr independientes. La sonda lo mide y **esa lectura no llega hasta el
+> paradigma**: ni el `ToolSurface` ni la tarea la transportan. Así que `governed_by_coupling`
+> es `False` y **se registra**. Es la forma que el barrido de la 7.17 busca — una creencia
+> completa, medida, que no llega a donde se decide.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

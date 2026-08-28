@@ -44,6 +44,7 @@ from typing import Any
 from .parsing import extract_json, well_formed
 from .blackboard import Blackboard
 from ..llm import LLMClient, Usage
+from ..feasibility import MAX_ORCHESTRATION_CALLS
 from ..tools import ToolSurface
 from . import ANSWER_CONTRACT, answer_contract, Result, _run_tool_loop, parse_answer
 
@@ -55,6 +56,102 @@ DAG_MAX_REPLAN_ITERATIONS = 3
 DAG_READY_THRESHOLD = 0.8
 DAG_DIMINISHING_RETURNS = 0.05
 DAG_SUB_AGENT_ITERATIONS = 10
+
+
+
+@dataclass(frozen=True)
+class DagShape:
+    """La forma del grafo de control, DERIVADA del request y no propuesta por el modelo."""
+
+    max_sub_questions: int
+    max_replans: int
+    reason: str
+    governed_by_coupling: bool
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "max_sub_questions": self.max_sub_questions,
+            "max_replans": self.max_replans,
+            "reason": self.reason,
+            "governed_by_coupling": self.governed_by_coupling,
+        }
+
+
+def projected_calls(ramas: int, replans: int) -> int:
+    """Las llamadas que una forma cuesta en el peor caso. LA MISMA formula que factibilidad.
+
+    `feasibility.check("dag_strategy")` proyecta `4 * 10 * 4 + 4 + 1` con los topes fijos.
+    Esta funcion es esa cuenta parametrizada, y existe para que las dos no puedan
+    discrepar: si la forma se derivara con una aritmetica propia, podria elegir un grafo
+    que la factibilidad declara infactible, y el registro tendria un paradigma admitido
+    corriendo una forma que su propia cota prohibe.
+    """
+    return ramas * DAG_SUB_AGENT_ITERATIONS * (replans + 1) + ramas + 1
+
+
+def dag_shape(task: dict[str, Any]) -> DagShape:
+    """Cuantos nodos y cuanta profundidad de replan, por aritmetica sobre el request.
+
+    EL PROBLEMA QUE CIERRA (`D-3`). Hasta hoy el MODELO dibujaba el grafo de control: el
+    planificador proponia `sub_questions` con sus dependencias y `_assign_waves` solo
+    topologizaba lo que el modelo dijo. Los topes eran dos constantes fijas —4 y 3— iguales
+    para una tarea de 3 unidades y para una de 400. Es la version estructural de `D-1`: el
+    invariante del producto dice que el modelo es SENSOR y no maneja flujo de control, y un
+    grafo de control es flujo de control.
+
+    LAS TRES COTAS, y ninguna necesita una constante nueva:
+
+      material    mas de una rama por unidad no descompone nada: reparte la misma unidad
+                  en dos preguntas. El tope natural es `n_units`
+      llamadas    `MAX_ORCHESTRATION_CALLS`, la MISMA cota que la factibilidad impone, con
+                  la misma formula. Un replan MULTIPLICA porque re-corre todas las olas
+      piso        una rama sin replan es el caso degenerado y sigue siendo un DAG valido
+                  —de un nodo—. Se dice, no se finge que hubo descomposicion
+
+    SE BUSCA DE MAYOR A MENOR y no se resuelve en cerrado a proposito: el espacio tiene
+    a lo sumo `4 x 4` puntos, asi que enumerarlo es exacto y no hay redondeo que discuta
+    con la cota. Una formula cerrada ahorraria dieciseis comparaciones y podria diferir
+    de `projected_calls` en el borde, que es donde importa.
+
+    LO QUE NO GOBIERNA, Y ES LO QUE MAS IMPORTARIA. El acoplamiento decide si las ramas
+    pueden correr independientes: con acoplamiento alto, descomponer en paralelo mide
+    cualquier cosa menos la cadena. **La sonda lo mide y esa lectura no llega hasta aca**
+    —ni el `ToolSurface` ni la tarea la transportan— asi que `governed_by_coupling` es
+    `False` y se REGISTRA. Es la misma forma que el barrido de la 7.17 busca: una creencia
+    completa, medida, que no llega a donde se decide.
+    """
+    n_units = max(1, len(task.get("unit_ids") or []))
+    tope_ramas = max(1, min(DAG_MAX_SUB_QUESTIONS, n_units))
+
+    mejor = (1, 0)
+    for ramas in range(tope_ramas, 0, -1):
+        for replans in range(DAG_MAX_REPLAN_ITERATIONS, -1, -1):
+            if projected_calls(ramas, replans) <= MAX_ORCHESTRATION_CALLS:
+                mejor = (ramas, replans)
+                break
+        else:
+            continue
+        break
+    ramas, replans = mejor
+
+    if ramas == 1:
+        motivo = (
+            f"una sola rama: {n_units} unidad(es) y la cota de {MAX_ORCHESTRATION_CALLS} "
+            f"llamadas. Es un DAG de un nodo, y se dice en vez de fingir descomposicion"
+        )
+    elif ramas < DAG_MAX_SUB_QUESTIONS:
+        limita = "el material" if n_units < DAG_MAX_SUB_QUESTIONS else "la cota de llamadas"
+        motivo = (
+            f"{ramas} ramas y {replans} replan(s) = {projected_calls(ramas, replans)} "
+            f"llamadas: {limita} acota por debajo del tope fijo de "
+            f"{DAG_MAX_SUB_QUESTIONS}"
+        )
+    else:
+        motivo = (
+            f"{ramas} ramas y {replans} replan(s) = {projected_calls(ramas, replans)} "
+            f"llamadas: el tope fijo manda, el material ({n_units} unidades) alcanza"
+        )
+    return DagShape(ramas, replans, motivo, governed_by_coupling=False)
 
 
 # El blackboard vive en `blackboard.py`: es una DIMENSION (estado compartido), no una
@@ -218,12 +315,17 @@ def dag_strategy(
     # it does not.
     max_board_chars = int(task["budget_tokens"]) * 4 // 3
 
+    # LA FORMA SE DERIVA ANTES DE PREGUNTAR. El planificador recibe el tope ya calculado,
+    # asi que el modelo propone DENTRO de una forma que el codigo fijo — en vez de proponer
+    # la forma y que el codigo la acepte.
+    shape = dag_shape(task)
+
     # ---- Phase 1: plan
     plan_completion = client.complete(
         messages=[{
             "role": "user",
             "content": PLANNER_PROMPT.format(
-                max_sub=DAG_MAX_SUB_QUESTIONS, query=query, n_units=len(unit_ids)
+                max_sub=shape.max_sub_questions, query=query, n_units=len(unit_ids)
             ),
         }],
         max_tokens=800,
@@ -238,7 +340,7 @@ def dag_strategy(
     sub_questions = well_formed(
         extract_json(plan_completion.text, "sub_questions", sink=surface),
         "id", "question", sink=surface,
-    )[:DAG_MAX_SUB_QUESTIONS]
+    )[:shape.max_sub_questions]
     if not sub_questions:
         # A malformed plan degrades to a single sub-question equal to the query. This
         # is how such strategies behave in practice, and removing it would measure a
@@ -248,7 +350,7 @@ def dag_strategy(
     extractions: dict[str, str] = {}
     previous_avg = -1.0
 
-    for iteration in range(DAG_MAX_REPLAN_ITERATIONS + 1):
+    for iteration in range(shape.max_replans + 1):
         # ---- Phase 2: execute waves
         for wave in _assign_waves(sub_questions):
             for sub in wave:
@@ -305,7 +407,7 @@ def dag_strategy(
         # ---- Phase 4: the verify router (dag_verify_router)
         if all_accept or avg_score >= DAG_READY_THRESHOLD:
             break
-        if iteration >= DAG_MAX_REPLAN_ITERATIONS:
+        if iteration >= shape.max_replans:
             break
         if previous_avg >= 0 and (avg_score - previous_avg) < DAG_DIMINISHING_RETURNS:
             break

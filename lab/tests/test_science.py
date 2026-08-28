@@ -1944,6 +1944,252 @@ def check_handoff_authorisation(ok: bool) -> bool:
     return ok
 
 
+def check_the_code_draws_the_graph(ok: bool) -> bool:
+    """§48: D-3, la forma del DAG la deriva el CODIGO, no la propone el modelo.
+
+    Hasta hoy el planificador proponia `sub_questions` con sus dependencias y
+    `_assign_waves` solo topologizaba lo que el modelo dijo, con dos constantes fijas —4 y
+    3— iguales para una tarea de 3 unidades y para una de 400. Es la version estructural de
+    `D-1`: el invariante dice que el modelo es SENSOR y no maneja flujo de control, y un
+    grafo de control es flujo de control.
+    """
+    # ALIASADO a proposito: `feasibility.check` tapa al `check` de este archivo, y el
+    # sombreado no falla al importar — falla adentro del primer aserto, con un TypeError
+    # que no menciona el nombre. Un import que redefine el verificador del test es la
+    # clase de error que hace pasar un test que no probo nada.
+    from app.feasibility import MAX_ORCHESTRATION_CALLS, check as feasibility_check
+    from app.paradigms.dag import (
+        DAG_MAX_REPLAN_ITERATIONS, DAG_MAX_SUB_QUESTIONS, dag_shape, projected_calls,
+    )
+
+    print("\n--- 48. el codigo dibuja el grafo (D-3) ---")
+
+    def forma(n: int):
+        return dag_shape({"unit_ids": [f"u{i}" for i in range(n)],
+                          "budget_tokens": 40_000})
+
+    ok &= check("una unidad da UNA rama: un DAG de un nodo, y se dice",
+                forma(1).max_sub_questions == 1
+                and "un nodo" in forma(1).reason)
+    ok &= check("la forma escala con el material y no con una constante",
+                [forma(n).max_sub_questions for n in (1, 2, 3, 4)] == [1, 2, 3, 4])
+    ok &= check("y no crece mas alla del tope fijo por mucho material que haya",
+                forma(400).max_sub_questions == DAG_MAX_SUB_QUESTIONS)
+
+    # LA PROPIEDAD QUE IMPORTA: la forma derivada nunca excede la cota que la factibilidad
+    # impone. Si se derivara con aritmetica propia, podria elegir un grafo que su propia
+    # cota prohibe, y el registro tendria un paradigma admitido corriendo una forma
+    # infactible.
+    excesos = [
+        n for n in (1, 2, 3, 4, 10, 40, 400)
+        if projected_calls(forma(n).max_sub_questions, forma(n).max_replans)
+        > MAX_ORCHESTRATION_CALLS
+    ]
+    ok &= check("ninguna forma derivada excede la cota de llamadas de factibilidad",
+                not excesos)
+
+    docs = {f"u{i}": "x" * 400 for i in range(40)}
+    v = feasibility_check("dag_strategy", docs,
+                          {"unit_ids": list(docs), "budget_tokens": 40_000})
+    ok &= check("y usa la MISMA formula que factibilidad proyecta, no una paralela",
+                projected_calls(DAG_MAX_SUB_QUESTIONS, DAG_MAX_REPLAN_ITERATIONS)
+                == v.projected_calls)
+
+    ok &= check("el hueco se REGISTRA: el acoplamiento no llega al paradigma",
+                forma(40).governed_by_coupling is False)
+    ok &= check("y la forma lleva su motivo, no un numero pelado",
+                "ramas" in forma(40).reason or "rama" in forma(40).reason)
+    return ok
+
+
+def check_who_sets_the_dial(ok: bool) -> bool:
+    """§47: T-5, quien fija el dial. Tres fuentes y una regla: el MAXIMO gana.
+
+    `max` no es conveniencia: es la unica composicion que hace que cada fuente solo pueda
+    ENDURECER. Con `min` o un promedio, agregar una fuente podria ablandar el resultado, y
+    entonces una fuente nueva seria un riesgo en vez de una garantia. Enunciado completo en
+    `EL_DIAL.es.md`.
+    """
+    from app.assurance import Assurance, PROFILES, required_floor, resolve
+    from app.beliefs import Belief, BeliefBase, Provenance
+
+    print("\n--- 47. quien fija el dial (T-5) ---")
+
+    def con(**props) -> BeliefBase:
+        b = BeliefBase()
+        for k, v in props.items():
+            b.assert_(Belief(k, v, 1.0, Provenance.COMPUTED, "declarado por el caller"))
+        return b
+
+    vacia = con()
+    ok &= check("sin nada que imponga, gana lo PEDIDO",
+                resolve(vacia, requested=Assurance.EXPLORATORY).level
+                is Assurance.EXPLORATORY)
+    ok &= check("el llamador puede SUBIR: conoce cosas que no estan en el material",
+                resolve(vacia, requested=Assurance.CERTIFIED).level
+                is Assurance.CERTIFIED)
+
+    irr = con(irreversible=True)
+    ok &= check("una accion irreversible impone A3 aunque se pida el minimo",
+                resolve(irr, requested=Assurance.EXPLORATORY).level
+                is Assurance.CERTIFIED)
+    ok &= check("`shared_writes` impone A2, que es otro piso y no el mismo",
+                resolve(con(shared_writes=True),
+                        requested=Assurance.EXPLORATORY).level
+                is Assurance.ACCOUNTABLE)
+
+    aprendido = {"R": Assurance.ACCOUNTABLE}
+    ok &= check("el piso APRENDIDO tambien sube, y solo sube",
+                resolve(vacia, requested=Assurance.EXPLORATORY,
+                        learned=aprendido, region="R").level
+                is Assurance.ACCOUNTABLE)
+    ok &= check("y no baja lo que el request ya impuso: el maximo gana",
+                resolve(irr, requested=Assurance.EXPLORATORY,
+                        learned={"R": Assurance.STANDARD}, region="R").level
+                is Assurance.CERTIFIED)
+    ok &= check("un piso aprendido de otra region no toca esta",
+                resolve(vacia, requested=Assurance.EXPLORATORY,
+                        learned=aprendido, region="OTRA").level
+                is Assurance.EXPLORATORY)
+
+    # LA PROPIEDAD, y es la que hace seguro agregar una fuente: el nivel efectivo es
+    # monotono en cada fuente por separado. Se verifica sobre el producto entero.
+    from itertools import product
+    fallas = []
+    for pedido, piso_ap in product(Assurance, Assurance):
+        alto = resolve(vacia, requested=pedido, learned={"R": piso_ap}, region="R").level
+        for menor in Assurance:
+            if menor > pedido:
+                continue
+            bajo = resolve(vacia, requested=menor, learned={"R": piso_ap},
+                           region="R").level
+            if bajo > alto:
+                fallas.append((pedido.label, menor.label, piso_ap.label))
+    ok &= check("MONOTONO en cada fuente: bajar lo pedido nunca sube el nivel efectivo "
+                f"({len(list(product(Assurance, Assurance)))} combinaciones)", not fallas)
+
+    # LA CUARTA FUENTE, que no es un nivel: A2 sin calibracion endurece la PROCEDENCIA
+    # dentro del nivel en vez de bajar el nivel.
+    sin_cal = resolve(vacia, requested=Assurance.ACCOUNTABLE,
+                      calibration_trustworthy=False)
+    con_cal = resolve(vacia, requested=Assurance.ACCOUNTABLE,
+                      calibration_trustworthy=True)
+    ok &= check("A2 sin calibracion exige OBSERVED, y NO baja de nivel",
+                sin_cal.level is Assurance.ACCOUNTABLE
+                and sin_cal.profile.derived_floor is Provenance.OBSERVED)
+    ok &= check("con calibracion ganada, A2 admite ELICITED como su perfil declara",
+                con_cal.profile.derived_floor is Provenance.ELICITED)
+
+    # EL HALLAZGO DE MARGINALIZAR: tres de las cuatro posiciones no restringen patrones.
+    inertes = [
+        lvl.label for lvl in Assurance
+        if PROFILES[lvl].admissible_patterns is None
+    ]
+    ok &= check(f"el dial no restringe PATRONES hasta A3 — {inertes} no filtran ninguno, "
+                f"y por eso marginalizar dice cual escalon se paga",
+                inertes == ["A0_EXPLORATORY", "A1_STANDARD", "A2_ACCOUNTABLE"])
+    ok &= check("pero no es inerte en los otros ejes: A2 exige theta firmado y A1 no",
+                PROFILES[Assurance.ACCOUNTABLE].require_signed_theta
+                and not PROFILES[Assurance.STANDARD].require_signed_theta)
+
+    floor, razones = required_floor(irr)
+    ok &= check("el piso viene con su motivo escrito, no como un numero pelado",
+                floor is Assurance.CERTIFIED and any("irreversible" in r for r in razones))
+    return ok
+
+
+def check_assembler_soundness(ok: bool) -> bool:
+    """§46: T-3, el teorema de soundness del ensamblador. Exhaustivo, no por casos.
+
+    Si `fill` emite, entonces para TODA ranura existe una creencia vigente sobre la
+    proposicion asignada, con procedencia >= piso, y la subcadena emitida es exactamente
+    `str(valor)`. Enunciado y limites en `SOUNDNESS.es.md`.
+
+    SE RECORRE EL ESPACIO ENTERO Y NO CASOS ELEGIDOS. Cuatro procedencias por cuatro pisos
+    son dieciseis puntos: enumerarlos es exacto y cuesta lo mismo que elegir tres. Elegir
+    casos es donde se esconde el que falta.
+    """
+    from itertools import product
+    from app.beliefs import Belief, BeliefBase, Provenance
+    from app.contracts import fill, SlotBinding, slots_of
+
+    print("\n--- 46. soundness del ensamblador (T-3) ---")
+
+    PLANTILLA = "El saldo de {cuenta} es {monto} al {fecha}."
+    ranuras = slots_of(PLANTILLA)
+    ok &= check("las ranuras salen de la PLANTILLA, no de una lista paralela",
+                ranuras == ["cuenta", "monto", "fecha"])
+
+    VALORES = {"cuenta": "AC-77", "monto": 1234.5, "fecha": "2026-08-28"}
+    BINDINGS = [SlotBinding(slot=s, proposition=f"p_{s}") for s in ranuras]
+
+    def base_con(procedencias: dict[str, Provenance]) -> BeliefBase:
+        b = BeliefBase()
+        for s, prov in procedencias.items():
+            b.assert_(Belief(f"p_{s}", VALORES[s], 1.0, prov, "de prueba"))
+        return b
+
+    # EXHAUSTIVO sobre (procedencia de la ranura critica) x (piso pedido).
+    fallas = []
+    for prov, piso in product(Provenance, Provenance):
+        procs = {s: Provenance.COMPUTED for s in ranuras}
+        procs["monto"] = prov
+        v = fill(PLANTILLA, BINDINGS, base_con(procs), floor=piso)
+        deberia = prov.rank >= piso.rank and all(
+            p.rank >= piso.rank for p in procs.values()
+        )
+        if bool(v.rendered) != deberia:
+            fallas.append((prov.value, piso.value, bool(v.rendered), deberia))
+        if v.rendered:
+            # Condicion 3: la subcadena es exactamente `str(valor)`, sin formatear.
+            for s in ranuras:
+                if str(VALORES[s]) not in v.rendered:
+                    fallas.append((s, "subcadena ausente", v.rendered, ""))
+            if "{" in v.rendered or "}" in v.rendered:
+                fallas.append(("", "ranura sin sustituir", v.rendered, ""))
+    ok &= check(f"emite exactamente cuando toda ranura llega al piso "
+                f"({len(list(product(Provenance, Provenance)))} combinaciones)",
+                not fallas)
+
+    # Falla cerrada y ENTERA: una sola ranura floja retiene la salida completa.
+    flojo = {s: Provenance.COMPUTED for s in ranuras}
+    flojo["fecha"] = Provenance.ASSUMED
+    v = fill(PLANTILLA, BINDINGS, base_con(flojo), floor=Provenance.COMPUTED)
+    ok &= check("una ranura floja retiene la salida ENTERA, no emite una parcial",
+                v.rendered is None and len(v.refused) == 1)
+    ok &= check("y el motivo nombra la ranura y su proposicion, no solo «fallo»",
+                v.refused[0][0] == "fecha" and v.refused[0][1] == "p_fecha")
+
+    # Sin creencia no es lo mismo que creencia floja, y el motivo lo distingue.
+    b = base_con({s: Provenance.COMPUTED for s in ranuras if s != "monto"})
+    v = fill(PLANTILLA, BINDINGS, b, floor=Provenance.COMPUTED)
+    ok &= check("«no hay creencia» se distingue de «procedencia baja» en el motivo",
+                v.rendered is None and "no hay creencia" in v.refused[0][2])
+
+    # Una ranura sin asignar es un error de la PLANTILLA, y tampoco emite.
+    v = fill(PLANTILLA, BINDINGS[:2], base_con(
+        {s: Provenance.COMPUTED for s in ranuras}), floor=Provenance.COMPUTED)
+    ok &= check("una ranura sin asignacion no emite y lo dice",
+                v.rendered is None and "sin asignar" in v.refused[0][2])
+
+    # VIGENTE, no historica: una creencia posterior supersede.
+    b = base_con({s: Provenance.COMPUTED for s in ranuras})
+    b.assert_(Belief("p_monto", 999.0, 1.0, Provenance.COMPUTED, "corregido"))
+    v = fill(PLANTILLA, BINDINGS, b, floor=Provenance.COMPUTED)
+    ok &= check("el teorema habla de la creencia VIGENTE: la nueva es la que se emite",
+                v.rendered is not None and "999.0" in v.rendered
+                and "1234.5" not in v.rendered)
+
+    # EL LIMITE, dicho en el teorema: la prosa que envuelve no esta cubierta.
+    NEGADA = "El saldo de {cuenta} NO supera {monto}."
+    v = fill(NEGADA, BINDINGS[:2], base_con(
+        {s: Provenance.COMPUTED for s in ranuras}), floor=Provenance.COMPUTED)
+    ok &= check("una plantilla que NIEGA emite sound y falso: el alcance es la ranura, "
+                "no la oracion — y por eso el limite esta EN el teorema",
+                v.rendered is not None and "NO supera" in v.rendered)
+    return ok
+
+
 def check_absence_and_presupposition(ok: bool) -> bool:
     """§45: las dos obligaciones que faltaban, y la asimetria que las separa.
 
@@ -2597,6 +2843,9 @@ def main() -> int:
     ok = check_measurement_and_state_are_two_trees(ok)
     ok = check_model_is_an_action(ok)
     ok = check_absence_and_presupposition(ok)
+    ok = check_assembler_soundness(ok)
+    ok = check_who_sets_the_dial(ok)
+    ok = check_the_code_draws_the_graph(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1
