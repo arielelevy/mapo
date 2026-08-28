@@ -467,6 +467,25 @@ Todo lo anterior está verificado en `tests/test_science.py` contra distribucion
 términos se conocen por construcción, incluido el caso negativo en el que se confirma que un
 ruteador por encima de `β_max` captura valor negativo.
 
+**Qué es el Teorema 1, y qué no es.** Es una *identidad*: una descomposición algebraica
+exacta de una diferencia, verdadera por construcción. **Ninguna medición puede falsarla**, y
+nada en este paper debe leerse como que la confirmó. Lo empírico es sólo si sus términos
+satisfacen la desigualdad sobre una distribución dada — y eso es una pregunta sobre un
+ruteador, no sobre el teorema.
+
+**Y la distinción importa acá porque los términos nunca se separaron.** En los dos corpus
+held-out el margen de decisión del ruteador fue **0 en todas las tareas**, así que la curva
+riesgo–cobertura colapsa a un solo punto en el origen: **AURC 0,000** contra un techo de
+**+0,400**. Un ruteador que nunca se abstiene no tiene `α` ni `β` distintos de
+siempre-fallback, así que la identidad se cumple **vacuamente** — con `π·α·G_α` y
+`(1−π)·β·L_β` medidos sobre una cobertura que el ruteador no eligió.
+
+> **El trabajo que un lector podría acreditarle a §5.1 lo hace §5.2.** El teorema de
+> selección aporta la contabilidad; toda afirmación falsable que este registro llegó a
+> resolver es sobre dominancia de cascada y sensibilidad del detector. Presentarlos en este
+> orden es una decisión de exposición, no una de prioridad — y la lectura honesta es que la
+> rama de selección de la partición de más abajo **sigue sin ejercitarse**.
+
 ## 5.2 Dominancia de la cascada, y su corrección medida
 
 Un **ruteador** que se equivoca paga `L`, una pérdida de calidad: se entrega una respuesta peor

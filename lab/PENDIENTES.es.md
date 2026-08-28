@@ -233,7 +233,7 @@
 - [~] **T-6** · **arXiv 2603.18043 leído** y ubicado en §2.4 de los dos papers: corrobora la disciplina del sensor desde el ángulo adversarial, y **ocupa «procedencia + ruteo + contratos» como frase** — la conjunción queda enunciada por lo que excluye. Faltan EnvProbe, Kintsugi, SHARP, Trace2Policy
 
 **Paper**
-- [ ] W-1 · re-encuadrar §5.1 vs §5.2
+- [x] **W-1** · **re-encuadrado en los dos archivos.** El punto no era el orden de las secciones: era que **el Teorema 1 es una IDENTIDAD** —una descomposicion algebraica exacta, verdadera por construccion— y **ninguna medicion puede falsarla**. Lo empirico es solo si sus terminos satisfacen la desigualdad, que es una pregunta sobre un ruteador. Y los terminos **nunca se separaron**: el margen fue 0 en todas las tareas, asi que `alpha` y `beta` no se distinguen de siempre-fallback y la identidad se cumple **vacuamente**. El AURC degenerado (0,000 contra techo +0,400) es la misma cosa vista desde la curva. Queda dicho que el trabajo que un lector le acreditaria a §5.1 lo hace §5.2
 - [ ] W-2 · toda edición va a los DOS archivos
 - [ ] W-3 · integrar el hallazgo de nano (P13)
 - [ ] W-4 · endorser de arXiv, o Zenodo con DOI
@@ -526,7 +526,7 @@ por donde el mecanismo debería actuar — no sobre la grilla completa.
 | ~~P-8~~ | ~~Promoción sin incertidumbre~~ | **CERRADO 2026-08-28.** Bootstrap **pareado** sobre el holdout (1.000 remuestras, 95%, semilla fija) y el criterio es el **borde inferior**. Comparar dos puntos no era una guarda: un candidato que gana por 0,001 gana por ruido la mitad de las veces, y promovido queda como incumbente que el ciclo siguiente debe superar — el error **se heredaba**. `test_science.py` §29 |
 | ~~P-9~~ | ~~Repetir consolidación reaplica historia~~ | **CERRADO 2026-08-28**, y salió un segundo defecto tapado por el primero: el peso se redondeaba al **serializar** y no al aplicar, así que **lo firmado no era lo que decide**. El bundle lleva marca de agua firmada de lo absorbido. `test_science.py` §28 |
 | ~~P-10~~ | ~~Flags declarativos del dial A0–A3~~ | **CERRADO 2026-08-28** para `theta_may_learn_online`: `serve.py` envuelve el request entero y `Plasticity.apply` levanta ahí adentro. Se cumplía **por casualidad** —`apply` sólo se llama offline— y una invariante casual la rompe el próximo cambio. **Falta el sellado de A3**, que sigue declarado y no impuesto. `test_science.py` §27 |
-| P-11 | **Separar producto de banco en `lab/app/`** | Hoy conviven. La regla que evita que se vuelvan a mezclar: **el banco importa al producto; el producto jamás sabe que el banco existe**. Concreto: `serve.py` todavía importa `grading` |
+| ~~P-11~~ | ~~Separar producto de banco en `lab/app/`~~ | **VERIFICADO 2026-08-28**: ningun modulo del producto —`serve`, `router`, `rules`, `beliefs`, `policy`, `assurance`, `decide`, `contracts`, `probe`, `features`— importa `grading`, `runner`, `metrics` ni `corpus`. La regla se cumple hoy. Lo que falta no es la separacion sino la **mudanza fisica**, que va con `A-3` |
 
 ---
 
@@ -813,7 +813,7 @@ después: el mecanismo de P17 no se movió (cascada 2/26, catorce esperando la s
 
 | # | Qué |
 |---|---|
-| W-1 | **Re-encuadrar §5.1 (teorema de selección) vs §5.2 (dominancia de cascada)**. E2 muestra que la dominancia hace el trabajo que se le acredita al teorema; ahora además con el AURC degenerado (0,000 contra un techo de +0,400) sobre la mesa |
+| ~~W-1~~ | **HECHO 2026-08-28.** El teorema es una identidad y no se puede falsar; los terminos nunca se separaron porque el margen fue 0 en todas las tareas. Escrito en `paper-en.md` y `paper-es.md`, en la misma posicion de cada uno |
 | W-2 | Toda edición va a **los dos** archivos: `paper-en.md` (canónico) y `paper-es.md` (espejo) |
 | W-3 | Integrar el hallazgo de nano (P13) — «la estructura rescata al modelo barato, los loops abiertos no» — que es el resultado más publicable y está huérfano de tesis |
 | W-4 | Endorser de arXiv, o publicar en **Zenodo con DOI**. §14 del `PLAN.md` es histórico |

@@ -440,6 +440,25 @@ All of the above is verified in `tests/test_science.py` against distributions wh
 are known by construction, including the negative case where a router above `β_max` is
 confirmed to capture negative value.
 
+**What Theorem 1 is, and what it is not.** It is an *identity*: an exact algebraic
+decomposition of a difference, true by construction. It cannot be falsified by any
+measurement, and nothing in this paper should be read as having confirmed it. What is
+empirical is only whether its terms satisfy the inequality on a given distribution — and
+that is a question about a router, not about the theorem.
+
+**The distinction matters here because the terms were never separated.** Across both
+held-out corpora the router's decision margin was **0 on every task**, so the
+risk–coverage curve collapses to a single point at the origin: **AURC 0.000** against a
+ceiling of **+0.400**. A router that never abstains has no `α` and no `β` distinct from
+always-fallback, so the identity holds vacuously — with `π·α·G_α` and `(1−π)·β·L_β` both
+measured on a coverage the router did not choose.
+
+> **The work a reader might credit to §5.1 is done by §5.2.** The selection theorem
+> supplies the accounting; every falsifiable claim this record actually settled is about
+> cascade dominance and detector sensitivity. Presenting them in this order is a
+> presentation choice, not a claim of priority — and the honest reading is that the
+> selection branch of the partition below has still not been exercised.
+
 ## 5.2 Cascade dominance, and its measured correction
 
 A **router** that errs pays `L`, a quality loss: a worse answer is delivered and nothing
