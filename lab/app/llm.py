@@ -249,6 +249,13 @@ class SealedCacheMiss(RuntimeError):
 @dataclass
 class Usage:
     prompt_tokens: int = 0
+    # TOKENS DE ENTRADA QUE EL PROVEEDOR SIRVIO DE SU CACHE. Distinto de `cached_calls`,
+    # que es NUESTRO cache de disco: aquel evita la llamada entera, este la abarata.
+    #
+    # No se registraba, y por eso `X-4b` no se podia contestar con datos: el cache del
+    # endpoint esta encendido por defecto —no hay directiva que mandar— asi que la unica
+    # pregunta era si pegaba, y no habia con que mirarlo.
+    provider_cached_tokens: int = 0
     completion_tokens: int = 0
     calls: int = 0
     cached_calls: int = 0
@@ -260,6 +267,7 @@ class Usage:
 
     def merge(self, other: "Usage") -> None:
         self.prompt_tokens += other.prompt_tokens
+        self.provider_cached_tokens += other.provider_cached_tokens
         self.completion_tokens += other.completion_tokens
         self.calls += other.calls
         self.cached_calls += other.cached_calls
@@ -268,6 +276,7 @@ class Usage:
     def as_dict(self) -> dict[str, Any]:
         return {
             "prompt_tokens": self.prompt_tokens,
+            "provider_cached_tokens": self.provider_cached_tokens,
             "completion_tokens": self.completion_tokens,
             "total_tokens": self.total_tokens,
             "calls": self.calls,
@@ -449,6 +458,14 @@ class LLMClient:
             usage=Usage(
                 prompt_tokens=raw_usage.get("prompt_tokens", 0),
                 completion_tokens=raw_usage.get("completion_tokens", 0),
+                # `prompt_tokens_details` puede faltar entero —depende del modelo y de la
+                # version de API— y ahi 0 significa «el proveedor no lo informa», que no
+                # es «no pego». Se separa en el analisis, no aca.
+                provider_cached_tokens=int(
+                    (raw_usage.get("prompt_tokens_details") or {}).get(
+                        "cached_tokens", 0
+                    ) or 0
+                ),
                 calls=1,
                 cached_calls=1 if from_cache else 0,
                 # A cache hit costs no wall time; charging the original latency would

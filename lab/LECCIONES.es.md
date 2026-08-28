@@ -1392,6 +1392,43 @@ era plausible, así que nadie lo miró hasta que algo lo usó para decidir.
 
 ---
 
+### 5.11 El caché del proveedor sí cubre `tools`, y aun así esa vía no existe · `VERIFICADO`
+
+La hipótesis era: el sobrecosto de declarar herramientas se recupera con el caché de prompt
+del proveedor, y `llm.py` no manda ninguna directiva. **Las dos mitades resultaron falsas**,
+y la segunda de una manera que ninguna cantidad de código arreglaba.
+
+**Lo que dice la documentación de primera mano**, verificado y no supuesto:
+
+| | |
+|---|---|
+| ¿cubre `tools`? | **sí** — *«Both the messages array and tool definitions»* |
+| ¿hay directiva que mandar? | **no** — está encendido por defecto y *«there is no opt-out support»* |
+| ¿qué hace falta? | **≥1.024 tokens iniciales idénticos**; después, cada 128 idénticos más |
+| ¿qué lo rompe? | *«a single character difference in the first 1,024 tokens»* |
+
+**Y ahí muere, por aritmética.** El prefijo estable entero mide **~567 tokens**: 533 de
+definiciones de herramientas más 34 del contrato de respuesta. **Nunca llega a 1.024**, así
+que entre tareas no hay caché posible ni con la mejor de las intenciones.
+
+> Y si llegara, tampoco serviría como está: el prompt arranca con `Task: {question}`, o sea
+> que **lo variable va primero**. La documentación pide exactamente lo contrario —*«structure
+> your requests such that repetitive content occurs at the beginning»*— y con la pregunta
+> adelante el prefijo común se rompe en el token 3.
+
+Dentro de una misma tarea sí hay caché, porque el bucle de herramientas acumula mensajes y
+el prefijo crece por encima del umbral. **Eso ya está pasando y es gratis.** Lo que no había
+era manera de saberlo: `cached_calls` cuenta *nuestro* caché de disco —que evita la llamada
+entera— y el del proveedor, que la abarata, **no se registraba**. Ahora sí
+(`provider_cached_tokens`, desde `prompt_tokens_details`).
+
+**El premio, con el sobrecosto real en 6,7% y concentrado en un solo brazo, era chico desde
+el principio.** Verificar antes de construir costó una búsqueda en la documentación y una
+división; construir la directiva que no existe habría costado una tarde y no habría cambiado
+un token.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una
