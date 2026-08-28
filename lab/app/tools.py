@@ -401,6 +401,14 @@ class ToolSurface:
     # FACTOR: exigir las obligaciones tipadas (polaridad, presuposicion). Cambia el
     # contrato que todos los brazos leen, asi que sus filas van a otro archivo.
     demand_obligations: bool = False
+    # FACTOR: estado compartido entre pasos. Es una DIMENSION, no una propiedad de una
+    # topologia — mientras vivio adentro de `dag.py`, «el efecto dag_strategy» era la
+    # conjuncion de la topologia de olas y el blackboard, sin nada que las separe, y la
+    # pregunta «mejora react con estado compartido?» no se podia ni formular.
+    #
+    # `None` es «como cada patron venga de fabrica»: dag CON, react SIN. Es el regimen en
+    # el que se midio todo hasta hoy, y decirlo `None` lo distingue de haberlo elegido.
+    shared_state: bool | None = None
     calls: dict[str, int] = field(default_factory=dict)
     units_read: set[str] = field(default_factory=set)
     hallucinated: int = 0

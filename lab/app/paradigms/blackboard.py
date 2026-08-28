@@ -23,6 +23,34 @@ from dataclasses import dataclass, field
 
 
 @dataclass
+# DONDE ES FACTOR Y DONDE SERIA OTRO PATRON. `F-2` pedia cruzar `{board, sin} x {react,
+# dag}`, y la mitad de ese cruce NO SE PUEDE construir sin cambiar lo que se mide:
+#
+#   dag_strategy   FACTOR limpio. Las olas ya corren en secuencia, asi que el board es una
+#                  adicion encima: apagarlo deja las mismas olas, el mismo verify y los
+#                  mismos replans, y lo unico que cambia es si cada sub-agente ve lo que
+#                  los anteriores encontraron. Eso es exactamente una dimension
+#
+#   react          DEGENERADO. Es UN agente en un bucle: no hay entre quienes compartir, y
+#                  su transcripcion ya es el estado. Un «react con board» le agregaria al
+#                  prompt un resumen de lo que el prompt ya contiene, asi que la celda
+#                  medira redundancia, no estado compartido
+#
+#   map_reduce     SERIA OTRO PATRON. Sus llamadas son independientes por construccion —de
+#                  ahi que escale—. Darle estado compartido las vuelve secuenciales, y eso
+#                  cambia el grafo de control, que es la definicion de patron y no de
+#                  factor (`PATRON_O_FACTOR.es.md`)
+#
+#   handoff        LIMITE. Lo que viaja entre alcances ES su estado compartido minimo, asi
+#                  que quitarlo deja la topologia —alcances disjuntos, transferencia
+#                  autorizada por codigo— sin nada que transferir. Discutible; hasta que se
+#                  decida, no se mide, y no medirlo se dice.
+#
+# Asi que el cruce real es `{board, sin} x {dag_strategy}` mas los patrones donde la
+# dimension no aplica. Una celda vacia POR CONSTRUCCION no es un hueco del banco: es una
+# propiedad de la topologia, y llenarla con algo que se le parezca mediria otra cosa.
+
+
 class Blackboard:
     """Shared state across sub-agents.
 

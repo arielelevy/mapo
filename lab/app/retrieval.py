@@ -337,6 +337,112 @@ class HybridRetriever:
         }
 
 
+class HydeFused:
+    """HyDE como RAMA PARALELA fusionada por RRF. `H-1`, `H-2`, `F-3`.
+
+    QUE ES. Se le pide al modelo una respuesta HIPOTETICA a la pregunta —como se veria el
+    parrafo que la contesta, escrito en el estilo del corpus— y se rankea densamente con
+    ESE texto en vez de con la pregunta. El puente que cruza: la pregunta dice «cuenta de
+    liquidacion de Valerio» y el documento dice «AC-7741, titular Valerio Simoni, rol
+    custodio». Un vector de la pregunta y uno del documento viven lejos; un vector de la
+    respuesta hipotetica vive cerca del documento, porque tiene su forma.
+
+    POR QUE RAMA Y NO HERRAMIENTA, que es la decision de `H-1`. Una herramienta la llama el
+    MODELO, y eso pone flujo de control del lado del sensor — el invariante del producto lo
+    prohibe. Como brazo de recuperacion, quien decide usarla es la configuracion de la
+    corrida: determinista, registrable, y comparable contra el brazo sin ella.
+
+    POR QUE FUSIONADA Y NO REEMPLAZANDO. Una respuesta hipotetica puede estar bien
+    imaginada y ser falsa —el modelo inventa una cuenta que no existe— y entonces su vector
+    apunta a documentos parecidos y equivocados. Fusionar por RRF hace que ese error tenga
+    que VENCER al ranking base en vez de reemplazarlo: una unidad que solo la rama HyDE
+    quiere entra abajo, y una que las dos quieren sube. Es la misma logica por la que
+    `hybrid` fusiona lexico y denso en vez de elegir uno.
+
+    LO QUE NO ES DETERMINISTA, Y SE DECLARA. La generacion es una llamada al modelo, asi
+    que este brazo reintroduce varianza en la recuperacion — un segundo piso de ruido
+    encima del de los paradigmas. Mismo estatus que `LLMReranked`: sirve para preguntar si
+    HyDE cambia la conclusion, no para producir el numero titular.
+
+    Y CUESTA. Una llamada por consulta, y las consultas las emite el paradigma, asi que el
+    costo escala con cuanto busca cada topologia — un brazo que busca diez veces paga diez
+    generaciones. Sin cobrarlo, comparar `hybrid` contra `hybrid_hyde` compara una
+    recuperacion gratis contra una paga y llama «mejor» a la diferencia (`H-3`).
+    """
+
+    name = "hybrid_hyde"
+
+    # Un parrafo corto. El objetivo es la FORMA del documento, no su contenido: un texto
+    # largo agrega tokens y ruido lexico sin acercar el vector, porque lo que lo acerca es
+    # el registro —nombres, identificadores, la sintaxis del corpus— y eso entra en dos
+    # oraciones. Mas largo es mas caro y no mas parecido.
+    HYDE_MAX_TOKENS = 160
+
+    HYDE_PROMPT = (
+        "Write ONE short paragraph that looks like the passage which would answer this "
+        "question, as it would appear in an internal records document. Use the same "
+        "register: entity name, the specific value, the role or context. Invent "
+        "plausible values — this text is used only as a search probe, never shown to "
+        "anyone.\n\nOutput only the paragraph.\n\nQuestion: {query}"
+    )
+
+    def __init__(self, base: Any, embedder: Any, client: Any, depth: int = 40) -> None:
+        self._base = base
+        self._semantic = SemanticRetriever(embedder)
+        self._client = client
+        self._depth = depth
+        # Una generacion por CONSULTA distinta, no por llamada. Un paradigma que repite la
+        # misma busqueda no paga dos veces, que es lo que pasaria sin esto y haria que el
+        # costo del brazo dependiera de cuanto se repite el paradigma en vez de cuanto
+        # busca. Local a la instancia, o sea a la celda: no cruza tareas.
+        self._generated: dict[str, str] = {}
+        self.generations = 0
+
+    def _hypothetical(self, query: str) -> str:
+        if query in self._generated:
+            return self._generated[query]
+        completion = self._client.complete(
+            messages=[{"role": "user",
+                       "content": self.HYDE_PROMPT.format(query=query)}],
+            max_tokens=self.HYDE_MAX_TOKENS,
+        )
+        texto = (completion.text or "").strip()
+        self.generations += 1
+        self._generated[query] = texto
+        return texto
+
+    def rank(self, view: CorpusView, query: str, limit: int) -> list[str]:
+        base_ranking = self._base.rank(view, query, self._depth)
+        hipotetica = self._hypothetical(query)
+        if not hipotetica:
+            # UNA GENERACION VACIA NO ES UN RANKING VACIO. Se cae al brazo base y no a
+            # nada: descartar el ranking base porque la rama extra fallo haria que una
+            # falla de HyDE se lea como una falla de recuperacion, que es el mismo error
+            # que `LLMReranked` evita al no parsear su respuesta.
+            return base_ranking[:limit]
+
+        lists = [base_ranking, self._semantic.rank(view, hipotetica, self._depth)]
+        fused: dict[str, float] = {}
+        for ranking in lists:
+            for position, unit_id in enumerate(ranking, start=1):
+                fused[unit_id] = fused.get(unit_id, 0.0) + 1.0 / (RRF_K + position)
+        ordered = sorted(fused.items(), key=lambda kv: (-kv[1], kv[0]))
+        return [unit_id for unit_id, _ in ordered[:limit]]
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "retriever": self.name,
+            "base": self._base.describe(),
+            "fusion": "rrf",
+            "k": RRF_K,
+            "depth": self._depth,
+            "generations": self.generations,
+            # Se declara, igual que `LLMReranked`: una generacion es una llamada al modelo,
+            # asi que este brazo tiene su propio piso de ruido.
+            "deterministic": False,
+        }
+
+
 class LLMReranked:
     """Optional cross-encoder-style rerank of a base retriever's candidates.
 
@@ -390,6 +496,36 @@ class LLMReranked:
         }
 
 
+# BRAZOS QUE LLAMAN AL MODELO, y por eso no se pueden compartir entre celdas.
+#
+# Dos consecuencias, y ninguna es cosmetica:
+#
+#   costo    su gasto tiene que ir al medidor de LA CELDA. Con una instancia compartida,
+#            la generacion de la primera tarea subsidiaria a todas las demas
+#   estado   su memo de consultas es local a la celda. Compartido, una tarea heredaria
+#            la hipotetica de otra y el brazo mediria el orden del recorrido
+#
+# Los demas brazos son funciones puras sobre vectores cacheados: compartirlos es correcto
+# y ademas barato, asi que la distincion no es «por las dudas».
+MODEL_CALLING_ARMS = frozenset({"hybrid_reranked", "hybrid_hyde"})
+
+
+def build_arm(name: str, embedder: Any, client: Any) -> Any:
+    """Una instancia FRESCA del brazo, para una celda.
+
+    Se levanta si el brazo no existe: caer al lexico callado es como una corrida entera
+    mide un brazo que nadie pidio y el registro dice otro.
+    """
+    arms = build_arms(embedder=embedder, client=client)
+    if name not in arms:
+        raise ValueError(
+            f"Brazo de recuperacion {name!r} desconocido. Disponibles: {sorted(arms)}. "
+            f"Se levanta en vez de caer a uno por omision: una corrida que mide un brazo "
+            f"y registra otro es peor que una que no corre."
+        )
+    return arms[name]
+
+
 def build_arms(embedder: Any = None, client: Any = None) -> dict[str, Any]:
     """Assemble the arms available for a run.
 
@@ -402,4 +538,8 @@ def build_arms(embedder: Any = None, client: Any = None) -> dict[str, Any]:
         arms["semantic"] = SemanticRetriever(embedder)
         if client is not None:
             arms["hybrid_reranked"] = LLMReranked(arms["hybrid"], client)
+            # HyDE es una RAMA, no una herramienta: quien decide usarla es la corrida y no
+            # el modelo. Necesita cliente por la misma razon que el rerank —genera texto—
+            # y por eso comparte su condicion de NO determinista.
+            arms["hybrid_hyde"] = HydeFused(arms["hybrid"], embedder, client)
     return arms

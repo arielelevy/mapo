@@ -422,6 +422,96 @@ capture. If that happens, P15b is evaluated on C5 alone and the C3 half is repor
 **vacuous, not as confirmed** — the distinction matters, and it is written down here rather
 than decided once the numbers are in. C3 in nano remains an open region, not a result.
 
+### Registered predictions — P26, HyDE as a fused branch (2026-08-28, before running)
+
+`hybrid_hyde` asks the model for a **hypothetical answer** — what the passage answering the
+question would look like, in the corpus register — and ranks densely with *that* instead of
+with the question. The bridge it crosses: the question says "settlement account for Valerio"
+and the document says "AC-7741, holder Valerio Simoni, role custodian". A question vector
+and a document vector sit far apart; a hypothetical-answer vector sits close, because it has
+the document's shape.
+
+**It is an arm, not a tool** (`H-1`). A tool is called by the model, which puts control flow
+on the sensor's side. As a retrieval arm the run configuration decides, so it is
+deterministic in who chooses, registrable, and comparable against the arm without it.
+
+**It is fused, not substituted.** A hypothetical answer can be well-imagined and false — the
+model invents an account that does not exist — and then its vector points at documents that
+are similar and wrong. RRF makes that error **beat** the base ranking rather than replace
+it, the same logic by which `hybrid` fuses lexical and dense instead of picking one.
+
+| | prediction | falsified if |
+|---|---|---|
+| **P26a** | recall of answer-bearing units rises **≥5pp** over `hybrid` on the cells where the question's wording and the document's differ (C2, C4) | it does not, which retires HyDE for this corpus |
+| **P26b** | on C1 — one fact, one unit, wording already close — the gain is **≤1pp**: there is no gap to bridge | it gains there too, which would mean the effect is not the semantic bridge but something else, and the mechanism claim is wrong |
+| **P26c** | **net of its own cost**, at λ>0, `hybrid_hyde` does **not** beat `hybrid` for the cheap arms: one generation per distinct query is a fixed tax that a 2,435-token `rewoo` cell cannot amortise | it wins net for `rewoo` too, which would make HyDE unconditionally worth it — a stronger result than predicted |
+| **P26d** | the ranking of paradigms is **unchanged** by the retrieval arm: retrieval quality shifts everyone's level, not their order | the order changes, which would mean "the best paradigm" was partly an artefact of retrieval quality — and would retire every cross-arm comparison made so far |
+
+**P26d is the one that matters, and it is the honest baseline `AR-4` asked for.** Every
+paradigm comparison in this harness ran under one retrieval arm. If the order is
+arm-dependent, the comparisons are conditional on a constant nobody varied. Predicting *no
+change* is predicting that the existing results survive — and it is the prediction that
+would hurt most to lose.
+
+**Charged, not free** (`H-3`). Before today the row billed `result.usage`, which is what the
+paradigm remembered to add up. That equals the cell meter only while **all** spending goes
+through the paradigm's own calls — true until a retrieval arm started calling the model.
+`hybrid_hyde` generates one hypothetical per distinct query and that spend is invisible in
+`result.usage` **by construction**: the paradigm never saw it. Billing it wrong would not
+make HyDE look slightly better — it would compare a **free** retrieval against a **paid**
+one and call the difference "better". The row now bills the cell meter and records
+`retrieval_tokens` separately.
+
+> And a check that was already failing quietly: the **error** path already used the meter.
+> So a cell that crashed was billed correctly and a cell that worked was billed short.
+
+---
+
+### Registered predictions — P26, HyDE as a fused branch (2026-08-28, before running)
+
+`hybrid_hyde` asks the model for a **hypothetical answer** — what the passage answering the
+question would look like, in the corpus register — and ranks densely with *that* instead of
+with the question. The bridge it crosses: the question says "settlement account for Valerio"
+and the document says "AC-7741, holder Valerio Simoni, role custodian". A question vector
+and a document vector sit far apart; a hypothetical-answer vector sits close, because it has
+the document's shape.
+
+**It is an arm, not a tool** (`H-1`). A tool is called by the model, which puts control flow
+on the sensor's side. As a retrieval arm the run configuration decides, so it is
+deterministic in who chooses, registrable, and comparable against the arm without it.
+
+**It is fused, not substituted.** A hypothetical answer can be well-imagined and false — the
+model invents an account that does not exist — and then its vector points at documents that
+are similar and wrong. RRF makes that error **beat** the base ranking rather than replace
+it, the same logic by which `hybrid` fuses lexical and dense instead of picking one.
+
+| | prediction | falsified if |
+|---|---|---|
+| **P26a** | recall of answer-bearing units rises **≥5pp** over `hybrid` on the cells where the question's wording and the document's differ (C2, C4) | it does not, which retires HyDE for this corpus |
+| **P26b** | on C1 — one fact, one unit, wording already close — the gain is **≤1pp**: there is no gap to bridge | it gains there too, which would mean the effect is not the semantic bridge but something else, and the mechanism claim is wrong |
+| **P26c** | **net of its own cost**, at λ>0, `hybrid_hyde` does **not** beat `hybrid` for the cheap arms: one generation per distinct query is a fixed tax that a 2,435-token `rewoo` cell cannot amortise | it wins net for `rewoo` too, which would make HyDE unconditionally worth it — a stronger result than predicted |
+| **P26d** | the ranking of paradigms is **unchanged** by the retrieval arm: retrieval quality shifts everyone's level, not their order | the order changes, which would mean "the best paradigm" was partly an artefact of retrieval quality — and would retire every cross-arm comparison made so far |
+
+**P26d is the one that matters, and it is the honest baseline `AR-4` asked for.** Every
+paradigm comparison in this harness ran under one retrieval arm. If the order is
+arm-dependent, the comparisons are conditional on a constant nobody varied. Predicting *no
+change* is predicting that the existing results survive — and it is the prediction that
+would hurt most to lose.
+
+**Charged, not free** (`H-3`). Before today the row billed `result.usage`, which is what the
+paradigm remembered to add up. That equals the cell meter only while **all** spending goes
+through the paradigm's own calls — true until a retrieval arm started calling the model.
+`hybrid_hyde` generates one hypothetical per distinct query and that spend is invisible in
+`result.usage` **by construction**: the paradigm never saw it. Billing it wrong would not
+make HyDE look slightly better — it would compare a **free** retrieval against a **paid**
+one and call the difference "better". The row now bills the cell meter and records
+`retrieval_tokens` separately.
+
+> And a check that was already failing quietly: the **error** path already used the meter.
+> So a cell that crashed was billed correctly and a cell that worked was billed short.
+
+---
+
 ### Registered predictions — P25, absence and presupposition (2026-08-28, before running)
 
 Two obligations the harness never had, each with a cell, a verifier, and a typed contract.

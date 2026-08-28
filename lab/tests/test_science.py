@@ -1944,6 +1944,84 @@ def check_handoff_authorisation(ok: bool) -> bool:
     return ok
 
 
+def check_retrieval_is_a_factor(ok: bool) -> bool:
+    """§49: la recuperacion es un FACTOR cruzado, y un brazo que llama al modelo se cobra.
+
+    TRES PROPIEDADES, y las tres fallaban de formas distintas antes de hoy:
+
+      construccion  un brazo que llama al modelo se arma POR CELDA, con el cliente de esa
+                    celda. Compartido, la generacion de la primera tarea subsidia a todas
+                    y su memo de consultas cruza tareas
+      cobro         la fila cobra el MEDIDOR DE LA CELDA y no la contabilidad del
+                    paradigma. `hybrid_hyde` genera una hipotetica por consulta y ese
+                    gasto no aparece en `result.usage` por construccion — el paradigma
+                    nunca lo vio— asi que se comparaba una recuperacion gratis contra una
+                    paga y se llamaba «mejor» a la diferencia
+      separacion    dos brazos no se promedian. El sufijo del archivo lo separa, y la
+                    guarda de lectura lo atrapa si alguien concatena a mano — que es el
+                    unico caso que queda, porque la huella y el vocabulario COINCIDEN
+                    entre brazos
+    """
+    import json
+    import tempfile
+    from app.retrieval import MODEL_CALLING_ARMS, build_arm, build_arms
+    from app.runner import load_rows
+
+    print("\n--- 49. la recuperacion es un factor, y se cobra ---")
+
+    ok &= check("HyDE es un BRAZO y no una herramienta: el modelo no puede invocarlo",
+                "hybrid_hyde" not in {
+                    t["function"]["name"]
+                    for t in __import__("app.tools", fromlist=["TOOL_SPECS"]).TOOL_SPECS
+                })
+    ok &= check("y esta declarado como uno de los que llaman al modelo",
+                "hybrid_hyde" in MODEL_CALLING_ARMS
+                and "hybrid_reranked" in MODEL_CALLING_ARMS)
+
+    puros = set(build_arms()) - MODEL_CALLING_ARMS
+    ok &= check(f"los brazos puros no llaman al modelo y se comparten ({sorted(puros)})",
+                "lexical" in puros and "oracle" in puros)
+
+    try:
+        build_arm("no-existe", None, None)
+        ok &= check("un brazo desconocido levanta", False)
+    except ValueError as exc:
+        ok &= check("un brazo desconocido levanta, no cae al lexico callado",
+                    "desconocido" in str(exc))
+
+    base = {"task_id": "t", "paradigm": "p", "fingerprint": "A",
+            "region_vocabulary": "V", "retriever": "hybrid"}
+
+    def escribir(filas):
+        f = Path(tempfile.mkdtemp()) / "r.jsonl"
+        f.write_text(chr(10).join(json.dumps(x) for x in filas), encoding="utf-8")
+        return f
+
+    ok &= check("un archivo de un solo brazo se lee sin quejarse",
+                len(load_rows(escribir([base, dict(base, task_id="u")]))) == 2)
+    try:
+        load_rows(escribir([base, dict(base, retriever="hybrid_hyde")]))
+        ok &= check("mezclar brazos levanta", False)
+    except ValueError as exc:
+        ok &= check("mezclar brazos levanta — la huella y el vocabulario COINCIDEN, "
+                    "asi que esta es la unica guarda que queda",
+                    "brazos de recuperacion" in str(exc))
+
+    from app.runner import Row
+    ok &= check("la fila separa el gasto de recuperacion del gasto del paradigma",
+                "retrieval_tokens" in Row.__dataclass_fields__)
+
+    # F-2: el estado compartido es una DIMENSION, y su cruce tiene una celda vacia POR
+    # CONSTRUCCION. Que este vacia no es un hueco del banco.
+    from app.tools import ToolSurface
+    ok &= check("el estado compartido es un factor de la superficie, no de una topologia",
+                "shared_state" in ToolSurface.__dataclass_fields__)
+    ok &= check("y `None` significa «como cada patron viene de fabrica», que se distingue "
+                "de haberlo elegido",
+                ToolSurface.__dataclass_fields__["shared_state"].default is None)
+    return ok
+
+
 def check_the_code_draws_the_graph(ok: bool) -> bool:
     """§48: D-3, la forma del DAG la deriva el CODIGO, no la propone el modelo.
 
@@ -2846,6 +2924,7 @@ def main() -> int:
     ok = check_assembler_soundness(ok)
     ok = check_who_sets_the_dial(ok)
     ok = check_the_code_draws_the_graph(ok)
+    ok = check_retrieval_is_a_factor(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

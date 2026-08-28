@@ -39,7 +39,9 @@ from .fsio import exclusive
 from .contracts import verify_coverage, verify_obligations
 from .paradigms import CATALOG, COST_PRIORS, FALLBACK, Infeasible, REGISTRY, RETIRED
 from .embeddings import EmbeddingClient
-from .retrieval import CorpusView, Retriever, build_arms
+from .retrieval import (
+    MODEL_CALLING_ARMS, CorpusView, Retriever, build_arm, build_arms,
+)
 from .tools import VARIANTS, ToolSurface
 from .assurance import Assurance
 from .policy import Episode, Plasticity, PolicyBundle, promote
@@ -177,6 +179,10 @@ class Row:
     # Se registra aparte de `utility` a proposito. La utilidad es F1 contra el gold y
     # castiga igual una respuesta incompleta que una equivocada; el contrato separa esas
     # dos, que es lo que ninguna metrica de anclaje puede hacer.
+    # Gasto que el paradigma NO vio: hoy, la recuperacion que llama al modelo. Separado y
+    # no fundido en `cost_tokens` porque son dos preguntas distintas — cuanto salio la
+    # celda, y cuanto de eso lo puso el brazo de recuperacion.
+    retrieval_tokens: int = 0
     completeness: dict[str, Any] | None = None
     # `C-ABSENCE` y `C-PRESUPPOSITION`, cuando la tarea las exige. `None` es SIN CONTRATO
     # y se distingue de un contrato cumplido: un booleano volveria indistinguible «nadie
@@ -266,6 +272,20 @@ def load_rows(
             f"{path.name} mezcla decodificaciones: {seen}. Promediar "
             f"entre modelos no mide un paradigma: mide el modelo. Separa los archivos."
         )
+    # Y EL BRAZO DE RECUPERACION, que es la tercera de la misma familia. El sufijo del
+    # archivo ya lo separa por construccion, asi que esto solo dispara si alguien
+    # concatena dos archivos a mano — y ahi es la unica guarda que queda, porque la huella
+    # y el vocabulario COINCIDEN entre brazos. Dos recuperaciones distintas promediadas no
+    # miden un paradigma: miden cuanto le importa a ese paradigma la calidad de busqueda,
+    # que es justo la pregunta que el factor existe para hacer por separado.
+    brazos = sorted({r["retriever"] for r in rows if r.get("retriever")})
+    if len(brazos) > 1:
+        raise ValueError(
+            f"{path.name} mezcla brazos de recuperacion: {brazos}. La recuperacion es un "
+            f"FACTOR cruzado, no una constante: promediar dos brazos borra exactamente la "
+            f"diferencia que se queria medir."
+        )
+
     # Y LO MISMO PARA EL VOCABULARIO DE REGION, por la misma razon. Una region es una
     # etiqueta cuyo significado lo fija el vocabulario que la produjo; dos filas de
     # vocabularios distintos llevan la misma etiqueta queriendo decir cosas distintas.
@@ -307,6 +327,7 @@ class Runner:
         offer_read_all: bool = False,
         terse_tools: bool = False,
         demand_obligations: bool = False,
+        shared_state: bool | None = None,
     ) -> None:
         # Hybrid is the default because it is what a real deployment has. The degraded
         # arms exist to test whether the conclusion depends on retrieval quality, not to
@@ -314,6 +335,9 @@ class Runner:
         embedder = EmbeddingClient(
             settings, settings.embedding_deployment, sealed=sealed
         )
+        # El embedder se guarda para poder reconstruir por celda el brazo que llama al
+        # modelo. Sin esto habria que rehacer el catalogo entero en cada tarea.
+        self._embedder = embedder
         arms = build_arms(embedder=embedder)
         if retriever_arm not in arms:
             raise ValueError(
@@ -345,6 +369,11 @@ class Runner:
         # por defecto: las filas medidas hasta hoy NO lo tenian, y mezclarlas mediria el
         # promedio de dos experimentos.
         self.demand_obligations = demand_obligations
+        # QUINTO FACTOR. `None` deja a cada patron como viene de fabrica —dag CON board,
+        # react SIN— que es el regimen medido hasta hoy. Forzarlo a `True` o `False` cruza
+        # la dimension contra los patrones, que es lo que `F-2` pide para poder atribuir
+        # «el efecto dag_strategy» a la topologia o al estado compartido.
+        self.shared_state = shared_state
         self._retriever = arms[retriever_arm]
         # Kept so the surface can expose lexical and dense SEPARATELY alongside the
         # fused entry point. Offering only the fused view took the choice of modality
@@ -378,6 +407,8 @@ class Runner:
             suffix += "_terse"
         if demand_obligations:
             suffix += "_oblig"
+        if shared_state is not None:
+            suffix += "_board" if shared_state else "_noboard"
         self._results_path = (
             settings.results_dir / f"{corpus_name}{suffix}_rows.jsonl"
         )
@@ -425,7 +456,9 @@ class Runner:
             probe=resolve_probes,
         )
 
-    def surface_for(self, task: dict[str, Any]) -> ToolSurface:
+    def surface_for(
+        self, task: dict[str, Any], client: Any = None
+    ) -> ToolSurface:
         """The tool surface for one task, built the same way the grid builds it.
 
         Extracted from `run_cross_product`'s local closure so that anything outside the
@@ -439,9 +472,22 @@ class Runner:
             unit_ids=task["unit_ids"],
             relevant_units=task.get("relevant_units", []),
         )
+        # EL BRAZO QUE LLAMA AL MODELO SE CONSTRUYE POR CELDA, con el cliente de la celda:
+        # asi su gasto entra al medidor correcto y su memo de consultas no cruza tareas.
+        # Los demas son funciones puras sobre vectores cacheados y se comparten.
+        retriever = self._retriever
+        if self.retriever_arm in MODEL_CALLING_ARMS:
+            if client is None:
+                raise ValueError(
+                    f"El brazo {self.retriever_arm!r} llama al modelo y necesita el "
+                    f"cliente de la celda para que su gasto se cobre. Sin el, la "
+                    f"comparacion contra un brazo gratis llamaria «mejor» a la diferencia."
+                )
+            retriever = build_arm(self.retriever_arm, self._embedder, client)
+
         return ToolSurface(
             view=view,
-            hybrid=self._retriever,
+            hybrid=retriever,
             semantic=self._arms["semantic"],
             lexical=self._arms["lexical"],
             variant=self.surface_variant,
@@ -450,6 +496,7 @@ class Runner:
             offer_read_all=self.offer_read_all,
             terse_tools=self.terse_tools,
             demand_obligations=self.demand_obligations,
+            shared_state=self.shared_state,
         )
 
     def features_for(self, task: dict[str, Any], allow_derived: bool) -> Features:
@@ -562,8 +609,8 @@ class Runner:
                 # A fresh surface per task: the usage trace must not accumulate
                 # across tasks, or every paradigm would inherit the previous task's
                 # reads and the trace would stop describing what it actually did.
-                def make_surface() -> ToolSurface:
-                    return self.surface_for(task)
+                def make_surface(client: Any = None) -> ToolSurface:
+                    return self.surface_for(task, client)
 
                 # The grid of cells for this task. Tasks stay sequential because each
                 # begins with one feature extraction that the whole grid shares.
@@ -593,7 +640,7 @@ class Runner:
                     # paradigms are compared under the same sampling conditions.
                     client = SeededClient(self._client, self._settings.seed + trial)
                     return self._run_one(
-                        task, name, features, make_surface(), trial, client
+                        task, name, features, make_surface(client), trial, client
                     )
 
                 def record(row: Row, trial: int, name: str) -> None:
@@ -682,6 +729,19 @@ class Runner:
         started = time.perf_counter()
         try:
             result = REGISTRY[paradigm](client, surface, task)
+            spent = getattr(client, "spent", None) or result.usage
+            if result.usage.total_tokens > spent.total_tokens:
+                # IMPOSIBLE POR CONSTRUCCION: el medidor cuenta cada llamada que pasa por
+                # el cliente, asi que no puede quedar por debajo de lo que el paradigma
+                # sumo. Si pasa, el paradigma esta contando dos veces, y eso inflaria el
+                # costo de un brazo sin que nada lo diga.
+                raise ValueError(
+                    f"{task['task_id']}/{paradigm}: el paradigma declara "
+                    f"{result.usage.total_tokens} tokens y el medidor de la celda "
+                    f"{spent.total_tokens}. El medidor no puede quedar corto: o el "
+                    f"paradigma cuenta dos veces, o no todas sus llamadas pasan por el "
+                    f"cliente de la celda."
+                )
             utility = grading.score(result.answer, task["oracle"])
             # El contrato corre sobre la respuesta, no sobre el gold: lo que verifica es
             # que la respuesta ATIENDA a cada elemento del dominio declarado, que es
@@ -704,9 +764,25 @@ class Runner:
                 trial=trial,
                 region=features.region(),
                 utility=utility,
-                cost_tokens=result.usage.total_tokens,
-                prompt_tokens=result.usage.prompt_tokens,
-                completion_tokens=result.usage.completion_tokens,
+                # SE COBRA EL MEDIDOR DE LA CELDA, no la contabilidad del paradigma.
+                #
+                # `result.usage` es lo que el paradigma se acordo de sumar. Es igual al
+                # medidor mientras TODO el gasto pase por llamadas del paradigma — que era
+                # cierto hasta que un brazo de recuperacion empezo a llamar al modelo.
+                # `hybrid_hyde` genera una hipotetica por consulta y ese gasto no aparece
+                # en `result.usage` por construccion: el paradigma nunca lo vio.
+                #
+                # Cobrarlo mal no hace que HyDE parezca un poco mejor: lo compara GRATIS
+                # contra un brazo pago y llama «mejor» a la diferencia, que es exactamente
+                # lo que `H-3` avisaba. Y la ruta de error ya usaba `spent` — o sea que una
+                # celda que fallaba se cobraba bien y una que andaba se cobraba de menos.
+                cost_tokens=spent.total_tokens,
+                prompt_tokens=spent.prompt_tokens,
+                completion_tokens=spent.completion_tokens,
+                # Lo que el paradigma NO vio: recuperacion, y cualquier otra cosa que
+                # gaste fuera de sus propias llamadas. Cero es legitimo aca —significa que
+                # todo el gasto fue del paradigma— porque el medidor siempre existe.
+                retrieval_tokens=max(0, spent.total_tokens - result.usage.total_tokens),
                 completeness=contract,
                 obligations=obligations,
                 calls=result.usage.calls,

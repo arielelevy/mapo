@@ -320,6 +320,13 @@ def dag_strategy(
     # la forma y que el codigo la acepte.
     shape = dag_shape(task)
 
+    # EL ESTADO COMPARTIDO ES UN FACTOR, y apagarlo deja la topologia intacta: siguen las
+    # mismas olas, el mismo verify y los mismos replans. Lo unico que cambia es si cada
+    # sub-agente ve lo que los anteriores encontraron. Esa es exactamente la separacion
+    # que `F-2` pide, y sin ella «el efecto dag_strategy» no se puede atribuir.
+    usa_board = getattr(surface, "shared_state", None)
+    usa_board = True if usa_board is None else usa_board
+
     # ---- Phase 1: plan
     plan_completion = client.complete(
         messages=[{
@@ -359,7 +366,8 @@ def dag_strategy(
                 messages = [{
                     "role": "user",
                     "content": EXECUTE_PROMPT.format(
-                        blackboard=board.render(), sub_question=sub["question"]
+                        blackboard=board.render() if usa_board else "(sin estado compartido)",
+                        sub_question=sub["question"],
                     ),
                 }]
                 completion, sub_usage, transcript, sub_iters = _run_tool_loop(
@@ -370,7 +378,7 @@ def dag_strategy(
 
                 text = completion.text if completion else ""
                 extractions[sub["id"]] = text
-                if len(board.render()) < max_board_chars:
+                if usa_board and len(board.render()) < max_board_chars:
                     board.add_finding(sub["id"], text[:600])
                 # Units actually read come from the surface, which tracks them.
                 # This used to add `tool_call_id` values, which are call identifiers
