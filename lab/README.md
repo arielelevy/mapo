@@ -505,6 +505,54 @@ so its argmax coincides. The plasticity that GOVERNS is elsewhere — θ's reinf
 the §6.2 assurance ratchet; the weight column is record, not policy, and the operational
 story should stop implying otherwise (handoff Fase 0, item 5).
 
+**Statistics (free, `_analyze_statistics.py`, paired bootstrap over TASKS, 10k
+resamples, fixed seed) — and it corrects a reading.**
+
+| Contrast | mean | CI95 | p |
+|---|---:|---|---:|
+| P15 valuation vs best fixed | −0.0874 | [−0.2284, +0.0367] | 0.190 |
+| P15 valuation vs always-`react` | +0.0353 | [−0.1327, +0.2020] | 0.665 |
+| action-aware vs best fixed | −0.0112 | [−0.1214, +0.0905] | 0.891 |
+| action-aware vs always-`react` | **+0.1116** | **[+0.0014, +0.2382]** | 0.045 |
+
+**Correction to how P15a is stated.** The pre-registered criterion used the per-cell
+noise floor and the verdict against it stands: −0.087 is beyond ±0.057, so P15a fails its
+own registered test. But the *sampling* interval over 26 tasks includes zero (p=0.19).
+Those are two different uncertainties — measurement noise and sampling noise — and the
+record carried only the first. Both are now reported: **P15a is refuted against its
+registered criterion and is not established in either direction by a 26-task interval.**
+Under Benjamini-Hochberg (q=0.05, m=4 contrasts that have p-values) **no contrast
+survives**, the +0.045 one included. Threshold judgments (feasibility arithmetic, 26/26
+reproducibility) are excluded from the correction on purpose: they are not tests, and
+folding them in would invent precision.
+
+**θ never specialises on this record — and the continuation axis is why (measured).**
+AURC came out exactly 0.00000, which is degenerate, and the cause is not the curve: θ's
+margin is 0.0 on all 26 tasks. `MIN_EPISODES_FOR_CONFIDENCE = 8`, and:
+
+| region vocabulary | regions | max episodes in a region-paradigm cell | tasks with margin > 0 |
+|---|---:|---:|---:|
+| `regions/1` (3 segments) | 3 | 10 | 12 / 26 |
+| `regions/2-continuation` (4 segments) | 5 | 7 | **0 / 26** |
+
+Adding the discriminating axis **fragmented the region space below the confidence
+threshold**: θ went from specialising on 12 of 26 tasks to never specialising at all.
+This is the bias–variance trade in its plainest form — a more expressive vocabulary costs
+statistical power, and at this record size the cost exceeds the benefit.
+
+Two consequences, recorded BEFORE P16's numbers exist:
+1. It explains E2 mechanically. Two routers that disagree on 26/26 tasks give identical
+   utility because **neither was specialising**: the decision came from the gate, the
+   cascade and the default in both cases. "Learned routing loses to a fixed default" was
+   never what P15 measured — what it measured is a policy with no confident region
+   falling through to its governance rules.
+2. **P16 is running under `regions/2`, so it will measure that same regime.** Its frozen
+   verdict stays frozen — the router is NOT being touched mid-run — and the limitation is
+   written here before the numbers land. The fix belongs to a P17: hierarchical backoff,
+   where a 4-segment region with too little evidence falls back to its 3-segment parent
+   instead of asserting nothing. That keeps the axis where it has support and keeps the
+   power where it does not.
+
 **E2 — θ against a trivial learned arm on the same φ (exploratory, free,
 `_run_e2_learned.py`).** The reviewer's cheapest attack, answered: a ridge regression
 (72 parameters, closed form, no seed) trained on the same 140 cell episodes and seeing
