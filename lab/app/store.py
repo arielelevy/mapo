@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
 
-from .beliefs import Calibration, Provenance
+from .beliefs import Calibration, Provenance, score_calibration
 from .fsio import write_atomic
 
 # One writer at a time for the append+head pair. Two concurrent appends that read
@@ -251,29 +251,16 @@ class LearningStore:
         and an incrementally maintained figure would drift out of agreement with it
         without anything detecting the divergence.
         """
-        per_prop: dict[str, Calibration] = {}
-        for record in self.iter_belief_log():
-            beliefs = record.get("beliefs", [])
-            observed = {
-                b["proposition"]: b["value"]
-                for b in beliefs
-                if b["provenance"] == Provenance.OBSERVED.value
-            }
-            for b in beliefs:
-                if b["provenance"] != Provenance.ELICITED.value:
-                    continue
-                name = b["proposition"]
-                if name not in observed:
-                    continue
-                per_prop.setdefault(name, Calibration()).record(
-                    float(b["credence"]), b["value"] == observed[name]
-                )
+        per_prop, contradictions = score_calibration(self.iter_belief_log())
 
         payload = {
             "corpus": self._corpus,
             "propositions": {
                 name: calibration.as_dict() for name, calibration in per_prop.items()
             },
+            # Se persisten porque estaban en la otra copia y no en esta, que es como se
+            # noto que habia dos. «Mal calibrado» y «equivocado» no son lo mismo.
+            "contradictions": contradictions,
             # The switch a rule actually reads. False with no data is the correct
             # default: an unmeasured credence has not earned trust.
             "trust_elicited": bool(per_prop) and all(

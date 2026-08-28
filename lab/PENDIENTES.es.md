@@ -100,11 +100,11 @@
 - [x] **M18** · un solo escritor por archivo de resultados
 - [ ] M8 · constante de supresión de sonda *(ya no bloqueado: P16 cerró)*
 - [ ] M10 · `GIST_CHARS` inflado ⇒ sobre-rechazo *(ya no bloqueado; **esperar a que P17 termine**: cambia `router.plan`)*
-- [ ] M1 · args del modelo ⇒ `ToolFailure`
-- [ ] M13 · accesos fuera del `try` en dag/modern
-- [ ] M14 · extractor JSON duplicado ×9
-- [ ] M15 · loop de calibración duplicado y ya divergido
-- [ ] M16 · `float(r[attribute])` sin filtro en los splits
+- [ ] M1 · args del modelo ⇒ `ToolFailure` *(espera a P17)*
+- [ ] M13 · accesos fuera del `try` en dag/modern *(espera a P17)*
+- [ ] M14 · extractor JSON duplicado ×9 *(espera a P17: toca ejecución de paradigmas)*
+- [x] **M15** · loop de calibración deduplicado en `beliefs.score_calibration` — y las contradicciones, que sólo estaban en una copia, ahora se persisten en las dos
+- [x] **M16** · un solo filtro de `None`: una fila legacy volteaba la consolidación entera
 - [ ] pip-audit nunca corrido
 
 **Teoría — pizarra, bloquea a F6**

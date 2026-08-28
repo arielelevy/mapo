@@ -515,6 +515,53 @@ class Governance:
 # -- calibration ---------------------------------------------------------------
 
 
+def score_calibration(
+    belief_log: "Iterable[dict[str, Any]]",
+) -> tuple[dict[str, "Calibration"], dict[str, int]]:
+    """Puntua la credencia ELICITADA contra lo que despues se OBSERVO, por proposicion.
+
+    POR QUE ES UNA FUNCION. Este loop existia dos veces —en `store.py` y en
+    `consolidation.py`— y **ya habia divergido**: una de las dos contaba
+    contradicciones y la otra no. Nadie lo noto, porque dos copias de un calculo no
+    fallan cuando se separan: siguen dando numeros, sólo que distintos.
+
+    LA ASIMETRIA QUE HACE QUE ESTO SIGNIFIQUE ALGO. Sólo se puntua una creencia
+    `ELICITED` cuando existe una `OBSERVED` sobre la MISMA proposicion en la misma
+    base. Evidencia adjudicando opinion — que es exactamente para lo que existe el
+    orden de procedencia. Una opinion que nadie fue a verificar no cuenta ni a favor ni
+    en contra.
+
+    Devuelve tambien las CONTRADICCIONES por proposicion —cuantas veces la opinion dijo
+    lo contrario de lo observado— porque «mal calibrado» y «equivocado» no son lo mismo:
+    un sensor que dice 0,9 y acierta el 50% esta mal calibrado; uno que afirma lo
+    contrario de lo que se observa esta roto, y conviene poder distinguirlos.
+    """
+    per_prop: dict[str, Calibration] = {}
+    contradictions: dict[str, int] = {}
+
+    for record in belief_log:
+        beliefs = record.get("beliefs", [])
+        observed = {
+            b["proposition"]: b["value"]
+            for b in beliefs
+            if b["provenance"] == Provenance.OBSERVED.value
+        }
+        for b in beliefs:
+            if b["provenance"] != Provenance.ELICITED.value:
+                continue
+            name = b["proposition"]
+            if name not in observed:
+                continue
+            correct = b["value"] == observed[name]
+            per_prop.setdefault(name, Calibration()).record(
+                float(b["credence"]), correct
+            )
+            if not correct:
+                contradictions[name] = contradictions.get(name, 0) + 1
+
+    return per_prop, contradictions
+
+
 class Calibration:
     """Reliability of elicited credence: does 0.8 mean 0.8?
 

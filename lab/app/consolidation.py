@@ -54,7 +54,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable
 
-from .beliefs import Calibration, Provenance
+from .beliefs import Calibration, Provenance, score_calibration
 from .assurance import Assurance, learn_floors as learn_assurance_floors
 from .policy import Episode, Plasticity, PolicyBundle, Stat
 
@@ -176,9 +176,12 @@ def discover_partitions(
     candidates: list[CandidateSplit] = []
 
     for attribute in attributes:
-        values = sorted({
-            float(r[attribute]) for r in search_rows if r.get(attribute) is not None
-        })
+        # Se filtra UNA vez y los dos usos parten de la misma lista. Antes `values`
+        # descartaba los `None` y los splits de abajo no, asi que una fila legacy sin el
+        # atributo hacia `float(None)` y volteaba la consolidacion entera — un registro
+        # viejo era suficiente para que el aprendizaje offline dejara de correr.
+        rows_with = [r for r in search_rows if r.get(attribute) is not None]
+        values = sorted({float(r[attribute]) for r in rows_with})
         if len(values) < 2:
             continue
 
@@ -188,8 +191,8 @@ def discover_partitions(
         ]
 
         for threshold in thresholds:
-            low = [r for r in search_rows if float(r[attribute]) <= threshold]
-            high = [r for r in search_rows if float(r[attribute]) > threshold]
+            low = [r for r in rows_with if float(r[attribute]) <= threshold]
+            high = [r for r in rows_with if float(r[attribute]) > threshold]
             if len(low) < MIN_SIDE_EPISODES or len(high) < MIN_SIDE_EPISODES:
                 continue
 
@@ -325,28 +328,7 @@ def audit_propositions(
     A single global trust switch cannot express "reliable about cardinality, hopeless
     about coupling". This is what replaces it.
     """
-    per_prop: dict[str, Calibration] = {}
-    contradictions: dict[str, int] = {}
-
-    for base in belief_log:
-        beliefs = base.get("beliefs", [])
-        observed = {
-            b["proposition"]: b["value"]
-            for b in beliefs
-            if b["provenance"] == Provenance.OBSERVED.value
-        }
-        for b in beliefs:
-            if b["provenance"] != Provenance.ELICITED.value:
-                continue
-            proposition = b["proposition"]
-            if proposition not in observed:
-                continue
-            correct = b["value"] == observed[proposition]
-            per_prop.setdefault(proposition, Calibration()).record(
-                float(b["credence"]), correct
-            )
-            if not correct:
-                contradictions[proposition] = contradictions.get(proposition, 0) + 1
+    per_prop, contradictions = score_calibration(belief_log)
 
     return {
         proposition: PropositionAudit(
