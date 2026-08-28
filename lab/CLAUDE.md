@@ -30,8 +30,9 @@ implementación que lo corra.
 
 ## La fila de paradigmas (decisión del autor, 2026-08-26)
 
-- **`cot` NO se corre nunca más**: queda su dato histórico como control nulo (idéntico a
-  direct en toda celda). Ninguna corrida nueva lo incluye.
+- **El control nulo por prompting NO se corre nunca más**: quedó su dato histórico
+  (idéntico a `direct` en toda celda medida). Ninguna corrida nueva lo incluye, y
+  `RETIRED` en `app/paradigms/` lo impide por código.
 - **`direct` es el caso degenerado gateado por factibilidad**: solo existe cuando la
   evidencia entra en ventana — en el régimen de producción eso no pasa. No es un
   candidato del catálogo del motor; es lo que la aritmética elige sola cuando puede.

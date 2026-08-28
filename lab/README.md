@@ -187,7 +187,7 @@ app/
                  and Calibration (reliability diagram + ECE) for elicited credence
   rules.py       the standard rule set AS DATA, plus the sensors that populate a base
   assurance.py   the per-request assurance dial and what each level admits
-  paradigms/     direct, cot, react, map_reduce, plan_execute, reflection
+  paradigms/     direct, react, map_reduce, plan_execute, reflection
   paradigms/dag.py  DAG with verify-replan over a shared blackboard: plan ->
                  topological waves -> verify on 4 dimensions -> replan (<=3, ready
                  0.8, diminishing 0.05) -> synthesise. The most elaborate topology
@@ -272,7 +272,7 @@ feasibility sweep (pure arithmetic, no LLM calls) over every task × paradigm of
 
 | # | Prediction | If it fails |
 |---|---|---|
-| P1 | Feasibility pruning: on the three large corpora, every task whose required evidence exceeds the allowance leaves `direct`/`cot` infeasible by arithmetic, recorded at zero cost; on `gold_xl` the pruning also reaches full-coverage cells for paradigms whose projection exceeds the budget | The feasibility check is wrong or the corpora do not leave the window — the regime claim collapses |
+| P1 | Feasibility pruning: on the three large corpora, every task whose required evidence exceeds the allowance leaves `direct` infeasible by arithmetic, recorded at zero cost; on `gold_xl` the pruning also reaches full-coverage cells for paradigms whose projection exceeds the budget | The feasibility check is wrong or the corpora do not leave the window — the regime claim collapses |
 | P2 | Ranking invariance among feasible paradigms: on matched tasks (same cardinality, ~30× content, `gold_v2` ↔ `gold_deep`) the per-cell utility ordering among *feasible* paradigms is preserved; what changes is the feasible set, not the order inside it | The claim "mechanisms are invariant to content scale" is rewritten — magnitudes AND orderings become corpus-local |
 | P3 | `map_reduce` stays at u≈0 on coupled (C3) cells at every scale — the failure is structural, not capacity | §8 attributes to structure what is actually scale; the ontological argument is withdrawn |
 | P4 | `dag_strategy` does not beat `react` on net utility out-of-window, and its cost stays ≥2× `react` on C5 cells | §8.7 is reported inverted: the elaborate topology pays off exactly where the window ends |
@@ -595,6 +595,86 @@ robust negative result and it is publishable as one. It does **not** settle whet
 selection pays, because on neither corpus could the selection rule fire: gradeability
 implied a detector, the cascade pre-empted at priority 90, and the bench took one step of
 a two-step rule. **P17 is the first corpus where the question can even be asked.**
+
+### P17 verdict (2026-08-28, run complete: 390 rows / 130 cells, 0 infra, 12.69M tokens)
+
+First corpus where the selection rule could fire at all. Verdict script committed before
+the run; the two prerequisite bugs it had were fixed before any row existed, and that is
+recorded in the commit rather than hidden.
+
+| prediction | verdict | number |
+|---|---|---|
+| **P17a** cascade fires on ≤ 6 of 26 | **CONFIRMED** | **2 of 26** |
+| **P17b** selection decides on ≥ 7 of the 14 probed | **REFUTED** | **0 of 14** |
+| **P17c** net gap positive, outside the noise floor | **REFUTED** | −1.0425 against a floor of 0.0786 |
+| **P17d** reproducibility | **CONFIRMED** | 26/26 |
+
+**P17b failed in the most informative way available, and it moves the diagnosis.** The
+probe RAN on all 14 tasks and cost 83,539 tokens. It resolved **none of them**: all 14
+stayed `unresolved`, so the honest action was deferral.
+
+That is no longer pre-emption. The cascade does not crowd selection out any more (2 of 26);
+the probe rule fires as designed (14 of 26). **Selection still cannot decide because the
+evidence the probe returns does not clear the provenance floor it must clear.** Three
+pre-emptions were diagnosed and fixed; this is a fourth, and it is the only one left.
+
+**And the λ sweep makes the shape unmistakable.**
+
+| λ | net vs best fixed | net vs always-`react` |
+|---:|---:|---:|
+| 0.00 | −0.1464 | **+0.0000** |
+| 0.02 | −0.4693 | −0.3821 |
+| 0.05 | −1.0425 | −0.9553 |
+| 0.40 | −7.7294 | −7.6422 |
+
+**Exactly zero against always-`react` at λ=0** — because 20 of the 22 routing-cohort tasks
+end at the fallback (14 deferred unresolved, 6 deferred for want of confidence). On those
+tasks the router IS `react`, so it cannot differ from it. Everything below λ=0 is the price
+of having asked.
+
+Per cell: C1 +0.9333 alone is positive; C2 −0.4413, C3 −1.0005, C4 −0.8236, C5 −0.7753.
+Gate price on the irreversible cohort: −1.0158, deliberate as before.
+
+**What this establishes, stated narrowly.** Removing the detector conflation was necessary
+and it worked — the cascade stopped pre-empting. It was not sufficient: with the path
+cleared, routing degenerates to the fallback on 20 of 22 tasks. **The binding constraint
+is the probe, and it is now the only thing between the record and an answer about
+selection.**
+
+### The same bar, applied to the incumbents (2026-08-28, `_audit_catalog.py`, zero tokens)
+
+A new candidate needs a registered prediction, a falsification criterion and a run before
+it enters. The paradigms already in the row were never asked for any of that: they entered
+by history. Exactly one arm has ever been retired on evidence, and the bar it had to clear
+is the one the rest should clear too.
+
+**Criterion:** a paradigm is dominated if it is never uniquely best and, when tied, never
+the cheapest. Such an arm cannot be the right answer to any question — whatever it solves,
+another solves as well or better for the same price or less.
+
+Over 96 tasks across six corpora:
+
+| paradigm | competed | uniquely best | cheapest when tied | verdict |
+|---|---:|---:|---:|---|
+| `rewoo` | 96 | 10 | 46 | earns its place |
+| `gist_reader` | 96 | 9 | 9 | earns its place |
+| `dag_strategy` | 96 | 8 | 0 | earns its place |
+| `react` | 96 | 2 | 3 | earns its place (and is the fallback) |
+| `map_reduce` | 33 | 1 | 2 | earns its place, **barely** — 180 of 270 rows infeasible |
+| `reflection` | 14 | 1 | 0 | earns its place, thinly |
+| **`plan_execute`** | 14 | **0** | **0** | **DOMINATED** |
+| `graph_traverse` | 3 | 0 | 2 | price only — already falsified (P10a) |
+| `extract_compute`, `streaming_scan` | 0 | — | — | infeasible on every row, as recorded |
+
+**`plan_execute` is dominated.** The honest caveat: the one arm retired before it was
+dominated on *every measured cell*, and this rests on 14 competed cells — thinner evidence
+for the same verdict. What would overturn it is a single cell where
+`plan_execute` is uniquely best, or ties cheapest.
+
+**And it answers a design question with data rather than taste**: `map_reduce` is *not*
+dominated. It wins one cell outright. So replacing it with a sub-agent/handoff pattern
+would trade a measured cell of coverage for an unmeasured arm — the two should be run
+against each other, not swapped.
 
 ### The ordering was not caution, it was necessary — and here is the proof (2026-08-27)
 

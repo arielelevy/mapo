@@ -17,7 +17,15 @@
 **Bloqueantes**
 - [x] **B1** · veredicto de P16 — **P16a REFUTADA** (−1,2888), **P16c decisiva**: +0,1211 con λ=0 y adentro del ruido en λ=0,02 · P16d 26/26 · 0 infra · 13,95M tokens
 - [x] **B2** · detectores honestos aplicados — una sola función `has_runtime_detector`, falla cerrada; **P17a confirmada con el código real: cascada 2/26**
-- [~] **B3** · **P17 corriendo** — humo verde, veredicto congelado en git antes de la primera fila
+- [x] **B3** · **P17 cerrada**: P17a CONFIRMADA (cascada 2/26), **P17b REFUTADA (0 de 14: la sonda corrió, costó 83k tokens y no resolvió ninguna)**, P17c REFUTADA (−1,0425), P17d 26/26. El cuello de botella es **la sonda**
+
+**La cuarta pre-empción — lo único que queda entre el registro y una respuesta**
+- [ ] **S-1** · **que la sonda resuelva**: corrió en 14/14 y resolvió 0. La evidencia que trae no llega al piso de procedencia que la regla exige. Sin esto, ningún patrón nuevo se mide en un mundo donde el router decide
+- [ ] **S-2** · decidir si el piso es correcto o la sonda es débil — son arreglos opuestos y hay que separarlos antes de tocar nada
+
+**Catálogo — la misma vara que a los candidatos nuevos**
+- [ ] **K-1** · **`plan_execute` está DOMINADO** (0 únicos mejores, 0 más barato al empatar, sobre 14 celdas): retirarlo por el mismo criterio con el que se retiró el único brazo retirado hasta hoy. Salvedad: aquél cayó sobre *toda* celda medida y esto son 14
+- [x] K-2 · `map_reduce` **no** está dominado — gana una celda. Reemplazarlo por handoff cambiaría cobertura medida por un brazo sin medir: van **uno contra otro**, no uno en lugar del otro
 
 **Mediciones**
 - [ ] M-1 · brazo en PROSA (E1) — implementado, sin correr
@@ -96,7 +104,7 @@
 - [x] M2 · M4 · M5 · M6 · M7 · M9 · M12 · M19 *(antes)*
 - [x] **M3** · throttle bajo el lock y sin contar de más
 - [x] **M11** · ECE sobre la credencia declarada, no el centro del bin
-- [x] **M17** · `cot` fuera del default (`RETIRED`)
+- [x] **M17** · el control nulo retirado sale del default (`RETIRED`)
 - [x] **M18** · un solo escritor por archivo de resultados
 - [x] **M8** · `COUPLING_CREDENCE_FLOOR` compartido: había una **zona muerta** — credencia 0,3 suprimía la sonda y no alcanzaba para especializar
 - [x] **M10** · `GIST_CHARS` derivado de `SUMMARY_CHARS`: 400 → 220. El gist real promedia 69,4 chars, o sea **5,8× de sobre-proyección**
@@ -609,7 +617,7 @@ después: el mecanismo de P17 no se movió (cascada 2/26, catorce esperando la s
 | M14 | `modern.py` ×9 + `dag.py:217` | Extractor JSON copiado nueve veces con tuplas de excepciones divergentes: falta `extract_json()` compartido |
 | M15 | `store.py:245-261` vs `consolidation.py:333-348` | Loop de calibración duplicado y **ya divergido** (`contradictions` sólo está en uno) |
 | M16 | `consolidation.py:191-192` | `float(r[attribute])` en los *splits* sin el filtro de `None` que sí tienen los *values*: crashea sobre filas legacy |
-| M17 | `runner.py` / `main.py` | Verificar que ningún default reintroduzca `cot`, que por decisión no se corre nunca más |
+| M17 | `runner.py` / `main.py` | Verificar que ningún default reintroduzca el brazo retirado, que por decisión no se corre nunca más |
 | M18 | `main.py:78-92` | Dos `POST /run` concurrentes duplican celdas y pesan doble en `study()`: falta lockfile por `results_path` |
 | — | entorno | `pip-audit` nunca se corrió (no está instalado) |
 

@@ -9,7 +9,7 @@ candidatos activos del producto.
 | Nombre | Estructura | Región o propósito | Estado actual |
 |---|---|---|---|
 | `direct` | Una llamada con todo el material. | Caso degenerado cuando la evidencia cabe. | Control gateado por factibilidad. |
-| `cot` | Igual estructura que Direct con instrucción de razonamiento. | Control nulo. | Retirado de nuevas corridas; dominado por Direct. |
+
 | `react` | Bucle abierto de herramientas. | Fallback general. | Activo, costoso y sensible al modelo. |
 | `map_reduce` | Map por unidad y reducción. | Cobertura independiente. | Activo; falla estructuralmente en acoplamiento. |
 | `plan_execute` | Plan de subpreguntas, ejecución y síntesis. | Descomposición. | Sin región ganadora medida. |
