@@ -506,21 +506,32 @@ un veredicto de acoplamiento que no está en posición de emitir.
 
 ---
 
-### 8.5 La demanda más importante del request es la que nadie escribe · `MÉTODO`
+### 8.5 La cardinalidad de la RESPUESTA es implícita en la pregunta, y cada valor falla distinto · `MÉTODO`
 
-«Listame las direcciones» significa **todas** las direcciones. Nadie escribe «listame
-*todas* las direcciones»: el plural imperativo ya carga la exhaustividad, y por eso pasa
-desapercibida en el diseño.
+«Listame las direcciones» significa **todas** las direcciones: nadie escribe «listame
+*todas* las direcciones», el plural imperativo ya lo carga. Pero **«¿cuál fue el arma
+homicida?» espera exactamente una**, y ahí la exhaustividad no aplica — pedir «todas las
+armas homicidas» sería otra pregunta.
 
-Eso invierte qué hay que detectar. No se trata de cazar el request excepcional que
-*declara* que quiere todo — se trata de reconocer que **el default de una enumeración es
-todo**, y que lo excepcional es que alcance una muestra.
+Así que no es un flag de exhaustividad: es una **cardinalidad de respuesta tipada**,
+implícita en la forma gramatical del pedido, y **cada valor tiene un criterio de corrección
+y un modo de falla distintos**:
 
-**Y en producción nada lo verifica.** Una enumeración que contesta con un subconjunto está
-mal, punto. En un banco se ve, porque el F1 contra gold castiga la respuesta incompleta —
-pero eso es una propiedad del *banco*. Sin gold, la única forma de saber que una respuesta
-está completa es un contrato de completitud, y **su dominio no lo declara el llamador: lo
-implica la forma de la pregunta.**
+| forma del pedido | qué se espera | cómo falla | ¿exhaustividad? |
+|---|---|---|---|
+| singular — «cuál fue el arma» | **exactamente una** | ambigüedad, varias candidatas, la equivocada | **no aplica** |
+| enumerativa — «listame los nombres» | **todas** | incompleta | **sí, y es el default** |
+| agregada — «cuántos X» | **un número** | mal contado por cobertura parcial | sí, para poder contar |
+
+Confundirlas tiene consecuencias opuestas: forzar cobertura sobre una singular es pagar de
+más por nada, y no forzarla sobre una enumerativa es entregar una respuesta incompleta que
+parece correcta.
+
+**Y en producción nada de esto se verifica.** Una enumeración que contesta con un
+subconjunto está mal, punto. En un banco se ve, porque el F1 contra gold castiga la
+respuesta incompleta — pero eso es una propiedad del *banco*. Sin gold, la única forma de
+saberlo es un contrato de completitud, y **su dominio no lo declara el llamador: lo implica
+la forma de la pregunta.**
 
 > Las demandas que el diseño olvida son las que el lenguaje ya expresa sin decirlas. Y son
 > justamente las que un sistema sin gold no puede recuperar después.

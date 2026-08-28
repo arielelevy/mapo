@@ -57,7 +57,7 @@
 - [ ] AR-4 · baseline honesto: contra HyDE y RAG plano, no contra nada
 
 **La fase de entendimiento — la mitad que S-3 declaró faltante**
-- [ ] **U-1** · fase que emite **demandas tipadas** del request, no un float de conclusión. **Polaridad corregida**: la exhaustividad es *implícita* en «listame los nombres», así que lo raro no es pedir todo — lo raro es que alcance una muestra
+- [ ] **U-1** · fase que emite **demandas tipadas** del request, no un float de conclusión. **Lo que se tipa es la CARDINALIDAD DE LA RESPUESTA**, implícita en la forma del pedido y no binaria: singular («cuál fue el arma») / enumerativa («listame los nombres») / agregada («cuántos X»). Cada una falla distinto y sólo dos piden exhaustividad
 - [ ] **U-2** · que **la regla** combine demanda × material — resuelve los 4 falsos positivos de C4 sin heurísticas nuevas
 - [ ] **U-3** · entran como `ELICITED`: el modelo lee la pregunta, no puede superar ese rango
 - [ ] **U-4** · `requires_exhaustive` se **verifica** con C-COMPLETE — el único camino a promoverla
@@ -531,18 +531,22 @@ necesario*. Hoy nada en el request lo declara, así que la cobertura se persigue
 tareas que no la piden y se paga sin comprarse nada.
 
 **Corrección importante sobre la forma de esa demanda (autor, 2026-08-28).** No es un flag
-que alguien pone: **es implícita en la forma del pedido.** «Listame las direcciones» ya
-significa *todas* las direcciones; nadie escribe «listame todas las direcciones». El plural
-imperativo carga la exhaustividad, y por eso pasa desapercibida.
+que alguien pone: **es implícita en la forma del pedido**, y **no es binaria**. «Listame las
+direcciones» significa *todas*; **«¿cuál fue el arma homicida?» espera exactamente una**, y
+ahí la exhaustividad no aplica.
 
-Eso invierte la polaridad de U-1 y cambia qué hay que detectar:
+Lo que la fase tiene que tipar es la **cardinalidad de la respuesta**, y cada valor falla
+distinto:
 
-| encuadre | qué se busca | qué tan frecuente |
-|---|---|---|
-| ~~el que tenía~~ | ¿este request **declara** que quiere todo? | raro — casi nadie lo dice |
-| **el correcto** | ¿alcanza una **muestra**? | raro — el default de una enumeración es *todo* |
+| forma del pedido | qué se espera | cómo falla | ¿exhaustividad? |
+|---|---|---|---|
+| **singular** — «cuál fue el arma» | exactamente una | ambigüedad, varias candidatas | **no aplica** |
+| **enumerativa** — «listame los nombres» | todas | incompleta | sí, y es el *default* |
+| **agregada** — «cuántos X» | un número | mal contado por cobertura parcial | sí, para poder contar |
 
-El trabajo de la fase de entendimiento no es cazar declaraciones excepcionales: es **hacer
+Confundirlas tiene consecuencias opuestas: forzar cobertura sobre una singular **paga de
+más por nada**, y no forzarla sobre una enumerativa **entrega algo incompleto que parece
+correcto**. El trabajo de la fase no es cazar declaraciones excepcionales: es **hacer
 explícita y tipada una demanda que el pedido ya trae implícita**.
 
 **Y la consecuencia operativa es dura.** Una enumeración que contesta con un subconjunto
