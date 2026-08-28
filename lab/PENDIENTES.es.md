@@ -54,7 +54,7 @@
 - [ ] P-1 · que la sonda sense **recuperabilidad** (hoy sensa acoplamiento)
 - [x] **P-2** · ~~sacarlo del camino activo~~ — **decisión revertida el 2026-08-27, y la revisión estaba mal planteada.** Lo demostrado es estrecho: el peso no puede mejorar la **selección de paradigma**, porque en el punto fijo es una transformación monótona de la tasa de victorias. Eso **no dice nada** sobre aprender asociaciones entre pares, que es a donde va (P-2c, P-2d, D-4). Y además ya gobierna algo: es el **reloj de decaimiento** con el que `consolidation.py:286` poda las stats sin episodios — nunca poda por peso solo, porque una stat con episodios es evidencia. Ese ciclo de vida —acotado, decae, piso, poda— es justo la maquinaria que una tabla de asociaciones necesita. **No se saca: se reusa.**
 - [ ] P-2b · reintroducirlo como **detector de no estacionariedad** *(drift medido: 80%)*
-- [ ] P-2c · **Hebbiano sobre el orden de tools** — bloqueado por instrumentación
+- [~] **P-2c** · **condición necesaria CONFIRMADA** (`app/association.py`, `_analyze_associations.py`): dentro de un mismo paradigma las transiciones **no rinden igual** — dispersión de tasas de éxito de 0,182 en `rewoo` (0,000 a 0,688), 0,149 en `dag`, 0,107 en `react`. El orden lleva información que el conteo no lleva. **Falta**: (a) que sirva para decidir algo, con el costo cobrado; (b) estratificar por celda — la dispersión podría ser dificultad de tarea filtrándose, que es el mismo confound que apareció con el recall; (c) n es chico (114 filas, P17 a medias)
 - [ ] P-2d · asociaciones aprendidas como creencias *(necesita un rango bajo OBSERVED)*
 - [ ] P-2e · componer el patrón en vez de elegirlo *(el techo)*
 - [ ] P-3 · calibración por proposición al router activo
