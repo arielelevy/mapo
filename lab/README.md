@@ -551,6 +551,50 @@ two-step rule). Only the first is an artifact; the second is the layer working; 
 is the one to fix, and it costs a model call per task — which is precisely the governance
 cost the thesis says should be priced rather than assumed away.
 
+### Evidence recall dwarfs the paradigm gap (2026-08-27, `_analyze_retention.py`, zero tokens)
+
+The pending "context retention" item asked whether a paradigm's advantage survives
+controlling for how much evidence it actually got. Retention proper — how much of what
+was retrieved survives to the answering call — is **not instrumented**, and is not
+claimed here. What the paid rows already carry is the first link in that chain: evidence
+**recall**, the fraction of the units that actually bear the answer that the paradigm
+read. `relevant_units` is declared per task; `relevant_units_read` is logged per row.
+
+**The headline needs no conditioning at all — it is two means over the same cells:**
+
+| corpus | full-recall cells | mean utility, full recall | partial recall | gap | largest paradigm advantage | ratio |
+|---|---:|---:|---:|---:|---:|---:|
+| `gold_transfer` | 29/90 | 0.869 | 0.336 | **+0.533** | 0.126 | **4.2×** |
+| `gold_deep` | 19/55 | 0.763 | 0.261 | +0.502 | 0.357 | 1.4× |
+| `gold_v2` | 9/48 | 0.607 | 0.218 | +0.388 | 0.391 | 1.0× |
+| `gold_holdout` | 3/16 | 0.565 | 0.194 | +0.371 | 0.234 | 1.6× |
+
+On `gold_transfer` — the production regime, out-of-window, five structured paradigms, and
+the corpus P15 ran on — **the difference between reading all the evidence and not reading
+it is 4.2× the largest difference between paradigms.** The older corpora sit near 1×, and
+that is not a contradiction: they include `direct`, whose advantage IS a recall advantage
+(everything fits in the window, so it reads everything by construction). The ratio
+collapsing exactly where a paradigm's edge is known to be retrieval is the story, not an
+exception to it.
+
+**The suggestive part, reported as an indication and not a verdict.** Restricting to
+cells that read ALL the relevant evidence, `dag_strategy` — the best fixed paradigm, the
+one P15's routing lost to — goes from **+0.083 to −0.040**. Its advantage changes sign.
+Read plainly: it was not better at solving, it was better at finding.
+
+**Why that second reading is weaker than the first, stated rather than buried.** Recall
+is not a pre-treatment covariate; it is a CONSEQUENCE of the paradigm. Conditioning on a
+post-treatment variable does not yield an unbiased direct effect and can open collider
+bias — a clumsy paradigm's full-recall cells are the easy tasks, while a good one's
+include hard ones. So the magnitude comparison stands on its own (two means, same cells),
+and the sign flip is a lead to chase, not a result to cite.
+
+**What it changes.** If it survives instrumentation, "this structure wins" becomes "this
+structure retrieves more" — which is *more* actionable, not less: the fix moves to the
+retriever, and paradigm selection is left arbitrating a smaller share of the variance
+than the whole routing program has been assuming. That is also a caution for P17: a
+selection rule that finally fires is arbitrating over the smaller effect.
+
 ### P17 registered (2026-08-27, before any number exists)
 
 The three pieces P17 needed are built. Two are code and are done; the third is the
