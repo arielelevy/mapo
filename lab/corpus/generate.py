@@ -546,6 +546,67 @@ class Generator:
             truth_horizon_unknown=True,
         )
 
+    def task_c8_currency(self, idx: int, width: int) -> Task:
+        """Resolver una supersesion declarada. MISMO material que C5, demanda opuesta.
+
+        C5 pregunta QUIEN tiene informacion contradictoria: pone a prueba la DETECCION
+        del conflicto. Esta pregunta cual es el domicilio VIGENTE de una cuenta: pone a
+        prueba la RESOLUCION del conflicto por precedencia. Los mismos dos documentos
+        sostienen las dos preguntas y exigen cosas distintas — que es exactamente lo que
+        `ONTOLOGIA_PREGUNTAS.es.md` sostiene sobre la demanda: no la determina el
+        material.
+
+        POR QUE ESTA CELDA FALTABA Y POR QUE ES BARATA. Las enmiendas ya existian en el
+        corpus desde C5, con la precedencia ESCRITA —«this filing supersedes any earlier
+        domicile on record for that account»— y ninguna pregunta las interrogaba.
+        Medido el 2026-08-28: cero preguntas sobre domicilio, cero golds en un valor
+        enmendado. El material estaba y sobraba como distractor.
+
+        LO QUE SEPARA, Y NINGUNA OTRA CELDA LO HACE. Una respuesta incorrecta aca dice
+        CUAL de dos fallas ocurrio, porque los dos valores estan en el corpus:
+
+          - responde otra ciudad cualquiera  -> no encontro nada: falla de recuperacion
+          - responde el domicilio ORIGINAL   -> encontro los dos y eligio el superado:
+                                                falla de VIGENCIA
+
+        El F1 castiga las dos igual. Un paradigma que devuelve el valor superado esta
+        fallando CON PROCEDENCIA IMPECABLE —el memo viejo dice lo que dice— y ese es
+        exactamente el modo de falla que la capa de decision existe para impedir.
+
+        NO SE PLANTA NADA NUEVO: reusa la enmienda que C5 ya crea para el mismo
+        (idx, width), asi que la celda no agrega un solo token al corpus.
+        """
+        units = self._memo_ids()[:width]
+        planted_index = (idx * 13 + width // 4 + 1) % max(1, width)
+        planted = self.people[planted_index]
+        conflicting = f"amend-{planted_index:03d}-w{width:03d}"
+        alt_city = next(c for c in CITIES if c != planted.city)
+        if conflicting not in self.documents:
+            self.documents[conflicting] = "\n".join([
+                f"SUPPLEMENTARY FILING {conflicting.upper()}",
+                "",
+                f"The domicile of record associated with settlement account "
+                f"{planted.account} is {alt_city}.",
+                "This filing supersedes any earlier domicile on record for that account.",
+                "No other engagement details are restated.",
+            ])
+        return Task(
+            task_id=f"c8-{idx:03d}-w{width}",
+            cell="C8_currency",
+            question=(
+                f"What is the domicile of record currently on file for settlement "
+                f"account {planted.account}? Name the city only."
+            ),
+            oracle=[alt_city],
+            unit_ids=units + [conflicting],
+            relevant_units=[conflicting],
+            budget_tokens=60_000,
+            truth_n_units=len(units) + 1,
+            # No exige encadenar: la enmienda sola contesta. Lo que exige es NO quedarse
+            # con el primer valor que aparece, que es otra cosa.
+            truth_coupling=0.2,
+        )
+
     def task_c7_irreversible(self, idx: int, warranted: bool) -> Task:
         """High risk. A critic gate is mandatory regardless of what costs suggest.
 
@@ -603,6 +664,8 @@ class Generator:
                 tasks.append(self.task_c2_bulk_extraction(i, width))
                 tasks.append(self.task_c4_aggregate(i, width))
                 tasks.append(self.task_c5_contradiction(i, width))
+                # Despues de C5, que es quien planta la enmienda que esta reusa.
+                tasks.append(self.task_c8_currency(i, width))
         return tasks
 
 
@@ -614,6 +677,8 @@ class Generator:
 #   C3  a chain endpoint: checking it means walking the chain.         none
 #   C4  an aggregate: verifying the count requires the count.          none
 #   C5  unknown horizon: knowing when to stop is the question.         none
+#   C8  currency: verifying a value is current means finding every
+#       filing that could supersede it -- which is the task.               none
 #
 # This is a claim about the WORLD, not a knob. A deployment that can cheaply check a
 # list is a deployment with an index nobody has; declaring one anyway puts the cascade
@@ -625,6 +690,7 @@ HONEST_DETECTORS = {
     "C3": False,
     "C4": False,
     "C5": False,
+    "C8": False,
 }
 
 

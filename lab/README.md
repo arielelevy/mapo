@@ -596,6 +596,50 @@ selection pays, because on neither corpus could the selection rule fire: gradeab
 implied a detector, the cascade pre-empted at priority 90, and the bench took one step of
 a two-step rule. **P17 is the first corpus where the question can even be asked.**
 
+### C8, the currency cell — registered 2026-08-28, before any run
+
+**Why it did not exist, and why it costs nothing.** The corpus has carried amendments since
+C5 was written, each with its precedence declared in fixed form — *"this filing supersedes
+any earlier domicile on record for that account"*. Measured before building anything
+(`_analyze_supersession.py`): **zero questions mention domicile, zero golds are an amended
+value.** The material was there and served only as a distractor — costing tokens, dirtying
+retrieval, measuring nothing.
+
+C8 reuses the amendment C5 already plants, so the corpus grew by **32 tasks and zero
+documents**.
+
+**Same material, opposite demand — which is the point.**
+
+| cell | question | what it tests |
+|---|---|---|
+| C5 | *"name the individual with contradictory city information"* | **detecting** the conflict |
+| **C8** | *"what is the domicile currently on file for account X?"* | **resolving** it by precedence |
+
+**And it separates two failures no other cell can.** Both values live in the material, so a
+wrong answer says which failure happened:
+
+- **another city entirely** → it never found the filing: a *retrieval* failure
+- **the original domicile** → it found both and chose the superseded one: a **currency**
+  failure, made *with impeccable provenance*, because the old memo does say what it says
+
+Set F1 punishes the two identically and cannot tell them apart. The second is the one this
+product exists to prevent.
+
+**Registered predictions, written before a single row exists.**
+
+- **P18a (mechanism).** A paradigm that reads every unit resolves the supersession; one
+  that stops at the first match returns the superseded value. Falsified if the two classes
+  are indistinguishable on C8.
+- **P18b.** On C8, the *superseded value* is the single most common wrong answer — not a
+  scatter of unrelated cities. Falsified if wrong answers do not concentrate there.
+- **P18c.** C8 utility is **not** predicted by C5 utility on the same (idx, width):
+  detecting a conflict and resolving it are different capabilities. Falsified if the two
+  correlate above 0.7.
+
+Ground truth is re-derived independently by `corpus/verify.py::_c8`, which also refuses a
+task whose superseded value is absent from the material — without it, a wrong answer would
+only mean "not found", which the other cells already measure.
+
 ### P17 verdict (2026-08-28, run complete: 390 rows / 130 cells, 0 infra, 12.69M tokens)
 
 First corpus where the selection rule could fire at all. Verdict script committed before

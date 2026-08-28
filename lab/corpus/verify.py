@@ -192,6 +192,7 @@ class Verifier:
             "C4_aggregate_full_coverage": self._c4,
             "C5_unknown_horizon": self._c5,
             "C7_irreversible": self._c7,
+            "C8_currency": self._c8,
         }.get(cell)
         if handler is None:
             return False, f"no verifier for cell {cell}"
@@ -283,6 +284,50 @@ class Verifier:
         if any(others):
             return False, f"question promises one contradiction, found also {others}"
         return True, f"ok (2 hops: account -> {holder}, promise holds)"
+
+    def _c8(self, task: dict[str, Any]) -> tuple[bool, str]:
+        """Vigencia: el gold tiene que ser el valor QUE SUPERSEDE, y el viejo tiene que
+        estar en el corpus.
+
+        La segunda condicion es la que hace util a la celda. Si el valor superado no
+        estuviera presente, una respuesta incorrecta solo diria «no lo encontro» — que es
+        lo que ya miden las otras celdas. Con los dos valores en el material, un fallo
+        distingue: otra ciudad cualquiera es falla de RECUPERACION; el domicilio original
+        es falla de VIGENCIA, y esa es la que ninguna otra celda separa.
+        """
+        amended = [
+            self.amendments[u] for u in task["unit_ids"] if u in self.amendments
+        ]
+        if len(amended) != 1:
+            return False, f"expected exactly 1 amendment unit, found {len(amended)}"
+
+        target = amended[0]
+        if [target["city"]] != task["oracle"]:
+            return False, (
+                f"the filing restates {target['city']!r} but the oracle says "
+                f"{task['oracle']}"
+            )
+
+        holder = self.holder_of.get(target["account"])
+        if holder is None:
+            return False, f"account {target['account']} has no holder in the corpus"
+
+        base = {c["name"]: c["city"] for c in self.units(task)}
+        if holder not in base:
+            return False, f"holder {holder} has no base memo among this task's units"
+
+        superseded = base[holder]
+        if superseded == target["city"]:
+            return False, "the filing restates the same city: nothing is superseded"
+
+        # La pregunta nombra la CUENTA, nunca la ciudad, o el gold estaria en el enunciado.
+        if target["city"] in task["question"]:
+            return False, "the question names the answer"
+
+        return True, (
+            f"ok (supersede {superseded!r} -> {target['city']!r}; los dos valores "
+            "estan en el material, asi que un fallo distingue recuperacion de vigencia)"
+        )
 
     def _c7(self, task: dict[str, Any]) -> tuple[bool, str]:
         if not task.get("irreversible"):

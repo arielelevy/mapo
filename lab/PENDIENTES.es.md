@@ -58,7 +58,8 @@
 
 **Ontología de la pregunta** (`ONTOLOGIA_PREGUNTAS.es.md`, pizarra)
 - [~] **O-1** · **medido: la supersesión está en el material y NINGUNA pregunta la interroga** (`_analyze_supersession.py`). 5 cuentas enmendadas, 0 preguntas sobre domicilio, 0 golds en un valor vigente. Las enmiendas son **sólo distractor**: cuestan tokens y no miden nada — y pueden estar deprimiendo utilidades por un eje que el registro no declara medir
-- [ ] **O-1b** · **agregar preguntas de vigencia al generador** — el material ya está, la precedencia ya está escrita en forma fija, y el gold es el valor de la enmienda. Con predicción registrada: *un paradigma que lee TODAS las unidades respeta la supersesión; uno que corta en el primer acierto devuelve el valor superado* — y eso separa por fin «no encontró» de «encontró el viejo», que el F1 castiga igual
+- [x] **O-1b** · **celda C8 implementada y verificada 6/6**, reusando las enmiendas de C5: **+32 tareas, +0 documentos**. Separa falla de recuperación de falla de **vigencia**, que ninguna otra celda distingue
+- [ ] **O-1c** · **correr P18** (a: los que leen todo resuelven la supersesión · b: el valor superado es el error más común · c: C8 no se predice desde C5). Predicciones registradas antes de existir una sola fila
 - [ ] **O-2** · **B2 ausencia y negación** — el de peor relación daño/atención: afirmar una ausencia desde una muestra produce una respuesta que *parece normal*. La asimetría ya existe en la sonda, pero sólo del lado del material
 - [ ] **O-3** · **D1 presuposición** — el más fácil y no está: una presuposición ya tiene forma de proposición, así que el mecanismo para verificarla existe entero. Falta extraerla
 - [ ] **O-4** · **A1 cardinalidad de respuesta**: medible hoy (C1 singular, C2 enumerativa, C4 agregada) y **no medido**
