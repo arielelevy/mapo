@@ -69,6 +69,12 @@ EST_FINDING_CHARS = 220
 # plus plan, verify and synthesise per round.
 MAX_ORCHESTRATION_CALLS = 200
 
+# La forma del handoff, DERIVADA del patron y no repetida a mano. Importarlos crearia un
+# ciclo —`paradigms` importa `tools`, que importa esto— asi que se declaran aca con el
+# nombre del que salen, y `test_science.py` §39 verifica que no se hayan separado.
+HANDOFF_SCOPES = 2      # paradigms.handoff.SCOPES
+HANDOFF_TURNS = 6       # paradigms.handoff.MAX_TURNS_PER_AGENT
+
 # A paradigm whose GUARANTEED spend exceeds the declared budget by more than this is
 # infeasible. Slightly above 1.0 because the projection is an estimate and refusing a
 # paradigm that would have come in at 1.01x would be the check being wrong in the other
@@ -249,6 +255,52 @@ def check(
         # Two LLM calls plus at most MAX_PLAN_STEPS tool executions, none of which
         # involve the model. Its spend is bounded by construction.
         return Verdict(True, projected_calls=2)
+
+    if paradigm == "handoff":
+        # ALCANCES DISJUNTOS, y de ahi sale la cota entera. `SCOPES` agentes, cada uno con
+        # `MAX_TURNS_PER_AGENT` vueltas como maximo, todo fijado por el CODIGO — no hay
+        # bucle que el modelo corte. Y la transferencia no agrega vueltas: re-alcanza.
+        #
+        # POR QUE NO SE COMPARA CONTRA EL CONTENIDO ENTERO. Un agente ve SOLO su alcance,
+        # asi que su contexto es una fraccion del material: el reparto es la razon de ser
+        # del patron. Compararlo contra el total lo declararia infactible exactamente
+        # donde el reparto lo hace posible, que es al reves de lo que la cota tiene que
+        # hacer.
+        por_alcance = content // max(1, HANDOFF_SCOPES)
+        proyectadas = HANDOFF_SCOPES * HANDOFF_TURNS
+        if proyectadas > MAX_ORCHESTRATION_CALLS:
+            return Verdict(
+                False,
+                f"{HANDOFF_SCOPES} alcances x {HANDOFF_TURNS} vueltas son {proyectadas} "
+                f"llamadas, por encima del tope de {MAX_ORCHESTRATION_CALLS}",
+                projected_calls=proyectadas,
+                projected_tokens=content,
+                axis="cardinality",
+            )
+        if por_alcance > allowance:
+            return Verdict(
+                False,
+                f"cada alcance carga ~{por_alcance} tokens contra un margen de "
+                f"{allowance}: repartir en {HANDOFF_SCOPES} no alcanza para que una "
+                f"parte entre",
+                projected_calls=proyectadas,
+                projected_tokens=content,
+                axis="context",
+            )
+        # UN ALCANCE POR UNIDAD ES EL PISO. Con menos unidades que alcances el reparto
+        # deja alcances vacios y el patron degenera en una pasada — corre, y no es un
+        # handoff. Se dice en el veredicto en vez de dejarlo pasar como si lo fuera.
+        if units < HANDOFF_SCOPES:
+            return Verdict(
+                False,
+                f"{units} unidad(es) para {HANDOFF_SCOPES} alcances: el reparto deja "
+                f"alcances vacios y no hay transferencia que autorizar, asi que esto "
+                f"correria como una pasada sola con nombre de handoff",
+                projected_calls=proyectadas,
+                projected_tokens=content,
+                axis="cardinality",
+            )
+        return Verdict(True, projected_calls=proyectadas, projected_tokens=content)
 
     if paradigm == "pointer_chase":
         # Anchor pick + at most hop_cap sensor calls, ONE unit each, + solve. The hop

@@ -1949,6 +1949,56 @@ el mismo día que escribí la herramienta.
 
 ---
 
+### 5.23 El proveedor esconde su razonamiento; el nuestro se puede emitir entero · `EJECUTADO`
+
+Idea del autor: que el código emita sus **propias acciones de razonamiento**, con `yield`,
+lo más amigable posible para quien espera. Y no es una comodidad de interfaz — es lo único
+que este producto tiene y el modelo no.
+
+**Del razonamiento del modelo no se puede mostrar nada.** Los tokens de razonamiento se
+facturan y no aparecen en el contenido, y la documentación dice explícitamente que
+intentar extraerlos por otra vía no está soportado. El razonamiento de MAPO es lo
+contrario: **poda de factibilidad, creencias tipadas con procedencia, resolución del dial,
+veredictos de contrato**. Todo computado, todo enunciable.
+
+**Y hay un argumento de latencia, medido.** El TTFT del modelo es de cientos de
+milisegundos y `dag_strategy` tarda 30 segundos por celda. La escalera de decisión corre en
+microsegundos y **sin gastar un token**: los primeros eventos salen antes de que el
+proveedor haya recibido la primera llamada. **Lo que el usuario ve primero es exactamente lo
+que el producto sabe explicar mejor.**
+
+Sobre una pregunta real, once eventos:
+
+```
+feasibility → belief ×7 → assurance → decision → deferred
+```
+
+**El contrato existía y sólo del lado del cliente.** `ui/src/types.ts` declara la unión
+tipada entera —`decision`, `probe`, `paradigm.step`, `token`, `retained`, `done`, `gated`,
+`deferred`— y `serve.py` devolvía un bloque. Otra vez la misma forma.
+
+**Tres reglas de orden que se verifican, y cada una bloquea una manera distinta de mentir:**
+
+| | |
+|---|---|
+| exactamente **un** terminal | cero es cortarse sin decir cómo; dos es decir dos cosas distintas |
+| **nada** después del terminal | describe trabajo que el consumidor ya dio por cerrado |
+| `decision` **antes** que cualquier `token` | si el texto empieza antes, lo que el usuario vio primero no fue una decisión — y **ésa es la tesis entera del producto** |
+
+La tercera es la que importa. Un stream que la invierte **desmiente el producto en
+pantalla**, y se ve perfectamente bien mientras lo hace.
+
+**Y una sola implementación.** `_answer()` **consume** el stream en vez de reimplementar la
+decisión. Con dos caminos —uno que decide para devolver y otro que decide para emitir— la
+separación se vería como «la consola muestra algo distinto de lo que el registro dice», que
+es la falla más difícil de creer cuando aparece.
+
+> **Lo encontró de paso:** `handoff` estaba en el `REGISTRY` y la factibilidad **no tenía
+> aritmética para él**, así que el endpoint del producto reventaba con cualquier request.
+> Nunca se había notado porque nada fuera del banco recorre el catálogo entero.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

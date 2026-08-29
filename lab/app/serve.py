@@ -34,6 +34,7 @@ from typing import Any
 from .verify import score as detector_score
 from .assurance import Assurance
 from .config import Settings
+from .events import Event
 from .features import FeatureExtractor, measure_continuation, payload_for
 from .llm import LLMClient, Usage
 from .paradigms import COST_PRIORS, FALLBACK, REGISTRY
@@ -258,6 +259,31 @@ def _answer(
     requested: Assurance,
     probe: bool,
 ) -> Answer:
+    """La respuesta completa. CONSUME el stream, no reimplementa la decision.
+
+    UNA SOLA IMPLEMENTACION. Si hubiera un camino que decide para devolver y otro que
+    decide para emitir, los dos serian libres de separarse — y la separacion se veria
+    como «la consola muestra algo distinto de lo que el registro dice», que es la falla
+    mas dificil de creer cuando aparece.
+    """
+    ultimo = None
+    for evento in _answer_stream(request, settings, bundle, requested, probe):
+        ultimo = evento
+    if ultimo is None or not ultimo.is_terminal:
+        raise ValueError(
+            "El stream termino sin evento terminal. Un stream que se corta sin decir "
+            "como es peor que uno que falla: el consumidor se queda esperando."
+        )
+    return ultimo.data["result"]
+
+
+def _answer_stream(
+    request: Request,
+    settings: Settings,
+    bundle: PolicyBundle,
+    requested: Assurance,
+    probe: bool,
+):
     task = request.as_task()
     # EL POOL SOLO EXISTE SI HAY CATALOGO. Con un solo modelo el sistema corre como
     # siempre y el plan dice `model=""` — que es distinto de mentir un nombre por omision.
@@ -304,6 +330,36 @@ def _answer(
     features = decision.features
     reading = decision.probe
 
+    # LO QUE SE EMITE PRIMERO ES LO QUE SE SUPO PRIMERO, y eso no es una decision de
+    # presentacion: la poda por aritmetica corre ANTES de cualquier inferencia, asi que
+    # sale antes de que el proveedor haya recibido una sola llamada. El TTFT del modelo se
+    # mide en cientos de milisegundos; esto sale en microsegundos y sin gastar un token.
+    verdicts = plan.verdict.get("feasibility") or {}
+    if verdicts or plan.notes:
+        yield Event("feasibility", {
+            "pruned": [
+                n for n in plan.notes
+                if "infeasible" in n or "precondicion" in n or "GATEADO" in n
+            ],
+            "ladder": plan.ladder,
+        })
+
+    # LAS CREENCIAS, con su procedencia. Es la deliberacion que el proveedor esconde y
+    # este sistema puede mostrar entera: el modelo nunca dice por que decidio, y esto si.
+    for b in (plan.verdict.get("beliefs", {}).get("beliefs", []))[:32]:
+        yield Event("belief", {
+            "proposition": b.get("proposition"),
+            "value": b.get("value"),
+            "provenance": b.get("provenance"),
+            "credence": b.get("credence"),
+            "evidence": b.get("evidence"),
+        })
+
+    yield Event("assurance", plan.assurance)
+
+    if reading is not None:
+        yield Event("probe", reading.as_dict())
+
     # EL MODELO ES PARTE DE LA ACCION, asi que la EJECUCION cambia de cliente. Planificar
     # barato y ejecutar con el que el plan eligio es la unica lectura coherente de «el
     # modelo se elige»: si se planificara con uno y se ejecutara con otro sin decirlo, el
@@ -331,6 +387,8 @@ def _answer(
         fallback=bundle.fallback,
     ).as_dict()
 
+    yield Event("decision", {"plan": explain})
+
     if plan.gated:
         # Lo que costo DECIDIR ya viene contado en la decision: reconstruirlo aca
         # era una tercera copia de la misma aritmetica, y las tres podian separarse.
@@ -338,7 +396,7 @@ def _answer(
         gate_usage.merge(decision.usage)
         # Nothing runs. The caller asked for something whose consequences a human owns,
         # and returning a plan is the whole answer.
-        return Answer(
+        _resultado = Answer(
             outcome="gated",
             text="",
             paradigm=plan.paradigm,
@@ -350,6 +408,11 @@ def _answer(
                 "shared state. The plan is returned for review; nothing was executed."
             ),
         )
+        yield Event("gated", {"result": _resultado,
+                       "outcome": _resultado.outcome,
+                       "paradigm": _resultado.paradigm,
+                       "note": _resultado.note})
+        return
 
     if decision.unresolved:
         # FAIL-CLOSED. The plan still wants evidence nobody produced — probing was
@@ -362,7 +425,7 @@ def _answer(
         deferred_usage = Usage()
         deferred_usage.merge(decision.usage)
         deferred_usage.merge(fallback_result.usage)
-        return Answer(
+        _resultado = Answer(
             outcome="deferred",
             text=fallback_result.answer,
             paradigm=bundle.fallback,
@@ -375,6 +438,11 @@ def _answer(
                 "ran instead of the plan's placeholder paradigm"
             ),
         )
+        yield Event("deferred", {"result": _resultado,
+                       "outcome": _resultado.outcome,
+                       "paradigm": _resultado.paradigm,
+                       "note": _resultado.note})
+        return
 
     # Decidir cuesta tokens, y esos tokens estan en la factura: una sonda que no
     # llega al total hace que el camino gobernado parezca tan barato como el ciego,
@@ -399,7 +467,7 @@ def _answer(
             )
             text = result.answer
             if score >= 1.0:
-                return Answer(
+                _resultado = Answer(
                     outcome="answered",
                     text=text,
                     paradigm=rung,
@@ -408,7 +476,12 @@ def _answer(
                     probe=probe_record,
                     ladder_run=ladder,
                 )
-        return Answer(
+                yield Event("done", {"result": _resultado,
+                               "outcome": _resultado.outcome,
+                               "paradigm": _resultado.paradigm,
+                               "note": _resultado.note})
+                return
+        _resultado = Answer(
             outcome="answered",
             text=text,
             paradigm=plan.ladder[-1],
@@ -418,11 +491,16 @@ def _answer(
             ladder_run=ladder,
             note="the whole ladder ran and no rung satisfied the detector",
         )
+        yield Event("done", {"result": _resultado,
+                       "outcome": _resultado.outcome,
+                       "paradigm": _resultado.paradigm,
+                       "note": _resultado.note})
+        return
 
     result = REGISTRY[plan.paradigm](client, surface, task)
     usage.merge(result.usage)
     deferred = plan.paradigm == bundle.fallback and plan.action == "defer_to_fallback"
-    return Answer(
+    _resultado = Answer(
         outcome="deferred" if deferred else "answered",
         text=result.answer,
         paradigm=plan.paradigm,
@@ -436,3 +514,8 @@ def _answer(
             else ""
         ),
     )
+    yield Event("deferred", {"result": _resultado,
+                   "outcome": _resultado.outcome,
+                   "paradigm": _resultado.paradigm,
+                   "note": _resultado.note})
+    return
