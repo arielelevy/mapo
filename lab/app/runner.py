@@ -346,6 +346,7 @@ class Runner:
         demand_obligations: bool = False,
         shared_state: bool | None = None,
         offer_board: bool = False,
+        stable_prefix_first: bool = False,
     ) -> None:
         # Hybrid is the default because it is what a real deployment has. The degraded
         # arms exist to test whether the conclusion depends on retrieval quality, not to
@@ -402,6 +403,11 @@ class Runner:
         # todos los patrones por igual. Es el unico que se puede cruzar `{con, sin} x
         # {patrones}` de verdad, porque el board estructural solo existe en `dag`.
         self.offer_board = offer_board
+        # SEPTIMO FACTOR: el orden del prompt. Condicion NECESARIA para que el cache del
+        # proveedor pueda pegar entre tareas, y no suficiente — el prefijo estable mide
+        # ~567 tokens contra un umbral de 1.024. Se mide aparte para separar el efecto del
+        # ORDEN del efecto del LARGO.
+        self.stable_prefix_first = stable_prefix_first
         # Un brazo que llama al modelo no tiene instancia compartida: se construye por
         # celda en `surface_for`. Se deja el hibrido como base para lo que no es una celda
         # —describe(), la sonda— y se dice, en vez de guardar un None que explote lejos.
@@ -442,6 +448,8 @@ class Runner:
             suffix += "_dagboard" if shared_state else "_nodagboard"
         if offer_board:
             suffix += "_boardtool"
+        if stable_prefix_first:
+            suffix += "_stableprefix"
         self._results_path = (
             settings.results_dir / f"{corpus_name}{suffix}_rows.jsonl"
         )
@@ -541,6 +549,7 @@ class Runner:
             demand_obligations=self.demand_obligations,
             shared_state=self.shared_state,
             offer_board=self.offer_board,
+            stable_prefix_first=self.stable_prefix_first,
         )
 
     def features_for(self, task: dict[str, Any], allow_derived: bool) -> Features:

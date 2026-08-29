@@ -367,6 +367,17 @@ def _answer_stream(
     if pool and plan.model:
         client = pool.client_for(plan.model)
 
+    # LA LECTURA DE LA SONDA VIAJA A LA EJECUCION. Es el unico punto donde la creencia
+    # medida y la superficie que el paradigma va a usar coexisten: antes la sonda medía
+    # acoplamiento, la decision lo consumia, y el PARADIGMA no se enteraba — asi que
+    # `dag_shape` elegia su forma ignorando la creencia que mas la gobierna (`D-3b`).
+    #
+    # Se pasa la lectura OBSERVADA, no la estimada: si no hubo sonda queda `None`, que es
+    # «no se sabe» y no «cero». Cero seria unidades independientes, y ahi descomponer en
+    # paralelo es correcto — exactamente la conclusion opuesta a no saber.
+    if reading is not None:
+        surface = replace(surface, coupling=reading.coupling)
+
     explain = plan.explain()
     probe_record = reading.as_dict() if reading else None
 

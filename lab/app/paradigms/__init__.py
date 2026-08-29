@@ -32,6 +32,30 @@ from ..llm import Completion, LLMClient, Usage
 from ..cognitive import compact_history, manage_history
 from ..tools import ToolFailure, ToolSurface, specs_for
 
+def framed(surface: Any, contrato: str, pregunta: str, cuerpo: str = "") -> str:
+    """El prompt, con lo ESTABLE adelante y lo VARIABLE al final. `X-4d`.
+
+    POR QUE EL ORDEN IMPORTA Y NO ES COSMETICO. El cache de prompt del proveedor exige
+    que los primeros 1.024 tokens sean IDENTICOS, y despues acierta cada 128 mas. Hoy
+    todos los prompts arrancan con `Task: {question}`, asi que entre dos tareas el prefijo
+    comun se rompe en el token 3 — la documentacion pide exactamente lo contrario:
+    «structure your requests such that repetitive content occurs at the beginning».
+
+    Y NO ALCANZA POR SI SOLO, que es la parte honesta. El prefijo estable entero mide ~567
+    tokens (533 de tools + 34 del contrato) contra un umbral de 1.024: dar vuelta el orden
+    NO compra cache hasta que ese prefijo crezca. Se implementa igual porque es gratis, es
+    condicion necesaria, y medirlo aparte separa el efecto del orden del efecto del largo.
+
+    ES UN FACTOR, no una limpieza: cambia el payload que el modelo lee, asi que puede
+    cambiar lo que contesta. Apagado por defecto — el regimen medido hasta hoy es el otro.
+    """
+    if surface is not None and getattr(surface, "stable_prefix_first", False):
+        partes = [answer_contract(surface), contrato, cuerpo, f"Task: {pregunta}"]
+    else:
+        partes = [f"Task: {pregunta}", contrato, cuerpo, answer_contract(surface)]
+    return "\n\n".join(x for x in partes if x)
+
+
 def answer_contract(surface: Any = None) -> str:
     """El contrato de respuesta, mas las obligaciones si la corrida las exige.
 

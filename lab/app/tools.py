@@ -480,6 +480,20 @@ class ToolSurface:
     # `shared_state`, que gobierna el board ESTRUCTURAL de dag —el que escribe el codigo—.
     # Fundirlos mediria dos cosas con un interruptor.
     offer_board: bool = False
+    # EL ACOPLAMIENTO MEDIDO, cuando la sonda corrio. `D-3b`.
+    #
+    # POR QUE VIAJA POR LA SUPERFICIE Y NO POR LA TAREA. La tarea es lo que el CALLER
+    # declara; esto es lo que el sistema MIDIO pagando una unidad. Meterlo en la tarea los
+    # volveria indistinguibles, y el piso de procedencia entero depende de distinguirlos.
+    #
+    # `None` es «no se sondeo», y NO es acoplamiento cero. Cero significa unidades
+    # independientes —donde descomponer en paralelo es correcto— y no saber significa que
+    # no hay con que decidir la forma. Confundirlos haria que la forma mas paralela sea el
+    # default silencioso justo donde nadie midio.
+    coupling: float | None = None
+    # FACTOR: lo estable adelante y la pregunta al final (`X-4d`). Cambia el payload, asi
+    # que sus filas van a otro archivo.
+    stable_prefix_first: bool = False
     calls: dict[str, int] = field(default_factory=dict)
     board_posts: int = 0
     board_reads: int = 0

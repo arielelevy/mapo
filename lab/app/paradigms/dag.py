@@ -89,7 +89,7 @@ def projected_calls(ramas: int, replans: int) -> int:
     return ramas * DAG_SUB_AGENT_ITERATIONS * (replans + 1) + ramas + 1
 
 
-def dag_shape(task: dict[str, Any]) -> DagShape:
+def dag_shape(task: dict[str, Any], coupling: float | None = None) -> DagShape:
     """Cuantos nodos y cuanta profundidad de replan, por aritmetica sobre el request.
 
     EL PROBLEMA QUE CIERRA (`D-3`). Hasta hoy el MODELO dibujaba el grafo de control: el
@@ -123,6 +123,23 @@ def dag_shape(task: dict[str, Any]) -> DagShape:
     n_units = max(1, len(task.get("unit_ids") or []))
     tope_ramas = max(1, min(DAG_MAX_SUB_QUESTIONS, n_units))
 
+    # EL ACOPLAMIENTO ACOTA LAS RAMAS, y es la cota que faltaba. Con acoplamiento alto las
+    # unidades dependen unas de otras: descomponer en paralelo mide cualquier cosa menos
+    # la cadena, porque cada rama ve un pedazo que no se explica solo. La cota es lineal y
+    # no un interruptor —el acoplamiento es continuo— y nunca baja de una rama, que sigue
+    # siendo un DAG valido.
+    #
+    # `None` NO es cero. Sin sondeo no hay con que acotar y se deja el tope del material;
+    # tratarlo como cero haria que la forma mas paralela sea el default silencioso justo
+    # donde nadie midio.
+    if coupling is not None:
+        if not 0.0 <= coupling <= 1.0:
+            raise ValueError(
+                f"acoplamiento {coupling}: es una fraccion y tiene que estar en [0, 1]. "
+                f"Un valor fuera de rango no acota nada — invierte la cota."
+            )
+        tope_ramas = max(1, min(tope_ramas, round(DAG_MAX_SUB_QUESTIONS * (1 - coupling))))
+
     mejor = (1, 0)
     for ramas in range(tope_ramas, 0, -1):
         for replans in range(DAG_MAX_REPLAN_ITERATIONS, -1, -1):
@@ -151,7 +168,10 @@ def dag_shape(task: dict[str, Any]) -> DagShape:
             f"{ramas} ramas y {replans} replan(s) = {projected_calls(ramas, replans)} "
             f"llamadas: el tope fijo manda, el material ({n_units} unidades) alcanza"
         )
-    return DagShape(ramas, replans, motivo, governed_by_coupling=False)
+    if coupling is not None:
+        motivo += f"; acoplamiento {coupling:.2f} acota a {tope_ramas} rama(s)"
+    return DagShape(ramas, replans, motivo,
+                    governed_by_coupling=coupling is not None)
 
 
 # El blackboard vive en `blackboard.py`: es una DIMENSION (estado compartido), no una
@@ -321,7 +341,7 @@ def dag_strategy(
     # LA FORMA SE DERIVA ANTES DE PREGUNTAR. El planificador recibe el tope ya calculado,
     # asi que el modelo propone DENTRO de una forma que el codigo fijo — en vez de proponer
     # la forma y que el codigo la acepte.
-    shape = dag_shape(task)
+    shape = dag_shape(task, getattr(surface, "coupling", None))
 
     # EL ESTADO COMPARTIDO ES UN FACTOR, y apagarlo deja la topologia intacta: siguen las
     # mismas olas, el mismo verify y los mismos replans. Lo unico que cambia es si cada
