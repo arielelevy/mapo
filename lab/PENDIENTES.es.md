@@ -183,7 +183,7 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
 
 ## Resumen — todo de un vistazo
 
-`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **16 abiertos · 10 en curso · 149 cerrados** (contados 2026-08-29)
+`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **17 abiertos · 10 en curso · 149 cerrados** (contados 2026-08-29)
 
 > **El contador se cuenta, no se recuerda.** Decía «59 abiertos · 16 en curso · 52
 > cerrados» y los números reales eran 14, 10 y 147: se había escrito a mano y quedado
@@ -522,6 +522,59 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
 
   **Así que esto ya no espera una decisión de diseño: espera la corrida**, como el resto.
   Lo que sigue siendo del autor es si vale gastar en un factor más.
+
+- [ ] **AR-6** · **«el contexto largo reemplaza a la recuperación»: medido en una sonda, y
+  la respuesta es *depende de la profundidad*** (prueba manual del autor, 2026-08-29).
+
+  La factibilidad poda `direct` en las 9 celdas de C3 porque la tarea declara **40.000**
+  tokens de presupuesto y el material son **340.496** medidos. Pero `terra` tiene ventana de
+  **922.000**: el material **le entra**. Así que la pregunta era si la poda escondía una
+  capacidad. Se corrió a mano, fuera del harness, sin escribir en ningún `.jsonl`:
+
+  | tarea | saltos | `reasoning_effort` | u | razonamiento |
+  |---|---|---|---|---|
+  | `c3-000-h1` | 1 | `none` | **1,000** | 0 |
+  | `c3-000-h1` | 1 | `medium` | 1,000 | 36 |
+  | `c3-002-h3` | **3** | `none` | **0,000** | 0 |
+  | `c3-002-h3` | **3** | `medium` | **1,000** | **69** |
+  | `c3-002-h3` | 3 | `high` | 1,000 | 96 |
+
+  **Ver todo resuelve un salto y NO resuelve tres.** Con `effort=none` en h3 contestó
+  `AR7552764200` en vez de `AR7693223774` — una cuenta que existe, plausible, y equivocada:
+  siguió la línea un tramo y paró. Lo que cierra la cadena de tres **no es más contexto: son
+  69 tokens de razonamiento**.
+
+  **Por qué esto es de la línea anti-RAG y no una curiosidad.** El argumento «con ventanas de
+  un millón, la recuperación sobra» se contesta acá con un número: el contexto largo
+  **sustituye a la recuperación en el acoplamiento superficial y no en el profundo**, y el eje
+  que separa los dos no es el tamaño de la ventana sino la **profundidad de la cadena**. Es la
+  misma forma que `MEDICION.es.md` §7: una dependencia que el régimen vuelve trivial no puede
+  falsificar el patrón que existe para esa dependencia.
+
+  **Y reencuadra el resultado de `terra` en la campaña.** Ahí `dag_strategy` sacó **0,889** y
+  el resto ≤ 0,333, **todos con `reasoning_effort='none'`** porque Chat Completions no admite
+  tools y razonamiento juntos. O sea: **`dag_strategy` estaba comprando con estructura
+  —descomponer, verificar, replanificar— lo que 69 tokens de razonamiento compran directo.**
+  Eso convierte la restricción de la API en una amenaza de validez con número: la campaña
+  mide a los `gpt-5.6` **con su capacidad distintiva apagada**, y el costo de apagarla es
+  0,000 contra 1,000 en la misma tarea.
+
+  **Qué falta para que esto sea una medición y no una sonda:**
+
+  1. **`direct` sin poda como FACTOR declarado**, no como excepción a mano. Hoy la
+     factibilidad corre contra el presupuesto de la tarea; correrlo contra la **ventana del
+     modelo** es otra condición experimental y tiene que declararse, no colarse.
+  2. **Las 9 celdas de C3 con réplicas**, no dos tareas sueltas. `h1` y `h3` no están
+     pareadas más allá de la profundidad.
+  3. **El barrido de `reasoning_effort`** sobre `direct`, que es el **único paradigma del
+     catálogo que puede correr con razonamiento** en `gpt-5.6` — no usa tools. Eso lo vuelve
+     el brazo natural para medir el eje, y no estaba previsto.
+  4. **El precio, que no es el de la tabla.** Con más de 272k de entrada, `gpt-5.6` cobra la
+     **tarifa larga sobre la request entera**: `terra` pasa de 2,0 a **4,0** por millón. Cada
+     una de estas llamadas costó **USD 1,36**; la sonda entera, 6,80.
+
+  Y un dato de paso que vale para toda estimación futura: contar material por
+  **caracteres/4 sobrestimó 42%** — 483k estimados contra 340k reales del tokenizador.
 
 - [ ] **X-6** · **el 98,9% del gasto es ENTRADA, y el caché del proveedor sirve entre el 2%
   y el 4%** (medido el 2026-08-29, a pedido del autor: «¿se puede optimizar la corrida?»).
