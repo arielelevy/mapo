@@ -15,6 +15,15 @@ COTA SUPERIOR ESTIMADA, calculada antes de correr sobre el registro existente:
                 generaciones
   TOTAL         ~792k tokens. Referencia nano: ~USD 0,07
 
+LA ESTIMACION DE ARRIBA SALIO ~18x BAJA Y SE DEJA ESCRITA, no se corrige en su lugar: es
+la unica forma de que la proxima estimacion se haga distinto. Lo medido, sobre `hybrid`:
+`dag_strategy` sola cuesta **7,15M** tokens en 96 filas (74.485 por fila) y las otras tres
+juntas 5,24M. El error no fue de aritmetica sino de MODELO: se proyecto desde el registro
+de `hybrid` suponiendo cache caliente, y para `hybrid_hyde` el cache esta FRIO por
+construccion —la recuperacion devuelve otras unidades, asi que los prompts son otros—, que
+es justo lo que el parrafo de arriba dice y la suma no uso. El total real de P26 es
+~12,4M, ~USD 2 de referencia nano.
+
 LAS PREDICCIONES ESTAN REGISTRADAS EN README.md (P26a-d) ANTES de esta corrida. La que
 importa es P26d: el ORDEN de los paradigmas no cambia con el brazo. Si cambiara, «el mejor
 paradigma» seria en parte un artefacto de la calidad de busqueda, y se caeria toda
@@ -46,6 +55,20 @@ REPEAT = 3
 # en vez de gastar cuota. Su dato historico se replaya desde las filas ya pagadas.
 PARADIGMS = ["dag_strategy", "gist_reader", "react", "rewoo"]
 BRAZOS = ["hybrid", "hybrid_hyde"]
+
+# SE PARAMETRIZA PORQUE LA CORRIDA QUEDO A MEDIAS Y RETOMARLA ENTERA NO ES GRATIS.
+# `resume=True` salta las celdas que ya estan, asi que volver a lanzar el script completo
+# no re-cobraria lo hecho — pero tampoco DECLARA que se esta corriendo una pata sola, y un
+# log que dice «brazos=[hybrid, hybrid_hyde]» sobre una corrida que toco un paradigma en un
+# brazo es un registro que miente por omision. El argumento hace visible el alcance real.
+if len(sys.argv) > 1:
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--paradigms", default=",".join(PARADIGMS))
+    ap.add_argument("--arms", default=",".join(BRAZOS))
+    ns = ap.parse_args()
+    PARADIGMS = [x for x in ns.paradigms.split(",") if x]
+    BRAZOS = [x for x in ns.arms.split(",") if x]
 
 base = Settings.from_env()
 settings = replace(

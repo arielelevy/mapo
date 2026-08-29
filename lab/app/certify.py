@@ -216,6 +216,10 @@ class World:
     tasks: dict[str, dict[str, Any]]  # task_id -> task payload
     regions: dict[str, str]  # task_id -> region label
     utilities: dict[str, dict[str, float]]  # task_id -> paradigm -> mean utility
+    # COSTO POR CELDA, en tokens. Opcional porque un mundo armado antes de que esto
+    # existiera no lo trae — y ahi el beneficio se computa a lambda 0, que es lo que se
+    # computaba antes. Vacio significa "no registrado", nunca "gratis".
+    costs: dict[str, dict[str, float]] = field(default_factory=dict)
 
 
 def _rebuild_base(
@@ -234,13 +238,29 @@ def _benefit_on(
     world: World,
     deficits: dict[str, Deficit],
     fallback: str,
+    lambda_cost: float = 0.0,
+    probe_tokens: int = 0,
+    clause_tokens: int = 0,
 ) -> tuple[float, int]:
-    """Mean benefit of repairing, over the tasks of this world that show the deficit.
+    """Mean benefit of repairing, NET of cost, over the tasks that show the deficit.
 
-    Benefit per task: the recorded utility of the paradigm the REPAIRED decision picks,
-    minus the recorded utility of what the unrepaired decision runs (the fallback — a
-    probe placeholder never executes as itself). Recorded means only: this loop never
-    runs anything, it re-reads what the bench already paid for.
+    POR QUE NETA Y NO SOLO UTILIDAD (medido el 2026-08-29). Corriendo el ciclo entero sobre
+    el registro, el diagnostico encontraba el deficit en 8 de 8 tareas del mundo de validate
+    y el beneficio daba **+0,0000 exacto**. La causa no era que la reparacion no sirviera:
+    es que el paradigma DESPUES de reparar es el mismo `fallback`, asi que
+    `u(after) - u(fallback)` es cero **por construccion**.
+
+    Lo que una clausula de adquisicion compra no es utilidad, es **no tener que sondear** —
+    83k tokens medidos en `P17b` contra los `max_tokens` que la clausula declara. Una
+    metrica de utilidad pura no puede ver eso, y con ella **ninguna clausula de esta clase
+    se promoveria jamas**, no porque no valgan sino porque se las mide en el eje equivocado.
+
+    LA CONVENCION DE `lambda` ES LA DEL BANCO: opera sobre la RAZON de costo contra el mas
+    barato de la tarea (`Study.cost_ratio`), no sobre tokens absolutos. Usar otra escala
+    daria numeros que no se pueden comparar con ningun otro resultado del registro.
+
+    A `lambda_cost = 0` esto devuelve exactamente lo que devolvia antes, asi que el cambio
+    no reinterpreta ningun veredicto viejo: los reproduce y agrega el eje que faltaba.
     """
     gains = []
     for task_id, deficit in deficits.items():
@@ -248,7 +268,24 @@ def _benefit_on(
         row = world.utilities.get(task_id, {})
         if after not in row or fallback not in row:
             continue  # unmeasured on this world: no invented numbers
-        gains.append(row[after] - row[fallback])
+        bruto = row[after] - row[fallback]
+        if lambda_cost <= 0.0:
+            gains.append(bruto)
+            continue
+        costos = world.costs.get(task_id, {})
+        if after not in costos or fallback not in costos:
+            # SIN COSTO REGISTRADO NO SE INVENTA UNO. Se cae al bruto y se dice con el
+            # conteo: mezclar celdas netas con celdas brutas produciria un promedio que no
+            # es ninguna de las dos cosas.
+            gains.append(bruto)
+            continue
+        piso = min(c for c in costos.values() if c > 0) or 1.0
+        # SIN REPARAR SE SONDEA: el placeholder no se ejecuta como si mismo, y lo que corre
+        # en su lugar paga la sonda. CON la clausula se paga su presupuesto declarado, que
+        # es acotado por construccion. Esa diferencia es el beneficio real.
+        ratio_after = (costos[after] + clause_tokens) / piso
+        ratio_fall = (costos[fallback] + probe_tokens) / piso
+        gains.append(bruto - lambda_cost * (ratio_after - ratio_fall))
     if not gains:
         return 0.0, 0
     return sum(gains) / len(gains), len(gains)
@@ -297,6 +334,12 @@ def certify_clause(
     authorizer: str,
     claim_id: str,
     min_tasks: int = 2,
+    # LA BRECHA NETA, con defaults que reproducen el comportamiento anterior. A
+    # `lambda_cost = 0` esto es exactamente lo que se computaba antes de 2026-08-29, asi
+    # que ningun veredicto viejo se reinterpreta: se reproduce y se le agrega el eje que
+    # faltaba.
+    lambda_cost: float = 0.0,
+    probe_tokens: int = 0,
 ) -> tuple[AcquisitionClause | None, Certificate]:
     """The single path from draft to promoted clause. Everything else is a draft forever.
 
@@ -330,7 +373,15 @@ def certify_clause(
         deficits = _diagnose_world(
             world, policy, theta_assert, fallback, draft.target_proposition
         )
-        stages[manifest.role] = _benefit_on(world, deficits, fallback)
+        # EL PRESUPUESTO DE LA CLAUSULA SALE DE LA CLAUSULA, no de un parametro suelto:
+        # es lo que la clausula PROMETE gastar, y certificarla contra otro numero
+        # certificaria una clausula distinta de la que se va a instalar.
+        stages[manifest.role] = _benefit_on(
+            world, deficits, fallback,
+            lambda_cost=lambda_cost,
+            probe_tokens=probe_tokens,
+            clause_tokens=draft.max_tokens,
+        )
 
     validate_ok = (
         stages["validate"][1] >= min_tasks

@@ -40,7 +40,6 @@ from typing import Any
 
 from ..beliefs import Belief, BeliefBase, Provenance
 from ..llm import LLMClient, Usage
-from ..retrieval import CorpusView
 from ..tools import ToolSurface
 from . import ANSWER_CONTRACT, answer_contract, Result, _run_tool_loop, parse_answer
 from .parsing import extract_json
@@ -85,35 +84,10 @@ def _scopes(unit_ids: list[str], n: int) -> list[list[str]]:
     return [sorted(unit_ids[i::n]) for i in range(n)] if unit_ids else []
 
 
-def _sub_surface(surface: ToolSurface, unit_ids: list[str]) -> ToolSurface:
-    """La misma superficie, restringida a un alcance. Comparte los contadores.
-
-    El alcance es una propiedad de la VISTA, no una instruccion en el prompt: un agente
-    no puede leer fuera de su alcance porque las unidades no estan, no porque se le haya
-    pedido que no lo haga.
-    """
-    view = CorpusView(
-        task_id=surface.view.task_id,
-        documents=surface.view.documents,
-        unit_ids=list(unit_ids),
-        relevant_units=[u for u in surface.view.relevant_units if u in set(unit_ids)],
-    )
-    sub = ToolSurface(
-        view=view,
-        hybrid=surface.hybrid,
-        semantic=surface.semantic,
-        lexical=surface.lexical,
-        variant=surface.variant,
-        budget_tokens=surface.budget_tokens,
-        stop_on_barren=surface.stop_on_barren,
-        offer_read_all=surface.offer_read_all,
-    )
-    # Los contadores del padre siguen siendo los que se registran: lo que se mide es lo
-    # que la TAREA consumio, no lo que consumio cada agente por separado.
-    sub.calls = surface.calls
-    sub.sequence = surface.sequence
-    sub.units_read = surface.units_read
-    return sub
+# `_sub_surface` VIVIA ACA y se movio a `ToolSurface.scoped` (2026-08-29). No por
+# prolijidad: no propagaba `terse_tools`, `offer_board`, `demand_obligations` ni
+# `shared_state`, asi que adentro de un sub-agente esos factores no existian. Un olvido de
+# campo en una copia hecha a mano es invisible; en la clase, `replace` los lleva todos.
 
 
 def _authorises(base: BeliefBase, missing: str, scope: list[str],
@@ -187,7 +161,7 @@ def handoff(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Re
         }]
 
         completion, sub_usage, sub_transcript, turns = _run_tool_loop(
-            client, _sub_surface(surface, scope), messages,
+            client, surface.scoped(scope), messages,
             max_iterations=MAX_TURNS_PER_AGENT,
         )
         usage.merge(sub_usage)

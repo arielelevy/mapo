@@ -18,7 +18,7 @@ import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dc_field
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -40,7 +40,7 @@ from .contracts import verify_coverage, verify_obligations
 from .paradigms import CATALOG, COST_PRIORS, FALLBACK, Infeasible, REGISTRY, RETIRED
 from .embeddings import EmbeddingClient
 from .retrieval import (
-    MODEL_CALLING_ARMS, CorpusView, Retriever, build_arm, build_arms,
+    ANALYZER_VERSION, MODEL_CALLING_ARMS, CorpusView, Retriever, build_arm, build_arms,
 )
 from .tools import VARIANTS, ToolSurface
 from .assurance import Assurance
@@ -219,6 +219,18 @@ class Row:
     # `None` en un derivado significa NO ESTABLECIDO, nunca cero — es el contrato de
     # `Features` y se conserva al escribirlo.
     n_units: int = 0
+    # Lo que costo construir estado derivado del corpus durante este request. Fuera de
+    # `cost_tokens` a proposito: es otra medicion (`G-4`).
+    ingest_tokens: int = 0
+    # Con que analizador lexico se produjo. Sin esto, un analisis puede promediar filas de
+    # antes y despues de un cambio de tokenizacion sin que nada lo denuncie.
+    analyzer: str = ""
+    # QUE GASTO EN CADA MODELO. Vacio o de una sola clave = un modelo, el regimen medido
+    # hasta hoy. Con dos, `cost_tokens` deja de ser convertible a plata por si solo: un
+    # token de `terra` cuesta 10x uno de `luna`, y sumarlos da un entero que no significa
+    # nada. Es la condicion para que `X-5b` —el par (modelo, paradigma) como accion— se
+    # pueda medir adentro de una misma ejecucion.
+    tokens_by_model: dict = dc_field(default_factory=dict)
     phi_coupling: float | None = None
     phi_horizon_unknown: bool | None = None
     phi_continuation: float | None = None
@@ -303,6 +315,38 @@ def load_rows(
             f"diferencia que se queria medir."
         )
 
+    # Y EL ANALIZADOR LEXICO, que es la cuarta de la misma familia y la mas silenciosa.
+    # El brazo esta en el nombre del archivo, el modelo en la huella, el vocabulario en su
+    # campo — pero el TOKENIZADOR no dejaba rastro, y cambiarlo mueve el ranking de la
+    # recuperacion sin mover ninguno de los tres. Medido al cambiarlo el 2026-08-29: 19 de
+    # 26 tareas de `gold_p17` cambian el orden que el lexico devuelve, y las 7 que no son
+    # las de una sola unidad, donde no hay nada que ordenar.
+    #
+    # Una fila SIN el campo es del regimen anterior a que existiera, y se dice asi: no se
+    # la puede tratar como si fuera del actual, y tampoco levanta sola — mezclarla con una
+    # que si lo declara es lo que levanta.
+    #
+    # SALVO LAS INFACTIBLES, y ese matiz faltaba (2026-08-29). Una fila podada por
+    # aritmetica no ejecuta: no busca, no tokeniza, y por eso no declara analizador. No es
+    # una fila del regimen viejo — es una fila que no tiene tokenizador que declarar. La
+    # guarda las contaba como «(sin declarar)» y levantaba sobre CUALQUIER archivo que
+    # tuviera una celda podada, que son casi todos: `direct` sobre `c2-000-w4` y
+    # `c4-000-w4` alcanzaba para voltear una corrida entera.
+    #
+    # El guarda del brazo, tres bloques mas arriba, ya hacia lo correcto por otra via
+    # (`if r.get("retriever")`); este no tenia el equivalente. Y no se puede copiar ese
+    # test, porque `retriever` SI viene cargado en una fila infactible: el unico campo que
+    # separa «no ejecuto» de «ejecuto en otro regimen» es `infeasible`.
+    ejecutadas = [r for r in rows if not r.get("infeasible")]
+    analizadores = sorted({r.get("analyzer") or "(sin declarar)" for r in ejecutadas})
+    if len(analizadores) > 1:
+        raise ValueError(
+            f"{path.name} mezcla analizadores lexicos: {analizadores}. El tokenizador "
+            f"decide QUE encuentra BM25, asi que dos analizadores producen recuperaciones "
+            f"distintas con la misma huella y el mismo brazo — es la unica de las cuatro "
+            f"guardas que ningun otro campo puede detectar."
+        )
+
     # Y LO MISMO PARA EL VOCABULARIO DE REGION, por la misma razon. Una region es una
     # etiqueta cuyo significado lo fija el vocabulario que la produjo; dos filas de
     # vocabularios distintos llevan la misma etiqueta queriendo decir cosas distintas.
@@ -343,6 +387,7 @@ class Runner:
         stop_on_barren: int = 0,
         offer_read_all: bool = False,
         terse_tools: bool = False,
+        compact_material: bool = False,
         demand_obligations: bool = False,
         shared_state: bool | None = None,
         offer_board: bool = False,
@@ -389,6 +434,7 @@ class Runner:
         # que si es medible con ese N es el RIESGO —si el modelo elige peor herramienta—
         # y ese es el numero por el que el factor existe.
         self.terse_tools = terse_tools
+        self.compact_material = compact_material
         # CUARTO FACTOR. `C-ABSENCE` y `C-PRESUPPOSITION` necesitan que el agente declare
         # dos campos tipados, y pedirselos cambia el prompt de todos los brazos. Apagado
         # por defecto: las filas medidas hasta hoy NO lo tenian, y mezclarlas mediria el
@@ -442,6 +488,8 @@ class Runner:
             suffix += "_readall"
         if terse_tools:
             suffix += "_terse"
+        if compact_material:
+            suffix += "_prune"
         if demand_obligations:
             suffix += "_oblig"
         if shared_state is not None:
@@ -546,6 +594,7 @@ class Runner:
             stop_on_barren=self.stop_on_barren,
             offer_read_all=self.offer_read_all,
             terse_tools=self.terse_tools,
+            compact_material=self.compact_material,
             demand_obligations=self.demand_obligations,
             shared_state=self.shared_state,
             offer_board=self.offer_board,
@@ -585,6 +634,7 @@ class Runner:
         task_ids: list[str] | None = None,
         workers: int = 1,
         replay_only: bool = False,
+        baseline_reason: str = "",
     ) -> list[Row]:
         """Como `_run_cross_product`, con un solo escritor por archivo de resultados.
 
@@ -597,7 +647,7 @@ class Runner:
             return self._run_cross_product(
                 paradigms=paradigms, limit=limit, resume=resume,
                 repeat=repeat, task_ids=task_ids, workers=workers,
-                replay_only=replay_only,
+                replay_only=replay_only, baseline_reason=baseline_reason,
             )
 
     def _run_cross_product(
@@ -609,6 +659,7 @@ class Runner:
         task_ids: list[str] | None = None,
         workers: int = 1,
         replay_only: bool = False,
+        baseline_reason: str = "",
     ) -> list[Row]:
         """Run the cross product, `repeat` times per cell.
 
@@ -641,7 +692,19 @@ class Runner:
                 # campos nuevos sobre filas ya pagadas no viola nada. Sin esto, un
                 # registro que contiene un brazo despriorizado no se puede rellenar nunca,
                 # y queda con campos en cero que se leen igual que ceros medidos.
-                if not replay_only:
+                if baseline_reason:
+                    # CORRIDA DE LINEA BASE: se permite, y la razon queda en el log de la
+                    # corrida. Es una excepcion acotada y nombrada, no un interruptor —
+                    # `baseline_roster` obliga a listar cada brazo, y el CATALOG no se
+                    # toca: sus estados y razones son evidencia y siguen ahi.
+                    #
+                    # Por que existe: los veredictos que sacaron a estos brazos se tomaron
+                    # cada uno bajo su propio regimen. Una linea base a la que le faltan
+                    # cinco brazos es la linea base de los que sobrevivieron.
+                    print(f"LINEA BASE — brazos fuera del catalogo activo: {blocked}",
+                          flush=True)
+                    print(f"  razon declarada: {baseline_reason}", flush=True)
+                elif not replay_only:
                     raise ValueError(
                         f"Estos paradigmas no se corren:\n{chr(10).join(lines)}\n"
                         "Su dato historico se replaya desde las filas ya pagadas. Si esto "
@@ -799,6 +862,7 @@ class Runner:
         try:
             result = REGISTRY[paradigm](client, surface, task)
             spent = getattr(client, "spent", None) or result.usage
+            ingest_tokens = getattr(surface, "ingest_tokens", 0)
             if result.usage.total_tokens > spent.total_tokens:
                 # IMPOSIBLE POR CONSTRUCCION: el medidor cuenta cada llamada que pasa por
                 # el cliente, asi que no puede quedar por debajo de lo que el paradigma
@@ -845,9 +909,15 @@ class Runner:
                 # contra un brazo pago y llama «mejor» a la diferencia, que es exactamente
                 # lo que `H-3` avisaba. Y la ruta de error ya usaba `spent` — o sea que una
                 # celda que fallaba se cobraba bien y una que andaba se cobraba de menos.
-                cost_tokens=spent.total_tokens,
+                # LA INGESTA SE DESCUENTA (G-4). Construir estado derivado del corpus se
+                # amortiza sobre todas las consultas futuras, asi que cobrarselo a la fila
+                # que le toco construirlo mezcla amortizar con responder — y produce un
+                # costo que ninguna otra fila del mismo brazo vuelve a pagar. Va a su
+                # propia columna, que es otra medicion y no un renglon de esta.
+                cost_tokens=max(0, spent.total_tokens - ingest_tokens),
                 prompt_tokens=spent.prompt_tokens,
                 completion_tokens=spent.completion_tokens,
+                ingest_tokens=ingest_tokens,
                 # Lo que el paradigma NO vio: recuperacion, y cualquier otra cosa que
                 # gaste fuera de sus propias llamadas. Cero es legitimo aca —significa que
                 # todo el gasto fue del paradigma— porque el medidor siempre existe.
@@ -866,6 +936,8 @@ class Runner:
                 tool_usage=result.tool_usage,
                 infeasible=False,
                 retriever=self.retriever_arm,
+                analyzer=ANALYZER_VERSION,
+                tokens_by_model=dict(spent.by_model),
                 # Declared, never inferred from `bool(oracle)`: a task whose correct
                 # answer is the empty set still HAS a cheap oracle, and inferring it
                 # would mislabel exactly those tasks as unverifiable.
@@ -897,6 +969,8 @@ class Runner:
                 tool_usage={"infeasible": str(reason)},
                 infeasible=True,
                 retriever=self.retriever_arm,
+                analyzer=ANALYZER_VERSION,
+                tokens_by_model=dict(spent.by_model),
                 has_oracle=bool(task.get("has_oracle", True)),
                 answer="",
                 truth_coupling=task.get("truth_coupling", 0.0),
@@ -920,6 +994,9 @@ class Runner:
             # Usage (it never returned one), but the client metered them. Recording 0
             # here would teach the cost model that this paradigm fails cheaply.
             spent = getattr(client, "spent", None) or Usage()
+            # EL MISMO DESCUENTO QUE LA RUTA DE EXITO. Una asimetria aca ya costo una vez
+            # (`H-3`): la celda que crashea se cobraba distinto que la que anda.
+            ingest_tokens = getattr(surface, "ingest_tokens", 0)
             return Row(
                 task_id=task["task_id"],
                 cell=task["cell"],
@@ -927,9 +1004,10 @@ class Runner:
                 trial=trial,
                 region=features.region(),
                 utility=0.0,
-                cost_tokens=spent.total_tokens,
+                cost_tokens=max(0, spent.total_tokens - ingest_tokens),
                 prompt_tokens=spent.prompt_tokens,
                 completion_tokens=spent.completion_tokens,
+                ingest_tokens=ingest_tokens,
                 calls=spent.calls,
                 wall_seconds=round(time.perf_counter() - started, 3),
                 iterations=0,
@@ -938,6 +1016,8 @@ class Runner:
                 tool_usage={},
                 infeasible=False,
                 retriever=self.retriever_arm,
+                analyzer=ANALYZER_VERSION,
+                tokens_by_model=dict(spent.by_model),
                 has_oracle=bool(task.get("has_oracle", True)),
                 answer="",
                 truth_coupling=task.get("truth_coupling", 0.0),

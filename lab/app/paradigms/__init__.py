@@ -163,11 +163,20 @@ def _run_tool_loop(
             messages=messages,
             tools=specs_for(
                 surface.variant,
-                getattr(surface, "offer_read_all", False),
+                surface.offer_read_all,
                 # Lo retirado no se ofrece. Rechazar una llamada no le quita la decision
                 # al modelo — P20 lo midio: la re-emite con otras palabras el 69% de las
                 # veces. No ofrecerla si.
-                drop=surface.withdrawn() if hasattr(surface, "withdrawn") else (),
+                drop=surface.withdrawn(),
+                # LOS DOS FACTORES QUE FALTABAN, y su ausencia los volvia inertes. Este es
+                # el UNICO sitio del repo que manda la declaracion de tools, asi que un
+                # factor que no llega aca no llega a ningun lado: `offer_board=True` se
+                # habria corrido entero y medido CERO —la tool nunca aparece en la lista
+                # que el modelo ve— y `terse_tools` habria mandado la spec larga. Los dos
+                # tenian test sobre `specs_for` y ninguno sobre el CAMINO, que es como un
+                # factor pasa de estar implementado a estar ejecutado.
+                terse=surface.terse_tools,
+                offer_board=surface.offer_board,
             ),
         )
         usage.merge(completion.usage)
@@ -510,6 +519,16 @@ CATALOG: dict[str, CatalogEntry] = {
                      "produccion; su dato historico se replaya igual",
     ),
     "reflection": CatalogEntry(Status.ACTIVE, "unico mejor en 1 de 14: delgado, no dominado"),
+    "supervisor": CatalogEntry(
+        Status.ACTIVE,
+        "CANDIDATO NUEVO (2026-08-29), sin medir. El tercero de la familia de sub-agentes, "
+        "y el que faltaba: `dag_strategy` fija su plan antes de ejecutar y `handoff` fija "
+        "sus alcances en el codigo; aca las llamadas NO estan decididas de antemano — el "
+        "supervisor mira lo que volvio y recien ahi despacha la siguiente. Sin el, la "
+        "familia se media en sus bordes y no donde vive. Entra con prediccion falsable "
+        "registrada antes de correr, como todos",
+        revives_when="no aplica: esta activo y sin medir",
+    ),
     "handoff": CatalogEntry(
         Status.ACTIVE,
         "CANDIDATO NUEVO (2026-08-28), sin medir. Alcances independientes y transferencia "
@@ -575,6 +594,31 @@ RETIRED: frozenset[str] = frozenset(
     name for name, entry in CATALOG.items() if not entry.runnable
 )
 
+
+def baseline_roster(include: tuple[str, ...] = ()) -> list[str]:
+    """El plantel de una corrida de LINEA BASE homogenea.
+
+    POR QUE HACE FALTA UN MECANISMO Y NO UN PARCHE. El catalogo bloquea por codigo los
+    brazos retirados y en standby, y esta bien que lo haga: impide gastar cuota en algo que
+    ya se decidio. Pero una corrida de linea base tiene el problema opuesto — su valor
+    ESTA en que todos los brazos corran bajo las mismas condiciones, y un plantel donde
+    faltan cinco no es una linea base, es la linea base de los que sobrevivieron.
+
+    Los veredictos que sacaron a esos brazos se tomaron cada uno bajo su propio regimen:
+    corpus distinto, tokenizador distinto, sin entidades, con el `offer_board` que nunca
+    llegaba al modelo. Volver a medirlos juntos es exactamente lo que una linea base es.
+
+    LO QUE ESTA FUNCION NO HACE: no cambia el CATALOG. Los estados y sus razones son
+    evidencia y quedan; esto declara una EXCEPCION acotada a una corrida, y hay que nombrar
+    cada brazo. Un `include_all=True` volveria a hacer invisible lo que el catalogo existe
+    para hacer visible.
+    """
+    desconocidos = sorted(set(include) - set(REGISTRY))
+    if desconocidos:
+        raise ValueError(f"no existen en el REGISTRY: {desconocidos}")
+    activos = sorted(n for n, e in CATALOG.items() if e.runnable and n in REGISTRY)
+    return sorted(set(activos) | set(include))
+
 REGISTRY: dict[str, ParadigmFn] = {
     "direct": direct,
     "cot": cot,
@@ -610,6 +654,17 @@ REGISTRY["dag_strategy"] = dag_strategy
 from .handoff import handoff  # noqa: E402
 
 REGISTRY["handoff"] = handoff
+
+# `supervisor.py` importa lo mismo que `handoff.py` y por el mismo motivo circular.
+from .supervisor import supervisor  # noqa: E402
+
+REGISTRY["supervisor"] = supervisor
+# Costo: entre `handoff` y `dag_strategy`. Mas caro que handoff —hay una llamada de
+# coordinacion ANTES de cada sub-agente, no solo entre alcances— y mas barato que dag,
+# que ademas replanifica sobre un plan entero. La cota la fija `MAX_DISPATCHES`, no el
+# modelo: un brazo cuyo gasto depende de cuando el modelo decida parar no se puede
+# proyectar, y sin proyeccion la factibilidad no lo puede admitir.
+COST_PRIORS["supervisor"] = 8.0
 # Costo: SCOPES agentes, cada uno con su bucle acotado. Mas caro que un fan-out fijo
 # —hay dos bucles— y mas barato que `dag_strategy`, que ademas replanifica.
 COST_PRIORS["handoff"] = 5.0

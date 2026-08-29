@@ -106,7 +106,48 @@ ACCOUNT = re.compile(r"Settlement account on file: (?P<account>AR\d+)\.")
 # Built from _NAME, not a literal: an earlier literal here lacked the numeric name
 # discriminator that _NAME gained after the 400-people incident, so the verifier
 # rejected valid corpora exactly in the regime the discriminator exists for.
-REPORTS = re.compile(rf"Reports to (?P<supervisor>{_NAME}) for all authorisations\.")
+# LA LINEA YA NO EMPIEZA CON EL NOMBRE NI TRAE EL NOMBRE COMPLETO (K-6). Dice
+# «The above-named reports to M. Cavallero», asi que hay dos cosas nuevas que parsear: la
+# anafora con su concordancia —«They report» contra «That person reports»— y una SUPERFICIE
+# del supervisor, que hay que resolver a un canonico antes de poder seguir la cadena.
+_SURFACE = r"[\w'.-]+(?: [\w'.-]+)*"
+# ACEPTA LOS DOS FORMATOS a proposito. El corpus viejo escribe «Reports to Lucia Arrieta»
+# y el nuevo «The above-named reports to L. Arrieta». Un verificador que solo entiende el
+# nuevo declara ROTO todo corpus historico —que se sigue replayando— y eso es peor que
+# inutil: dice «la verdad no se puede derivar» de un corpus donde si se puede. Cual de los
+# dos regimenes es este lo decide la guarda de correferencia, no el parser.
+REPORTS = re.compile(
+    rf"^(?:(?:The above-named|The same individual|That person|They) )?[Rr]eports? to "
+    rf"(?P<supervisor>{_SURFACE}) for all authorisations\.$",
+    re.MULTILINE,
+)
+
+
+def resolve_surface(surface: str, canonical: list[str]) -> str | None:
+    """La forma de superficie -> el unico nombre canonico compatible, o `None`.
+
+    SE RESUELVE POR MATCHING, NO REGENERANDO LAS VARIANTES DEL GENERADOR. Si el
+    verificador construyera las mismas formas con la misma regla, una regla equivocada
+    coincidiria en los dos lados y la verificacion no probaria nada. Aca se pregunta lo
+    contrario —que canonicos son compatibles con esta forma— y **dos compatibles es un
+    fallo**, no un desempate: una referencia ambigua no tiene verdad derivable.
+
+    Tampoco lee `entities.json`. Ese archivo lo escribe el generador, asi que usarlo seria
+    el generador verificandose a si mismo.
+    """
+    surface = surface.strip()
+    hits = []
+    for full in canonical:
+        if surface == full:
+            return full
+        partes = full.split()
+        if len(partes) < 2:
+            continue
+        nombre, apellido = partes[0], partes[-1]
+        resto = " ".join(partes[1:])
+        if surface in (f"{nombre[0]}. {resto}", f"{nombre} {apellido[0]}.", apellido):
+            hits.append(full)
+    return hits[0] if len(hits) == 1 else None
 # The supplementary filing names an ACCOUNT and never the person, so verifying it
 # requires the same two hops the task requires: read the restated domicile, then find
 # who holds that account.
@@ -169,9 +210,24 @@ class Verifier:
 
         # Name -> supervisor, taken across the whole corpus, since a chain question
         # may traverse units outside the task's own list.
+        #
+        # LA CADENA SE RESUELVE ACA, y es la mitad nueva de la verificacion (K-6). El texto
+        # nombra al supervisor con una forma de superficie —«M. Cavallero»— asi que seguir
+        # la linea de reporte exige resolverla contra los canonicos del mundo. Una forma
+        # que resuelve a DOS deja el enlace en `None` y la tarea falla en `_c3`: es lo
+        # correcto, porque una referencia ambigua no tiene verdad derivable y dejarla pasar
+        # convertiria el verificador en un desempatador que inventa la respuesta.
+        canonical = sorted(c["name"] for c in self.parsed.values())
         self.supervisor_of = {
-            c["name"]: c["supervisor"] for c in self.parsed.values()
+            c["name"]: (resolve_surface(c["supervisor"], canonical)
+                        if c["supervisor"] else None)
+            for c in self.parsed.values()
         }
+        # Lo que NO resolvio, para que un fallo diga cual forma y no solo «se rompio».
+        self.unresolved = sorted(
+            c["supervisor"] for c in self.parsed.values()
+            if c["supervisor"] and not resolve_surface(c["supervisor"], canonical)
+        )
         self.city_of = {c["name"]: c["city"] for c in self.parsed.values()}
         self.account_of = {c["name"]: c["account"] for c in self.parsed.values()}
         self.holder_of = {
@@ -392,7 +448,9 @@ class Verifier:
         for _ in range(hops):
             nxt = self.supervisor_of.get(current)
             if not nxt:
-                return False, f"chain from {name} breaks at {current}"
+                pista = (f" (formas sin resolver en el corpus: {self.unresolved})"
+                         if self.unresolved else "")
+                return False, f"chain from {name} breaks at {current}{pista}"
             current = nxt
         account = self.account_of.get(current)
         if [account] != task["oracle"]:
@@ -572,6 +630,42 @@ def main() -> int:
           f"{len(verifier.amendments)} amendments, "
           f"{len(verifier.triggers)} triggers")
     print("near-miss guard  : PASS (no distractor parses as an assertion)")
+
+    # GUARDA DE CORREFERENCIA (K-6). Un corpus puede verificar 100% y haber perdido la
+    # dificultad que lo justifica: si toda mencion cruzada volviera a usar el nombre
+    # completo —una plantilla que alguien "arregla", un pool de apellidos que se achica—
+    # resolver entidades vuelve a ser un `in` de string y NADA lo denunciaria, porque la
+    # verdad sigue derivandose igual de bien. Se cuenta contra el TEXTO, y se levanta.
+    cruzadas = sum(
+        1 for c in verifier.parsed.values()
+        if c["supervisor"] and c["supervisor"] not in {
+            q["name"] for q in verifier.parsed.values()
+        }
+    )
+    con_supervisor = sum(1 for c in verifier.parsed.values() if c["supervisor"])
+    # LA EXIGENCIA SE ATA A QUE EL CORPUS LA DECLARE. `entities.json` es lo que dice «este
+    # corpus tiene entidades con variantes»; un corpus del regimen viejo no lo tiene y no
+    # se le puede reprochar no cumplir una propiedad que nunca prometio. Al que SI lo
+    # declara se le exige, porque ahi el 0% significa que la dificultad se perdio.
+    declara_entidades = (Path(args.corpus) / "entities.json").exists()
+    if con_supervisor:
+        frac = cruzadas / con_supervisor
+        if not declara_entidades:
+            print(f"coreference guard: n/a (corpus sin `entities.json`, regimen previo a "
+                  f"K-6; {frac:.0%} de los saltos exigen resolver)")
+        else:
+            estado = "PASS" if frac > 0 else "FAIL"
+            print(f"coreference guard: {estado} ({cruzadas}/{con_supervisor} saltos de "
+                  f"cadena exigen resolver una variante, {frac:.0%})")
+            if not cruzadas:
+                print("  El corpus declara entidades y toda referencia cruzada usa el "
+                      "nombre completo: verifica igual y ya no mide resolucion.")
+                return 1
+    if verifier.unresolved:
+        print(f"coreference guard: FAIL — formas que no resuelven a un unico canonico: "
+              f"{verifier.unresolved}")
+        return 1
+
     print(f"tasks checked    : {len(tasks)}")
     print()
     for cell in sorted(per_cell):

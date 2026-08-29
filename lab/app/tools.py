@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .board import Blackboard
@@ -40,6 +40,15 @@ from .cognitive import COGNITIVE_TOOL_SPECS, WorkingState
 from .retrieval import CorpusView, LexicalRetriever, Retriever, tokenise
 
 SUMMARY_CHARS = 180
+# LA PODA DE MATERIAL, segundo brazo de `C-4`. `managed` compacta HISTORIA DE MENSAJES, asi
+# que no toca a los paradigmas que arman un prompt grande de una sola vez — y ahi esta el
+# mas caro por llamada de todo el catalogo: `gist_reader` mide 14.798 tokens por llamada y
+# no lleva historia. Su contexto no crece con los turnos, crece con las UNIDADES.
+#
+# ES UN FACTOR Y NO UN PATRON, por la misma prueba que `terse_tools`: acorta lo que el
+# modelo recibe sin cambiar quien decide la proxima accion ni cuantas llamadas hay. El
+# grafo de control queda idéntico.
+COMPACT_SUMMARY_CHARS = 60
 HIGHLIGHT_WINDOW = 90
 MAX_BATCH_READ = 10
 # Rough chars-per-token. Only used to decide whether a bulk read fits, so an
@@ -396,15 +405,20 @@ class ToolFailure(Exception):
     """A tool call the model got wrong, as opposed to a bug in the harness."""
 
 
-def _summarise(text: str) -> str:
+def _summarise(text: str, compact: bool = False) -> str:
     """First substantive line plus a length hint.
 
     A summary has to be genuinely cheaper than the unit or the granularity ladder is
     decoration. The length hint is what lets an agent decide whether reading is worth it.
+
+    LA PISTA DE LARGO SOBREVIVE A LA PODA, y eso no es un detalle: es lo unico que le
+    permite al agente decidir si leer vale la pena. Podar el resumen hasta que deje de
+    poder decidirlo no mediria poda de material, mediria ceguera.
     """
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     body = next((line for line in lines[1:] if len(line) > 30), lines[0] if lines else "")
-    return f"{body[:SUMMARY_CHARS]} … [{len(text)} chars]"
+    tope = COMPACT_SUMMARY_CHARS if compact else SUMMARY_CHARS
+    return f"{body[:tope]} … [{len(text)} chars]"
 
 
 def _highlight(text: str, terms: list[str]) -> str:
@@ -494,10 +508,49 @@ class ToolSurface:
     # FACTOR: lo estable adelante y la pregunta al final (`X-4d`). Cambia el payload, asi
     # que sus filas van a otro archivo.
     stable_prefix_first: bool = False
+    # EL ESTADO DERIVADO DEL CORPUS, YA CONSTRUIDO (G-4). Lo pone la etapa de ingesta, no
+    # el request. `None` significa que la ingesta no corrio, y el paradigma que lo necesite
+    # se declara infactible en vez de construirlo: construirlo aca le cobraria el indice
+    # entero a una fila arbitraria y registraria la lectura del corpus como lectura de esta
+    # pregunta. Es un `Any` para no importar `ingest` desde acá — `ingest` importa `llm` y
+    # `parsing`, y el ciclo lo pagaria todo el que importe una tool.
+    ingested: Any = None
+    # LO QUE SE GASTO CONSTRUYENDO ESTADO DERIVADO EN ESTE REQUEST. Va aparte para que el
+    # runner lo DESCUENTE de `cost_tokens`: la ingesta se amortiza sobre todas las
+    # consultas futuras y cobrarsela a la fila que le toco construirla mezcla amortizar
+    # con responder. Es su propia medicion, no un renglon de la de ejecucion.
+    ingest_tokens: int = 0
+    # RELECTURA: una unidad que se sirve DE NUEVO en el mismo request. No es un defecto en
+    # si —un paradigma con ramas independientes no tiene por que saber lo que leyo otra— es
+    # la medida de cuanto costaria de menos si no lo fuera.
+    #
+    # SE CUENTA, NO SE EVITA. Servir la segunda lectura de un cache cambiaria el gasto y
+    # con eso el objeto de estudio, y hacerlo antes de saber cuanto vale seria optimizar a
+    # ciegas. Primero el numero.
+    reread_units: int = 0
+    reread_chars: int = 0
+    # TODO EL TEXTO QUE LA SUPERFICIE ENTREGO, por cualquier via. `read_chars` solo se
+    # llena en `note_retention`, que recorre MENSAJES — asi que da 0 para todo paradigma
+    # que no lleve historia, y ahi estan justo los que arman el prompt mas grande de una
+    # sola vez: `gist_reader` mide 14.798 tokens por llamada, el mayor del catalogo, y su
+    # contexto no crece con los turnos sino con las UNIDADES. Sin este contador, un factor
+    # de poda de material no se puede medir aunque se corra.
+    served_chars: int = 0
+    # El factor: cuando esta encendido, todo resumen que la superficie emite va podado.
+    compact_material: bool = False
     calls: dict[str, int] = field(default_factory=dict)
     board_posts: int = 0
     board_reads: int = 0
     units_read: set[str] = field(default_factory=set)
+    # LECTURA ESTRUCTURAL: la que el CODIGO del paradigma hace por `read_one`, no la que
+    # el modelo eligio llamando a una tool. Va a un set APARTE a proposito. Sumarla a
+    # `units_read` moveria numeros ya publicados y, peor, borraria la distincion: ocho de
+    # trece paradigmas leen el corpus entero desde su propio codigo —`gist_reader` para
+    # armar sus gists, `direct` para volcar el material— y eso no es una decision del
+    # modelo. Separadas, `units_read` sigue significando «lo que el modelo eligio leer» y
+    # existe con que comparar. Juntas, ningun promedio de lectura entre paradigmas
+    # significaria nada, y nada lo denunciaria.
+    units_read_structural: set[str] = field(default_factory=set)
     # UN SOLO BOARD POR CELDA. `dag_strategy` escribe el suyo desde el codigo y la tool
     # escribe el mismo objeto: si fueran dos, un sub-agente que postea no veria los
     # hallazgos que el codigo asento, y habria dos «estados compartidos» a la vez.
@@ -620,12 +673,58 @@ class ToolSurface:
         """Elementos que llegaron incompletos adentro de una forma correcta."""
         self.dropped_items += n
 
+    def scoped(self, unit_ids: list[str]) -> "ToolSurface":
+        """La misma superficie restringida a un alcance, compartiendo la contabilidad.
+
+        EL ALCANCE ES UNA PROPIEDAD DE LA VISTA, no una instruccion en el prompt: un
+        sub-agente no puede leer afuera porque las unidades NO ESTAN, no porque se le haya
+        pedido que no lo haga. Un limite que se pide se puede desobedecer.
+
+        VIVE EN LA CLASE Y NO EN UN PARADIGMA porque olvidar un campo aca es invisible:
+        `handoff` construia su sub-superficie a mano y no propagaba `terse_tools`,
+        `offer_board`, `demand_obligations` ni `shared_state`, asi que esos factores
+        simplemente no existian adentro de un sub-agente — y el brazo se habria corrido
+        entero midiendo el factor apagado donde mas importa. Es la misma forma del defecto
+        del bucle de herramientas, un nivel mas abajo.
+        """
+        from .retrieval import CorpusView
+
+        alcance = set(unit_ids)
+        sub = replace(
+            self,
+            view=CorpusView(
+                task_id=self.view.task_id,
+                documents=self.view.documents,
+                unit_ids=list(unit_ids),
+                relevant_units=[u for u in self.view.relevant_units if u in alcance],
+            ),
+        )
+        # LOS CONTADORES SON DEL PADRE, compartidos por referencia: lo que se registra es
+        # lo que la TAREA consumio, no lo que consumio cada sub-agente por su cuenta.
+        # `replace` los copia como objetos nuevos, asi que hay que volver a atarlos.
+        sub.calls = self.calls
+        sub.sequence = self.sequence
+        sub.units_read = self.units_read
+        sub.units_read_structural = self.units_read_structural
+        sub.board_state = self.board_state
+        sub.state = self.state
+        return sub
+
     def unit_ids(self) -> list[str]:
         return list(self.view.unit_ids)
 
     def read_one(self, unit_id: str) -> str:
+        """Lectura ESTRUCTURAL: la pide el codigo del paradigma, no el modelo.
+
+        No pasa por `dispatch`, asi que no cuenta como llamada, no descuenta presupuesto y
+        no dispara `stop_on_barren` — y esta bien que no lo haga, porque ninguna de esas
+        tres cosas gobierna una linea de codigo. Lo que NO estaba bien es que no dejara
+        rastro: una lectura invisible se lee igual que una lectura que no ocurrio.
+        """
         if unit_id not in self.view.unit_ids:
             raise ToolFailure(f"Unit {unit_id} is not part of this task.")
+        self.units_read_structural.add(unit_id)
+        self.served_chars += len(self.view.documents[unit_id])
         return self.view.documents[unit_id]
 
     # -- dispatch ----------------------------------------------------------
@@ -698,7 +797,8 @@ class ToolSurface:
                 f"task — select what you need and read those."
             ),
             "units": [
-                {"unit_id": u, "summary": _summarise(self.view.documents[u])}
+                {"unit_id": u,
+                 "summary": _summarise(self.view.documents[u], self.compact_material)}
                 for u in self.view.unit_ids
             ],
             "estimated_tokens_if_full": est_tokens,
@@ -879,7 +979,8 @@ class ToolSurface:
             note = self._note_search(ranked)
             body: dict[str, Any] = {
                 "results": [
-                    {"unit_id": u, "summary": _summarise(self.view.documents[u])}
+                    {"unit_id": u,
+                 "summary": _summarise(self.view.documents[u], self.compact_material)}
                     for u in ranked
                 ]
             }
@@ -908,6 +1009,11 @@ class ToolSurface:
                 self._required(args, "query", "keyword_search"),
                 self._bounded_int(args, "limit", 5, "keyword_search"),
             )
+            for u in ranked:
+                if u in self.units_read:
+                    self.reread_units += 1
+                    self.reread_chars += len(self.view.documents[u])
+                self.served_chars += len(self.view.documents[u])
             self.units_read.update(ranked)
             return json.dumps([
                 {"unit_id": u, "text": self.view.documents[u]} for u in ranked
@@ -932,7 +1038,11 @@ class ToolSurface:
                 if unit_id not in self.view.unit_ids:
                     missing.append(unit_id)
                     continue
+                if unit_id in self.units_read:
+                    self.reread_units += 1
+                    self.reread_chars += len(self.view.documents[unit_id])
                 self.units_read.add(unit_id)
+                self.served_chars += len(self.view.documents[unit_id])
                 out.append({"unit_id": unit_id, "text": self.view.documents[unit_id]})
             if missing:
                 self.hallucinated += len(missing)
@@ -962,6 +1072,23 @@ class ToolSurface:
             "calls": dict(sorted(self.calls.items())),
             "sequence": list(self.sequence),
             "units_read": len(self.units_read),
+            "ingest_tokens": self.ingest_tokens,
+            # Cuanto texto se re-sirvio. `reread_chars / read_chars` es la fraccion del
+            # gasto de lectura que un cache entre ramas ahorraria sin que ninguna rama vea
+            # nada que no pidio — que es la unica optimizacion que NO cambia el grafo de
+            # control, y por eso la unica que se puede hacer sin cambiar lo que se mide.
+            "reread_units": self.reread_units,
+            "reread_chars": self.reread_chars,
+            "served_chars": self.served_chars,
+            # LAS DOS LECTURAS, SEPARADAS. `units_read` es lo que el modelo eligio; esto es
+            # lo que el codigo del paradigma leyo por su cuenta. La union NO es la suma:
+            # un paradigma puede leer estructuralmente una unidad que despues el modelo
+            # vuelve a pedir, y contarla dos veces inventaria lectura.
+            "units_read_structural": len(self.units_read_structural),
+            "units_read_any": len(self.units_read | self.units_read_structural),
+            "relevant_units_read_any": len(
+                (self.units_read | self.units_read_structural) & self.view.relevant
+            ),
             "board_posts": self.board_posts,
             "board_reads": self.board_reads,
             "batched_reads": self.batched_reads,

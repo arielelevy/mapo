@@ -18,14 +18,11 @@ No prompt cleverness: the difference under test is control structure.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from collections import defaultdict
-from pathlib import Path
 from typing import Any
 
 from .parsing import extract_json, well_formed
-from ..fsio import write_atomic
 from ..llm import LLMClient, Usage
 from ..tools import MAX_BATCH_READ, ToolFailure, ToolSurface, _summarise
 from . import ANSWER_CONTRACT, answer_contract, Result, _finish
@@ -182,84 +179,18 @@ def gist_reader(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -
 # client's own cache namespace rather than at a path hardcoded relative to this file.
 # Two consequences, both intended: it follows MAPO_CACHE_DIR wherever that points, and an
 # index extracted on one account is never served to a run on another.
-GRAPH_CACHE_SUBDIR = "graph"
-GRAPH_INDEX_MAX_TOKENS = 500
+# CUANTOS SALTOS RECORRE LA TRAVESIA. Vivia junto a las constantes del indice y al mover
+# el indice a `app/ingest.py` se fue con ellas — el paradigma quedaba con un `NameError` en
+# tiempo de ejecucion, no de import, asi que ningun test de importacion lo veia. Lo encontro
+# el smoke de humo de los 13, que es exactamente para lo que existe.
 WALK_DEPTH = 2
 
 
-def _corpus_digest(surface: ToolSurface, fingerprint: str = "") -> str:
-    """Identity of the index: the corpus it describes AND the decode that produced it.
-
-    The corpus alone was not enough. The index is extracted by the model, so an index
-    built by one model was being served to a run of another -- a silent cross-model
-    contamination in exactly the arm that depends on the index being faithful.
-    """
-    key = json.dumps(
-        [fingerprint, sorted((u, len(surface.read_one(u))) for u in surface.unit_ids())]
-    ).encode()
-    return hashlib.sha256(key).hexdigest()[:16]
-
-
-def _entity_graph(
-    client: LLMClient, surface: ToolSurface, usage: Usage
-) -> dict[str, Any]:
-    """Entity graph over the corpus: built once, memoised on disk per world.
-
-    The index is the amortised half of the pattern: one short extraction call per unit,
-    paid by the FIRST task that needs it (recorded in that row's usage, honestly) and
-    free for every task after — plus the content-addressed LLM cache makes replicate
-    runs cheap even when this file is deleted.
-    """
-    cache_dir = client.cache_root / GRAPH_CACHE_SUBDIR
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    path = cache_dir / f"{_corpus_digest(surface, client.fingerprint)}.json"
-    if path.exists():
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            # A truncated index (crash or write race) is rebuilt, not served forever.
-            path.unlink(missing_ok=True)
-
-    entity_units: dict[str, list[str]] = defaultdict(list)
-    edges: dict[str, list[str]] = defaultdict(list)
-    for unit_id in surface.unit_ids():
-        prompt = (
-            "List the entities (people, document ids, projects, addresses, dates) "
-            "mentioned in this text, and directed relations between them.\n"
-            'JSON only: {"entities": ["..."], "relations": [["a","b"], ...]}\n\n'
-            f"[{unit_id}]\n{surface.read_one(unit_id)}"
-        )
-        completion = client.complete(
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=GRAPH_INDEX_MAX_TOKENS,
-        )
-        usage.merge(completion.usage)
-        payload = extract_json(completion.text, sink=surface)
-        if not isinstance(payload, dict):
-            continue
-        ents = [
-            str(e).strip().lower()
-            for e in payload.get("entities", []) if str(e).strip()
-        ]
-        for e in ents:
-            entity_units[e].append(unit_id)
-        for pair in payload.get("relations", []):
-            if isinstance(pair, list) and len(pair) >= 2:
-                a, b = str(pair[0]).lower(), str(pair[1]).lower()
-                edges[a].append(b)
-                edges[b].append(a)
-        # Co-mention is an edge too: HippoRAG's co-occurrence backbone.
-        for i, a in enumerate(ents):
-            for b in ents[i + 1:]:
-                edges[a].append(b)
-                edges[b].append(a)
-
-    graph = {
-        "entity_units": {k: sorted(set(v)) for k, v in entity_units.items()},
-        "edges": {k: sorted(set(v)) for k, v in edges.items()},
-    }
-    write_atomic(path, json.dumps(graph, ensure_ascii=False))
-    return graph
+# `_entity_graph` VIVIA ACA y construia el indice adentro del request. Se movio entero a
+# `app/ingest.py` por `G-4`, y no se dejo un envoltorio de compatibilidad a proposito: un
+# envoltorio habria permitido que un paradigma nuevo lo llamara sin darse cuenta, que es
+# exactamente el error que la mudanza corrige. Lo que queda del lado del paradigma es
+# `require(...)`, que rechaza y explica.
 
 
 def graph_traverse(
@@ -272,9 +203,17 @@ def graph_traverse(
     cost is fixed by construction (2 LLM calls + a walk that costs nothing).
     """
     usage = Usage()
-    graph = _entity_graph(client, surface, usage)
-    entity_units: dict[str, list[str]] = graph["entity_units"]
-    edges: dict[str, list[str]] = graph["edges"]
+    # CONSUME, NO CONSTRUYE (G-4). El indice se arma en la etapa de ingesta, antes y
+    # aparte: su costo se pagaba entero en la PRIMERA fila que lo necesitaba —una fila
+    # arbitraria, la que el cross product puso primero— y su lectura del corpus entero
+    # figuraba como lectura de esta pregunta. Si la ingesta no corrio, esto se declara
+    # infactible en vez de construirla: un respaldo silencioso devolveria las dos cosas.
+    from ..ingest import require
+    graph = require(
+        surface, client, surface.view.documents, surface.unit_ids(), "graph_traverse"
+    ).entity_graph
+    entity_units: dict[str, list[str]] = graph.get("entity_units", {})
+    edges: dict[str, list[str]] = graph.get("edges", {})
 
     q_prompt = (
         f"Task: {task['question']}\n\n"

@@ -1,72 +1,89 @@
 # Pruebas y alcance de evidencia
 
-Las suites actuales son scripts sin framework. Verifican identidades y mecanismos sobre
-datos sintéticos; no sustituyen una evaluación held-out del producto.
+Son **dos scripts sin framework**, y eso es a propósito: verifican identidades y mecanismos
+sobre datos sintéticos, y **no sustituyen** una evaluación held-out del producto. Un `PASS`
+acá no es un resultado científico — es la condición para que un resultado científico pueda
+significar algo.
 
-## Suites actuales
+**Tienen que pasar completas antes de gastar un token.** No hace falta API key.
 
-| Suite | Qué cubre |
+```powershell
+py tests\test_science.py
+py tests\test_consolidation.py
+```
+
+---
+
+## `test_science.py` — 33 secciones
+
+Cubre la capa de medición y las guardas que impiden que dos experimentos se promedien.
+Las que más se tocan:
+
+| grupo | qué prueba |
 |---|---|
-| `test_science.py` | Álgebra de brecha de oráculo, selección, cascada, grading, bundle, retries, throttle, sonda básica y request de producto. |
-| `test_consolidation.py` | Particiones sintéticas, guarda contra ruido, replay, homeostasis, calibración, pisos de garantía y copy-on-write. |
+| **álgebra** | brecha de oráculo, selección, cascada, riesgo-cobertura, grading exacto |
+| **el registro** | que sea autodescriptivo: con qué modelo, qué brazo, qué tokenizador, qué vocabulario de región |
+| **las cuatro guardas de mezcla** (§42, §49) | `load_rows` **levanta** si un archivo mezcla decodificaciones, brazos, analizadores léxicos o vocabularios. La del analizador es la única que ningún otro campo puede detectar |
+| **el dial** (§27, §47) | que imponga lo que declara, y que `max(pedido, piso, aprendido)` sea la única composición donde cada fuente sólo endurece |
+| **soundness** (§46) | el teorema del ensamblador: si `fill` emite, toda ranura viene de una creencia vigente con procedencia ≥ piso |
+| **la plata** (§41, §52, §53) | que sea una unidad y no un número; un cliente por modelo; los aranceles son datos |
+| **el catálogo** (§39, §58, §59) | que los 15 paradigmas corran de punta a punta sin gastar, y que **ningún factor quede inalcanzable** |
 
-## Lo que un PASS no demuestra
+> **§59 es la que más veces salvó una corrida.** Prueba que cada factor booleano viaja
+> desde el runner hasta la declaración de tools. Sin ella, `offer_board=True` se habría
+> corrido entero y medido cero, porque la tool nunca aparecía en la lista que el modelo ve.
+> Tenían test sobre `specs_for` y ninguno sobre el **camino**, que es como un factor pasa de
+> estar implementado a estar ejecutado.
 
-- que el motor supere al mejor fijo;
+## `test_consolidation.py` — el ciclo de sueño, y sobre todo que no confabule
+
+**La etapa peligrosa es la abstracción.** Una búsqueda sobre muchas particiones candidatas
+encuentra algo en ruido puro si se la deja, y una «verdad» descubierta que en realidad es un
+artefacto de comparaciones múltiples **es peor que no descubrir nada**: llega vestida con la
+autoridad de la evidencia.
+
+Por eso la prueba central es la **negativa**: dado un registro donde la utilidad es
+independiente de todo atributo, el ciclo **tiene que no reportar nada**.
+
+| grupo | qué prueba |
+|---|---|
+| particiones y guarda contra ruido | la negativa de arriba |
+| validez del aprendizaje | la candidata se ajusta **sin** el bloque final; un episodio es una celda `(tarea, paradigma)`, no un trial |
+| pisos de garantía aprendidos | que aprendan de estadísticas de rechazo tipado, y que **nunca** lleguen a `CERTIFIED` |
+| certificación de cláusulas | tres mundos disjuntos, mundo final de **un solo uso**, instalación fail-closed, y que editar una cláusula instalada **invalide la firma del bundle** |
+| copy-on-write | que el incumbente quede byte a byte intacto cuando la guarda rechaza |
+
+---
+
+## Lo que un PASS **no** demuestra
+
+Esta lista importa más que la de arriba.
+
+- que el motor le gane al mejor paradigma fijo;
 - que la sonda funcione sobre el corpus real;
-- que theta generalice a mundos nuevos;
-- que la promoción actual no tenga leakage;
-- que una partición descubierta llegue al router;
-- que la firma autentique al emisor;
-- que A3 esté completamente sellado.
+- que θ generalice a mundos nuevos;
+- que la promoción actual no tenga leakage estadístico;
+- que una partición descubierta llegue efectivamente al router;
+- que la firma autentique al **emisor** (autentica el contenido, que no es lo mismo);
+- que `A3` esté completamente sellado.
 
-## Pruebas requeridas para REC
+Cada una de esas se contesta con una corrida, no con un test. Dónde está cada una:
+[`../PENDIENTES.es.md`](../PENDIENTES.es.md).
 
-### Diagnóstico
+---
 
-- contrafactuales que no cambian el plan no disparan sonda;
-- el conjunto reportado es mínimo bajo el orden declarado;
-- las hipótesis simuladas nunca aparecen en la base factual;
-- la misma sesión reproduce diagnóstico y plan.
+## Y una prueba que no está acá, pero es del mismo tipo
 
-### Evidencia
+**La corrida light** (`bench/runs/_run_homogenea_light.py`) es un test de integración que
+cuesta tokens: ejercita los 13 patrones contra los 7 factores y verifica que **cada factor
+llegue al modelo**, comparando cada uno contra la base. Un factor desconectado no da error
+—da exactamente la base—, así que ningún test unitario lo ve. Va después de estas dos
+suites y antes de cualquier campaña.
 
-- una clave literal entre unidades distintas gana `OBSERVED`;
-- una clave inventada, ausente, autorreferente o fuera de scope no lo gana;
-- una lectura negativa acotada no se transforma en negación global;
-- hashes o versiones distintos invalidan replay;
-- conflictos producen salida conservadora.
-
-### Orquestación
-
-- la región cambia después de evidencia aceptada;
-- pre y post creencias permanecen en una única historia;
-- sonda deshabilitada o agotada difiere y no ejecuta un placeholder;
-- costo de sonda reduce presupuesto y entra en uso total;
-- replay no invoca al modelo.
-
-### Aprendizaje
-
-- final no entra en entrenamiento ni selección;
-- duplicar trials no aumenta el `n` de tareas;
-- mundos relacionados no cruzan splits;
-- una cláusula que no replica se rechaza;
-- el incumbente queda byte a byte intacto ante rechazo;
-- política y certificado deben corresponder exactamente.
-
-### Frontera
-
-- runtime no recibe gold, `cell`, `truth_*` ni `relevant_units`;
-- un error de infraestructura se registra, se excluye y puede completarse después;
-- siempre-`react` está presente en toda evaluación del claim principal.
-
-## Orden de ejecución futuro
-
-1. Pruebas puras de creencias, región y diagnóstico.
-2. Pruebas negativas de verificación.
-3. Integración request-sonda-replan sin red.
-4. Persistencia, tampering y certificados.
-5. Suites científicas completas.
-6. Verificación independiente del corpus.
-7. Smoke pago.
-8. Corrida preregistrada.
+> La lista de pruebas que este documento pedía **antes** de que REC existiera —diagnóstico,
+> evidencia, orquestación, aprendizaje, frontera, y un «orden de ejecución futuro» de ocho
+> pasos— se mudó a [`../historico/PRUEBAS-REQUERIDAS-REC.es.md`](../historico/PRUEBAS-REQUERIDAS-REC.es.md)
+> el 2026-08-29. Era un plan escrito cuando `rec.py` y `certify.py` no existían; hoy
+> existen, corren, y buena parte de esa lista está cubierta por `test_consolidation.py`.
+> Se conserva porque dice **qué se quiso probar**, que sigue siendo el criterio contra el
+> cual falta cobertura.

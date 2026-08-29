@@ -43,10 +43,20 @@ from app.feasibility import check
 from app.paradigms import TRAVERSES_SCOPE
 from app.rules import BULK_THRESHOLD
 
-# La fila que se mide hoy. Se declara aca y no se deriva del REGISTRY porque lo que
-# importa es que brazos se CORREN, no cuales existen: un paradigma retirado sigue en el
-# registro y no puede satisfacer nada.
-FILA_ACTIVA = ("react", "dag_strategy", "rewoo", "gist_reader", "handoff")
+# La fila que se mide hoy. Importa que brazos se CORREN, no cuales existen — pero
+# declararla a mano la dejo VIEJA y el auditor empezo a dar un diagnostico falso: seguia
+# diciendo «interseccion VACIA, la precondicion de cobertura no se puede imponer» cuando el
+# plantel ya incluia `direct` y `map_reduce`, que si recorren el alcance.
+#
+# Un auditor desactualizado es peor que no tenerlo: informa con la autoridad de una medida.
+# Asi que se DERIVA del mismo lugar que la corrida — `baseline_roster` — y las exclusiones
+# se nombran, que es lo que la version anterior queria proteger.
+from app.paradigms import REGISTRY, baseline_roster  # noqa: E402
+
+# Los dos que NO se corren, por decision del autor y no por el catalogo: `cot` es el control
+# nulo por prompting (2026-08-26) y `plan_execute` esta retirado por dominado (2026-08-29).
+NO_SE_CORREN = ("cot", "plan_execute")
+FILA_ACTIVA = tuple(baseline_roster(tuple(sorted(set(REGISTRY) - set(NO_SE_CORREN)))))
 
 
 def disparadores() -> dict[str, callable]:

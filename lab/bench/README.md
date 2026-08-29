@@ -7,11 +7,15 @@ producto no sabe que el banco existe.** Estaba escrita en `CLAUDE.md` y no se ve
 
 | | | |
 |---|---:|---|
-| `analysis/` | 27 | interrogan el registro ya pagado. **Cero llamadas al modelo** |
-| `runs/` | 22 | gastan cuota. Cada uno declara su estimación antes de correr |
-| `audits/` | 9 | barridos sobre el código y sobre el cruce código × corpus |
+| `analysis/` | 35 | interrogan el registro ya pagado. **Cero llamadas al modelo** |
+| `runs/` | 27 | gastan cuota. Cada uno declara su estimación antes de correr |
+| `audits/` | 10 | barridos sobre el código y sobre el cruce código × corpus |
 | `oneoff/` | 13 | migraciones y arreglos que ya corrieron. Arqueología, no herramientas |
 | `_sanity.py` | | cotas que un número derivado tiene que pasar **antes** de reportarse |
+| `_estimate.py` | | qué va a costar una corrida, **contado del corpus**. Se corre solo: `py bench/_estimate.py` |
+
+> **Los conteos se cuentan.** Decían 27/22/9 y eran 35/27/10 — se habían escrito a mano.
+> Se recuentan con `ls bench/<carpeta>/*.py | grep -v __init__ | wc -l`.
 
 ---
 
@@ -33,10 +37,10 @@ repo no acepta.
 
 ---
 
-## Los dos barridos, que buscan la misma falla por caminos distintos
+## Los tres barridos, que buscan la misma falla por caminos distintos
 
-Aparecen juntos porque la segunda vez que cometí la falla, el primer barrido **no podía
-verla**.
+Aparecen juntos porque cada vez que volví a cometer la falla, el barrido anterior **no
+podía verla**. Son tres capas: el nombre, el dato, y el camino.
 
 **`_audit_declarado.py` — léxico.** Nombres que se definen y cuyo único uso es su propia
 serialización o un `print`. Encontró `REGION_VOCABULARY`, que llevaba escrito al lado *«un θ
@@ -50,7 +54,21 @@ del cruce entre el código y los corpus.
 > Encontró cuatro de siete disparadores que **nunca dispararon** — uno de ellos una
 > precondición que yo había cerrado como hecha el mismo día.
 
-La lista de los dos **no es un veredicto**. Cada caso se decide leyendo: un campo que sólo
+**`_diagnose_managed.py` — de camino** (2026-08-29). El tercero de la familia, y contesta
+lo que los otros dos no pueden: *¿se ejecutó el código, o solamente no dio error?* Un
+factor que no llega al modelo y uno que llega y decide no hacer nada producen filas
+**idénticas**, y la diferencia importa porque una bloquea la campaña y la otra no. Envuelve
+la función del factor y cuenta llamadas y efectos por separado. Veredicto medido sobre
+`managed`: **61 llamadas, 0 demociones** — el camino se recorre, la condición no se cumple,
+`w4` no tiene historia que compactar.
+
+**Y una falla que estos tres comparten y hay que vigilar: un auditor desactualizado es peor
+que no tenerlo, porque informa con la autoridad de una medida.** `_audit_catalog.py`
+imprimió *«DOMINADOS: ninguno»* sobre **cero tareas** —el registro se había archivado y un
+`except FileNotFoundError: continue` se lo tragó—, y «ninguno dominado» es justo el
+resultado tranquilizador que uno espera leer. Ahora levanta.
+
+Ninguna de las tres listas **es un veredicto**. Cada caso se decide leyendo: un campo que sólo
 se serializa puede estar bien, y una guarda para un corpus que todavía no existe es
 legítima. Lo que no puede pasar es que sea una **sorpresa**.
 
@@ -64,8 +82,22 @@ py tests/test_consolidation.py     # completo
 py corpus/verify.py --corpus corpus/<nombre>
 ```
 
-Más: predicciones falsables **registradas con fecha en `README.md` antes de correr**,
-`repeat >= 3`, piso de ruido **por celda**, decisiones sobre la brecha **neta**.
+Y **la corrida light, que no es opcional**:
+
+```
+py bench/runs/_run_homogenea_light.py
+```
+
+Ejercita la matriz entera —13 patrones × 7 factores— sobre las 4 tareas más baratas. No
+mide nada: prueba que la matriz **corre**, y desde el 2026-08-29 prueba algo más difícil,
+que **cada factor llega al modelo**. Un factor desconectado no da error: da exactamente la
+base, y eso ya pasó cuatro veces. Ahora cada factor reporta cuántas filas movió respecto de
+la base, y cero es un bloqueante. Se corre **de a una**: dos procesos a la vez appendean al
+mismo `.jsonl` y el resumen sale con más filas que celdas.
+
+Más: predicciones falsables **registradas con fecha en
+`historico/BITACORA-PREDICCIONES.es.md` antes de correr**, `repeat >= 3`, piso de ruido
+**por celda**, decisiones sobre la brecha **neta**.
 
 **Y estimar contra el corpus, nunca contra el registro.** Un archivo de resultados **no
 declara si está completo**: estimé una corrida en 362k tokens leyendo un `.jsonl` de 90
@@ -83,6 +115,7 @@ lab/
   bench/      esto
   corpus/     generación y verificación del mundo
   tests/      test_science.py, test_consolidation.py
+  historico/  snapshots fechados: valían el día que se escribieron
   results/    MEDICIÓN — evidencia de lo que se corrió        (fuera de git)
   state/      ESTADO — lo que el sistema aprendió             (fuera de git)
   cache/      completions content-addressed                   (fuera de git)

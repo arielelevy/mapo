@@ -27,7 +27,7 @@ import argparse
 import json
 import random
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, field as dc_field
 from pathlib import Path
 from typing import Any
 
@@ -36,10 +36,21 @@ FIRST = [
     "Camila", "Nicolas", "Julieta", "Federico", "Agustina", "Emilio", "Renata",
     "Bruno", "Carolina", "Mateo", "Paula", "Gonzalo", "Micaela", "Esteban",
 ]
+# 18 APELLIDOS NO ALCANZABAN, y se vio al medirlo: con 40 personas cada apellido lo
+# comparten al menos dos, asi que NINGUNA admitia «Arrieta» como forma unica y la variante
+# mas dificil —apellido pelado, sin nombre ni inicial— no aparecia nunca en el corpus. El
+# pool no es decoracion: fija cuantas formas de superficie el mundo puede sostener sin
+# ambiguedad, y con el pool chico la dificultad se perdia en silencio.
 LAST = [
     "Arrieta", "Bengochea", "Cavallero", "Duarte", "Elizalde", "Ferreyra",
     "Goitia", "Herrera", "Ibarrola", "Juarez", "Kessler", "Lombardi",
     "Maidana", "Nardelli", "Ochoa", "Peralta", "Quiroga", "Rinaldi",
+    "Sarmiento", "Toledo", "Urquiza", "Verdaguer", "Wachtel", "Ybarra",
+    "Zambrano", "Alcorta", "Basualdo", "Camino", "Dellepiane", "Escalante",
+    "Fontana", "Grimaldi", "Hurtado", "Iriarte", "Jauregui", "Krause",
+    "Lascano", "Marchetti", "Novoa", "Olmedo", "Pizarro", "Quintana",
+    "Robledo", "Sotelo", "Tagliaferri", "Uriburu", "Vallejos", "Wenceslao",
+    "Ximenez", "Yrigoyen", "Zabaleta", "Aguirregaray", "Berutti", "Casaubon",
 ]
 FIRMS = [
     "Andesmar Holdings", "Boreal Trading", "Cardenal Capital", "Delta Sur SA",
@@ -147,6 +158,88 @@ PADDING = (
 )
 
 
+# --- Entidades: variantes de superficie, anafora y correferencia (K-6) ------------
+#
+# POR QUE EXISTE. Hasta acá cada mención de una persona era su nombre completo, idéntico
+# en todos los documentos. Resolver entidades costaba un `in` de string, así que el
+# corpus medía «¿encontrás el string?» y no «¿resolvés a quién se refiere?». Cualquier
+# patrón de grafo se evaluaba donde su trabajo ya estaba hecho, y `graph_traverse` dio
+# u=0,000 en las dos celdas acopladas sin que se pudiera saber si el patrón fallaba o la
+# celda no lo ejercitaba.
+#
+# LA GUARDA QUE MANDA: UNA VARIANTE AMBIGUA NO ENTRA. Si «Arrieta» matchea a dos personas
+# del mundo, usarla destruye la verdad derivable — la respuesta pasa a depender de una
+# desambiguación que el corpus no puede resolver, y el verificador no podría re-derivarla
+# independientemente. Se filtran contra el mundo ENTERO, no contra el alcance de la tarea:
+# un alcance chico puede volver única una forma que el mundo hace ambigua, y ahí la
+# variante existiría sólo en el régimen que la esconde.
+#
+# NADA DE TITULOS CON GENERO. «Ms.»/«Mr.» exigiría inferir el género de un nombre, que es
+# una suposición sobre una persona. Las formas son el apellido, la inicial y la anáfora
+# neutra, que es además lo que aparece en prosa administrativa real.
+# La forma va con SU verbo: «they» concuerda en plural y «the same individual» en
+# singular. Sin eso salia «They reports to», y un corpus con gramatica rota mide tolerancia
+# del modelo al ruido ademas de resolucion de entidades — dos cosas en una celda.
+ANAPHORA = (
+    ("The above-named", "reports"),
+    ("The same individual", "reports"),
+    ("That person", "reports"),
+    ("They", "report"),
+)
+
+# Abreviatura de firma: la sigla y la primera palabra. Es la correferencia que no es de
+# persona, y la que hace que un `keyword_search` por el nombre completo pierda unidades.
+def firm_surfaces(firm: str) -> list[str]:
+    words = [w for w in firm.split() if w[:1].isupper()]
+    formas = [firm]
+    if len(words) >= 2:
+        formas.append("".join(w[0] for w in words))
+        formas.append(words[0])
+    return formas
+
+
+def person_surfaces(name: str) -> list[str]:
+    """Variantes de superficie de un nombre, de la mas especifica a la mas corta."""
+    partes = name.split()
+    if len(partes) < 2:
+        return [name]
+    nombre, apellido = partes[0], partes[-1]
+    resto = " ".join(partes[1:])
+    return [
+        name,
+        f"{nombre[0]}. {resto}",
+        f"{nombre} {apellido[0]}.",
+        apellido,
+    ]
+
+
+def _ambiguous_forms(names: list[str]) -> dict[str, list[str]]:
+    """Formas que matchean a mas de una persona, con todas las que la producen."""
+    quien: dict[str, list[str]] = {}
+    for n in names:
+        for forma in set(person_surfaces(n)):
+            quien.setdefault(forma, []).append(n)
+    return {f: sorted(v) for f, v in sorted(quien.items()) if len(v) > 1}
+
+
+def unambiguous_surfaces(names: list[str]) -> dict[str, list[str]]:
+    """Para cada nombre, sus variantes que identifican a UNA sola persona del mundo.
+
+    La canonica siempre entra —es unica por construccion, el mundo enumera nombres— y las
+    demas solo si ninguna otra persona las produce. El resultado puede ser de una sola
+    forma, y eso esta bien: significa que ese nombre no admite abreviatura sin ambiguedad,
+    y forzarla mentiria.
+    """
+    conteo: dict[str, int] = {}
+    for n in names:
+        for forma in set(person_surfaces(n)):
+            conteo[forma] = conteo.get(forma, 0) + 1
+    return {
+        n: [f for f in person_surfaces(n) if f == n or conteo.get(f, 0) == 1]
+        for n in names
+    }
+
+
 # Anchored so amendment units (amend-*) can never be mistaken for base memos.
 _MEMO_ID = re.compile(r"memo-\d{3}")
 
@@ -159,6 +252,9 @@ class Person:
     role: str
     account: str
     supervisor: str | None = None
+    # Las formas con que este mundo puede nombrar a esta persona sin ambiguedad. La
+    # primera es siempre la canonica. Se calculan contra el mundo entero (`K-6`).
+    surfaces: list[str] = dc_field(default_factory=list)
 
 
 @dataclass
@@ -237,7 +333,18 @@ class Generator:
         names: list[str] = []
         pool = len(FIRST) * len(LAST)
         for i in range(n_people):
-            base = f"{FIRST[i % len(FIRST)]} {LAST[(i // len(FIRST)) % len(LAST)]}"
+            # LOS DOS COMPONENTES VARIAN. Rotar uno solo produce un mundo degenerado en
+            # los dos sentidos: con el nombre primero, las 22 primeras comparten apellido
+            # —ninguna admite «Arrieta» como forma unica y la variante mas dificil no
+            # aparece—; con el apellido primero, las 54 primeras se llaman todas «Marta»,
+            # que es un mundo que ningun extractor de entidades enfrenta.
+            #
+            # El paso 23 sobre los apellidos es coprimo con 54, asi que recorre los 54 sin
+            # repetir, y el par (nombre, apellido) es inyectivo mientras `i` no llegue al
+            # minimo comun multiplo. Sigue siendo determinista y sin rechazo, que es lo que
+            # este bloque protege.
+            base = (f"{FIRST[i % len(FIRST)]} "
+                    f"{LAST[(i * 23) % len(LAST)]}")
             names.append(base if i < pool else f"{base} {i // pool + 1}")
 
         for name in names:
@@ -256,6 +363,14 @@ class Generator:
         # person[0], so following the reporting line upward from anywhere converges to
         # the same terminal and the multi-hop question becomes guessable: three C3
         # tasks all had the identical answer. Blocks give several independent roots.
+        # LAS SUPERFICIES SE CALCULAN CON EL MUNDO COMPLETO, antes de cualquier alcance.
+        # Contra un alcance chico, «Arrieta» podria parecer unica y dejar de serlo cuando
+        # la tarea abre a 48 unidades: la variante existiria solo en el regimen que la
+        # esconde, que es la forma de bug mas cara del banco.
+        formas = unambiguous_surfaces([p.name for p in self.people])
+        for person in self.people:
+            person.surfaces = formas[person.name]
+
         block = max(4, n_people // 6)
         for i, person in enumerate(self.people):
             root = (i // block) * block
@@ -266,15 +381,20 @@ class Generator:
         """One memo per person, plus distractor memos that mention nobody relevant."""
         for i, p in enumerate(self.people):
             unit_id = f"memo-{i:03d}"
+            # PRIMERA MENCION CANONICA, LAS SIGUIENTES NO. Es como se escribe en prosa
+            # administrativa real, y es lo que vuelve la resolucion un trabajo en vez de
+            # un `in` de string: la segunda linea sobre la misma persona ya no contiene su
+            # nombre. Determinista por indice, no al azar: el corpus tiene que reproducirse.
+            firma = firm_surfaces(p.firm)
             lines = [
                 f"INTERNAL MEMORANDUM {unit_id.upper()}",
-                f"Subject: engagement review, {p.firm}",
+                f"Subject: engagement review, {firma[0]}",
                 "",
-                f"{p.name}, based in {p.city}, acts as {p.role} for {p.firm}.",
+                f"{p.name}, based in {p.city}, acts as {p.role} for {firma[0]}.",
                 f"Settlement account on file: {p.account}.",
             ]
             if p.supervisor:
-                lines.append(f"Reports to {p.supervisor} for all authorisations.")
+                lines.append(self._reports_line(p, i))
             lines.append("")
             lines.append(
                 f"Routine correspondence was logged in {self._rng.choice(CITIES)} "
@@ -292,6 +412,65 @@ class Generator:
                 "No individual engagement is referenced in this note.",
             ])
 
+
+    def entity_gold(self) -> dict[str, Any]:
+        """El gold de entidades: quien es quien, con que formas, y donde se lo menciona.
+
+        SIN ESTO LAS ENTIDADES NO SE PUEDEN EVALUAR. Un corpus con variantes de superficie
+        y sin registro de cuales son mide que el patron falle sin poder decir si fallo
+        resolviendo o buscando. Es la mitad que faltaba de `K-6`: la dificultad sola no
+        alcanza, hace falta la verdad contra la que puntuarla.
+
+        LAS MENCIONES SE CUENTAN CONTRA EL TEXTO YA ESCRITO, no contra la intencion del
+        generador. Declarar «memo-003 menciona a Lucia» porque el codigo penso escribirlo
+        seria un gold derivado del generador y no del corpus, y un cambio de plantilla lo
+        desincronizaria en silencio.
+        """
+        menciones: dict[str, list[str]] = {}
+        for person in self.people:
+            hits = []
+            for unit_id, text in sorted(self.documents.items()):
+                if any(forma in text for forma in person.surfaces):
+                    hits.append(unit_id)
+            menciones[person.name] = hits
+        return {
+            "people": {
+                p.name: {
+                    "surfaces": p.surfaces,
+                    "canonical": p.name,
+                    "mentioned_in": menciones[p.name],
+                    "supervisor": p.supervisor,
+                }
+                for p in self.people
+            },
+            "firms": {
+                f: firm_surfaces(f)
+                for f in sorted({p.firm for p in self.people})
+            },
+            # Formas DESCARTADAS por ambiguas, con quienes las producen. Se guardan porque
+            # son el control: un extractor que devuelve «Arrieta» como entidad resuelta
+            # esta inventando una desambiguacion que el corpus no tiene.
+            "ambiguous": _ambiguous_forms([p.name for p in self.people]),
+        }
+
+
+    def _reports_line(self, p: "Person", index: int) -> str:
+        """La linea de la cadena de reporte, con anafora y forma NO canonica del supervisor.
+
+        UN SOLO SITIO PARA LOS DOS CAMINOS. `build_documents` y `build_documents_hard`
+        escribian esta linea cada uno por su cuenta, y cuando `K-6` le puso correferencia a
+        uno, el otro —el que usan TODOS los corpus reales, porque van con `--hard`— siguio
+        escribiendo el nombre completo. El corpus verificaba 100%, declaraba entidades, y
+        no medía resolucion: exactamente la falla silenciosa que la guarda de correferencia
+        de `verify.py` existe para atrapar, y la atrapo.
+
+        Si el supervisor no admite ninguna variante unica se lo nombra completo. Mentir una
+        forma ambigua romperia la verdad derivable, que vale mas que la dificultad.
+        """
+        anafora, verbo = ANAPHORA[index % len(ANAPHORA)]
+        sup = next(q for q in self.people if q.name == p.supervisor)
+        forma = sup.surfaces[1] if len(sup.surfaces) > 1 else sup.name
+        return f"{anafora} {verbo} to {forma} for all authorisations."
 
     def _assert_line(self, p: "Person", index: int) -> str:
         """One assertion, phrased differently per person."""
@@ -328,7 +507,7 @@ class Generator:
                 f"Settlement account on file: {p.account}.",
             ]
             if p.supervisor:
-                lines.append(f"Reports to {p.supervisor} for all authorisations.")
+                lines.append(self._reports_line(p, i))
             lines.append("")
             lines.extend(self._near_miss_lines(p, self._rng.randint(1, 2)))
             lines.append("")
@@ -1203,6 +1382,13 @@ def main() -> None:
     (out / "tasks.json").write_text(
         json.dumps([t.as_dict() for t in tasks], ensure_ascii=False, indent=2),
         encoding="utf-8",
+    )
+
+    # EL GOLD DE ENTIDADES ES UN ARCHIVO PROPIO, no un campo del manifiesto: lo consume
+    # el verificador y lo consumira la evaluacion de NER, y meterlo adentro del manifiesto
+    # obligaria a leer metadatos de generacion para resolver una entidad.
+    (out / "entities.json").write_text(
+        json.dumps(generator.entity_gold(), ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
     cells: dict[str, int] = {}

@@ -31,6 +31,34 @@ from typing import Any, Callable, Iterable
 import numpy as np
 
 
+# LA DOSIS DE BRAZO (auditoria C-2). El brazo de recuperacion sustituye `hybrid`, que es
+# la tool `search`; `keyword_search` y `semantic_search` salen fijos de `Runner._arms` y son
+# CONSTANTES entre brazos. Asi que cambiar de brazo no trata a los paradigmas por igual: la
+# exposicion es la fraccion de sus busquedas que va por `search`, y esta medida entre 0% y
+# 70% segun el paradigma.
+#
+# VIVE ACA Y NO EN CADA ANALIZADOR a proposito. Recomputada en tres lugares serian tres
+# definiciones, y la primera vez que una difiera nadie se entera: las tres imprimen un
+# numero plausible.
+SEARCH_TOOL = "search"
+SEARCH_TOOLS = ("search", "keyword_search", "semantic_search")
+
+
+def arm_dose(tool_usage: dict[str, Any] | None) -> float | None:
+    """Fraccion de las busquedas que paso por el brazo. `None` si no hubo ninguna.
+
+    `None` NO es 0,0, y la diferencia importa: un paradigma que nunca busca —`gist_reader`
+    enumera las unidades desde el codigo— no recibio tratamiento cero, no recibio
+    tratamiento. Devolver 0,0 ahi lo metaria en el promedio como un caso tratado que no
+    respondio, que es exactamente la lectura equivocada.
+    """
+    calls = (tool_usage or {}).get("calls") or {}
+    total = sum(calls.get(t, 0) for t in SEARCH_TOOLS)
+    if not total:
+        return None
+    return calls.get(SEARCH_TOOL, 0) / total
+
+
 @dataclass(frozen=True)
 class Observation:
     """One (task, paradigm) cell of the cross product."""

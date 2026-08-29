@@ -65,6 +65,29 @@ def main() -> None:
                 (r["utility"], r.get("cost_tokens", 0))
             )
 
+    # SIN FILAS NO HAY VEREDICTO, Y ESTO LEVANTA (2026-08-29).
+    #
+    # El `except FileNotFoundError: continue` de arriba existe para que un corpus que
+    # todavia no corrio no voltee la auditoria. Lo que hacia ademas, sin querer, es
+    # tragarse el caso en que NINGUNO existe: el 2026-08-29 el registro entero se archivo a
+    # `results/archivo-2026-08-29-pre-K6/` porque cambio el tokenizador, y este auditor
+    # imprimio «DOMINADOS: ninguno · Se sostienen SOLO por precio: ninguno» sobre **cero
+    # tareas**. Los dos «ninguno» eran verdad y no significaban nada.
+    #
+    # Es la falla que `_audit_inerte.py` ya tenia escrita en su docstring: «un auditor
+    # desactualizado es peor que no tenerlo, informa con la autoridad de una medida». Un
+    # veredicto de dominancia sobre cero filas es exactamente eso, y encima se lee como el
+    # resultado tranquilizador — «no hay dominados» es lo que uno espera leer.
+    if not cells:
+        raise SystemExit(
+            f"Cero filas en {settings.results_dir} para los corpus {CORPORA}.\n"
+            f"Un veredicto de dominancia sobre cero tareas diria «ninguno dominado» y eso\n"
+            f"no es un resultado: es la ausencia de datos con forma de resultado.\n"
+            f"El registro anterior a K-6 esta en `results/archivo-2026-08-29-pre-K6/` y NO\n"
+            f"se puede mezclar con filas nuevas (cambio el tokenizador; ver su LEEME.md).\n"
+            f"Pasa los corpus a auditar como argumentos, o corre la campana primero."
+        )
+
     uniquely_best: dict[str, int] = defaultdict(int)
     tied_best: dict[str, int] = defaultdict(int)
     cheapest_when_tied: dict[str, int] = defaultdict(int)

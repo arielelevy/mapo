@@ -1879,7 +1879,7 @@ def check_coverage_trigger(ok: bool) -> bool:
 def check_handoff_authorisation(ok: bool) -> bool:
     from app.beliefs import Belief, BeliefBase, Provenance
     from app.paradigms import CATALOG, COST_PRIORS, REGISTRY
-    from app.paradigms.handoff import SCOPES, _authorises, _scopes, _sub_surface
+    from app.paradigms.handoff import SCOPES, _authorises, _scopes
     from app.retrieval import CorpusView, LexicalRetriever
     from app.tools import ToolFailure, ToolSurface
 
@@ -1906,7 +1906,7 @@ def check_handoff_authorisation(ok: bool) -> bool:
 
     # EL ALCANCE ES DE LA VISTA, NO DEL PROMPT. Un agente no puede leer afuera porque las
     # unidades NO ESTAN, no porque se le haya pedido que no lo haga.
-    sub = _sub_surface(surface, scopes[0])
+    sub = surface.scoped(scopes[0])
     ok &= check("el agente ve solo su alcance", sub.unit_ids() == scopes[0])
     try:
         sub.dispatch("read", {"unit_ids": scopes[1][0]})
@@ -2157,12 +2157,19 @@ def check_model_pool(ok: bool) -> bool:
     ok &= check("un modelo que no deja fijar el esfuerzo con tools se REGISTRA, no se "
                 "rechaza: correr, corre — y razonando",
                 "deep" in dos.describe()["effort_not_controllable_with_tools"])
-    ok &= check("y el que si acepta el nivel con herramientas no figura",
-                "fast" not in dos.describe()["effort_not_controllable_with_tools"])
-    ok &= check("las dos propiedades del modelo estan medidas, no leidas: nano no razona "
-                "al default y terra si",
-                _models.FAST.reasons_by_default is False
-                and _models.DEEP.reasons_by_default is True)
+    # EL TEST PRUEBA EL MECANISMO, NO EL MAPEO. Fijaba `fast` = nano y se rompio el dia que
+    # el autor cambio `roles.fast` a luna — que es un cambio de CONFIGURACION, dato externo,
+    # y no puede romper una suite. Lo que tiene que valer es que el pool registre la
+    # propiedad de cada modelo tal como el arancel la declara, sea cual sea el mapeo.
+    registrados = set(dos.describe()["effort_not_controllable_with_tools"])
+    esperados = {m.name for m in (_models.FAST, _models.DEEP)
+                 if not m.explicit_effort_with_tools}
+    ok &= check(f"el pool registra exactamente los que NO aceptan el nivel con tools "
+                f"({sorted(esperados)})", registrados == esperados)
+    ok &= check("las dos propiedades salen del arancel, que es donde vive lo MEDIDO: una "
+                "llamada real por modelo, no documentacion leida",
+                isinstance(_models.FAST.reasons_by_default, bool)
+                and isinstance(_models.DEEP.reasons_by_default, bool))
 
     original = _models.CATALOG
     try:
@@ -2217,9 +2224,22 @@ def check_model_pool(ok: bool) -> bool:
     ok &= check("y sin variable el sistema corre con UN modelo, que es el regimen medido",
                 _optional_deployments("_MAPO_NO_EXISTE") == {})
 
-    ok &= check("las ventanas son de ENTRADA, no la total: 272k nano, 922k los 5.6",
-                _models.FAST.context_tokens == 272_000
-                and _models.DEEP.context_tokens == 922_000)
+    # LA VENTANA ES DE ENTRADA, NO LA TOTAL, y eso es lo que el test tiene que fijar — no
+    # el numero de un modelo en particular. `check_pair` compara contra tokens de PROMPT;
+    # usar la total (que incluye 128.000 de salida) admitiria planes que no entran.
+    # Fijaba `FAST == 272_000` y se rompio al cambiar `roles.fast` a luna: un cambio de
+    # configuracion externa no puede romper una suite.
+    import json as _json
+    _tar = _json.loads(Path("config/tariffs.json").read_text(encoding="utf-8"))
+    for papel, modelo in (("fast", _models.FAST), ("deep", _models.DEEP)):
+        declarada = _tar["tariffs"][_tar["roles"][papel]]["context_input_tokens"]
+        ok &= check(f"la ventana de `{papel}` es la de ENTRADA declarada en el arancel "
+                    f"({declarada:,}), no la total",
+                    modelo.context_tokens == declarada)
+    ok &= check("y ninguna incluye los 128.000 de salida: la total nunca es la ventana "
+                "contra la que se admite un plan",
+                all(m.context_tokens % 1000 == 0 and m.context_tokens < 1_050_000
+                    for m in (_models.FAST, _models.DEEP)))
     return ok
 
 
@@ -2297,6 +2317,454 @@ def check_coverage_precondition_abstains(ok: bool) -> bool:
                 any("recorre el alcance" in n for n in plan.notes))
     ok &= check("el EXPLAIN lo lleva: una abstencion que no se registra no se audita",
                 plan.explain()["gated"] is True)
+    return ok
+
+
+def check_estimates_come_from_the_corpus(ok: bool) -> bool:
+    """§55: el conteo de celdas sale del CORPUS, nunca de un archivo de resultados (P-16).
+
+    Dos errores del mismo dia, las dos veces con la aritmetica bien y la ENTRADA mal: P26
+    estimado en 362k leyendo un .jsonl parcial (90 filas sobre 6 de 32 tareas) contra 12,2M
+    reales — 34x — y su docstring en 792k contra 12,4M — 18x.
+
+    LO QUE ESTE TEST FIJA NO ES UN NUMERO, ES DE DONDE SALE. Un archivo de resultados no
+    declara si esta completo, y una corrida que murio a la mitad se lee igual que una que
+    termino, asi que pasarle uno tiene que LEVANTAR y no devolver un numero plausible.
+    """
+    from bench._estimate import count_tasks, estimate, measured_cost
+
+    print()
+    print("--- 55. estimar contra el corpus, no contra el registro ---")
+
+    ok &= check("cuenta las tareas del corpus", count_tasks("corpus/gold_p18") == 32)
+    try:
+        count_tasks("results/nano/gold_p18_rows.jsonl")
+        ok &= check("un archivo de resultados como fuente de conteo LEVANTA", False)
+    except ValueError:
+        ok &= check("un archivo de resultados como fuente de conteo LEVANTA: es el modo "
+                    "de falla que costo 34x, y devolver un numero plausible es peor que "
+                    "romper", True)
+
+    costos = {"a": 100.0, "b": 10.0}
+    e = estimate("corpus/gold_p18", ["a", "b"], ["x", "y"], repeat=3, costs=costos)
+    ok &= check("las celdas son tareas x paradigmas x brazos x repeat, aritmetica pura",
+                e.cells == 32 * 2 * 2 * 3)
+    ok &= check("y el total usa el costo medido de CADA paradigma, no un promedio",
+                e.tokens == (100.0 + 10.0) * 32 * 3 * 2)
+
+    sin_n = estimate("corpus/gold_p18", ["a", "nuevo"], ["x"], 3, costos)
+    ok &= check("un paradigma sin medir deja el total en SIN N — rellenarlo con la media "
+                "inventaria el numero que se pide: hay ~30x entre el mas caro y el mas "
+                "barato del catalogo",
+                sin_n.tokens is None and sin_n.unmeasured == ("nuevo",))
+    ok &= check("pero las celdas se cuentan igual: el conteo no depende de haber medido",
+                sin_n.cells == 32 * 2 * 3)
+
+    # MEDIANA Y NO MEDIA: una celda que se fue de mambo arrastra la media justo donde no
+    # hay que equivocarse.
+    filas = [{"paradigm": "p", "cost_tokens": c} for c in (10, 10, 10, 10, 10_000)]
+    ok &= check("el costo por celda es la MEDIANA: una celda descontrolada no arrastra "
+                "la estimacion", measured_cost(filas)["p"] == 10)
+    filas.append({"paradigm": "p", "cost_tokens": 9, "infra_error": True})
+    ok &= check("y un infra_error no entra: no es parte de la evaluacion",
+                measured_cost(filas)["p"] == 10)
+
+    ok &= check("el cache es una DECLARACION del que llama, y `frio` es el default porque "
+                "es el caso que se subestimo las dos veces", e.cache == "frio")
+    return ok
+
+
+def check_factors_reach_the_model(ok: bool) -> bool:
+    """S56: un factor que no llega a la declaracion de tools NO EXISTE (D-1c, F-2b).
+
+    `_run_tool_loop` es el UNICO sitio del repo que manda `tools` al modelo, y llamaba a
+    `specs_for` sin pasar `terse` ni `offer_board`. Los dos factores tenian test sobre
+    `specs_for` y ninguno sobre el CAMINO, asi que los dos estaban implementados y ninguno
+    ejecutado: `offer_board=True` se habria corrido entero y medido CERO —la tool jamas
+    aparece en la lista que el modelo ve— y F-2b habria concluido «el board no compra
+    nada» por un defecto de cableado.
+
+    LA PRUEBA ES EL CAMINO, no la funcion. Un test sobre `specs_for` seguia pasando con el
+    bug puesto, que es exactamente por que no lo encontro.
+    """
+    from app.paradigms import _run_tool_loop
+    from app.retrieval import CorpusView, LexicalRetriever
+    from app.tools import ToolSurface
+
+    print()
+    print("--- 56. los factores llegan a la declaracion de tools ---")
+
+    vistas = []
+
+    # EL `Usage` REAL, no uno falso: un doble que no implementa `merge` esconde justo el
+    # acoplamiento que este test recorre.
+    from app.llm import Usage as _RealUsage
+
+    class _Completion:
+        def __init__(self):
+            self.text, self.usage, self.tool_calls = "listo", _RealUsage(), []
+
+    class _Espia:
+        def complete(self, messages, tools=None, **kw):
+            vistas.append([t["function"]["name"] for t in (tools or [])])
+            return _Completion()
+
+    docs = {f"u{i}": f"unidad {i}" for i in range(4)}
+    view = CorpusView(task_id="t", documents=docs, unit_ids=list(docs),
+                      relevant_units=["u1"])
+
+    def correr(**kw):
+        vistas.clear()
+        s = ToolSurface(view=view, hybrid=LexicalRetriever(), semantic=LexicalRetriever(),
+                        lexical=LexicalRetriever(), variant="basic",
+                        budget_tokens=40_000, **kw)
+        _run_tool_loop(_Espia(), s, [{"role": "user", "content": "x"}], 1)
+        return vistas[0]
+
+    base = correr()
+    ok &= check("sin factores, el board NO se ofrece: es el regimen ya medido",
+                "post" not in base and "board" not in base)
+    con_board = correr(offer_board=True)
+    ok &= check("con `offer_board` la tool LLEGA al modelo — esto es lo que fallaba, y su "
+                "ausencia habria dado «el board no compra nada» por cableado",
+                "post" in con_board and "board" in con_board)
+    ok &= check("y `offer_read_all` tambien viaja por el mismo camino",
+                "read_all" in correr(offer_read_all=True))
+
+    # `terse` no cambia QUE tools hay, cambia su descripcion: se mide por tamano.
+    largo = ToolSurface(view=view, hybrid=LexicalRetriever(), semantic=LexicalRetriever(),
+                        lexical=LexicalRetriever(), variant="basic", budget_tokens=40_000)
+    corto = ToolSurface(view=view, hybrid=LexicalRetriever(), semantic=LexicalRetriever(),
+                        lexical=LexicalRetriever(), variant="basic", budget_tokens=40_000,
+                        terse_tools=True)
+    import json as _json
+    tam = []
+    for sup in (largo, corto):
+        vistas.clear()
+        espia = _Espia()
+        original = espia.complete
+        capt = []
+
+        def complete(messages, tools=None, _c=capt, **kw):
+            _c.append(_json.dumps(tools))
+            return _Completion()
+        espia.complete = complete
+        _run_tool_loop(espia, sup, [{"role": "user", "content": "x"}], 1)
+        tam.append(len(capt[0]))
+    ok &= check(f"`terse_tools` acorta la spec que el modelo REALMENTE recibe "
+                f"({tam[0]} -> {tam[1]} chars)", tam[1] < tam[0])
+    return ok
+
+
+def check_ingest_is_its_own_measurement(ok: bool) -> bool:
+    """S57: el NER agrupa, y la ingesta se mide APARTE de la ejecucion (G-4, G-1, K-6).
+
+    DOS MECANISMOS QUE SE SOSTIENEN MUTUAMENTE. Con el corpus de entidades, un extractor
+    que no clusteriza devuelve «m. cavallero» de una unidad y «marta cavallero» de otra:
+    dos nodos, y el grafo partido justo entre las unidades que habia que conectar. Y un
+    indice que se construye adentro del request le cobra a una fila arbitraria un costo que
+    ninguna otra fila del mismo brazo vuelve a pagar.
+
+    LA CLUSTERIZACION ES CONSERVADORA Y ESO SE PRUEBA. Unir de mas es peor que unir de
+    menos: dos personas fundidas en un nodo dan una respuesta con la confianza de una
+    travesia y el contenido de una confusion, y nada aguas abajo lo detecta.
+    """
+    from app.ingest import canonical_form, cluster
+
+    print()
+    print("--- 57. el NER agrupa y la ingesta se mide aparte ---")
+
+    ok &= check("la inicial mas apellido es la misma entidad",
+                canonical_form("m. cavallero", "marta cavallero"))
+    ok &= check("el apellido solo tambien", canonical_form("cavallero", "marta cavallero"))
+    ok &= check("y nombre mas inicial", canonical_form("marta c.", "marta cavallero"))
+    ok &= check("dos personas distintas NO se unen",
+                not canonical_form("marta arrieta", "marta cavallero"))
+
+    r = cluster({"marta cavallero": ["m1"], "m. cavallero": ["m2"], "duarte x": ["m3"]},
+                {"marta cavallero": ["duarte x"], "m. cavallero": ["duarte x"]})
+    ok &= check("las variantes colapsan a UN nodo, con las unidades de las dos",
+                r["entity_units"].get("marta cavallero") == ["m1", "m2"])
+    ok &= check("el representante es la forma mas LARGA, no la mas frecuente: la mas larga "
+                "es la mas especifica", "m. cavallero" not in r["entity_units"])
+    ok &= check("las aristas se deduplican al representante — dos aristas a la misma "
+                "entidad no son grado 2",
+                r["edges"].get("marta cavallero") == ["duarte x"])
+    ok &= check("y queda escrito QUE se fusiono con que, o un grafo raro no se diagnostica",
+                r["aliases"] == {"m. cavallero": "marta cavallero"})
+
+    # EL CASO QUE DECIDE: apellido compartido. Unir seria inventar una desambiguacion.
+    amb = cluster({"marta cavallero": ["m1"], "ignacio cavallero": ["m2"],
+                   "cavallero": ["m3"]}, {})
+    ok &= check("con el apellido compartido por DOS personas, la forma corta no se une a "
+                "ninguna: unir de mas produce una confusion que nada aguas abajo detecta",
+                sorted(amb["entity_units"]) == ["cavallero", "ignacio cavallero",
+                                                "marta cavallero"])
+
+    # LA INGESTA NO SE COBRA EN LA EJECUCION.
+    from app.retrieval import CorpusView, LexicalRetriever
+    from app.tools import ToolSurface
+    docs = {"u0": "texto"}
+    view = CorpusView(task_id="t", documents=docs, unit_ids=["u0"], relevant_units=[])
+    sup = ToolSurface(view=view, hybrid=LexicalRetriever(), semantic=LexicalRetriever(),
+                      lexical=LexicalRetriever(), variant="basic", budget_tokens=1000)
+    ok &= check("la superficie arranca sin gasto de ingesta", sup.usage()["ingest_tokens"] == 0)
+    sup.ingest_tokens = 5000
+    ok &= check("y lo reporta cuando lo hay, en su propia columna",
+                sup.usage()["ingest_tokens"] == 5000)
+    from app.runner import Row
+    ok &= check("la fila tiene la columna, separada de `cost_tokens`",
+                "ingest_tokens" in Row.__dataclass_fields__)
+    return ok
+
+
+def check_every_paradigm_runs_offline(ok: bool) -> bool:
+    """S58: cada paradigma del registro corre de punta a punta contra un cliente falso.
+
+    DE DONDE SALE. Mover el indice de entidades a `app/ingest.py` se llevo `WALK_DEPTH` con
+    las constantes vecinas, y `graph_traverse` quedo con un `NameError` **en tiempo de
+    ejecucion, no de import** — asi que compilaba, importaba, y ningun test lo veia. Lo
+    encontro un smoke que costo tokens. Este no cuesta ninguno.
+
+    QUE PRUEBA Y QUE NO. No prueba que respondan bien: el cliente falso devuelve siempre lo
+    mismo. Prueba que el camino ENTERO se ejecuta — que no hay nombre sin definir, firma
+    cambiada ni campo que explote al construir el `Result`. Es el piso mas barato que
+    existe, y el unico que atrapa esta clase de defecto antes de gastar.
+    """
+    from app.llm import Usage as _RealUsage
+    from app.paradigms import REGISTRY, RETIRED
+    from app.retrieval import CorpusView, LexicalRetriever
+    from app.tools import ToolSurface
+
+    print()
+    print("--- 58. los paradigmas corren de punta a punta, sin gastar ---")
+
+    class _Completion:
+        def __init__(self, texto):
+            self.text, self.usage, self.tool_calls = texto, _RealUsage(), []
+
+    # EL CACHE VA A UN TEMPORAL, no al repo. `graph_traverse` construye su indice al vuelo
+    # cuando la ingesta falta, y con `cache_root = Path(".")` lo escribia en `lab/ingest/`:
+    # un test que deja artefactos en el arbol de trabajo.
+    import tempfile
+
+    _tmp = Path(tempfile.mkdtemp(prefix="mapo-test-"))
+
+    class _Cliente:
+        """Devuelve un JSON que satisface a todos: plan, sub-preguntas, respuesta y fin."""
+        fingerprint = "fake|t=0"
+        cache_root = _tmp
+        spent = _RealUsage()
+
+        def complete(self, messages, **kw):
+            return _Completion(
+                '{"sub_questions": [{"id": "sq_001", "question": "q", "depends_on": []}], '
+                '"steps": [], "plan": [], "read": [], "entities": [], "relations": [], '
+                '"status": "complete", "partial": "AR1", "answer": "AR1", '
+                '"dispatch": "una sub-pregunta", "done": false}'
+                + chr(10) + "ANSWER: AR1"
+            )
+
+    docs = {f"u{i}": f"unidad {i}: Marta Arrieta, account AR100{i}." for i in range(6)}
+    tarea = {
+        "task_id": "t", "question": "What is the account for Marta Arrieta?",
+        "cell": "C1_single_verifiable", "budget_tokens": 40_000,
+        "unit_ids": list(docs), "oracle": ["AR1000"], "has_oracle": True,
+        "irreversible": False, "shared_writes": False,
+        "truth_n_units": 1, "truth_coupling": 0.0, "truth_horizon_unknown": False,
+    }
+
+    fallos = []
+    for nombre in sorted(REGISTRY):
+        view = CorpusView(task_id="t", documents=docs, unit_ids=list(docs),
+                          relevant_units=["u0"])
+        surface = ToolSurface(view=view, hybrid=LexicalRetriever(),
+                              semantic=LexicalRetriever(), lexical=LexicalRetriever(),
+                              variant="basic", budget_tokens=40_000)
+        try:
+            resultado = REGISTRY[nombre](_Cliente(), surface, tarea)
+            if not hasattr(resultado, "answer"):
+                fallos.append(f"{nombre}: no devolvio un Result")
+        except Exception as exc:  # noqa: BLE001 — el punto es atrapar CUALQUIER cosa
+            fallos.append(f"{nombre}: {type(exc).__name__}: {exc}")
+
+    ok &= check(f"los {len(REGISTRY)} del registro corren sin explotar" +
+                (f" — FALLAN: {fallos}" if fallos else ""), not fallos)
+    ok &= check("y estan TODOS, incluidos los retirados: un brazo que no se corre igual se "
+                "replaya, y un replay sobre codigo roto falla igual",
+                set(REGISTRY) >= RETIRED)
+    return ok
+
+
+def check_no_factor_is_unreachable(ok: bool) -> bool:
+    """S59: todo factor de la superficie tiene camino desde el runner hasta el modelo.
+
+    TRES VECES EN UN DIA APARECIO ESTE DEFECTO, y siempre con la misma forma: un factor
+    implementado, con test propio, que **no se podia encender**.
+
+      offer_board / terse_tools   `_run_tool_loop` llamaba a `specs_for` sin pasarlos, asi
+                                  que `offer_board=True` habria corrido entero y medido
+                                  CERO — la tool nunca aparece en la lista que el modelo ve
+      compact_material            el runner no lo pasaba a la superficie: no habia forma de
+                                  encenderlo desde una corrida
+      terse/board en sub-agentes  `_sub_surface` de `handoff` no los propagaba, asi que
+                                  adentro de un sub-agente no existian
+
+    Un factor inalcanzable no falla: **corre y mide su ausencia**, y el resultado se lee
+    igual que un efecto nulo medido. Por eso la guarda es estructural y no un test por
+    factor: un factor nuevo queda cubierto sin que nadie se acuerde de agregarlo.
+    """
+    import inspect
+
+    from app.runner import Runner
+    from app.tools import ToolSurface
+
+    print()
+    print("--- 59. ningun factor queda inalcanzable ---")
+
+    booleanos = {
+        n for n, f in ToolSurface.__dataclass_fields__.items()
+        if f.type in ("bool", "bool | None")
+    }
+    src = inspect.getsource(Runner.surface_for)
+    huerfanos = sorted(c for c in booleanos if f"{c}=" not in src)
+    ok &= check(f"los {len(booleanos)} factores booleanos llegan del runner" +
+                (f" — NO LLEGAN: {huerfanos}" if huerfanos else ""), not huerfanos)
+
+    # Y los que gobiernan la DECLARACION de tools tienen que llegar al unico sitio que la
+    # manda. Un factor que llega a la superficie y no a `specs_for` sigue siendo inerte.
+    loop = inspect.getsource(_paradigms_loop())
+    for factor in ("terse", "offer_board", "offer_read_all"):
+        ok &= check(f"`{factor}` viaja hasta la declaracion de tools", factor in loop)
+
+    # La copia por alcance no puede perder ninguno: `scoped` usa `replace`, que los lleva
+    # todos, y este check impide que alguien lo vuelva a escribir campo por campo.
+    scoped = inspect.getsource(ToolSurface.scoped)
+    ok &= check("`scoped` copia la superficie entera con `replace`, no campo por campo — "
+                "un olvido en una copia a mano es invisible", "replace(" in scoped)
+    return ok
+
+
+def _paradigms_loop():
+    from app.paradigms import _run_tool_loop
+    return _run_tool_loop
+
+
+def check_mixed_model_execution_is_measurable(ok: bool) -> bool:
+    """S60: una ejecucion que usa DOS modelos tiene que poder convertirse a plata.
+
+    LA PREGUNTA DEL AUTOR (2026-08-29): «tiene sentido cuando se combinan dos LLMs, barato
+    y caro, en la misma ejecucion... el costo ahi es importante porque los tokens no valen
+    lo mismo». Es correcto y el banco no lo soportaba: `cost_tokens` es UN entero, y un
+    token de `terra` cuesta **10x** uno de `luna` en entrada y 10x en salida — mas el
+    escalon de contexto largo, que a partir de 272k duplica la entrada de los dos.
+
+    Sumarlos en un entero produce un numero que no se puede convertir a plata **ni
+    comparar con nada**. Por eso `Usage.by_model` y `Row.tokens_by_model`.
+
+    VACIO SIGNIFICA UN SOLO MODELO, que es el regimen medido hasta hoy — no se rellena con
+    un nombre por defecto, porque «no ruteado» y «ruteado a uno solo» son cosas distintas y
+    un default las confundiria.
+    """
+    from app.llm import Usage
+    from app.runner import Row
+
+    print()
+    print("--- 60. una ejecucion con dos modelos se puede cobrar ---")
+
+    u = Usage()
+    ok &= check("sin rutear, el desglose esta VACIO — distinto de {modelo: 0}", not u.by_model)
+
+    u.charge("gpt-5.6-luna", 1000, 50)
+    u.charge("gpt-5.6-luna", 500, 20)
+    otro = Usage()
+    otro.charge("gpt-5.6-terra", 2000, 300)
+    u.merge(otro)
+    ok &= check("acumula por modelo, y `merge` no los funde",
+                u.by_model["gpt-5.6-luna"] == {"prompt": 1500, "completion": 70, "calls": 2}
+                and u.by_model["gpt-5.6-terra"]["prompt"] == 2000)
+
+    # LA PRUEBA QUE IMPORTA: con el desglose la plata se puede calcular, sin el no.
+    precios = {"gpt-5.6-luna": (0.20, 1.20), "gpt-5.6-terra": (2.00, 12.00)}
+    plata = sum(
+        (c["prompt"] * precios[m][0] + c["completion"] * precios[m][1]) / 1_000_000
+        for m, c in u.by_model.items()
+    )
+    total_tokens = sum(c["prompt"] + c["completion"] for c in u.by_model.values())
+    plata_ingenua = (total_tokens * precios["gpt-5.6-luna"][0]) / 1_000_000
+    ok &= check(f"la plata real ({plata:.6f}) no es la que daria tratar todo como el "
+                f"barato ({plata_ingenua:.6f}) — {plata / plata_ingenua:.1f}x",
+                plata > plata_ingenua * 3)
+    ok &= check("y la fila lo lleva, o el desglose muere en el proceso",
+                "tokens_by_model" in Row.__dataclass_fields__)
+    return ok
+
+
+def check_two_kinds_of_reading(ok: bool) -> bool:
+    """§54: la lectura ESTRUCTURAL y la ELECTA se cuentan aparte (auditoria C-1).
+
+    `read_one` no pasa por `dispatch`: no cuenta como llamada, no descuenta presupuesto y
+    no dispara `stop_on_barren`. Eso esta bien —ninguna de las tres gobierna una linea de
+    codigo— pero hasta hoy tampoco dejaba RASTRO, y ocho de trece paradigmas leen el corpus
+    por ahi. Una lectura invisible se lee igual que una lectura que no ocurrio, asi que
+    `units_read` no significaba lo mismo entre paradigmas y ningun promedio lo denunciaba.
+
+    LA PRUEBA ES QUE SEAN DOS Y NO SE SUMEN. Si esto se «arreglara» sumando la lectura
+    estructural a `units_read`, todos los numeros publicados se moverian y la distincion
+    se perderia — que es el escenario que este test existe para impedir.
+    """
+    from app.retrieval import CorpusView, LexicalRetriever
+    from app.tools import ToolSurface
+
+    print()
+    print("--- 54. dos clases de lectura, contadas aparte ---")
+
+    docs = {f"u{i}": f"unidad {i} con texto suficiente" for i in range(5)}
+    view = CorpusView(task_id="t", documents=docs, unit_ids=list(docs),
+                      relevant_units=["u1", "u2"])
+    s = ToolSurface(view=view, hybrid=LexicalRetriever(), semantic=LexicalRetriever(),
+                    lexical=LexicalRetriever(), variant="basic", budget_tokens=40_000)
+
+    s.read_one("u0")
+    s.read_one("u1")
+    u = s.usage()
+    ok &= check("`read_one` deja rastro: la lectura estructural se cuenta",
+                u["units_read_structural"] == 2)
+    ok &= check("y NO toca `units_read`, que sigue siendo lo que el modelo eligio — si lo "
+                "tocara, todo numero publicado se moveria", u["units_read"] == 0)
+    ok &= check("tampoco cuenta como llamada ni entra a la secuencia: no fue una decision "
+                "del modelo", not u["calls"] and not u["sequence"])
+
+    s.dispatch("read", {"unit_ids": "u1, u3"})
+    u = s.usage()
+    ok &= check("la lectura por tool sigue contando donde siempre", u["units_read"] == 2)
+    ok &= check("la union NO es la suma: u1 se leyo de las dos formas y se cuenta UNA vez "
+                "— sumarlas inventaria lectura", u["units_read_any"] == 3)
+    # u2 es PORTADORA y solo la ve la lectura estructural — que es exactamente el caso que
+    # subestimaba el recall: `gist_reader` lee todas las unidades desde su codigo y su
+    # `relevant_units_read` no las contaba.
+    s.read_one("u2")
+    u = s.usage()
+    ok &= check("el recall ELECTO no ve la unidad portadora que solo leyo el codigo",
+                u["relevant_units_read"] == 1)
+    ok &= check("y el recall sobre la UNION si la ve — es el unico comparable entre un "
+                "paradigma que lee por codigo y uno que lee por tool",
+                u["relevant_units_read_any"] == 2)
+
+    # --- C-2: la dosis de brazo. El brazo sustituye `hybrid`, o sea la tool `search`;
+    # `keyword_search` y `semantic_search` son CONSTANTES entre brazos. Asi que la
+    # exposicion al tratamiento no es igual para todos y hay que poder leerla.
+    from app.metrics import arm_dose
+    ok &= check("sin ninguna busqueda la dosis es None, no 0,0: un paradigma que no busca "
+                "no recibio tratamiento cero, no recibio tratamiento",
+                arm_dose({"calls": {"read": 3}}) is None)
+    ok &= check("buscando solo por `search` la dosis es 1,0",
+                arm_dose({"calls": {"search": 4}}) == 1.0)
+    ok &= check("buscando solo por `keyword_search` la dosis es 0,0 — y ESO si es cero "
+                "medido: busco y nunca por el brazo",
+                arm_dose({"calls": {"keyword_search": 4}}) == 0.0)
+    ok &= check("y mezclado, es la fraccion que pasa por el brazo",
+                arm_dose({"calls": {"search": 1, "keyword_search": 3}}) == 0.25)
     return ok
 
 
@@ -2449,6 +2917,40 @@ def check_retrieval_is_a_factor(ok: bool) -> bool:
         ok &= check("mezclar brazos levanta — la huella y el vocabulario COINCIDEN, "
                     "asi que esta es la unica guarda que queda",
                     "brazos de recuperacion" in str(exc))
+
+    # LA CUARTA GUARDA DE MEZCLA — el analizador lexico — y su falso positivo.
+    #
+    # Que dos analizadores no se promedien esta bien y se prueba abajo. Lo que estaba mal
+    # es a QUIEN le exigia declararlo: una fila podada por aritmetica no ejecuta, no busca
+    # y no tokeniza, asi que no tiene analizador que declarar. La guarda la leia como «del
+    # regimen viejo» y levantaba. Con dos `direct` infactibles —lo normal en cualquier
+    # corrida— volteaba el archivo entero, y el mensaje hablaba de tokenizadores.
+    con_analizador = dict(base, analyzer="v2-stopwords")
+    ok &= check("un archivo de un solo analizador se lee sin quejarse",
+                len(load_rows(escribir([con_analizador,
+                                        dict(con_analizador, task_id="u")]))) == 2)
+    ok &= check("una fila INFACTIBLE sin analizador no cuenta como mezcla: no ejecuto, "
+                "asi que no tiene tokenizador que declarar",
+                len(load_rows(escribir([
+                    con_analizador,
+                    dict(base, task_id="u", infeasible=True),
+                ]))) == 2)
+    try:
+        load_rows(escribir([con_analizador,
+                            dict(con_analizador, task_id="u",
+                                 analyzer="v1-longitud")]))
+        ok &= check("mezclar analizadores levanta", False)
+    except ValueError as exc:
+        ok &= check("mezclar analizadores levanta — el tokenizador decide QUE encuentra "
+                    "BM25 y no deja rastro en ningun otro campo",
+                    "analizadores lexicos" in str(exc))
+    try:
+        load_rows(escribir([con_analizador, dict(base, task_id="u")]))
+        ok &= check("una fila EJECUTADA sin analizador sigue levantando", False)
+    except ValueError as exc:
+        ok &= check("una fila EJECUTADA sin analizador sigue levantando: esa si es del "
+                    "regimen viejo, y es lo que la guarda existe para atrapar",
+                    "analizadores lexicos" in str(exc))
 
     from app.runner import Row
     ok &= check("la fila separa el gasto de recuperacion del gasto del paradigma",
@@ -3418,6 +3920,13 @@ def main() -> int:
     ok = check_model_pool(ok)
     ok = check_tariffs_are_data(ok)
     ok = check_second_policy(ok)
+    ok = check_two_kinds_of_reading(ok)
+    ok = check_estimates_come_from_the_corpus(ok)
+    ok = check_factors_reach_the_model(ok)
+    ok = check_ingest_is_its_own_measurement(ok)
+    ok = check_every_paradigm_runs_offline(ok)
+    ok = check_no_factor_is_unreachable(ok)
+    ok = check_mixed_model_execution_is_measurable(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

@@ -28,6 +28,10 @@ tabla es el bug.
 | `certify.py` | Mundos separados, ledger de un solo uso, certificado. | Ejecutado. El mundo final se gasta ANTES de responder. |
 | `store.py` | Estado persistido del aprendizaje. | Parcial; falta el registro productivo integral. |
 | `serve.py` | Request real, decisión y ejecución. | Ejecutado; todavía importa grading del banco. |
+| `association.py` | Asociaciones entre pares ORDENADOS, con el ciclo de vida del peso. | Ejecutado. No cae bajo la demostración de redundancia del peso Hebbiano: aquélla es sobre `(región, paradigma)`, y esto asocia pares — es el único sentido vivo de la tesis Hebbiana, establecido con `p = 0,0078` y **débil** (3 celdas de 13, un corpus, un modelo). |
+| `contracts.py` | Contratos de afirmación: el proyector que el código decide, y su residuo. | Ejecutado. Implementa **dos** de las tres clases de `../CONTRATOS.es.md` — las dos que se pueden cerrar sin parsear prosa. |
+| `models.py` | El modelo como **acción**: parte de lo que se elige, no de lo que se observa. | Ejecutado. El espacio de decisión pasa de `paradigma` al par `(modelo, paradigma)`. Meter el modelo en el vocabulario de región habría sido el error. |
+| `verify.py` | Acuerdo entre una respuesta y un criterio: el verificador **del producto**. | Ejecutado. Existe separado del banco porque `serve.py` necesita verificar para correr la cascada, y tomarlo del banco invertía la dependencia. |
 | `paradigms/` | Estructuras de control ejecutables. | Ver `paradigms/README.es.md`. |
 
 ### Infraestructura de producto
@@ -41,6 +45,11 @@ tabla es el bug.
 | `cognitive.py` | Señales contables de estancamiento y cobertura. | Ejecutado. |
 | `config.py` | Configuración sin defaults: env faltante = raise en import. | Ejecutado. |
 | `fsio.py` | Escritura atómica. | Ejecutado. |
+| `ingest.py` | La ingesta como **etapa**, separada del request que responde. | Ejecutado. Impone la regla: ningún paradigma construye estado derivado propio adentro de un request. Su gasto se cobra en su propia columna (`ingest_tokens`), no mezclado con el del paradigma. |
+| `board.py` | Estado compartido entre sub-agentes: una **dimensión**, no un paradigma. | Ejecutado. Vivía adentro de `dag.py` y no lo usaba nadie más, lo cual confundía la topología con el estado compartido. |
+| `events.py` | Los eventos tipados que el motor emite mientras decide, con `yield`. | Ejecutado. Es lo que consume `ui/`: la escalera de decisión se ve antes de que exista un token. |
+| `pool.py` | El catálogo de modelos instanciado: un cliente por modelo, y una huella del conjunto. | Ejecutado. Un cliente por modelo y no uno que cambia de deployment, porque la huella ES la identidad de decodificación y va adentro de la clave de caché. |
+| `tariffs.py` | Aranceles: se **leen** de `config/tariffs.json`, no se escriben acá. | Ejecutado. Un precio es una cláusula del contrato con el proveedor: cambia sin avisar y actualizarlo no debería tocar un módulo. |
 
 ### Banco (debe salir de la capa de producto)
 

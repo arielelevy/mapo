@@ -1,0 +1,29 @@
+{
+  "generator_version": 2,
+  "seed": 101,
+  "hard": true,
+  "honest_detectors": true,
+  "unit_tokens": 8000,
+  "people": 60,
+  "per_cell": 3,
+  "widths": [
+    4,
+    16,
+    48
+  ],
+  "documents": 94,
+  "tasks": 78,
+  "cells": {
+    "C1_single_verifiable": 3,
+    "C7_irreversible": 6,
+    "W1_shared_writes": 3,
+    "C3_coupled_chain": 3,
+    "C2_bulk_independent": 9,
+    "C4_aggregate_full_coverage": 9,
+    "C5_unknown_horizon": 9,
+    "C8_currency": 9,
+    "C9_declared_roster": 9,
+    "B2_absence": 9,
+    "D1_presupposition": 9
+  }
+}

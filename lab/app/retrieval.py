@@ -56,9 +56,46 @@ _TOKEN = re.compile(r"[a-z0-9]+")
 BM25_K1 = 1.5
 BM25_B = 0.75
 
+# EL FILTRO DE LARGO ERA UN BUG QUE EL CORPUS VIEJO ESCONDIA. `len(t) > 2` descartaba todo
+# token de una o dos letras, y con el corpus previo a `K-6` eso no costaba nada porque
+# ningun nombre traia iniciales. Con variantes de superficie cuesta la medicion entera:
+#
+#   tokenise("M. Cavallero")  ->  ['cavallero']
+#   tokenise("I. Cavallero")  ->  ['cavallero']      <- IDENTICO
+#
+# La inicial es LA senal que desambigua a dos personas que comparten apellido, y BM25 no la
+# veia. El brazo lexico quedaba ciego exactamente donde el corpus nuevo mide, y el hibrido
+# heredaba la ceguera por su mitad lexica.
+#
+# LA REPARACION ES LA DE UN MOTOR REAL: no se filtra por largo, se filtra por una lista de
+# palabras vacias. Un motor Lucene conserva «m» como token y deja que el IDF decida su
+# peso — que es la respuesta correcta, porque un token frecuente se penaliza solo. Filtrar
+# por largo es una heuristica que confunde «corto» con «poco informativo», y una inicial es
+# corta y decisiva.
+# LA VERSION DEL ANALIZADOR, estampada en cada fila. NO va en el fingerprint de
+# decodificacion a proposito: ese entra en la clave de cache, y meterlo ahi invalidaria los
+# 148 MB de cache **incluso donde sigue siendo valido** — una tarea de una sola unidad
+# produce el mismo prompt con cualquier tokenizador, y medido son 7 de 26 tareas de
+# `gold_p17` cuyo ranking no cambia.
+#
+# DONDE SI TIENE QUE ESTAR: en la FILA, para que el analisis no pueda promediar a traves de
+# un cambio de analizador. Es la misma disciplina que el brazo de recuperacion, que ya vive
+# en un archivo aparte con guarda de mezcla en `load_rows`.
+#
+# v1 = filtro por largo (`len(t) > 2`), que descartaba las iniciales
+# v2 = sin filtro de largo, con stopwords (2026-08-29): `M. Cavallero` e `I. Cavallero`
+#      dejaron de tokenizar identico, que era lo que volvia ciego al lexico justo donde el
+#      corpus de entidades mide
+ANALYZER_VERSION = "v2-stopwords"
+
+STOPWORDS = frozenset("""
+a an and are as at be been but by for from has have in into is it its of on or such that
+the their then there these they this to was were will with no not any all each every than
+""".split())
+
 
 def tokenise(text: str) -> list[str]:
-    return [t for t in _TOKEN.findall(text.lower()) if len(t) > 2]
+    return [t for t in _TOKEN.findall(text.lower()) if t not in STOPWORDS]
 
 
 @dataclass
@@ -97,6 +134,9 @@ class LexicalRetriever:
     name = "lexical"
 
     def rank(self, view: CorpusView, query: str, limit: int) -> list[str]:
+        return [u for _, u in self._scored(view, query)[:limit]]
+
+    def _scored(self, view: CorpusView, query: str) -> list[tuple[float, str]]:
         terms = tokenise(query)
         if not terms:
             return []
@@ -133,7 +173,16 @@ class LexicalRetriever:
 
         # Unit id breaks ties, so the ranking is total and reproducible.
         scored.sort(key=lambda pair: (-pair[0], pair[1]))
-        return [unit_id for _, unit_id in scored[:limit]]
+        return scored
+
+    def scored(self, view: CorpusView, query: str, limit: int) -> list[tuple[str, float]]:
+        """Como `rank`, pero con el score. Lo pide Relative Score Fusion, no RRF.
+
+        Se expone en vez de recalcular afuera: dos implementaciones del mismo BM25 se
+        desincronizan, y la primera vez que difieran las dos devuelven un orden plausible.
+        """
+        pares = self._scored(view, query)
+        return [(u, sc) for sc, u in pares[:limit]]
 
     def describe(self) -> dict[str, Any]:
         return {"retriever": self.name, "k1": BM25_K1, "b": BM25_B}
@@ -278,13 +327,19 @@ class SemanticRetriever:
         self._embedder = embedder
 
     def rank(self, view: CorpusView, query: str, limit: int) -> list[str]:
+        return [u for _, u in self._scored(view, query)[:limit]]
+
+    def _scored(self, view: CorpusView, query: str) -> list[tuple[float, str]]:
         query_vector = self._embedder.embed(query)
         scored: list[tuple[float, str]] = []
         for unit_id in view.unit_ids:
             similarity = cosine(query_vector, self._embedder.embed(view.documents[unit_id]))
             scored.append((similarity, unit_id))
         scored.sort(key=lambda pair: (-pair[0], pair[1]))
-        return [unit_id for _, unit_id in scored[:limit]]
+        return scored
+
+    def scored(self, view: CorpusView, query: str, limit: int) -> list[tuple[str, float]]:
+        return [(u, sc) for sc, u in self._scored(view, query)[:limit]]
 
     def describe(self) -> dict[str, Any]:
         return {"retriever": self.name, **self._embedder.describe()}
@@ -307,7 +362,15 @@ class HybridRetriever:
 
     name = "hybrid"
 
-    def __init__(self, embedder: Any, depth: int = 40) -> None:
+    def __init__(self, embedder: Any, depth: int = 40, fusion: str = "rrf") -> None:
+        # LA FUSION ES UN FACTOR, y esta explicito porque el default de una herramienta
+        # ajena no puede decidirlo en silencio: Weaviate cambio su `fusionType` de RRF a
+        # Relative Score Fusion en v1.24, asi que quien actualiza sin fijarlo cambia de
+        # metodo sin enterarse. Si produccion fusiona distinto que el banco, el banco mide
+        # otra cosa — y ese es el modo de falla que este parametro vuelve visible.
+        if fusion not in ("rrf", "relative_score"):
+            raise ValueError(f"fusion desconocida: {fusion!r}")
+        self._fusion = fusion
         self._lexical = LexicalRetriever()
         self._semantic = SemanticRetriever(embedder)
         # How deep each ranker contributes before fusion. Deeper than `limit` on
@@ -316,6 +379,15 @@ class HybridRetriever:
         self._depth = depth
 
     def rank(self, view: CorpusView, query: str, limit: int) -> list[str]:
+        if self._fusion == "rrf":
+            fused = self._rrf(view, query)
+        else:
+            fused = self._relative_score(view, query)
+        ordered = sorted(fused.items(), key=lambda kv: (-kv[1], kv[0]))
+        return [unit_id for unit_id, _ in ordered[:limit]]
+
+    def _rrf(self, view: CorpusView, query: str) -> dict[str, float]:
+        """Fusion por RANGOS. No mira los scores, asi que no necesita normalizarlos."""
         lists = [
             self._lexical.rank(view, query, self._depth),
             self._semantic.rank(view, query, self._depth),
@@ -324,14 +396,40 @@ class HybridRetriever:
         for ranking in lists:
             for position, unit_id in enumerate(ranking, start=1):
                 fused[unit_id] = fused.get(unit_id, 0.0) + 1.0 / (RRF_K + position)
-        ordered = sorted(fused.items(), key=lambda kv: (-kv[1], kv[0]))
-        return [unit_id for unit_id, _ in ordered[:limit]]
+        return fused
+
+    def _relative_score(self, view: CorpusView, query: str) -> dict[str, float]:
+        """Fusion por SCORES normalizados a [0,1] por lista, y despues sumados.
+
+        QUE GANA Y QUE PIERDE FRENTE A RRF, para que la comparacion sea honesta. Gana
+        MAGNITUD: RRF trata igual a un primer puesto que gano por goleada y a uno que gano
+        por un pelo, y esa distincion a veces es la senal. Pierde ROBUSTEZ: normalizar
+        min-max hace que el resultado dependa del PEOR elemento de cada lista, asi que un
+        cambio en la cola mueve el tope, y una lista de un solo elemento no tiene rango que
+        normalizar. Cual conviene es empirico y por eso los dos estan.
+
+        El elemento unico se mapea a 1,0 y no a 0,0: con `hi == lo` la normalizacion no
+        esta definida, y elegir 0 haria que una lista que encontro UNA cosa relevante no
+        aporte nada — el peor default posible de los dos.
+        """
+        fused: dict[str, float] = {}
+        for ranker in (self._lexical, self._semantic):
+            pares = ranker.scored(view, query, self._depth)
+            if not pares:
+                continue
+            valores = [sc for _, sc in pares]
+            hi, lo = max(valores), min(valores)
+            span = hi - lo
+            for unit_id, sc in pares:
+                norm = 1.0 if span <= 0 else (sc - lo) / span
+                fused[unit_id] = fused.get(unit_id, 0.0) + norm
+        return fused
 
     def describe(self) -> dict[str, Any]:
         return {
             "retriever": self.name,
-            "fusion": "rrf",
-            "k": RRF_K,
+            "fusion": self._fusion,
+            "k": RRF_K if self._fusion == "rrf" else None,
             "depth": self._depth,
             "components": ["bm25", "dense"],
         }

@@ -76,6 +76,8 @@ MAX_ORCHESTRATION_CALLS = 200
 # nombre del que salen, y `test_science.py` §39 verifica que no se hayan separado.
 HANDOFF_SCOPES = 2      # paradigms.handoff.SCOPES
 HANDOFF_TURNS = 6       # paradigms.handoff.MAX_TURNS_PER_AGENT
+SUPERVISOR_DISPATCHES = 4   # paradigms.supervisor.MAX_DISPATCHES
+SUPERVISOR_TURNS = 3        # paradigms.supervisor.MAX_TURNS_PER_SUB
 
 # A paradigm whose GUARANTEED spend exceeds the declared budget by more than this is
 # infeasible. Slightly above 1.0 because the projection is an estimate and refusing a
@@ -140,7 +142,13 @@ def _content_tokens(documents: dict[str, str], unit_ids: list[str]) -> int:
 # The paradigms whose spend is a DECISION, not a guarantee: they read selectively and
 # cap their own iterations, so `content` is a worst case and pruning on it would discard
 # their only advantage. They are feasible here and bounded at runtime instead.
-WORST_CASE_ONLY = frozenset({"react", "reflection"})
+# `supervisor` entra aca y NO en el bloque de cotas duras. Su sub-agente corre el mismo
+# `_run_tool_loop` que `react`: busca y lee SELECTIVAMENTE, asi que `content` es su peor
+# caso y no su garantia. Podarlo sobre el peor caso lo dejaba admisible en 6 de 78 tareas
+# —o sea, medido en el 8% del corpus— y eso no habria sido un veredicto sobre el patron
+# sino sobre una cota mal elegida. La cantidad de LLAMADAS si la fija el codigo, y esa se
+# proyecta abajo.
+WORST_CASE_ONLY = frozenset({"react", "reflection", "supervisor", "handoff"})
 
 # CUANTAS LLAMADAS PUEDE HACER CADA UNO EN EL PEOR CASO. Su GASTO es una decision del
 # modelo, pero su CANTIDAD DE LLAMADAS no: la fija el codigo con `max_iterations`. Que el
@@ -154,6 +162,9 @@ WORST_CASE_ONLY = frozenset({"react", "reflection"})
 WORST_CASE_CALLS = {
     "react": 20,        # paradigms.__init__: _run_tool_loop(max_iterations=20)
     "reflection": 4 + 8,  # borrador (4) + revision (8)
+    # coordinacion + bucle del sub-agente, por despacho, mas la sintesis
+    "supervisor": SUPERVISOR_DISPATCHES * (1 + SUPERVISOR_TURNS) + 1,
+    "handoff": HANDOFF_SCOPES * HANDOFF_TURNS,
 }
 
 # Every name this layer has arithmetic for. Kept explicit so an unknown one raises
@@ -293,16 +304,20 @@ def check(
         return Verdict(True, projected_calls=2, projected_tokens=content)
 
     if paradigm == "handoff":
-        # ALCANCES DISJUNTOS, y de ahi sale la cota entera. `SCOPES` agentes, cada uno con
-        # `MAX_TURNS_PER_AGENT` vueltas como maximo, todo fijado por el CODIGO — no hay
-        # bucle que el modelo corte. Y la transferencia no agrega vueltas: re-alcanza.
+        # ALCANCES DISJUNTOS, y de ahi sale la cota de LLAMADAS: `SCOPES` agentes por
+        # `MAX_TURNS_PER_AGENT` vueltas, todo fijado por el CODIGO — no hay bucle que el
+        # modelo corte. La transferencia no agrega vueltas: re-alcanza.
         #
-        # POR QUE NO SE COMPARA CONTRA EL CONTENIDO ENTERO. Un agente ve SOLO su alcance,
-        # asi que su contexto es una fraccion del material: el reparto es la razon de ser
-        # del patron. Compararlo contra el total lo declararia infactible exactamente
-        # donde el reparto lo hace posible, que es al reves de lo que la cota tiene que
-        # hacer.
-        por_alcance = content // max(1, HANDOFF_SCOPES)
+        # LA COTA DE CONTEXTO SE SACO (2026-08-29), y es la misma correccion que
+        # `supervisor` necesito el mismo dia. Exigia que el alcance entero entrara en el
+        # margen —80.491 tokens contra 36.000 en una tarea w16— y eso lo dejaba INFACTIBLE
+        # en 57 de 78 tareas. Pero el agente de `handoff` corre `_run_tool_loop`: busca y
+        # lee SELECTIVAMENTE, igual que `react`, que es admisible en 78 de 78 con el mismo
+        # material delante. Su alcance es su PEOR caso, no su garantia, y el presupuesto se
+        # impone en runtime — la superficie degrada un bulk read que no puede pagar.
+        #
+        # Podar sobre el peor caso a un brazo que lee selectivamente le quita su unica
+        # ventaja, que es exactamente lo que este modulo dice que no hay que hacer.
         proyectadas = HANDOFF_SCOPES * HANDOFF_TURNS
         if proyectadas > MAX_ORCHESTRATION_CALLS:
             return Verdict(
@@ -312,16 +327,6 @@ def check(
                 projected_calls=proyectadas,
                 projected_tokens=content,
                 axis="cardinality",
-            )
-        if por_alcance > allowance:
-            return Verdict(
-                False,
-                f"cada alcance carga ~{por_alcance} tokens contra un margen de "
-                f"{allowance}: repartir en {HANDOFF_SCOPES} no alcanza para que una "
-                f"parte entre",
-                projected_calls=proyectadas,
-                projected_tokens=content,
-                axis="context",
             )
         # UN ALCANCE POR UNIDAD ES EL PISO. Con menos unidades que alcances el reparto
         # deja alcances vacios y el patron degenera en una pasada — corre, y no es un

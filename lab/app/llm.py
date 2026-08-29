@@ -20,7 +20,7 @@ import os
 import random
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, field as dc_field
 from pathlib import Path
 from typing import Any
 
@@ -299,10 +299,31 @@ class Usage:
     calls: int = 0
     cached_calls: int = 0
     wall_seconds: float = 0.0
+    # EL DESGLOSE POR MODELO. Cuando una ejecucion rutea `luna` para lo barato y `terra`
+    # para una decision compleja, **los tokens dejan de ser una unidad**: uno de `terra`
+    # cuesta 10x uno de `luna` en entrada y 10x en salida, y por encima de 272k de prompt
+    # los dos saltan a tarifa larga. Sumarlos en un solo entero produce un numero que no
+    # se puede convertir a plata ni comparar con nada.
+    #
+    # `{modelo: {"prompt": n, "completion": n, "calls": n}}`. Vacio significa **un solo
+    # modelo** —el regimen medido hasta hoy— y ahi `prompt_tokens`/`completion_tokens`
+    # alcanzan. No se rellena con el nombre del modelo por defecto a proposito: "no
+    # ruteado" y "ruteado a uno solo" son cosas distintas, y un default las confundiria.
+    by_model: dict[str, dict[str, int]] = dc_field(default_factory=dict)
 
     @property
     def total_tokens(self) -> int:
         return self.prompt_tokens + self.completion_tokens
+
+    def charge(self, model: str, prompt: int, completion: int) -> None:
+        """Atribuye un gasto a un modelo. Lo llama el cliente que sabe cual corrio."""
+        if not model:
+            return
+        celda = self.by_model.setdefault(
+            model, {"prompt": 0, "completion": 0, "calls": 0})
+        celda["prompt"] += prompt
+        celda["completion"] += completion
+        celda["calls"] += 1
 
     def merge(self, other: "Usage") -> None:
         self.prompt_tokens += other.prompt_tokens
@@ -318,6 +339,11 @@ class Usage:
         self.calls += other.calls
         self.cached_calls += other.cached_calls
         self.wall_seconds += other.wall_seconds
+        for modelo, celda in other.by_model.items():
+            mio = self.by_model.setdefault(
+                modelo, {"prompt": 0, "completion": 0, "calls": 0})
+            for k, v in celda.items():
+                mio[k] = mio.get(k, 0) + v
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -535,6 +561,18 @@ class LLMClient:
                 # A cache hit costs no wall time; charging the original latency would
                 # make a replay look as slow as the live run and distort latency stats.
                 wall_seconds=0.0 if from_cache else record.get("wall_seconds", 0.0),
+                # EL DESGLOSE POR MODELO SIEMPRE, aunque haya uno solo. Es el cliente el
+                # unico que sabe cual deployment corrio esta llamada, y si no lo estampa
+                # aca no lo sabe nadie mas: aguas abajo solo llegan enteros sumados. Con un
+                # solo modelo el desglose es redundante y no molesta; con dos, es la unica
+                # forma de convertir la fila a plata.
+                by_model={
+                    self._settings.chat_deployment: {
+                        "prompt": raw_usage.get("prompt_tokens", 0),
+                        "completion": raw_usage.get("completion_tokens", 0),
+                        "calls": 1,
+                    }
+                } if self._settings.chat_deployment else {},
             ),
             model_version=record.get("model_version", ""),
             from_cache=from_cache,
