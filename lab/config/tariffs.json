@@ -1,0 +1,77 @@
+{
+  "_comment": [
+    "Precios por millon de tokens. Datos, no codigo: son una clausula del contrato con el",
+    "proveedor y cambian sin avisar, asi que actualizarlos no deberia tocar un .py ni",
+    "pasar por una revision de codigo.",
+    "",
+    "Fuente y fecha van adentro del archivo porque un precio sin procedencia no se puede",
+    "auditar: `cost_unit()` estampa `usd@nano/2026-08-28` en cada reporte, y si alguien ve",
+    "una fecha vieja lo ve.",
+    "",
+    "long_context: los `5.6` cobran 2x la entrada y 1,5x la salida por encima del umbral",
+    "de contexto corto. cache_write: se cobra en los `5.6` y NO en nano — en `sol` la",
+    "escritura sale mas que la ENTRADA de `terra`, asi que un prefijo que cambia seguido",
+    "paga escritura sin llegar a cobrar lectura nunca."
+  ],
+  "source": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/ + prices.azure.com/api/retail/prices",
+  "verified_on": "2026-08-28",
+  "region": "eastus2",
+  "sku": "GlobalStandard",
+  "currency": "USD",
+  "unit": "per_million_tokens",
+
+  "tariffs": {
+    "nano": {
+      "deployment": "gpt-5.4-nano",
+      "prompt": 0.20,
+      "completion": 1.25,
+      "cached_prompt": 0.02,
+      "cache_write": null,
+      "long_context_prompt": null,
+      "long_context_completion": null
+    },
+    "luna": {
+      "deployment": "gpt-5.6-luna",
+      "prompt": 0.20,
+      "completion": 1.20,
+      "cached_prompt": 0.02,
+      "cache_write": 0.25,
+      "long_context_prompt": 0.40,
+      "long_context_completion": 1.80
+    },
+    "terra": {
+      "deployment": "gpt-5.6-terra",
+      "prompt": 2.00,
+      "completion": 12.00,
+      "cached_prompt": 0.20,
+      "cache_write": 2.50,
+      "long_context_prompt": 4.00,
+      "long_context_completion": 18.00
+    },
+    "sol": {
+      "deployment": "gpt-5.6-sol",
+      "prompt": 5.00,
+      "completion": 30.00,
+      "cached_prompt": 0.50,
+      "cache_write": 6.25,
+      "long_context_prompt": 10.00,
+      "long_context_completion": 45.00
+    }
+  },
+
+  "embeddings": {
+    "text-embedding-3-large": 0.143
+  },
+
+  "roles": {
+    "_comment": [
+      "Que arancel juega cada papel del catalogo de modelos (`app/models.py`). Es una",
+      "DECISION y por eso esta aca y no derivada: `deep` es `terra` y no `sol` porque",
+      "terra es el escalon mas chico que existe, y la regla del repo es no comprar mas",
+      "garantia de la que la medicion justifica. Cambiarlo a `sol` es una decision, no un",
+      "ajuste, y se ve en el diff."
+    ],
+    "fast": "nano",
+    "deep": "terra"
+  }
+}

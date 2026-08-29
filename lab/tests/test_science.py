@@ -1944,6 +1944,66 @@ def check_handoff_authorisation(ok: bool) -> bool:
     return ok
 
 
+def check_tariffs_are_data(ok: bool) -> bool:
+    """§53: los aranceles son DATOS y se leen de un JSON, no constantes en un .py.
+
+    POR QUE. Un precio es una clausula del contrato con el proveedor: cambia sin avisar, no
+    lo decide nadie de este lado, y actualizarlo no deberia tocar codigo. Mientras fueron
+    constantes fueron **referencia inventada** —0,05/0,40 para nano cuando el real es
+    0,20/1,25, un error de 4x en entrada— y nada podia notarlo, porque un numero puesto a
+    mano se lee igual de seguro que uno verificado.
+
+    Y EL CARGADOR FALLA FUERTE. Un arancel sin fecha no se puede auditar; uno sin precio
+    haria parecer gratis a un modelo que no lo es; un papel sin declarar decidiria el
+    precio del producto en silencio. Los tres levantan.
+    """
+    import json
+    import tempfile
+    from app.tariffs import (
+        DECLARADOS, DEEP, DETAILS, EMBEDDINGS, NANO, VERIFIED_ON, _build, breakeven,
+    )
+
+    print("\n--- 53. los aranceles son datos ---")
+
+    ok &= check("se leen del JSON y traen fecha de verificacion",
+                bool(VERIFIED_ON) and len(VERIFIED_ON) == 10)
+    ok &= check("la fecha viaja adentro del nombre, asi que el reporte la estampa",
+                NANO.name.endswith(VERIFIED_ON))
+    ok &= check("los cuatro modelos estan, con su deployment real",
+                {d.deployment for d in DETAILS.values()} >= {
+                    "gpt-5.4-nano", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"})
+    ok &= check("`luna` cuesta lo mismo que `nano`: NO es el caro, es clase nano",
+                DECLARADOS["luna"].prompt_per_mtok
+                == DECLARADOS["nano"].prompt_per_mtok)
+    ok &= check("y los caros son caros: terra ~10x, sol ~24x",
+                9.0 < breakeven(NANO, DECLARADOS["terra"], 0.15) < 11.0
+                and 23.0 < breakeven(NANO, DECLARADOS["sol"], 0.15) < 26.0)
+    ok &= check("el papel `deep` es una DECISION declarada en el JSON, no una derivacion",
+                DEEP is DECLARADOS["terra"])
+    ok &= check("los ejes que el calculo no usa se CONSERVAN en vez de perderse",
+                DETAILS["sol"].cache_write == 6.25
+                and DETAILS["terra"].long_context_prompt == 4.00)
+    ok &= check("y nano no cobra escritura de cache, que es la asimetria menos obvia",
+                DETAILS["nano"].cache_write is None
+                and DETAILS["sol"].cache_write is not None)
+    ok &= check("los embeddings tambien: HyDE los paga aparte de su llamada",
+                EMBEDDINGS.get("text-embedding-3-large") == 0.143)
+
+    for roto, porque in (
+        ({"tariffs": {"x": {"prompt": 1, "completion": 2, "deployment": "d"}}},
+         "sin fecha"),
+        ({"verified_on": "2026-01-01",
+          "tariffs": {"x": {"completion": 2, "deployment": "d"}}}, "sin precio"),
+        ({"verified_on": "2026-01-01", "tariffs": {}}, "sin ningun arancel"),
+    ):
+        try:
+            _build(roto)
+            ok &= check(f"un JSON {porque} levanta", False)
+        except ValueError:
+            ok &= check(f"un JSON {porque} LEVANTA en vez de inventar el numero", True)
+    return ok
+
+
 def check_model_pool(ok: bool) -> bool:
     """§52: un cliente POR MODELO, y una huella del conjunto.
 
@@ -2791,12 +2851,29 @@ def check_money_is_a_unit_not_a_number(ok: bool) -> bool:
                 Study(obs, tariff=caro).summary()["cost_unit"] == "usd@ref/x8"
                 and Study(obs).summary()["cost_unit"] == "tokens")
 
+    # ESTE ASERTO CAMBIO CUANDO LLEGARON LOS PRECIOS REALES, y el cambio es la leccion.
+    # Antes exigia UN SOLO valor: con los aranceles inventados NANO y DEEP eran
+    # exactamente proporcionales —25x en entrada y en salida— asi que la mezcla no movia
+    # nada. Eso era una propiedad de mis numeros, no del mundo, y el test la habia
+    # convertido en invariante. Con los reales (nano 0,20/1,25 = 6,25x; terra 2/12 = 6,0x)
+    # la mezcla si mueve, un 4%.
+    #
+    # Lo que se afirma ahora es lo que DECIDE: que la mezcla no cambia el orden de
+    # magnitud, asi que «el caro necesita usar como una decima parte de los tokens» vale
+    # sin saber la mezcla. Un aserto de igualdad exacta sobre precios de terceros es un
+    # test que se rompe cada vez que alguien actualiza una tarifa.
     from app.tariffs import DEEP, NANO, breakeven
-    ratios = {round(breakeven(NANO, DEEP, r), 6) for r in (0.0, 0.25, 0.5, 1.0)}
+    ratios = [breakeven(NANO, DEEP, r) for r in (0.0, 0.25, 0.5, 1.0)]
+    dispersion = (max(ratios) - min(ratios)) / min(ratios)
     ok &= check(
-        "NANO y DEEP son proporcionales, asi que la mezcla NO decide entre ellos "
-        f"(un solo valor: {ratios})",
-        len(ratios) == 1,
+        f"la mezcla mueve el punto de equilibrio menos del 10% "
+        f"({min(ratios):.2f}x a {max(ratios):.2f}x, dispersion {dispersion:.1%}), asi que "
+        f"el orden de magnitud del intercambio no depende de suponerla",
+        dispersion < 0.10,
+    )
+    ok &= check(
+        "y el caro es caro de verdad: el equilibrio esta muy por encima de 1",
+        min(ratios) > 5.0,
     )
     return ok
 
@@ -3181,6 +3258,7 @@ def main() -> int:
     ok = check_board_is_a_tool_for_everyone(ok)
     ok = check_coverage_precondition_abstains(ok)
     ok = check_model_pool(ok)
+    ok = check_tariffs_are_data(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

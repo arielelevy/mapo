@@ -38,7 +38,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 from .metrics import Tariff
-from .tariffs import DEEP as ARANCEL_DEEP, NANO as ARANCEL_NANO
+from .tariffs import DETAILS, DEEP as ARANCEL_DEEP, NANO as ARANCEL_NANO
 
 
 class Capability(IntEnum):
@@ -79,7 +79,9 @@ class Model:
         ) / 1_000_000
 
 
-# Los dos declarados. REFERENCIA: la ventana y el precio son del proveedor.
+# LOS DOS DEL CATALOGO. El precio ya NO es referencia: sale de `config/tariffs.json`,
+# verificado contra la API de precios de Azure y contra la pagina, 2026-08-28. La VENTANA
+# sigue siendo una declaracion del proveedor que no verifique — esta puesta a mano.
 FAST = Model(
     name="fast", context_tokens=400_000, tariff=ARANCEL_NANO, capability=Capability.FAST
 )
