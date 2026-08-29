@@ -183,6 +183,14 @@ class Row:
     # no fundido en `cost_tokens` porque son dos preguntas distintas — cuanto salio la
     # celda, y cuanto de eso lo puso el brazo de recuperacion.
     retrieval_tokens: int = 0
+    # Lo que el modelo decidio gastar PENSANDO, facturado como salida. Cero en un modelo
+    # que no razona, y eso es un cero MEDIDO, no un ausente.
+    reasoning_tokens: int = 0
+    # Espera antes del primer token: la de la primera llamada —lo que alguien espera antes
+    # de ver nada— y la acumulada sobre todas, porque en un bucle de herramientas cada
+    # vuelta vuelve a esperar.
+    first_ttft_ms: int = 0
+    ttft_ms_total: int = 0
     completeness: dict[str, Any] | None = None
     # `C-ABSENCE` y `C-PRESUPPOSITION`, cuando la tarea las exige. `None` es SIN CONTRATO
     # y se distingue de un contrato cumplido: un booleano volveria indistinguible «nadie
@@ -428,6 +436,16 @@ class Runner:
         self._results_path = (
             settings.results_dir / f"{corpus_name}{suffix}_rows.jsonl"
         )
+        # EL DIRECTORIO SE CREA ACA. Sin esto, el primer intento de tomar el lock del
+        # archivo falla con `FileNotFoundError` sobre un `.lock` que nadie menciono en
+        # ninguna configuracion — un sintoma que no se parece en nada a la causa. Un
+        # modelo nuevo estrena su carpeta, asi que pasa cada vez que se agrega uno.
+        self._results_path.parent.mkdir(parents=True, exist_ok=True)
+        # EL DIRECTORIO SE CREA ACA. Sin esto, el primer intento de tomar el lock del
+        # archivo falla con `FileNotFoundError` sobre un `.lock` que nadie menciono en
+        # ninguna configuracion — un sintoma que no se parece en nada a la causa. Un
+        # modelo nuevo estrena su carpeta, asi que pasa cada vez que se agrega uno.
+        self._results_path.parent.mkdir(parents=True, exist_ok=True)
         # La convencion de layout se aplica ACA, que es donde se conoce la configuracion:
         # `results/` es medicion y `state/` es el ledger epistemico, y son dos arboles.
         self.store = LearningStore(state_dir_for(settings.results_dir), corpus_name)
@@ -800,6 +818,9 @@ class Runner:
                 # gaste fuera de sus propias llamadas. Cero es legitimo aca —significa que
                 # todo el gasto fue del paradigma— porque el medidor siempre existe.
                 retrieval_tokens=max(0, spent.total_tokens - result.usage.total_tokens),
+                reasoning_tokens=spent.reasoning_tokens,
+                first_ttft_ms=spent.first_ttft_ms,
+                ttft_ms_total=spent.ttft_ms_total,
                 completeness=contract,
                 obligations=obligations,
                 calls=result.usage.calls,

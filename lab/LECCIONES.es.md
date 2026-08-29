@@ -1772,22 +1772,43 @@ solo tardaría.
 
 ---
 
-### 5.20 El tiempo al primer token no se puede medir, y no es un olvido · `MÉTODO`
+### 5.20 «No se puede medir sin streaming» — venía en la respuesta todo el tiempo · `CORRECCIÓN`
 
-Es el número que un usuario percibe con una interfaz que streamea, y es el que
-`ARQUITECTURA.es.md` necesita para su SSE. **No existe en ninguna fila, y no puede existir:**
-`llm.py` hace un POST y espera la respuesta entera. **Sin streaming no hay evento de primer
-token que cronometrar.**
+Escribí que el tiempo al primer token **no existe en ninguna fila y no puede existir**,
+porque `llm.py` hace un POST y espera la respuesta entera: sin streaming no hay evento que
+cronometrar. Lo registré como trabajo de implementación que tocaría el cliente que produce
+todo el registro.
 
-Eso no se arregla analizando: se arregla pidiendo `stream=true` y cronometrando el primer
-chunk. Es trabajo de implementación, cambia el cliente que produce **todo** el registro, y
-por eso se registra en vez de improvisarse.
+**Estaba equivocado.** Azure lo devuelve en el objeto `usage` de una respuesta normal:
 
-> Y hay una consecuencia que conviene ver antes de hacerlo: el caché es
-> content-addressed sobre la respuesta completa. Una respuesta servida del caché tiene
-> TTFT **cero**, que no es el TTFT de nada. La medición de latencia tendrá que separar
-> aciertos de caché o correr sin él — igual que `wall_seconds` ya hace, poniendo 0,0 en un
-> acierto para no atribuirle al modelo una latencia que no pagó.
+```json
+"latency_checkpoint": {
+  "user_visible_ttft_ms": 356,  "service_ttft_ms": 454,  "engine_ttft_ms": 22,
+  "engine_tbt_ms": 7,           "total_duration_ms": 765
+}
+```
+
+**En 400 de 400 entradas de caché revisadas.** Y como el caché guarda el **cuerpo completo**,
+todo el registro ya pagado se puede rellenar **sin gastar un token**.
+
+> El error tiene la misma forma que los otros dos de hoy: concluí desde un supuesto sobre
+> cómo funciona algo —«sin streaming no hay primer token»— en vez de mirar lo que el sistema
+> ya estaba guardando entero. La respuesta estaba en el disco desde la primera corrida.
+
+**Y hay tres TTFT, no uno.** Se prefiere `user_visible_ttft_ms` porque es el único que
+incluye todo lo que alguien espera; los otros dos miden tramos internos y son más chicos por
+construcción — `engine_ttft_ms` da **22 ms** donde el visible da **356**, un factor de 16.
+Reportar el del motor sería reportar una latencia que nadie experimenta.
+
+**Se guardan dos números y no uno.** El de la **primera** llamada es lo que alguien espera
+antes de ver nada. La **suma** sobre todas las llamadas es la espera acumulada real, porque
+en un bucle de herramientas cada vuelta vuelve a esperar el primer token. Sumar el primero
+sería un sinsentido; quedarse sólo con el total escondería la experiencia.
+
+**La trampa que sí anticipé bien, y sigue en pie con otra forma.** Un acierto de caché no
+tarda: el TTFT real es cero. Pero el número guardado es el de la llamada **original**, que
+sigue siendo el TTFT de esa respuesta y es lo que interesa del modelo. Se conserva, y
+`cached_calls` dice cuántas filas lo tienen de segunda mano.
 
 ---
 

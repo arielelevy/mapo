@@ -246,6 +246,29 @@ class SealedCacheMiss(RuntimeError):
     """
 
 
+def _ttft(raw_usage: dict[str, Any]) -> int:
+    """Tiempo al primer token, en ms, del bloque `latency_checkpoint` de Azure.
+
+    NO HACIA FALTA STREAMING, que es lo que yo habia concluido. El proveedor lo devuelve
+    en el objeto `usage` de una respuesta normal —`user_visible_ttft_ms`— y esta en las
+    400/400 entradas de cache que se revisaron. Dije que medirlo exigia `stream=true` y
+    reescribir el cliente; exigia mirar la respuesta que ya se estaba guardando entera.
+
+    Se prefiere `user_visible_ttft_ms` sobre `service_ttft_ms` y `engine_ttft_ms` a
+    proposito: es el unico de los tres que incluye todo lo que el usuario espera. Los
+    otros dos miden tramos internos y son mas chicos por construccion.
+
+    `0` significa que el proveedor no lo informo, y eso NO es un TTFT de cero: se separa
+    en el analisis, como todo lo ausente.
+    """
+    lc = raw_usage.get("latency_checkpoint") or {}
+    for clave in ("user_visible_ttft_ms", "service_ttft_ms", "engine_ttft_ms"):
+        v = lc.get(clave)
+        if v:
+            return int(v)
+    return 0
+
+
 @dataclass
 class Usage:
     prompt_tokens: int = 0
@@ -256,6 +279,22 @@ class Usage:
     # endpoint esta encendido por defecto —no hay directiva que mandar— asi que la unica
     # pregunta era si pegaba, y no habia con que mirarlo.
     provider_cached_tokens: int = 0
+    # TOKENS DE RAZONAMIENTO, que se facturan como SALIDA y no aparecen en el contenido.
+    # Sin separarlos, `completion_tokens` mezcla lo que el modelo decidio gastar PENSANDO
+    # con lo que gasto RESPONDIENDO — y en los `5.6` esa fraccion no la controla nadie de
+    # este lado, asi que es presupuesto que decide el modelo.
+    reasoning_tokens: int = 0
+    # TIEMPO AL PRIMER TOKEN. Dos numeros distintos y los dos importan:
+    #
+    #   first    el de la PRIMERA llamada de la celda. Es lo que alguien espera antes de
+    #            ver nada, y es el numero que una interfaz con SSE muestra
+    #   total    la suma sobre todas las llamadas. En un bucle de herramientas cada vuelta
+    #            vuelve a esperar el primer token, asi que esto es espera acumulada real
+    #
+    # Sumar el primero seria un sinsentido y quedarse solo con el total esconderia la
+    # experiencia. Por eso son dos campos y no uno.
+    first_ttft_ms: int = 0
+    ttft_ms_total: int = 0
     completion_tokens: int = 0
     calls: int = 0
     cached_calls: int = 0
@@ -268,6 +307,13 @@ class Usage:
     def merge(self, other: "Usage") -> None:
         self.prompt_tokens += other.prompt_tokens
         self.provider_cached_tokens += other.provider_cached_tokens
+        self.reasoning_tokens += other.reasoning_tokens
+        self.ttft_ms_total += other.ttft_ms_total
+        # EL PRIMERO GANA, y no se suma ni se promedia: es el de la primera llamada de la
+        # celda. `0` significa que todavia no hubo ninguna, que se distingue de un TTFT
+        # de cero — el proveedor nunca devuelve cero para una llamada real.
+        if not self.first_ttft_ms:
+            self.first_ttft_ms = other.first_ttft_ms
         self.completion_tokens += other.completion_tokens
         self.calls += other.calls
         self.cached_calls += other.cached_calls
@@ -277,6 +323,9 @@ class Usage:
         return {
             "prompt_tokens": self.prompt_tokens,
             "provider_cached_tokens": self.provider_cached_tokens,
+            "reasoning_tokens": self.reasoning_tokens,
+            "first_ttft_ms": self.first_ttft_ms,
+            "ttft_ms_total": self.ttft_ms_total,
             "completion_tokens": self.completion_tokens,
             "total_tokens": self.total_tokens,
             "calls": self.calls,
@@ -466,6 +515,21 @@ class LLMClient:
                         "cached_tokens", 0
                     ) or 0
                 ),
+                reasoning_tokens=int(
+                    (raw_usage.get("completion_tokens_details") or {}).get(
+                        "reasoning_tokens", 0
+                    ) or 0
+                ),
+                # `user_visible_ttft_ms` viene en CADA respuesta, incluidas las cacheadas:
+                # el cuerpo entero se guarda. Asi que esto se puede rellenar sobre el
+                # registro ya pagado sin gastar un token.
+                #
+                # UN ACIERTO DE CACHE NO TIENE TTFT. Sirviendo del disco el tiempo real es
+                # cero, y el numero guardado es el de la llamada ORIGINAL — que sigue
+                # siendo el TTFT de esa respuesta, y es lo que interesa del modelo. Se
+                # conserva, y `cached_calls` dice cuantas filas lo tienen de segunda mano.
+                first_ttft_ms=_ttft(raw_usage),
+                ttft_ms_total=_ttft(raw_usage),
                 calls=1,
                 cached_calls=1 if from_cache else 0,
                 # A cache hit costs no wall time; charging the original latency would
