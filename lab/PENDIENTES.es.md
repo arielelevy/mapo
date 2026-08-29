@@ -183,7 +183,7 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
 
 ## Resumen — todo de un vistazo
 
-`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **17 abiertos · 10 en curso · 149 cerrados** (contados 2026-08-29)
+`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **18 abiertos · 10 en curso · 149 cerrados** (contados 2026-08-29)
 
 > **El contador se cuenta, no se recuerda.** Decía «59 abiertos · 16 en curso · 52
 > cerrados» y los números reales eran 14, 10 y 147: se había escrito a mano y quedado
@@ -522,6 +522,81 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
 
   **Así que esto ya no espera una decisión de diseño: espera la corrida**, como el resto.
   Lo que sigue siendo del autor es si vale gastar en un factor más.
+
+- [ ] **K-10** · **`graph_traverse` es el único brazo que la factibilidad aprueba
+  INCONDICIONALMENTE, y es justo el que más precondición necesita** (observación del autor,
+  2026-08-29: «para graph también debería ser podado cuando no hay NER en el corpus»).
+
+  ```python
+  if paradigm == "graph_traverse":
+      return Verdict(True, projected_calls=2)
+  ```
+
+  El comentario dice por qué: el índice —**una llamada corta por unidad**— *«se amortiza
+  sobre todas las preguntas del corpus, así que no se cobra por tarea acá»*. La amortización
+  es correcta como contabilidad y **deja el hueco**: el único paradigma cuya precondición es
+  «una estructura derivada que tengo que construir primero» es el único que no declara
+  ninguna.
+
+  **Y sin resolución de entidades esa estructura no puede existir.** El paradigma termina
+  caminando un grafo que nadie prometió, y paga las 2 llamadas igual. Medido en la campaña:
+  `u = 0,200` sobre 20 celdas — mejor que el `0,000` de `P10a`, y lejos de servir.
+
+  **El diseño, y es el mismo de `has_oracle`.** La disponibilidad de resolución de entidades
+  es una propiedad **del corpus**, no del paradigma, así que se **declara por celda** igual
+  que se declara si hay detector barato. `feasibility.check` la lee y poda a costo cero
+  cuando no está. Hoy no se puede: `check(paradigm, documents, task)` no ve el directorio del
+  corpus, y `tasks.json` no declara nada de entidades — haría falta un campo y regenerar.
+
+  **Dos formas, y la segunda es más fuerte:**
+
+  | | qué poda | qué cuesta |
+  |---|---|---|
+  | **(a) por corpus** | todo `graph_traverse` donde el corpus no declara entidades | un campo en `Task` y regenerar. Barato y grueso |
+  | **(b) por tarea** | las celdas cuyas unidades **no tienen aristas cruzadas** — el grafo no tiene por dónde caminar | exige el índice, que es lo que se quería no pagar. Salvo que el corpus declare las aristas del gold, que **`entities.json` ya tiene** |
+
+  **Y (b) se midió antes de proponerla, con un resultado que la desinfla** (2026-08-29).
+  `entities.json` trae `mentioned_in` por persona, o sea las aristas del gold, así que la
+  derivación es aritmética. Contando sobre `gold_h1` una arista como «una entidad mencionada
+  en 2+ unidades **de la tarea**»:
+
+  ```
+  tareas SIN una sola entidad cruzada :  3 de 78   -> y las tres son C1
+  mediana de entidades cruzadas       : 13
+  ```
+
+  **Podaría el 4%, y sólo las de un hecho y una unidad** — donde no hay cruce por definición
+  y que ya son triviales. Así que **(b) no compra nada en este corpus**, y decirlo importa
+  porque cambia el diagnóstico:
+
+  > **El `0,200` de `graph_traverse` NO se explica por caminar un grafo sin aristas.** Tiene
+  > aristas en 75 de 78 tareas, con mediana 13. Está fallando por otra cosa, y la
+  > precondición que yo había propuesto lo habría ocultado en vez de explicarlo.
+
+  Lo que queda en pie de la observación del autor es **(a), y es lo estructural**: el brazo
+  no declara ninguna precondición, y es el único cuyo requisito es una estructura derivada
+  que hay que construir. En `gold_h1` no dispararía —el corpus tiene entidades— pero sí en
+  los corpus anteriores, que tenían **una forma canónica por entidad y cero anáfora**. Es
+  exactamente el régimen donde `P10a` lo falsificó, y donde la falsación valía menos de lo
+  que parecía.
+
+  **Y la pregunta que queda abierta es mejor que la que se hizo:** si tiene las aristas y
+  aun así saca 0,200, ¿qué le falta? Las candidatas son la **semilla** —qué entidades extrae
+  de la pregunta, que es la misma falla que mató a `pointer_chase` en `P14a`— o el **orden
+  de la caminata**. Las dos son diagnosticables sobre la traza, sin gastar.
+
+  **NO SE IMPLEMENTA EN MITAD DE LA CAMPAÑA, y el motivo es la regla de siempre.** Cambiar
+  la factibilidad ahora dejaría a `graph_traverse` con 20 celdas medidas y el resto podadas
+  **bajo la misma huella** — la factibilidad no está en la huella, así que ninguna de las
+  cuatro guardas de mezcla lo vería. Sería exactamente la contaminación silenciosa que este
+  repo existe para no tener. Va después, y con `graph_traverse` recorrido entero de nuevo.
+
+  **Y toca una decisión previa que hay que revisar con esto a la vista.** `K-5` puso a
+  `graph_traverse` en standby con dos condiciones de revival escritas, la primera de las
+  cuales —«un corpus con resolución de entidades real»— `gold_h1` **cumple**. Si además se
+  le pone precondición, el brazo pasa a correr **sólo donde puede**, y ahí su número
+  significa algo por primera vez: hoy el `0,200` promedia celdas donde la travesía era
+  imposible con celdas donde tenía las aristas.
 
 - [ ] **AR-6** · **«el contexto largo reemplaza a la recuperación»: medido en una sonda, y
   la respuesta es *depende de la profundidad*** (prueba manual del autor, 2026-08-29).
