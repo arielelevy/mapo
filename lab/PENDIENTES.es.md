@@ -183,7 +183,7 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
 
 ## Resumen — todo de un vistazo
 
-`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **18 abiertos · 10 en curso · 149 cerrados** (contados 2026-08-29)
+`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **20 abiertos · 10 en curso · 149 cerrados** (contados 2026-08-29)
 
 > **El contador se cuenta, no se recuerda.** Decía «59 abiertos · 16 en curso · 52
 > cerrados» y los números reales eran 14, 10 y 147: se había escrito a mano y quedado
@@ -522,6 +522,63 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
 
   **Así que esto ya no espera una decisión de diseño: espera la corrida**, como el resto.
   Lo que sigue siendo del autor es si vale gastar en un factor más.
+
+- [ ] **P-15b** · **el eje de horizonte del vocabulario de región NO falta: está, y es
+  CONSTANTE en las 78 tareas** (medido el 2026-08-29 con `bench/analysis/_analyze_tau.py`).
+
+  `P15` se refutó y el mecanismo se escribió así: *«el vocabulario de región no representa
+  continuidad u horizonte, así que las tareas que castigan una elección fija eran
+  indistinguibles de las que la premian»*. Eso se leyó como que **faltaba** el eje.
+  Calculando la región de las 78 tareas desde φ, sin correr nada:
+
+  | segmento | valores | |
+  |---|---|---|
+  | cardinalidad | `single` 3 · `few` 25 · `many` 50 | separa |
+  | oráculo | `oracle` 12 · `no_oracle` 66 | separa |
+  | **horizonte** | **`unknown` 78** | **no separa una sola tarea** |
+  | acoplamiento | `flat` 55 · `chain` 23 | separa |
+
+  **El eje está, y es peor que si faltara.** Ocupa lugar en la etiqueta, multiplica el
+  espacio de regiones nominalmente, y no distingue nada: θ trabaja de hecho con un
+  vocabulario de **tres** segmentos mientras el registro declara cuatro. Es la misma familia
+  que todo lo demás de esta sesión —algo declarado que no gobierna— y es la más cara,
+  porque está en el centro de la refutación del claim principal.
+
+  **Y hay una consecuencia sobre cómo se leyó la refutación.** «Falta el eje» sugiere
+  agregar una dimensión; «el eje está y no varía» dice otra cosa: **el corpus no produce
+  variación de horizonte**, o el extractor no la detecta. Son dos arreglos distintos y el
+  primero —agregar un segmento— no habría hecho nada.
+
+- [ ] **P-15c** · **la potencia de θ la fija el CORPUS, no la cuota** (medido el
+  2026-08-29). La aritmética, y no depende de ninguna corrida:
+
+  > Un par `(región, paradigma)` junta **un episodio por TAREA de esa región**. Para cruzar
+  > `MIN_EPISODES_FOR_CONFIDENCE = 8` hacen falta **8 tareas en la misma región**. Y
+  > **`repeat` no suma episodios**: un episodio es una celda, la media de sus réplicas.
+
+  Sobre `gold_h1`, con la poda de `B2`/`D1` y calculando la región desde φ:
+
+  | región | tareas | ¿cruza? |
+  |---|---:|---|
+  | `many/no_oracle/unknown/flat` | 21 | **sí** |
+  | `many/no_oracle/unknown/chain` | 12 | **sí** |
+  | `few/no_oracle/unknown/flat` | 9 | **sí** |
+  | las otras cuatro | 3–6 | no |
+
+  **3 de 7 regiones cruzan, cubriendo 42 de 60 tareas.** θ va a poder decidir en el 70% del
+  corpus y en ninguna de las otras cuatro regiones — y **correr `w48` no acerca a ninguna al
+  piso**: agrega tareas, y sólo cuentan si caen en la región justa.
+
+  **Eso separa dos decisiones que se venían tomando juntas.** Cuánto gastar en cuota es una
+  pregunta sobre precisión de la medición; cuántas regiones pueden decidir es una pregunta
+  sobre **diseño del corpus**. Hoy la segunda no se puede arreglar con la primera.
+
+  **Y lo encontró un diagnóstico, no el barrido.** `_analyze_tau.py` iba a barrer `tau` y lo
+  primero que reporta es de dónde sale el margen, porque un margen de 0 tiene dos causas
+  opuestas —empate, o falta de evidencia— y **un barrido ciego da la misma tabla plana en
+  las dos**. Sobre el registro parcial dio *«ninguna región tiene dos brazos por encima del
+  piso»*: sin el diagnóstico, esa tabla de 0,0% se habría leído como «`tau` no sirve», que
+  es lo contrario de lo que pasa.
 
 - [ ] **K-10** · **`graph_traverse` es el único brazo que la factibilidad aprueba
   INCONDICIONALMENTE, y es justo el que más precondición necesita** (observación del autor,
