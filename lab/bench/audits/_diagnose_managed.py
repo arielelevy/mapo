@@ -50,11 +50,14 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import app.cognitive as cog
 import app.paradigms as par
 from app.config import Settings
-from app.paradigms import REGISTRY
+from app.paradigms import REGISTRY, campaign_roster
 from app.runner import Runner
 
 CORPUS = "gold_h1"
-NO_SE_CORREN = ("cot", "plan_execute")
+# EL PLANTEL SALE DEL CATALOGO, no de una lista literal. Estaba clavado a mano aca y en
+# otros tres scripts, y los cuatro quedaron viejos el mismo dia en que se retiro
+# `map_reduce`. Las excepciones —quien corre estando retirado o en standby, y por que—
+# viven en `CAMPAIGN_INCLUDE`, en un solo lugar.
 
 
 def main() -> None:
@@ -90,7 +93,7 @@ def main() -> None:
     runner = Runner(settings, CORPUS, retriever_arm="hybrid", surface_variant="managed")
     tareas = [t["task_id"] for t in runner._tasks  # noqa: SLF001
               if t["task_id"].endswith("w4")][:4]
-    roster = sorted(set(REGISTRY) - set(NO_SE_CORREN))
+    roster = campaign_roster()
 
     for paradigma in roster:
         actual["paradigma"] = paradigma

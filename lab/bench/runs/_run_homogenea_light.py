@@ -62,7 +62,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from app.config import Settings
-from app.paradigms import REGISTRY
+from app.paradigms import REGISTRY, campaign_roster
 from app.runner import Runner
 
 CORPUS = "gold_h1"
@@ -77,8 +77,11 @@ CORPUS = "gold_h1"
 # 78 tareas = 3 por celda x (5 celdas sin width + 7 celdas x 3 widths). Verificado con
 # `py corpus/verify.py --corpus corpus/gold_h1`: 11 celdas en PASS, y el guarda de
 # correferencia da 39/39 saltos de cadena exigiendo resolver una variante.
-NO_SE_CORREN = ("cot", "plan_execute")
-ROSTER = sorted(set(REGISTRY) - set(NO_SE_CORREN))
+# EL PLANTEL SALE DEL CATALOGO, no de una lista literal. Estaba clavado a mano aca y en
+# otros tres scripts, y los cuatro quedaron viejos el mismo dia en que se retiro
+# `map_reduce`. Las excepciones —quien corre estando retirado o en standby, y por que—
+# viven en `CAMPAIGN_INCLUDE`, en un solo lugar.
+ROSTER = campaign_roster()
 RAZON = "corrida light: ejercita la matriz sin gastar, antes de la homogenea"
 
 # LOS FACTORES, uno por vez desde la base. El producto cruzado completo no es el punto: acá

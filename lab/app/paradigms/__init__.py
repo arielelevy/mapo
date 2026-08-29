@@ -508,15 +508,27 @@ CATALOG: dict[str, CatalogEntry] = {
     "rewoo": CatalogEntry(Status.ACTIVE, "unico mejor en 10, y el mas barato al empatar en 46"),
     "gist_reader": CatalogEntry(Status.ACTIVE, "unico mejor en 9"),
     "map_reduce": CatalogEntry(
-        Status.STANDBY,
-        "DESPRIORIZADO por decision del autor (2026-08-28): no se le gasta mas cuota de "
-        "medicion. La evidencia lo acompana — gana UNA celda de 33 en las que compite, y "
-        "la aritmetica de factibilidad lo poda en 180 filas de 270, asi que la mayor "
-        "parte de lo que se pagaria por el ya se sabe que no va a correr. Y en P20 su "
-        "reduccion fue 0,0%: su fan-out lo fija el codigo, asi que no tiene nada que "
-        "ahorrar donde el resto ahorra",
+        Status.RETIRED,
+        "RETIRADO por decision del autor (2026-08-29), y el motivo es que su NICHO ESTA "
+        "VACIO, no que se solape con otro patron. Donde el material entra en ventana lo "
+        "domina `direct` —una llamada contra una por unidad, misma respuesta— y donde no "
+        "entra, la aritmetica lo poda igual: 180 filas de 270. Entre esas dos condiciones "
+        "no queda region. La evidencia acompana: gana UNA celda de 33 en las que compite, "
+        "y en P20 su reduccion fue 0,0% porque su fan-out lo fija el codigo, asi que no "
+        "tiene nada que ahorrar donde el resto ahorra. "
+        "PASO POR STANDBY primero (2026-08-28, «no se le gasta mas cuota»); el paso a "
+        "retirado es la decision que aquella difirio. "
+        "Y NO SE RETIRA POR SOLAPARSE CON `supervisor`: la prueba de las cuatro preguntas "
+        "los separa en DOS de ellas — el fan-out de `map_reduce` es fijo y lo fija el "
+        "codigo, y ningun paso puede cambiar su plan; el supervisor decide la proxima "
+        "llamada DESPUES de ver la anterior. Son patrones distintos, y confundir «tiene "
+        "el nicho vacio» con «es lo mismo que aquel» pondria un veredicto correcto sobre "
+        "una premisa falsa",
         revives_when="una celda donde sea unico mejor Y factible bajo presupuesto de "
-                     "produccion; su dato historico se replaya igual",
+                     "produccion. Su dato historico se replaya igual: un brazo retirado "
+                     "sigue en el REGISTRY porque las filas ya pagadas hay que poder "
+                     "leerlas, y borrar la funcion volveria irreproducible el registro "
+                     "que lo midio",
     ),
     "reflection": CatalogEntry(Status.ACTIVE, "unico mejor en 1 de 14: delgado, no dominado"),
     "supervisor": CatalogEntry(
@@ -618,6 +630,51 @@ def baseline_roster(include: tuple[str, ...] = ()) -> list[str]:
         raise ValueError(f"no existen en el REGISTRY: {desconocidos}")
     activos = sorted(n for n, e in CATALOG.items() if e.runnable and n in REGISTRY)
     return sorted(set(activos) | set(include))
+
+# EL PLANTEL DE LA CAMPANA, EN UN SOLO LUGAR (2026-08-29).
+#
+# Estaba clavado a mano en CUATRO scripts como `NO_SE_CORREN = ("cot", "plan_execute")`, y
+# los cuatro quedaron viejos el mismo dia: retirar `map_reduce` no los toco, asi que
+# habrian seguido gastando cuota en un brazo que el autor acababa de matar. Un plantel
+# escrito a mano al lado de un catalogo que decide es la misma falla que un contador
+# escrito a mano al lado de una lista.
+#
+# LAS EXCEPCIONES SE NOMBRAN, y esa es la parte que importa. `baseline_roster` deja entrar
+# brazos no-runnable SOLO si se los nombra uno por uno, porque el valor de una linea base
+# esta en que todos corran bajo las mismas condiciones — y los veredictos que sacaron a
+# esos brazos se tomaron cada uno bajo su propio regimen: otro corpus, otro tokenizador,
+# sin entidades, con `offer_board` que no llegaba al modelo.
+#
+# QUIEN ENTRA Y POR QUE:
+#
+#   `graph_traverse`   STANDBY, y su condicion de revival es «un corpus con resolucion de
+#                      entidades real». `gold_h1` LA TIENE (36,5% de menciones invisibles a
+#                      keyword_search). Correrlo es lo que decide si revive, y no correrlo
+#                      dejaria la condicion escrita y nunca evaluada.
+#   `pointer_chase`    RETIRADO por P14a, pero sus FRENOS quedaron confirmados (P14b) y son
+#                      baratos: gasta 3.476 tokens por celda contra 30.000 del resto.
+#
+# QUIEN NO, Y ES UNA DECISION DEL AUTOR:
+#
+#   `map_reduce`       RETIRADO el 2026-08-29 — «es caro y prefiero el direct». Su nicho
+#                      esta vacio: donde el material entra lo domina `direct`, donde no
+#                      entra la aritmetica lo poda. P23 compara `handoff` contra el
+#                      fan-out fijo usando su REGISTRO EXISTENTE, no gasto nuevo, asi que
+#                      sacarlo del plantel no deja ninguna prediccion sin comparador.
+#   `cot`              control nulo por prompting. La ingenieria de prompts no es un
+#                      patron, y ya esta medido que no compra nada.
+#   `plan_execute`     dominado, sin region ganadora medida.
+CAMPAIGN_INCLUDE = ("graph_traverse", "pointer_chase")
+
+
+def campaign_roster() -> list[str]:
+    """El plantel que corre la campana. Derivado del CATALOG, con excepciones nombradas.
+
+    Se usa desde los scripts del banco en vez de una lista literal: asi retirar un brazo
+    lo saca de la campana en el mismo commit, y no en el que alguien se acuerde.
+    """
+    return baseline_roster(CAMPAIGN_INCLUDE)
+
 
 REGISTRY: dict[str, ParadigmFn] = {
     "direct": direct,

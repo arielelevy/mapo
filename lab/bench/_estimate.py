@@ -144,7 +144,10 @@ def estimate(
 # nadie importa es el que se queda viejo sin que nadie se entere.
 
 CORPUS_CAMPANA = "corpus/gold_h1"
-NO_SE_CORREN = ("cot", "plan_execute")
+# EL PLANTEL SALE DEL CATALOGO, no de una lista literal. Estaba clavado a mano aca y en
+# otros tres scripts, y los cuatro quedaron viejos el mismo dia en que se retiro
+# `map_reduce`. Las excepciones —quien corre estando retirado o en standby, y por que—
+# viven en `CAMPAIGN_INCLUDE`, en un solo lugar.
 # ~4 caracteres por token. Sirve para DIMENSIONAR, no para cobrar, y por eso alcanza.
 CHARS_POR_TOKEN = 4
 
@@ -179,14 +182,14 @@ def campana(corpus: str | Path = CORPUS_CAMPANA, repeat: int = 3) -> None:
     suposicion que queda viva, y esta declarada acá en vez de escondida en el numero.
     """
     from app.feasibility import check
-    from app.paradigms import REGISTRY
+    from app.paradigms import REGISTRY, campaign_roster
     from app.runner import load_rows
 
     raiz = Path(corpus)
     docs = json.loads((raiz / "documents.json").read_text(encoding="utf-8"))
     tareas = json.loads((raiz / "tasks.json").read_text(encoding="utf-8"))
     material = _material_por_tarea(corpus)
-    roster = sorted(set(REGISTRY) - set(NO_SE_CORREN))
+    roster = campaign_roster()
 
     # El costo por celda sale del registro de la LIGHT, que es el unico que existe sobre
     # este corpus. Es un piso: se midio en `w4`.

@@ -183,7 +183,7 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
 
 ## Resumen — todo de un vistazo
 
-`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **13 abiertos · 10 en curso · 149 cerrados** (contados 2026-08-29)
+`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **14 abiertos · 10 en curso · 149 cerrados** (contados 2026-08-29)
 
 > **El contador se cuenta, no se recuerda.** Decía «59 abiertos · 16 en curso · 52
 > cerrados» y los números reales eran 14, 10 y 147: se había escrito a mano y quedado
@@ -456,6 +456,37 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
 - [x] **P-2c** · **ESTABLECIDA** con `P-2f` (`_analyze_p2f.py`): **3 de 13 celdas** tienen una transicion presente en todas las replicas exitosas y ausente en todas las fallidas, contra **mediana nula 0**, `p = 0,0078`. El `p = 0,055` anterior estaba medido con `n=3`, donde la **mediana nula era 7 de 13** — el criterio se satisfacia por casualidad. Con `n=9` el observado BAJA de 10 a 3 y el null cae a 0: lo que se cayo era el ruido. Debil y real: un corpus, un modelo, 3 celdas
 - [x] **P-2f** · corrida completa: 13 celdas x 9 trials en `gold_p17b` (gemelo byte-identico, para no tocar el veredicto congelado de P17). **117 filas**, y el piso de `p` por celda bajo de `>= 1/3` —donde ninguna celda podia dar significativa aunque la senal fuera perfecta— a `0,008` en 10 de 13
 - [x] **P-2d** · **resuelto, y el rango que faltaba no era un rango.** El reticulo ordena **como** se obtuvo una creencia; hacia falta ademas **sobre que es**. `Scope ∈ {REQUEST, POPULATION}` lo separa, y el piso de las acciones exige las dos cosas — asi la asociacion aprendida entra honesta como `COMPUTED` sobre `POPULATION` y queda **estructuralmente fuera de lo irreversible sin degradarle la procedencia**. `AssociationTable.as_beliefs()` la convierte, y afirma la **medicion** y no la recomendacion: el invariante «COMPUTED exige credencia 1,0» rechazo el primer intento —poner la fuerza como credencia— y tenia razon. `test_science.py` §37
+- [ ] **P-2h** · **el reparto de `handoff` no se aprende, y es el consumidor natural de
+  `P-2g`** (idea del autor, 2026-08-29: «¿le metemos el aprendizaje a los handoff, quizá por
+  beliefs?»).
+
+  **Media respuesta ya está.** `handoff` **usa** creencias donde importa: el agente
+  **propone** la transferencia —`ELICITED`, es su lectura— y el **código autoriza** —
+  `COMPUTED`, exige que lo que falta aparezca **literal** en otro alcance—. Ésa es la
+  máquina de procedencia aplicada a un handoff, y es lo que lo separa de los tres
+  frameworks consultados, donde `transfer_to_agent()` es una tool que el modelo llama.
+
+  **Lo que NO se aprende es el reparto.** `_scopes` parte por índice (`unit_ids[i::n]`),
+  arbitrario **a propósito**: un bloque contiguo agruparía unidades vecinas del corpus y
+  mediría localidad del índice en vez de alcance.
+
+  **Por qué esto y `P-2g` son el mismo trabajo.** `AssociationTable.as_beliefs()` produce
+  creencias `COMPUTED`/`POPULATION` que ninguna regla consume. Un reparto aprendido —qué
+  unidades conviene que viajen juntas, reforzado **por resultado** y no por frecuencia— es
+  exactamente una asociación entre pares, y sería el primer consumidor real de esa tabla.
+
+  **Y es FACTOR, no patrón**, por la prueba de las cuatro preguntas: cambiar cómo se parte
+  el alcance no cambia cuántas llamadas hay, ni quién decide la próxima, ni si un paso puede
+  cambiar el plan. Así que se mide cruzado —`{reparto fijo, reparto aprendido} × {handoff,
+  supervisor}`— y no como un brazo nuevo.
+
+  **La tensión que hay que resolver ANTES, y es de diseño.** El reparto aprendido no cruza
+  el invariante —el código sigue decidiendo— pero **sí** convierte una estadística en
+  control de flujo. Y el `supervisor` tiene la versión aguda del mismo problema escrita en
+  su docstring: si el modelo dibujara la frontera del sub-agente, ahí sí se cruzaría. El
+  casillero que parece correcto es un **prior sobre el orden sugerido**, no una regla que
+  reparta. Esa decisión es del autor y por eso esto no se hizo solo.
+
 - [ ] **P-2g** · **la asociación aprendida se fabrica como creencia y NINGUNA REGLA la
   consume** (pregunta del autor, 2026-08-29: «¿está extendida la plasticidad al orden de
   tools y a los pesos del handoff?»). La respuesta medida es que **no**, y los tres estados

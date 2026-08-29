@@ -40,7 +40,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from app.contracts import OBLIGATIONS
 from app.feasibility import check
-from app.paradigms import TRAVERSES_SCOPE
+from app.paradigms import TRAVERSES_SCOPE, campaign_roster
 from app.rules import BULK_THRESHOLD
 
 # La fila que se mide hoy. Importa que brazos se CORREN, no cuales existen — pero
@@ -51,12 +51,16 @@ from app.rules import BULK_THRESHOLD
 # Un auditor desactualizado es peor que no tenerlo: informa con la autoridad de una medida.
 # Asi que se DERIVA del mismo lugar que la corrida — `baseline_roster` — y las exclusiones
 # se nombran, que es lo que la version anterior queria proteger.
-from app.paradigms import REGISTRY, baseline_roster  # noqa: E402
 
 # Los dos que NO se corren, por decision del autor y no por el catalogo: `cot` es el control
 # nulo por prompting (2026-08-26) y `plan_execute` esta retirado por dominado (2026-08-29).
-NO_SE_CORREN = ("cot", "plan_execute")
-FILA_ACTIVA = tuple(baseline_roster(tuple(sorted(set(REGISTRY) - set(NO_SE_CORREN)))))
+# EL PLANTEL SALE DEL CATALOGO, no de una lista literal. Estaba clavado a mano aca y en
+# otros tres scripts, y los cuatro quedaron viejos el mismo dia en que se retiro
+# `map_reduce`. Las excepciones —quien corre estando retirado o en standby, y por que—
+# viven en `CAMPAIGN_INCLUDE`, en un solo lugar.
+#  YA es  con las excepciones nombradas: envolverlo
+# otra vez no agregaba nada y sugeria que eran dos cosas.
+FILA_ACTIVA = tuple(campaign_roster())
 
 
 def disparadores() -> dict[str, callable]:
