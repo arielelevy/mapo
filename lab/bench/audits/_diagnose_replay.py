@@ -50,8 +50,12 @@ def main() -> None:
             "seed": self._settings.seed if seed_override is None else seed_override,
             "max_completion_tokens": max_tokens or self._settings.max_tokens,
         }
-        if self._settings.temperature is not None:
-            payload["temperature"] = self._settings.temperature
+        # Sigue a `LLMClient.complete`: `temperature` se fue del payload el 2026-08-29
+        # —los modelos de razonamiento no la aceptan— y la reemplaza `reasoning_effort`.
+        # Este archivo REIMPLEMENTA la clave de cache, asi que divergir aca hace que el
+        # diagnostico de replay reporte misses que no existen.
+        if self._settings.reasoning_effort is not None:
+            payload["reasoning_effort"] = self._settings.reasoning_effort
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"

@@ -63,6 +63,13 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from app.config import Settings
 from app.paradigms import REGISTRY, campaign_roster
+
+# EL MODELO SALE DE LA MISMA TABLA QUE LA CAMPAÑA, y eso es el punto entero de esta corrida:
+# probar la matriz sobre `nano` y despues lanzar sobre `luna` seria verificar el cableado de
+# una corrida que no es la que se va a pagar. `gpt-5.6` ademas tiene una restriccion que
+# `nano` no tiene —no admite `tools` junto con razonamiento en Chat Completions— asi que una
+# light sobre nano NO puede atrapar el 400 que la campaña se comeria en la primera llamada.
+from bench.runs._run_homogenea import MODELO_LIGHT as MODELO
 from app.runner import Runner
 
 CORPUS = "gold_h1"
@@ -161,10 +168,10 @@ def main() -> None:
     base_settings = Settings.from_env()
     settings = replace(
         base_settings,
-        endpoint=os.environ["MAPO_NANO_ENDPOINT"].rstrip("/"),
-        api_key=os.environ["MAPO_NANO_KEY"],
-        chat_deployment="gpt-5.4-nano",
-        temperature=0.0,
+        endpoint=os.environ[MODELO["endpoint"]].rstrip("/"),
+        api_key=os.environ[MODELO["key"]],
+        chat_deployment=MODELO["deployment"],
+        reasoning_effort=MODELO["esfuerzo"],
         results_dir=base_settings.results_dir / "light",
         corpus_dir=Path(sys.argv[1]) if len(sys.argv) > 1 else base_settings.corpus_dir,
     )

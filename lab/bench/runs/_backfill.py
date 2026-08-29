@@ -46,7 +46,7 @@ def main() -> None:
     ap.add_argument("--model-dir", required=True,
                     help="subcarpeta de results/ (nano, terra, ...)")
     ap.add_argument("--deployment", required=True)
-    ap.add_argument("--temperature-zero", action="store_true",
+    ap.add_argument("--temperature-zero-OBSOLETO", action="store_true",
                     help="la corrida original fijo temperature=0 (nano). Sin esto se "
                          "omite, como en los 5.6. La huella depende de esto, y con la "
                          "huella equivocada NINGUNA clave de cache acierta.")
@@ -58,7 +58,7 @@ def main() -> None:
         endpoint=os.environ["MAPO_NANO_ENDPOINT"].rstrip("/"),
         api_key=os.environ["MAPO_NANO_KEY"],
         chat_deployment=args.deployment,
-        temperature=0.0 if args.temperature_zero else None,
+        reasoning_effort=None,
         results_dir=base.results_dir / args.model_dir,
     )
     runner = Runner(s, args.corpus, retriever_arm="hybrid", surface_variant="basic")

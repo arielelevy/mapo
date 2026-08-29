@@ -238,6 +238,22 @@ def request_with_retry(
         time.sleep(wait)
 
 
+# QUE DEPLOYMENTS SON DE RAZONAMIENTO. Se decide por el NOMBRE, y eso es fragil a
+# proposito: la alternativa es una lista de deployments que hay que mantener a mano, y este
+# repo ya pago dos veces el precio de una lista escrita a mano que quedo vieja.
+#
+# `gpt-5.6` en adelante es lo que la doc marca con el pie ^9^: «support the Chat Completions
+# API and function tools, but not both at the same time unless `reasoning_effort` is
+# `none`». `gpt-5.4-nano` esta en la misma tabla de modelos de razonamiento y NO tiene ese
+# pie — acepta tools con su default, y de hecho acepta `temperature` explicita.
+FAMILIAS_CON_TOOLS_Y_RAZONAMIENTO_EXCLUYENTES = ("gpt-5.6", "gpt-5.7", "gpt-6")
+
+
+def _es_de_razonamiento(deployment: str) -> bool:
+    """Si este deployment rechaza `tools` junto con un `reasoning_effort` distinto de `none`."""
+    return deployment.startswith(FAMILIAS_CON_TOOLS_Y_RAZONAMIENTO_EXCLUYENTES)
+
+
 class SealedCacheMiss(RuntimeError):
     """Raised when a sealed replay needs a completion that is not in the cache.
 
@@ -480,15 +496,43 @@ class LLMClient:
             "seed": self._settings.seed if seed_override is None else seed_override,
             "max_completion_tokens": max_tokens or self._settings.max_tokens,
         }
-        # gpt-5-chat accepts ONLY the default temperature and 400s on an explicit 0,
-        # so the parameter is omitted rather than forced. Omission is recorded in the
-        # fingerprint, because a run at the model default is not the same experiment
-        # as a run at temperature 0 and the two must never be pooled.
-        if self._settings.temperature is not None:
-            payload["temperature"] = self._settings.temperature
+        # `temperature` YA NO SE MANDA (2026-08-29). La documentacion de Azure lista a los
+        # modelos de razonamiento bajo «Not Supported — `temperature`, `top_p`, ...»: no es
+        # que solo acepten 1, es que el parametro no existe para ellos, y `gpt-5.6-luna` y
+        # `gpt-5.6-terra` devuelven 400 ante un `temperature: 0.0` explicito.
+        #
+        # Se saco del payload Y de la huella, en el mismo movimiento. Sacarlo de la huella
+        # dejandolo vivo aca habria sido peor que dejarlo: dos corridas a temperaturas
+        # distintas compartirian clave de cache y ninguna guarda las separaria.
+        if self._settings.reasoning_effort is not None:
+            payload["reasoning_effort"] = self._settings.reasoning_effort
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
+            # Y ACA ESTA LA RESTRICCION QUE GOBIERNA TODO ESTE BANCO. La doc: «The
+            # `gpt-5.6` and later models support the Chat Completions API and they support
+            # tools, but the Chat Completions API doesn't support the two together. The
+            # request fails EVEN WHEN YOU DON'T SEND `reasoning_effort`, because these
+            # models default to `medium`. Sending `tools` is enough to trigger the error.»
+            #
+            # Todo paradigma de este catalogo es un bucle de herramientas sobre Chat
+            # Completions, asi que sobre un modelo de razonamiento hay dos caminos: la
+            # Responses API, o `reasoning_effort='none'` en cada request que lleve tools.
+            #
+            # NO SE FUERZA `none` DESDE ACA. Seria arreglar un 400 escondiendo que el
+            # modelo corre SIN RAZONAR —«the model then calls tools without reasoning,
+            # which loses the planning quality that reasoning provides»—, y eso cambia lo
+            # que se esta midiendo. Tiene que ser una eleccion declarada en la corrida, que
+            # entra a la huella y queda en cada fila.
+            if (self._settings.reasoning_effort not in (None, "none")
+                    and _es_de_razonamiento(self._settings.chat_deployment)):
+                raise ValueError(
+                    f"{self._settings.chat_deployment} no admite `tools` junto con "
+                    f"`reasoning_effort={self._settings.reasoning_effort!r}` en Chat "
+                    f"Completions. Corre con `MAPO_REASONING_EFFORT=none` —y entonces el "
+                    f"modelo llama tools SIN razonar, que es otra medicion y hay que "
+                    f"declararlo— o porta el ejecutor a la Responses API."
+                )
 
         key = self._key(payload)
         cached = self._read_cache(key)
