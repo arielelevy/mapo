@@ -76,6 +76,27 @@ ANSWER_CONTRACT = (
 
 
 def parse_answer(text: str) -> str:
+    """El valor del contrato `ANSWER:`, o el texto entero si no esta.
+
+    EL FALLBACK ES INDULGENCIA DELIBERADA, y hay que saber contra que. Si el modelo olvido
+    la linea del contrato, tomar el texto completo recupera una respuesta que si no se
+    perderia entera — y para un paradigma cuya salida ES prosa con esa linea, eso es lo
+    correcto.
+
+    PERO SOLO VALE PARA TEXTO QUE INTENTABA CUMPLIR ESTE CONTRATO. Aplicado a una salida de
+    OTRO contrato, el fallback no recupera: inventa. `handoff` le pasaba el JSON de su
+    sub-agente —`{"status": "needs", ...}`— y esto devolvia el JSON entero como respuesta;
+    la celda quedaba calificada contra la palabra `needs`, con F1 cero por construccion. Se
+    midio en 11 celdas de `luna` antes de encontrarlo (2026-08-29).
+
+    NO SE ENDURECE, y la decision es del momento: devolver vacio cuando falta la linea
+    cambiaria el comportamiento de `dag_strategy`, `supervisor` y el bucle generico en
+    mitad de una campaña, y eso parte el registro en dos epocas sin que ninguna guarda lo
+    vea. Lo que se arreglo es el llamador que le pasaba texto de otro contrato.
+
+    LA REGLA QUE QUEDA: `parse_answer` se llama sobre salida que intentaba emitir
+    `ANSWER:`. Sobre cualquier otra cosa, leer el campo que ese otro contrato define.
+    """
     matches = re.findall(r"^ANSWER:\s*(.+)$", text, flags=re.MULTILINE)
     # Last wins: a paradigm that revises its answer (Reflection) emits the contract
     # line more than once, and the final one is the one it stands behind.

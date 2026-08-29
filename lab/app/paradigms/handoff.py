@@ -141,6 +141,10 @@ def handoff(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Re
         scopes = [units]
 
     partials: list[str] = []
+    # LA RESPUESTA DEL ULTIMO AGENTE QUE RESOLVIO. Se guarda al declararla y no se
+    # reconstruye del texto: el texto del ultimo agente puede ser un `needs`, y el que
+    # resolvio puede haber sido el anterior.
+    resuelto: str = ""
     handed: dict[str, Any] | None = None
 
     for index, scope in enumerate(scopes):
@@ -155,9 +159,24 @@ def handoff(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Re
                 f"It could not resolve: {handed['missing']!r}\n"
                 f"It did establish: {handed['partial']}"
             )
+        # UN SOLO CONTRATO DE SALIDA, y esto era un bug que costo una corrida.
+        #
+        # Aca iba tambien `answer_contract(surface)`, que pide una linea `ANSWER: <x>`,
+        # mientras `AGENT_CONTRACT` pide **JSON y nada mas**. El sub-agente recibia las dos
+        # instrucciones y no podia cumplir las dos: obedecia al JSON —que es el que su rol
+        # necesita, porque tiene que poder decir «me falta esto»— y despues el ensamblado
+        # leia ese JSON con `parse_answer`, que no encuentra `ANSWER:` y devuelve el texto
+        # entero. La respuesta calificada terminaba siendo la palabra `needs`.
+        #
+        # El F1 de «needs» contra un numero de cuenta es cero POR CONSTRUCCION, asi que
+        # `handoff` no estaba fallando la tarea: estaba fallando al decir su respuesta. Se
+        # midio en 11 celdas de `luna` antes de encontrarlo.
+        #
+        # El contrato de formato del banco lo aplica el ENSAMBLADO, una sola vez y al final
+        # — que es donde vive la respuesta del patron, no en cada sub-agente.
         messages = [{
             "role": "user",
-            "content": f"Task: {task['question']}\n\n{contract}\n\n{answer_contract(surface)}",
+            "content": f"Task: {task['question']}\n\n{contract}",
         }]
 
         completion, sub_usage, sub_transcript, turns = _run_tool_loop(
@@ -176,6 +195,12 @@ def handoff(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Re
             partials.append(partial)
 
         if status == "resolved":
+            # LO QUE EL AGENTE DECLARO COMO RESPUESTA, tomado de su campo y no del texto.
+            # Si un agente posterior tambien resuelve, gana el suyo: es el que tuvo la
+            # transferencia y por lo tanto mas evidencia.
+            declarado = str(payload.get("answer") or "").strip()
+            if declarado:
+                resuelto = declarado
             handed = None
             continue
 
@@ -202,8 +227,19 @@ def handoff(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Re
         else:
             handed = None
 
+    # EL ENSAMBLADO SALE DE LO QUE LOS AGENTES DECLARARON, no del texto crudo del ultimo.
+    #
+    # Antes era `parse_answer(crudo) or " ".join(partials)`, y el `or` no rescataba nunca:
+    # `parse_answer` devuelve el texto ENTERO cuando no encuentra `ANSWER:`, asi que nunca
+    # da vacio y `partials` era codigo muerto. Sobre un JSON eso devolvia `needs`.
+    #
+    # Ahora se lee el campo que el contrato del sub-agente define, en el orden que importa:
+    # la respuesta del ULTIMO agente que resolvio —que es el que tuvo la transferencia si
+    # hubo— y si ninguno resolvio, lo que los agentes SI establecieron. Que ninguno resuelva
+    # es un resultado del patron y tiene que llegar como respuesta pobre, no como la palabra
+    # `needs`.
+    answer = resuelto or " ".join(p for p in partials if p)
     crudo = completion.text if completion else ""
-    answer = parse_answer(crudo) or " ".join(partials)
     return Result(
         answer=answer,
         raw_text=crudo,
