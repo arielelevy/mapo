@@ -127,7 +127,30 @@ def main() -> None:
                         f"`{nombre}`, que esta {CATALOG[nombre].status.value}"
                     )
 
-    # 3. ENLACES. Ya no es sobre el catalogo, pero es la misma clase: algo que el documento
+    # 3. NUMEROS DE LECCION UNICOS. `LECCIONES.es.md` se cita POR NUMERO desde
+    #    `PENDIENTES.es.md` y `DISENO.es.md` —una docena de referencias— asi que un numero
+    #    que apunta a dos entradas hace que la cita no signifique nada, y nada avisa: las
+    #    dos entradas se leen bien por separado.
+    #
+    #    Encontrado el 2026-08-29: `5.7` estaba duplicado. La entrada se numera a mano al
+    #    escribirla, y con 76 entradas y las secciones apiladas fuera de orden —la §8 tiene
+    #    entradas 2.4, 5.3, 6.3, 7.8— nadie puede sostener la unicidad leyendo.
+    lecciones = RAIZ / "lab" / "LECCIONES.es.md"
+    if lecciones.exists():
+        vistos: dict[str, int] = {}
+        for i, linea in enumerate(lecciones.read_text(encoding="utf-8").splitlines(), 1):
+            m = re.match(r"### (\d+\.\d+[a-z]?) ", linea)
+            if not m:
+                continue
+            numero = m.group(1)
+            if numero in vistos:
+                hallazgos.append(
+                    f"LECCIONES.es.md:{i}  repite el numero «{numero}», ya usado en la "
+                    f"linea {vistos[numero]} — y las lecciones se citan por numero"
+                )
+            vistos[numero] = i
+
+    # 4. ENLACES. Ya no es sobre el catalogo, pero es la misma clase: algo que el documento
     #    afirma y se puede derivar.
     enlace = re.compile(r"\]\(([^)#:]+\.(?:md|py|json|svg))\)")
     for doc in RAIZ.rglob("*.md"):

@@ -122,9 +122,23 @@ reducir la brecha de oráculo del ruteo **aunque mejore el sistema entero**.
 
 ### 3.3 Soldar una dimensión adentro de un brazo contamina el hallazgo · `MEDIDO`
 
-`Blackboard` está definido dentro de `dag_strategy` y no lo usa nadie más. `dag_strategy`
-es el mejor fijo en `gold_transfer`. Entonces **«el efecto dag_strategy» es la conjunción de
-la topología de olas y el estado compartido, y nada en el registro las separa.**
+`Blackboard` estaba definido dentro de `dag_strategy` y no lo usaba nadie más.
+`dag_strategy` es el mejor fijo en `gold_transfer`. Entonces **«el efecto dag_strategy» era
+la conjunción de la topología de olas y el estado compartido, y nada en el registro las
+separaba.**
+
+**Saldado en el código, no todavía en la medición** *(2026-08-29)*. La pizarra vive en
+`app/board.py`, es una dimensión (`shared_state`) que se cruza contra todo el catálogo, y
+`offer_board` la ofrece como tool a cualquier patrón. Lo que falta es correrla: `F-2b`.
+
+Y la mitad que **no** se saldó es la que importa para leer el registro viejo: **todo número
+de `dag_strategy` anterior a la extracción sigue siendo una conjunción.** Extraer el factor
+no desagrega retroactivamente lo que se midió plegado — sólo hace posible desagregarlo de
+acá en adelante.
+
+> **Un factor plegado adentro de un brazo no se puede atribuir**, y el orden correcto quedó
+> escrito por haberlo pagado: extraer, medir cruzado, y **recién entonces** decidir dónde
+> vive.
 
 ### 3.4 Contestá la pregunta antes de pagarla · `MÉTODO`
 
@@ -297,9 +311,20 @@ Agents SDK genera `transfer_to_<agente>`; Google ADK llama a `transfer_to_agent(
 «LLM-driven delegation». **Los tres transfieren el control con una llamada que emite el
 modelo.**
 
-La alternativa medible: misma **estructura** —alcances independientes, transferencia de
-propiedad, contexto completo— y **otra autoridad**: una regla determinista sobre la base de
-creencias, con piso de procedencia. Reproducible, gateable y auditable.
+La alternativa medible: misma **estructura** —alcances independientes y transferencia de
+propiedad— y **otra autoridad**: una regla determinista sobre la base de creencias, con piso
+de procedencia. Reproducible, gateable y auditable.
+
+Implementada en `handoff`: el agente **propone** la transferencia (`ELICITED`, es su
+lectura) y el **código autoriza** (`COMPUTED`, exige que lo que falta aparezca **literal**
+en otro alcance).
+
+> **Corrección 2026-08-29:** esta entrada decía «alcances independientes, transferencia de
+> propiedad, **contexto completo**», y las dos primeras contradicen a la tercera. Cada
+> agente ve **sólo su alcance** (`ToolSurface.scoped`), y el contrato se lo dice: *«You own
+> ONLY the units listed below. You cannot see any others.»* No es un detalle de
+> implementación — con contexto completo no hay alcances independientes, y sin alcances
+> independientes no hay nada que transferir.
 
 ### 8.3 Una constante que depende del dominio no debería ser una constante · `MÉTODO`
 
@@ -1153,7 +1178,9 @@ caracteres**. Ese conteo daba **4 de 4 retenidas** mientras el texto real caía 
 
 ---
 
-### 5.7 «El costo medido supersede al prior» estaba en un comentario y en ningún lado más · `MEDIDO`
+### 5.27 «El costo medido supersede al prior» estaba en un comentario y en ningún lado más · `MEDIDO`
+
+> *Renumerada de `5.7` a `5.27` el 2026-08-29: había DOS entradas con el número `5.7`.* Las lecciones se citan por número desde `PENDIENTES.es.md` y `DISENO.es.md`, así que un número que apunta a dos cosas hace que la cita no signifique nada. Se movió **ésta** y no la otra porque `X-5a` cita a la otra: renumerar la citada habría arreglado el duplicado rompiendo una referencia.
 
 El constructor del router lo dice desde siempre: *«relative priors only… measured
 `mean_cost` supersedes them once theta has data»*. **No lo hacía nadie.** `mean_cost` sólo
@@ -1419,8 +1446,20 @@ que entre tareas no hay caché posible ni con la mejor de las intenciones.
 Dentro de una misma tarea sí hay caché, porque el bucle de herramientas acumula mensajes y
 el prefijo crece por encima del umbral. **Eso ya está pasando y es gratis.** Lo que no había
 era manera de saberlo: `cached_calls` cuenta *nuestro* caché de disco —que evita la llamada
-entera— y el del proveedor, que la abarata, **no se registraba**. Ahora sí
-(`provider_cached_tokens`, desde `prompt_tokens_details`).
+entera— y el del proveedor, que la abarata, no se registraba.
+
+**Y «ahora sí» estaba a medias, lo cual es la parte que vale** *(corregido 2026-08-29)*.
+`provider_cached_tokens` se parseaba de `prompt_tokens_details` y entraba a `Usage` — y
+**`Usage` no lo pasaba a la fila**. O sea: se medía en cada llamada y moría en el proceso,
+así que desde el registro seguía siendo imposible saber cuánto se servía barato. Es la misma
+familia que `theta_may_learn_online` y `seal_replay`: algo que se produce y nadie consume,
+sólo que acá el consumidor faltante era el registro mismo.
+
+Con el campo en `Row`, el número se pudo medir por fin, y es chico: **2,3% de la entrada
+sobre el registro entero de la light** (`w4`), **3,8% sobre cuatro celdas de `w16`**, y
+**`w48` sin medir** — que es donde está el 61% del gasto y donde las conversaciones son más
+largas. La aritmética de arriba explica por qué es chico y la medición lo confirma, que no
+es lo mismo que suponerlo.
 
 **El premio, con el sobrecosto real en 6,7% y concentrado en un solo brazo, era chico desde
 el principio.** Verificar antes de construir costó una búsqueda en la documentación y una
@@ -2247,8 +2286,20 @@ Se escribe acá para que no se lo confunda con lo de arriba.
   signo de un paradigma al condicionar **no lo es**, porque el recall es consecuencia del
   paradigma y condicionar sobre una variable posterior al tratamiento no da un efecto
   directo insesgado.
-- **Que la retención importa.** Está medido el **recall** —si la evidencia se leyó—, no la
-  **retención** —si sobrevivió hasta la llamada que responde—. El segundo eslabón no está
-  instrumentado.
+- **Que la retención importa.** *(Actualizado 2026-08-29: el segundo eslabón **ya está
+  instrumentado**, y sigue sin decir nada — por un motivo que vale más que la medición.)*
+  `ToolSurface.note_retention` mide cuánto del texto leído **sigue en la historia** cuando
+  llega la llamada que responde, y `retention` viaja en cada fila.
+
+  Y da **1,0 por construcción** en `basic`, que es la variante de **todos** los estudios
+  medidos: ahí no hay compactación, así que nada puede sacar evidencia de la historia. Que
+  dé 1,0 no es un resultado sobre la retención — es que la pregunta no se puede hacer en
+  ese régimen. Empieza a decir algo en `cognitive` y `managed`, y `managed` **todavía no
+  corrió** (`C-4`).
+
+  Un detalle que costó una versión: se mide el **texto**, no la mención. La compactación no
+  borra, degrada a un stub que **conserva el id** — así que contar ids presentes daba
+  retención 1,0 justo en la variante que compacta, o sea «todo sobrevivió» exactamente
+  donde nada sobrevivió.
 - **Que el detector honesto arregla el ruteo.** Arregla que la pregunta **se pueda hacer**.
   La respuesta es P17.
