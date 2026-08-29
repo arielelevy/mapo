@@ -60,6 +60,18 @@ MAX_TURNS_PER_AGENT = 6
 HANDOFF_FLOOR_PROPOSAL = Provenance.ELICITED
 HANDOFF_FLOOR_AUTHORISATION = Provenance.COMPUTED
 
+# EL FORMATO DE `answer` VA ADENTRO DEL CONTRATO, y no al lado.
+#
+# Antes se concatenaba `answer_contract` —«responde con una linea ANSWER: <x>»— a este
+# contrato, que pide JSON y nada mas. Los dos no se pueden cumplir, y CUAL OBEDECIA ERA UNA
+# MONEDA AL AIRE: en `c7-000-neg` la replica t0 obedecio el `ANSWER:` y salio «no
+# escalation» (correcto), y t1 y t2 obedecieron el JSON. Tres replicas de la misma celda con
+# formatos de salida distintos — no por temperatura, por contratos en conflicto.
+#
+# Sacar el segundo contrato quito la ambiguedad y dejo al campo `answer` SIN FORMA: el
+# agente empezo a escribir prosa ahi («Marta Arrieta is identified as cus...»), que contra un
+# veredicto corto puntua cero igual. La correccion completa no es elegir uno de los dos
+# contratos: es que el que queda LLEVE ADENTRO lo que el otro pedia.
 AGENT_CONTRACT = """You own ONLY the units listed below. You cannot see any others.
 
 Work your units. Then answer with JSON only:
@@ -68,6 +80,10 @@ Work your units. Then answer with JSON only:
 {"status": "needs", "missing": "<the exact literal string you could not resolve>",
  "partial": "<what you did establish>"}
   — your units mention something they do not define.
+
+`answer` must be the VALUE ALONE and nothing else: a name, a number, a verdict. No sentence,
+no explanation, no restating of the question. If several values are required, separate them
+with '; '. A sentence in `answer` is a wrong answer even when it contains the right value.
 
 `missing` must be a string that appears VERBATIM in your units. Do not paraphrase it and
 do not invent one: it is looked up literally in the other scopes, and a paraphrase finds
