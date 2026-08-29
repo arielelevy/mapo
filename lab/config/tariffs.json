@@ -11,7 +11,9 @@
     "long_context: los `5.6` cobran 2x la entrada y 1,5x la salida por encima del umbral",
     "de contexto corto. cache_write: se cobra en los `5.6` y NO en nano — en `sol` la",
     "escritura sale mas que la ENTRADA de `terra`, asi que un prefijo que cambia seguido",
-    "paga escritura sin llegar a cobrar lectura nunca."
+    "paga escritura sin llegar a cobrar lectura nunca.",
+    "",
+    "context_input_tokens es la ventana de ENTRADA (la total incluye 128.000 de salida). reasons_by_default y explicit_effort_with_tools estan MEDIDOS con una llamada real sobre un prompt dificil, no leidos de la documentacion: terra razona 70 tokens al default y 66 con herramientas, y rechaza (HTTP 400) que se le pase el nivel explicito junto con tools; nano no razona al default pero SI acepta el nivel con tools. `luna` y `sol` se declaran por familia y NO estan medidos individualmente — es lo que hay, y decirlo es distinto de fingir que se probaron."
   ],
   "source": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/ + prices.azure.com/api/retail/prices",
   "verified_on": "2026-08-28",
@@ -19,59 +21,70 @@
   "sku": "GlobalStandard",
   "currency": "USD",
   "unit": "per_million_tokens",
-
   "tariffs": {
     "nano": {
       "deployment": "gpt-5.4-nano",
-      "prompt": 0.20,
+      "prompt": 0.2,
       "completion": 1.25,
       "cached_prompt": 0.02,
       "cache_write": null,
       "long_context_prompt": null,
-      "long_context_completion": null
+      "long_context_completion": null,
+      "context_input_tokens": 272000,
+      "reasons_by_default": false,
+      "explicit_effort_with_tools": true
     },
     "luna": {
       "deployment": "gpt-5.6-luna",
-      "prompt": 0.20,
-      "completion": 1.20,
+      "prompt": 0.2,
+      "completion": 1.2,
       "cached_prompt": 0.02,
       "cache_write": 0.25,
-      "long_context_prompt": 0.40,
-      "long_context_completion": 1.80
+      "long_context_prompt": 0.4,
+      "long_context_completion": 1.8,
+      "context_input_tokens": 922000,
+      "reasons_by_default": true,
+      "explicit_effort_with_tools": false
     },
     "terra": {
       "deployment": "gpt-5.6-terra",
-      "prompt": 2.00,
-      "completion": 12.00,
-      "cached_prompt": 0.20,
-      "cache_write": 2.50,
-      "long_context_prompt": 4.00,
-      "long_context_completion": 18.00
+      "prompt": 2.0,
+      "completion": 12.0,
+      "cached_prompt": 0.2,
+      "cache_write": 2.5,
+      "long_context_prompt": 4.0,
+      "long_context_completion": 18.0,
+      "context_input_tokens": 922000,
+      "reasons_by_default": true,
+      "explicit_effort_with_tools": false
     },
     "sol": {
       "deployment": "gpt-5.6-sol",
-      "prompt": 5.00,
-      "completion": 30.00,
-      "cached_prompt": 0.50,
+      "prompt": 5.0,
+      "completion": 30.0,
+      "cached_prompt": 0.5,
       "cache_write": 6.25,
-      "long_context_prompt": 10.00,
-      "long_context_completion": 45.00
+      "long_context_prompt": 10.0,
+      "long_context_completion": 45.0,
+      "context_input_tokens": 922000,
+      "reasons_by_default": true,
+      "explicit_effort_with_tools": false
     }
   },
-
   "embeddings": {
     "text-embedding-3-large": 0.143
   },
-
   "roles": {
     "_comment": [
       "Que arancel juega cada papel del catalogo de modelos (`app/models.py`). Es una",
       "DECISION y por eso esta aca y no derivada: `deep` es `terra` y no `sol` porque",
       "terra es el escalon mas chico que existe, y la regla del repo es no comprar mas",
       "garantia de la que la medicion justifica. Cambiarlo a `sol` es una decision, no un",
-      "ajuste, y se ve en el diff."
+      "ajuste, y se ve en el diff.",
+      "max = sol, y esta FUERA del catalogo por defecto (app/models.EXCEPTIONAL). Declararle un arancel no lo pone en el ruteo: hay que pedirlo por request. No hay ninguna medicion que distinga sol de terra, asi que meterlo adentro seria elegir el doble de precio por un orden que nadie verifico."
     ],
     "fast": "nano",
-    "deep": "terra"
+    "deep": "terra",
+    "max": "sol"
   }
 }

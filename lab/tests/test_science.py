@@ -2019,11 +2019,15 @@ def check_model_pool(ok: bool) -> bool:
     cambio — en una grilla fija se mide un paradigma con el modelo constante; en una
     ruteada se mide el ROUTER.
 
-    EL BLOQUEANTE, que aparecio despues de construir todo esto. Los `gpt-5.6` son modelos
-    de razonamiento y **no soportan Chat Completions + tools a la vez** salvo con
-    `reasoning_effort='none'`. Los paradigmas son bucles de herramientas sobre Chat
-    Completions. El pool se niega AL CONSTRUIR en vez de fallar a mitad de una corrida
-    paga, y este test lo fija para que nadie lo "arregle" sacando la guarda.
+    DOS CORRECCIONES QUE ESTE TEST FIJA, porque me equivoque dos veces seguidas. Primero
+    lei la documentacion —«no soportan Chat Completions y tools a la vez»— y declare que
+    no se podian usar: el pool LEVANTABA. Despues probe con un prompt TRIVIAL, medi cero
+    tokens de razonamiento, y declare que corrian «con el razonamiento apagado».
+
+    Las dos veces concluí desde algo que no podia contradecirme. Con un prompt DIFICIL:
+    `terra` razona al default (70 tokens), razona tambien con herramientas (66), y lo
+    unico que rechaza es el NIVEL explicito junto con tools. `nano` no razona al default
+    pero SI acepta el nivel con tools (`low` -> 35 tokens).
     """
     from dataclasses import replace as _replace
     from app.config import Settings, _optional_deployments
@@ -2046,24 +2050,25 @@ def check_model_pool(ok: bool) -> bool:
                 solo.fingerprint() not in {
                     m["fingerprint"] for m in solo.describe()["members"].values()})
 
-    try:
-        ModelPool(s, {"fast": "d-fast", "deep": "d-deep"})
-        ok &= check("un modelo sin tools sobre Chat Completions LEVANTA", False)
-    except ValueError as exc:
-        ok &= check("un modelo de razonamiento LEVANTA al construir, no a mitad de una "
-                    "corrida paga: los paradigmas son bucles de herramientas",
-                    "Responses API" in str(exc))
+    dos = ModelPool(s, {"fast": "d-fast", "deep": "d-deep"})
+    # LO QUE SE REGISTRA NO ES UNA CARENCIA SINO UNA PERDIDA DE CONTROL. Medido con un
+    # prompt dificil: `terra` corre con herramientas Y RAZONANDO al default (66 tokens de
+    # razonamiento). Lo que rechaza es que se le pase el NIVEL explicito junto con tools.
+    # Asi que el esfuerzo —y por lo tanto parte del costo, porque esos tokens se facturan
+    # como salida— lo decide el modelo y no la configuracion.
+    ok &= check("un modelo que no deja fijar el esfuerzo con tools se REGISTRA, no se "
+                "rechaza: correr, corre — y razonando",
+                "deep" in dos.describe()["effort_not_controllable_with_tools"])
+    ok &= check("y el que si acepta el nivel con herramientas no figura",
+                "fast" not in dos.describe()["effort_not_controllable_with_tools"])
+    ok &= check("las dos propiedades del modelo estan medidas, no leidas: nano no razona "
+                "al default y terra si",
+                _models.FAST.reasons_by_default is False
+                and _models.DEEP.reasons_by_default is True)
 
-    # LAS PROPIEDADES DEL CONJUNTO se prueban con un catalogo de dos que SI pueden. Se
-    # parchea el catalogo a proposito: lo que se verifica aca es la logica de la huella y
-    # del orden, no que exista hoy un caro utilizable — eso es `X-5p` y esta abierto.
     original = _models.CATALOG
     try:
-        _models.CATALOG = (
-            _models.FAST,
-            _replace(_models.DEEP, tools_on_chat_completions=True),
-        )
-        dos = ModelPool(s, {"fast": "d-fast", "deep": "d-deep"})
+        _models.CATALOG = (_models.FAST, _models.DEEP)
         ok &= check("el catalogo efectivo son los que TIENEN deployment",
                     [m.name for m in dos.models] == ["fast", "deep"])
         ok &= check("ordenado de menor capacidad a mayor: el empate cae del lado barato",

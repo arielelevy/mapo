@@ -82,24 +82,25 @@ class ModelPool:
             )
 
         self._miembros: dict[str, PooledModel] = {}
+        # Modelos que razonan al default y NO dejan fijar el nivel junto con herramientas.
+        # Van al `describe()`: es presupuesto que decide el modelo y no la configuracion,
+        # y eso tiene que estar en el registro y no en la cabeza de quien configuro.
+        self._sin_control_de_esfuerzo: list[str] = []
         for m in catalogo:
             if m.name not in deployments:
                 continue
             ajustes = replace(base, chat_deployment=deployments[m.name])
-            if not m.tools_on_chat_completions:
-                # SE LEVANTA AL CONSTRUIR, no al fallar la primera llamada. Los paradigmas
-                # son bucles de herramientas sobre Chat Completions y este modelo no
-                # soporta las dos cosas juntas: dejarlo entrar al pool haria que el ruteo
-                # eligiera un modelo que no puede ejecutar el plan, y el sintoma seria un
-                # error del proveedor a mitad de una corrida paga.
-                raise ValueError(
-                    f"El modelo {m.name!r} ({deployments[m.name]}) no soporta herramientas "
-                    f"sobre Chat Completions —es un modelo de razonamiento— y los "
-                    f"paradigmas de este producto son bucles de herramientas. Hace falta "
-                    f"la Responses API, o `reasoning_effort='none'`, que apaga justo lo "
-                    f"que se paga. Se levanta al construir el pool en vez de fallar a "
-                    f"mitad de una corrida."
-                )
+            if not m.explicit_effort_with_tools:
+                # NI SE LEVANTA NI ES UNA COMPRA DUDOSA — las dos versiones anteriores de
+                # esta guarda estaban mal, y las dos por medir con un prompt trivial.
+                #
+                # Lo medido: estos modelos corren con herramientas Y RAZONANDO al default
+                # (66 tokens de razonamiento). Lo que rechazan es que se les pase el nivel
+                # explicito junto con tools. Asi que lo que se registra no es una carencia
+                # sino una PERDIDA DE CONTROL: el nivel de razonamiento —y por lo tanto
+                # parte del costo, porque esos tokens se facturan como salida— lo decide
+                # el modelo y no la configuracion.
+                self._sin_control_de_esfuerzo.append(m.name)
             self._miembros[m.name] = PooledModel(
                 model=m,
                 deployment=deployments[m.name],
@@ -155,6 +156,7 @@ class ModelPool:
         """Lo que va al EXPLAIN y al reporte: que habia disponible cuando se decidio."""
         return {
             "fingerprint": self.fingerprint(),
+            "effort_not_controllable_with_tools": sorted(self._sin_control_de_esfuerzo),
             "members": {
                 n: {
                     "deployment": p.deployment,

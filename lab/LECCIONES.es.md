@@ -1882,6 +1882,52 @@ hace**, y levanta al construir en vez de fallar a mitad de una corrida paga.
 
 ---
 
+### 7.19 Tres conclusiones seguidas sobre lo mismo, y las dos primeras salieron de una prueba que no podia fallar · `CORRECCIÓN`
+
+Sobre si los `gpt-5.6` sirven para este producto, dije tres cosas en veinte minutos:
+
+| | lo que dije | de dónde salió |
+|---|---|---|
+| **1** | «no soportan tools sobre Chat Completions» | **leí la documentación** y no probé nada |
+| **2** | «sí soportan, pero con el razonamiento apagado» | probé — con un prompt **trivial** |
+| **3** | lo que sigue | probé con un prompt **difícil** |
+
+**La prueba del intento 2 no podía fallar.** Pedí «llamá a la herramienta ping», medí
+`reasoning_tokens=0` y concluí «no razona». Un prompt trivial da cero tokens de
+razonamiento en **cualquier** modelo: la prueba no distinguía «apagado» de «no hacía
+falta». Y el autor lo vio antes que yo — *«el razonamiento es interno, deciden cuándo
+hacerlo»*.
+
+Con un prompt difícil, medido:
+
+| | default | `none` | `low` | +tools default | +tools `low` |
+|---|---:|---:|---:|---|---|
+| `gpt-5.4-nano` | **0** | 0 | 0 | **0** | **35** ✅ |
+| `gpt-5.6-terra` | **70** | 0 | 63 | **66** ✅ | **HTTP 400** |
+
+**`terra` razona por su cuenta al default, y también mientras usa herramientas.** Lo que
+rechaza es que se le pase el **nivel explícito** junto con tools — incluso `low`. La
+restricción no es sobre el razonamiento: es sobre el **parámetro**.
+
+> Y de ahí sale una asimetría que ninguna de mis dos versiones anteriores permitía ver: en
+> **`nano` el nivel de razonamiento es un factor medible hoy** sobre el régimen del producto
+> (con tools, `low` da 35 tokens y funciona); en los `5.6` **no se puede tocar** sin la
+> Responses API — hay que aceptar el que el modelo elija.
+
+**Y eso cambia la comparación de precios otra vez.** Los tokens de razonamiento se facturan
+como **salida**. `terra` al default emite ~66-70 que `nano` no emite. Así que «luna cuesta
+lo mismo que nano por token» no es que sea engañoso: es que **compara dos unidades
+distintas**, y del lado del `5.6` una parte del gasto **la decide el modelo**, no la
+configuración.
+
+**La forma del error, que es lo que hay que llevarse.** Dos veces concluí desde algo que no
+podía contradecirme: primero desde la documentación sin ejecutar, después desde una medición
+cuyo control no discriminaba. **Es el mismo defecto que `_audit_inerte.py` busca en las
+guardas** —una condición que nunca se evalúa de verdad— cometido en mi propio razonamiento
+el mismo día que escribí la herramienta.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

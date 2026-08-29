@@ -53,6 +53,12 @@ class TariffDetail:
     cache_write: float | None
     long_context_prompt: float | None
     long_context_completion: float | None
+    # Hechos MEDIDOS del modelo, no del precio. Viven con el resto de sus hechos para que
+    # cambiar que modelo juega un papel cambie TODAS sus propiedades a la vez: tenerlos
+    # hardcodeados por papel hacia que `fast: luna` heredara las de nano y mintiera.
+    context_input_tokens: int | None
+    reasons_by_default: bool
+    explicit_effort_with_tools: bool
 
 
 def _load(path: Path = TARIFFS_PATH) -> dict[str, Any]:
@@ -92,6 +98,15 @@ def _build(raw: dict[str, Any]) -> tuple[dict[str, TariffDetail], str]:
             cache_write=d.get("cache_write"),
             long_context_prompt=d.get("long_context_prompt"),
             long_context_completion=d.get("long_context_completion"),
+            context_input_tokens=d.get("context_input_tokens"),
+            # SIN DEFAULT BENIGNO. Si el JSON no lo declara, se asume que razona y que NO
+            # deja fijar el esfuerzo: las dos son la suposicion CARA, y equivocarse hacia
+            # el lado caro cuesta plata mientras que hacia el barato cuesta un HTTP 400 a
+            # mitad de una corrida paga.
+            reasons_by_default=bool(d.get("reasons_by_default", True)),
+            explicit_effort_with_tools=bool(
+                d.get("explicit_effort_with_tools", False)
+            ),
         )
     if not detalles:
         raise ValueError(f"{TARIFFS_PATH.name} no declara ningun arancel.")
@@ -128,8 +143,19 @@ def _role(papel: str) -> Tariff:
     return DECLARADOS[nombre]
 
 
+def role_detail(papel: str) -> TariffDetail:
+    """El DETALLE completo del modelo que juega ese papel, no solo su arancel."""
+    roles = _RAW.get("roles") or {}
+    nombre = roles.get(papel)
+    if not nombre or nombre not in DETAILS:
+        raise ValueError(f"El papel {papel!r} no apunta a un arancel declarado.")
+    return DETAILS[nombre]
+
+
 NANO = _role("fast")
 DEEP = _role("deep")
+# EXCEPCIONAL: existe, y esta fuera del catalogo por defecto del ruteo.
+MAX = _role("max")
 
 # Embeddings: lo que HyDE paga aparte de su llamada al modelo.
 EMBEDDINGS: dict[str, float] = dict(_RAW.get("embeddings") or {})

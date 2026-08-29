@@ -38,7 +38,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 from .metrics import Tariff
-from .tariffs import DETAILS, DEEP as ARANCEL_DEEP, NANO as ARANCEL_NANO
+from .tariffs import role_detail
 
 
 class Capability(IntEnum):
@@ -48,10 +48,21 @@ class Capability(IntEnum):
     con costo — «este modelo es 0,7 de bueno pero sale la mitad»— y eso es exactamente
     meter la calidad adentro del presupuesto. Un orden solo permite comparar contra un
     piso, que es la unica pregunta que el dial hace.
+
+    TRES NIVELES Y NO DOS (decision del autor, 2026-08-28). Y agregar el tercero NO
+    multiplica los bins de theta, que es la trampa de `P15`: theta aprende por REGION sobre
+    PARADIGMAS, y el modelo se elige por REGLA —piso del dial, despues presupuesto—. Nada
+    aprende por modelo, asi que el espacio de aprendizaje no cambia. Si algun dia theta
+    aprendiera pares `(modelo, paradigma)`, esto pasaria a multiplicar y habria que
+    volver a mirarlo.
+
+    `MAX` NO ESTA EN EL CATALOGO POR DEFECTO. Ese es el sentido de «excepcional»: no es un
+    escalon mas caro al que se llega subiendo, es uno que hay que PEDIR. Ver `EXCEPTIONAL`.
     """
 
     FAST = 1
     DEEP = 2
+    MAX = 3
 
 
 @dataclass(frozen=True)
@@ -67,17 +78,28 @@ class Model:
     context_tokens: int
     tariff: Tariff
     capability: Capability
-    # SI PUEDE LLAMAR HERRAMIENTAS SOBRE CHAT COMPLETIONS, que no es una obviedad y es lo
-    # que decide si un modelo sirve para este producto.
+    # RAZONA POR SU CUENTA al default, sin que nadie se lo pida. Medido, no leido:
     #
-    # Los `gpt-5.6` son modelos de RAZONAMIENTO y la documentacion es explicita: soportan
-    # Chat Completions y function tools, **pero no las dos a la vez** salvo con
-    # `reasoning_effort='none'`. Para herramientas hay que usar la Responses API.
+    #   prompt dificil, sin tools    nano 0 tokens de razonamiento · terra 70
+    #   prompt dificil, CON tools    nano 0                        · terra 66
+    #   prompt trivial               los dos 0
     #
-    # Los trece paradigmas de este producto son bucles de herramientas sobre Chat
-    # Completions. O sea que un `5.6` NO es reemplazo directo: o se apaga el razonamiento
-    # —y entonces para que se paga— o se reescribe el cliente.
-    tools_on_chat_completions: bool = True
+    # O sea que en los `5.6` el razonamiento es INTERNO Y ADAPTATIVO: el modelo decide
+    # cuando hacerlo, y lo hace tambien mientras usa herramientas. Y esos tokens se
+    # facturan como SALIDA, asi que comparar «precio por token» contra un modelo que no
+    # razona compara dos unidades distintas.
+    reasons_by_default: bool = False
+
+    # SI ACEPTA `reasoning_effort` EXPLICITO JUNTO CON HERRAMIENTAS. Esta es la
+    # restriccion real, y no es la que la documentacion sugiere a primera lectura: los
+    # `5.6` corren con tools y RAZONANDO al default. Lo que rechazan —HTTP 400, incluso
+    # con `low`— es que se les pase el nivel explicito al mismo tiempo que las tools.
+    #
+    # La consecuencia practica es una asimetria util: en `nano` el nivel de razonamiento
+    # es un FACTOR medible hoy sobre el regimen del producto (con tools, `low` da 35
+    # tokens de razonamiento y funciona); en los `5.6` no se puede tocar sin la Responses
+    # API — hay que aceptar el que el modelo elija.
+    explicit_effort_with_tools: bool = True
 
     def __post_init__(self) -> None:
         if self.context_tokens <= 0:
@@ -91,31 +113,52 @@ class Model:
         ) / 1_000_000
 
 
-# LOS DOS DEL CATALOGO. El precio ya NO es referencia: sale de `config/tariffs.json`,
-# verificado contra la API de precios de Azure y contra la pagina, 2026-08-28. La VENTANA
-# sigue siendo una declaracion del proveedor que no verifique — esta puesta a mano.
-# `context_tokens` es la ventana de ENTRADA, no la total. La cota de `check_pair` compara
-# contra `projected_tokens`, que son tokens de prompt: usar la total —400.000 y 1.050.000—
-# admitiria planes que no entran, porque la salida ocupa 128.000 de esa cifra.
-#
-# Estaban las DOS mal: tenia 400.000 para los dos, que es la TOTAL de nano y ni siquiera la
-# de terra. Verificado en la tabla de capacidades de Foundry, 2026-08-28.
-FAST = Model(
-    name="fast", context_tokens=272_000, tariff=ARANCEL_NANO, capability=Capability.FAST
-)
-DEEP = Model(
-    name="deep", context_tokens=922_000, tariff=ARANCEL_DEEP,
-    capability=Capability.DEEP,
-    # FALSE, y esto BLOQUEA el ruteo de dos modelos tal como esta cableado hoy. No es un
-    # detalle de configuracion: los paradigmas son bucles de herramientas sobre Chat
-    # Completions, y este modelo no puede hacer las dos cosas a la vez.
-    tools_on_chat_completions=False,
-)
+# EL CATALOGO SE DERIVA DEL JSON, no se escribe aca. La ventana, si razona solo y si
+# acepta el nivel explicito con herramientas son propiedades del MODELO, y que modelo
+# juega cada papel lo decide `config/tariffs.json`. Hardcodearlas por papel hacia que
+# cambiar `fast: nano` por `fast: luna` heredara las propiedades de nano y mintiera.
+def _from_role(papel: str, capability: Capability) -> Model:
+    d = role_detail(papel)
+    if d.context_input_tokens is None:
+        raise ValueError(
+            f"El modelo {d.name!r} no declara `context_input_tokens`. La cota de ventana "
+            f"de `check_pair` la consume: sin ella, o se inventa un numero o se admite "
+            f"cualquier plan. Se levanta."
+        )
+    return Model(
+        name=papel,
+        context_tokens=d.context_input_tokens,
+        tariff=d.tariff,
+        capability=capability,
+        reasons_by_default=d.reasons_by_default,
+        explicit_effort_with_tools=d.explicit_effort_with_tools,
+    )
 
-# El catalogo. Una lista y no un dict de nombre a modelo porque el orden importa: el
-# ruteo recorre candidatos, y recorrerlos del mas barato al mas caro hace que el empate
-# —misma utilidad esperada— caiga del lado barato sin necesidad de una regla extra.
+
+FAST = _from_role("fast", Capability.FAST)
+DEEP = _from_role("deep", Capability.DEEP)
+# EXCEPCIONAL: 25x el barato, y fuera del catalogo por defecto.
+#
+# POR QUE FUERA Y NO COMO TERCER ESCALON. Un escalon al que se llega subiendo se alcanza
+# solo: basta una tarea que el dial mande a A3 y que el presupuesto tolere. «Excepcional»
+# significa que alguien lo PIDE, y eso es una propiedad del request, no del catalogo.
+#
+# Y la regla del repo es no comprar mas garantia de la que la medicion justifica: hoy NO
+# HAY NINGUNA MEDICION que distinga `sol` de `terra`.
+MAX = _from_role("max", Capability.MAX)
+
+
+# El catalogo POR DEFECTO. Una lista y no un dict porque el orden importa: el ruteo
+# recorre candidatos, y recorrerlos del mas barato al mas caro hace que el empate —misma
+# utilidad esperada— caiga del lado barato sin una regla extra.
 CATALOG: tuple[Model, ...] = (FAST, DEEP)
+
+# Los que existen pero hay que PEDIR. `by_name` los encuentra —asi un pool puede armarlos
+# si la configuracion los declara— y el ruteo no los ve salvo que el request los habilite.
+EXCEPTIONAL: tuple[Model, ...] = (MAX,)
+
+# Todo lo declarado, para que `by_name` no mienta sobre lo que existe.
+ALL_MODELS: tuple[Model, ...] = CATALOG + EXCEPTIONAL
 
 
 def by_name(name: str) -> Model:
@@ -125,11 +168,11 @@ def by_name(name: str) -> Model:
     caer al mas barato callado es como se rutea una accion irreversible al modelo
     equivocado sin que nadie se entere.
     """
-    for m in CATALOG:
+    for m in ALL_MODELS:
         if m.name == name:
             return m
     raise ValueError(
-        f"{name!r} no esta en el catalogo de modelos ({[m.name for m in CATALOG]}). "
+        f"{name!r} no esta declarado ({[m.name for m in ALL_MODELS]}). "
         f"Se levanta en vez de elegir uno: el modelo es una ACCION, y elegirla por "
         f"omision es la que nadie audita."
     )
