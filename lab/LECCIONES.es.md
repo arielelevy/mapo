@@ -2033,6 +2033,46 @@ reproduce exactamente la corrida original no es un rellenado.
 
 ---
 
+### 5.24 El modelo caro gana 0,48 y no se paga, y las dos predicciones lindas se cayeron · `MEDIDO`
+
+`P27`, sobre las 8 tareas de 32 que **discriminan** —las que nano no resuelve—, con `rewoo`
+y `react`, 3 réplicas, pareado por celda:
+
+| | nano | terra | Δ |
+|---|---:|---:|---:|
+| **utilidad** | 0,1833 | **0,6667** | **+0,4833** |
+| celdas | — | — | gana 10 · empata 5 · **pierde 1** |
+| plata | — | — | **+USD 0,0717** /celda |
+| **razonamiento** | **0** | **490** tok/celda | lo que el modelo decide gastar |
+| **TTFT p50** | 346 ms | **318 ms** | el caro responde **antes** |
+
+**P27c CONFIRMADA: neto de precio, pierde.** A λ de indiferencia 0,030 necesitaría recuperar
+~0,54 y recupera **0,48**. Por poco — y que esté en el borde es lo interesante: no es que el
+modelo caro no sirva, es que **a este precio no llega**, y una diferencia de precio del 12%
+daría vuelta el veredicto.
+
+**P27b REFUTADA, y era la predicción con mecanismo.** Predije que la ganancia aparecería
+**donde nada funcionó** (nano en 0 con todos sus brazos) más que donde algo funcionó a
+medias. Medido: **+0,5000 en piso contra +0,4778 en margen.** Prácticamente idéntico.
+
+> La ganancia es **plana**, así que no es capacidad selectiva: es **nivel**. Y eso importa
+> para el ruteo: si el caro ganara sólo donde es difícil, la región —que mide dificultad—
+> podría aprender a llamarlo. Ganando parejo, **no hay nada que aprender**: o se paga
+> siempre o no se paga nunca, y eso es una decisión de presupuesto, no de ruteo.
+
+**P27d REFUTADA.** Predije que tokens y plata darían veredictos **opuestos**. Coinciden:
+terra usa más de las dos. Una lectura preliminar sobre 6 celdas decía lo contrario, y estaba
+marcada como preliminar — con las 16, se da vuelta.
+
+**P27a sin veredicto: `luna` no está desplegado.** SIN N, y eso no cuenta como perdida.
+
+**Y un resultado que no había predicho nadie.** El modelo caro tiene **TTFT más bajo** —318
+contra 346 ms— **mientras emite 490 tokens de razonamiento por celda**. Razona más y empieza
+a responder antes. Ese número no existía en ninguna fila hasta que se descubrió que Azure lo
+manda en cada respuesta.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una
