@@ -127,9 +127,23 @@ afirmo(f"repeat 1 ahorra ~67%", abs((BASE - proy(tasks, repeat=1)) / BASE - 2/3)
        f"{(BASE-proy(tasks,repeat=1))/BASE:.1%}")
 afirmo(f"w48 es ~61% del gasto", 0.55 < proy(w48) / BASE < 0.65,
        f"{proy(w48)/BASE:.1%}")
-sin_dag = proy(tasks, ros=[p for p in roster if p != "dag_strategy"])
-afirmo("sacar dag_strategy ahorra ~27%", 0.22 < (BASE - sin_dag) / BASE < 0.32,
-       f"{(BASE-sin_dag)/BASE:.1%}")
+# LO QUE SE AFIRMA ES EL MECANISMO; LA MAGNITUD SE REPORTA (corregido 2026-08-29).
+#
+# Esto afirmaba «sacar dag_strategy ahorra ~27%» y volteo la campaña el dia que la corrida
+# light paso de `nano` a `luna`: con luna es 10,4%. El numero no estaba mal — estaba
+# MEDIDO SOBRE OTRO MODELO, y es exactamente la distincion que `MODELO_Y_CONSTANTES.es.md`
+# hace: los mecanismos son independientes del modelo, las magnitudes no.
+#
+# Un auditor que afirma una magnitud como si fuera invariante rechaza una corrida legitima
+# la primera vez que cambia el modelo. Asi que se afirma lo que es aritmetica —`repeat`
+# escala lineal— y lo que es propiedad del MATERIAL —`w48` domina porque tiene 12x—, y el
+# reparto entre paradigmas se imprime para mirar.
+print(r"\n   reparto del gasto por paradigma (magnitud: depende del modelo, se reporta):")
+for nombre in sorted(roster, key=lambda x: -proy(tasks, ros=[x]) if x in frac else 0)[:5]:
+    if nombre not in frac:
+        continue
+    parte = proy(tasks, ros=[nombre])
+    print(f"     {nombre:<16} {parte/1e6:>6.0f}M  ({parte/BASE:>5.1%})")
 
 print()
 print("=" * 78)

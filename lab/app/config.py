@@ -28,22 +28,30 @@ def _require(name: str) -> str:
 MODEL_DEFAULT = "model_default"
 
 
-def _require_temperature(name: str) -> float | None:
-    """Temperature, or None meaning "do not send the parameter at all".
+# LOS ESFUERZOS QUE LA DOCUMENTACION DECLARA. `max` es solo `gpt-5.6` + Responses API, y
+# `minimal` no existe de `gpt-5.1` en adelante — se aceptan igual porque el que valida de
+# verdad es el proveedor, y una lista blanca desactualizada rechazaria un valor valido.
+REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
-    Not a hidden default: the literal string `model_default` must be set explicitly.
-    Some deployments (gpt-5-chat) reject any explicit temperature, so the choice has
-    to be expressible, and it has to appear in the fingerprint.
+
+def _optional_effort(name: str) -> str | None:
+    """`reasoning_effort`, o None para dejar el default del modelo.
+
+    POR QUE ES OPCIONAL Y LA TEMPERATURA NO ERA. `MAPO_TEMPERATURE` era obligatoria para
+    que la eleccion fuera explicita, y tenia sentido cuando la temperatura era un eje. Ya
+    no lo es: los modelos de razonamiento no la aceptan. Este eje SI se puede dejar en el
+    default del modelo, y ahi el default lo determina el nombre del deployment — que ya
+    esta en la huella.
     """
-    raw = _require(name)
-    if raw.strip() == MODEL_DEFAULT:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw or raw == MODEL_DEFAULT:
         return None
-    try:
-        return float(raw)
-    except ValueError as exc:
+    if raw not in REASONING_EFFORTS:
         raise ValueError(
-            f"{name} must be a float or the literal '{MODEL_DEFAULT}', got {raw!r}"
-        ) from exc
+            f"{name}={raw!r} no es un esfuerzo valido. Los que la documentacion declara: "
+            f"{list(REASONING_EFFORTS)}, o '{MODEL_DEFAULT}' para dejar el del modelo."
+        )
+    return raw
 
 
 def _require_int(name: str) -> int:
@@ -81,7 +89,10 @@ class Settings:
     # fresh account still needs the one embedding deployment that exists and is cached.
     embedding_endpoint: str
     embedding_api_key: str = field(repr=False)
-    temperature: float | None
+    # `temperature` SE FUE (2026-08-29). Los modelos de razonamiento no la aceptan, y
+    # dejarla viva fuera de la huella habria permitido promediar dos decodificaciones
+    # distintas en silencio. Lo que la reemplaza es `reasoning_effort`.
+    reasoning_effort: str | None
     seed: int
     max_tokens: int
     request_timeout: int
@@ -111,7 +122,10 @@ class Settings:
             embedding_deployment=_require("AZURE_OPENAI_EMBEDDING_DEPLOYMENT"),
             embedding_endpoint=_require("AZURE_OPENAI_EMBEDDING_ENDPOINT").rstrip("/"),
             embedding_api_key=_require("AZURE_OPENAI_EMBEDDING_API_KEY"),
-            temperature=_require_temperature("MAPO_TEMPERATURE"),
+            # `MAPO_REASONING_EFFORT`: vacio o `model_default` deja el del modelo.
+            # NO es obligatoria como lo era `MAPO_TEMPERATURE`: el default de este eje
+            # lo fija el deployment, que ya viaja en la huella.
+            reasoning_effort=_optional_effort("MAPO_REASONING_EFFORT"),
             seed=_require_int("MAPO_SEED"),
             max_tokens=_require_int("MAPO_MAX_TOKENS"),
             request_timeout=_require_int("MAPO_REQUEST_TIMEOUT"),
@@ -133,12 +147,37 @@ class Settings:
 
         Goes into every cache key and every result row, so a result can never be
         confused with one produced under different decoding.
+
+        `temperature` SALIO DE LA HUELLA, Y DEL PAYLOAD (decision del autor, 2026-08-29:
+        «quitalo, esta obsoleto»). La documentacion de Azure lista a los modelos de
+        razonamiento bajo «Not Supported — `temperature`, `top_p`, `presence_penalty`,
+        `frequency_penalty`, `logprobs`, `top_logprobs`, `logit_bias`, `max_tokens`». No es
+        que sólo acepten 1: **el parametro no existe para ellos**, y `gpt-5.6-luna` y
+        `gpt-5.6-terra` devuelven 400 ante un `temperature: 0.0` explicito.
+
+        SE SACA ENTERO Y NO SOLO DE LA HUELLA, y esa es la parte que importa. Sacarlo de la
+        identidad dejandolo vivo en el payload seria el peor de los dos mundos: dos
+        corridas a temperaturas distintas tendrian la MISMA huella, la misma clave de cache
+        y ninguna guarda que las separe — se podrian promediar en silencio. Un eje que se
+        puede variar tiene que estar en la identidad; uno que no se puede variar no tiene
+        por que estar. La unica salida coherente es que deje de poder variar.
+
+        EL EJE QUE LO REEMPLAZA ES `reasoning_effort` —`none`, `minimal`, `low`, `medium`,
+        `high`, `xhigh`, `max`— con **default distinto por modelo**, y para este banco no es
+        opcional: la doc dice que Chat Completions **no soporta tools y razonamiento a la
+        vez**, y que *«sending `tools` is enough to trigger the error»* porque estos modelos
+        default a `medium`. Todo este banco son bucles de herramientas sobre Chat
+        Completions, asi que corre con `reasoning_effort='none'` o no corre.
+
+        Y va en la huella con la regla que la temperatura no cumplia: **si se puede variar,
+        se registra**. `none` contra `medium` son dos decodificaciones distintas y el
+        registro tiene que poder negarse a mezclarlas.
         """
-        temp = MODEL_DEFAULT if self.temperature is None else self.temperature
-        return (
-            f"{self.chat_deployment}|{self.api_version}"
-            f"|t={temp}|seed={self.seed}|max={self.max_tokens}"
-        )
+        partes = [self.chat_deployment, self.api_version]
+        if self.reasoning_effort is not None:
+            partes.append(f"effort={self.reasoning_effort}")
+        partes += [f"seed={self.seed}", f"max={self.max_tokens}"]
+        return "|".join(partes)
 
 
 def _optional_deployments(name: str) -> dict[str, str]:

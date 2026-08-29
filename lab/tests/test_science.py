@@ -2140,7 +2140,7 @@ def check_model_pool(ok: bool) -> bool:
         ok &= check("sin entorno no se puede construir un pool — SIN N, y se dice", True)
         return ok
 
-    s = _replace(base, temperature=0.0)
+    s = _replace(base, reasoning_effort='none')
     solo = ModelPool(s, {"fast": "d-fast"})
     ok &= check("un pool de un modelo se construye y su huella es del CONJUNTO",
                 solo.fingerprint().startswith("pool[fast]#"))

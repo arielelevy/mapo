@@ -2274,6 +2274,55 @@ lado. 78 filas nuevas, no 1.170.
 
 ---
 
+### 5.28 A `temperature=0` no lo reemplazó un parámetro: lo reemplazó `repeat` · `MEDIDO`
+
+**La pregunta del autor (2026-08-29):** «hay que evolucionar con los modelos — ¿investigá si
+a temperatura 0 la reemplazó algo en los LLM modernos?»
+
+**Los modelos nuevos la rechazan, y no es un capricho de API.** `gpt-5.6-luna` y
+`gpt-5.6-terra` devuelven `400 — Unsupported value: 'temperature' does not support 0.0 with
+this model. Only the default (1) value is supported.` La razón es arquitectónica: un modelo
+de razonamiento corre rondas internas de deliberación, verificación y selección, y el
+`temperature` **visible no gobierna el muestreo de la cadena oculta**. Bajarlo no lo vuelve
+más determinista; sólo aplana el fraseo.
+
+**Lo que quedó en su lugar es `seed` + `system_fingerprint`, y es best-effort.** Acá Azure
+**no devuelve `system_fingerprint`** en ninguno de los tres deployments, así que ni siquiera
+hay con qué detectar que el backend cambió por debajo.
+
+**Y la medición dio vuelta la premisa.** Se creía que nano era el determinista y los nuevos
+no. Tres prompts —vigencia, agregación, ausencia— por seis réplicas, con `seed` fijo:
+
+| modelo | temp | similitud de texto | **¿se mueve la RESPUESTA?** |
+|---|---|---|---|
+| `gpt-5.4-nano` | 0 | 91,3% | **0 de 3** |
+| `gpt-5.6-luna` | 1 | 96,7% | **1 de 3** |
+| `gpt-5.6-terra` | 1 | **100,0%** | **0 de 3** |
+
+**`terra` a temperatura 1 es el más reproducible de los tres.** Y `luna` es el menos —
+mueve la respuesta justo en el prompt de vigencia, que es la forma de la celda C8.
+
+> **Y la métrica correcta es «se mueve la respuesta», no «difiere el texto».** El banco
+> corrige F1 sobre conjuntos normalizados, así que el fraseo no entra. Medir la similitud
+> del texto habría dicho que nano (91,3%) es peor que `luna` (96,7%), y en lo que el banco
+> puntúa es al revés.
+
+**LA CONCLUSIÓN, y es sobre el método y no sobre los modelos.** A `temperature=0` no la
+reemplazó otro parámetro: la reemplazó **muestrear varias veces y reportar la varianza**.
+Y eso es exactamente lo que este banco ya hace — `repeat >= 3` con **piso de ruido POR
+CELDA**. La disciplina ya estaba; lo que sobraba era la creencia de que hacía falta un
+modelo determinista para que sirviera.
+
+> Un banco que necesita `temperature=0` para decidir es un banco que no puede medir los
+> modelos que vienen. El que mide su propia varianza puede medir cualquiera.
+
+**LÍMITES, y son grandes.** Tres prompts, seis réplicas, **fuera del harness** — sin tools,
+sin corpus, sin bucle de herramientas. Un bucle multi-turno tiene muchas más oportunidades
+de divergir que una sola llamada, así que esto **acota por abajo** la inestabilidad real. Es
+suficiente para elegir un modelo, no para publicar un número.
+
+---
+
 ## 9. Lo que este registro NO estableció
 
 Se escribe acá para que no se lo confunda con lo de arriba.
