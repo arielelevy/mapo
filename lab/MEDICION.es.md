@@ -138,11 +138,23 @@ Corolarios que salieron caros:
 
 Lo más caro que se aprendió, y tres veces:
 
-| lo que el corpus hacía gratis | qué volvió inmedible |
-|---|---|
-| ser corregible **implicaba** tener detector barato | la rama del ruteo: la cascada pre-empataba siempre |
-| una forma canónica por entidad, cero anáfora | todo patrón de grafo — su parte difícil no existía |
-| turno único | toda demanda sobre relación conversacional |
+| lo que el corpus hacía gratis | qué volvió inmedible | estado |
+|---|---|---|
+| ser corregible **implicaba** tener detector barato | la rama del ruteo: la cascada pre-empataba siempre | **arreglado** — `--honest-detectors` declara el detector por celda, en vez de suponer `True` en todas |
+| una forma canónica por entidad, cero anáfora | todo patrón de grafo — su parte difícil no existía | **arreglado** (`K-6`, 2026-08-29) — ver abajo |
+| turno único | toda demanda sobre relación conversacional | **sigue abierto** |
+
+**El de las entidades se arregló, y el arreglo se midió contra el texto y no contra la
+intención del generador.** El corpus produce variantes de superficie por persona y por
+firma, anáfora con concordancia, y la referencia cruzada en forma **no canónica**. Medido:
+**36,5%** de las menciones son invisibles a un `keyword_search` del nombre completo, y el
+**100%** de los saltos de cadena C3 exige resolver una variante.
+
+> **Y eso no resucita a `graph_traverse` por decreto.** Su falsación (P10a, u=0,000 en las
+> dos celdas acopladas) valía **para el régimen en que corrió** — un corpus donde resolver
+> entidades era gratis. Ahora existe una de sus dos condiciones de revival; la otra es un
+> índice con la disciplina de la sonda, y está escrita en el ejecutable. Volver a correrlo
+> es una decisión, no una consecuencia.
 
 > **Un generador que vuelve trivial una dependencia no puede falsificar el patrón que existe
 > para esa dependencia.** La falsación vale para el régimen en el que corrió.
@@ -216,8 +228,9 @@ Se dice acá para que no haya que descubrirlo:
 - **Una sola familia de modelos.** Parte de lo aprendido puede ser del modelo y no de la
   tarea, y eso está sin medir.
 - **Sin resultados en benchmarks públicos.**
-- **Cuatro ejes de la ontología son estructuralmente inmedibles acá** — entidades,
-  conversación, precisión exigida, subjetividad.
+- **Tres ejes de la ontología siguen siendo estructuralmente inmedibles acá** —
+  conversación, precisión exigida, subjetividad. Eran **cuatro**: el de entidades salió de
+  la lista el 2026-08-29 (`K-6`).
 
 ---
 

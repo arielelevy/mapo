@@ -1,9 +1,17 @@
 # Ontología de la pregunta: qué exige un request, y quién puede saberlo
 
-> **Estado: PIZARRA.** Nada de acá está implementado ni medido. Se escribe porque S-3 dejó
-> demostrado que **el acoplamiento es propiedad de (pregunta × material)** y que todos los
-> ejes computables del sistema son función del material solo. Esta es la mitad que falta,
-> desarmada en ejes.
+> **Estado: PIZARRA, con dos ejes ya salidos de acá** (actualizado 2026-08-29). Se escribió
+> porque S-3 dejó demostrado que **el acoplamiento es propiedad de (pregunta × material)** y
+> que todos los ejes computables del sistema son función del material **solo**. Ésta es la
+> mitad que falta, desarmada en ejes.
+>
+> **Lo que ya se fue de la pizarra al ejecutable** (`U-1`): `REQUEST_DEMANDS` en
+> `corpus/generate.py` tipa la demanda **por celda**, con los campos `answer_cardinality` y
+> `coverage_demanded` en `Task`, y **falla cerrado** si una celda no declara. Son **dos**
+> ejes y no uno — el corpus tenía el contraejemplo adentro.
+>
+> **Todo lo demás sigue sin implementar ni medir.** Un eje de este documento no cuenta como
+> existente hasta que algo lo lea; lo que hoy lo lee son esos dos campos.
 >
 > **La regla que ordena todo el documento**: cada eje se tipa con **vocabulario cerrado**,
 > nunca con prosa libre. Un eje que exija interpretar texto no entra.

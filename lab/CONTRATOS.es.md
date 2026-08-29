@@ -1,12 +1,24 @@
 # Semántica de los contratos de afirmación
 
-> **T-1.** Bloquea a F6 y al anti-RAG (AR-1). Es trabajo de **pizarra**: nada de acá entra
-> al paper hasta que exista implementación que lo corra. Se escribe primero porque sin él
-> F6 mide algo indefinido y «qué falta» no está definido.
+> **T-1.** Bloquea a F6 y al anti-RAG (AR-1).
 >
-> **Lo que existe hoy no es esto.** `ANSWER_CONTRACT` restringe el **formato** de la salida
-> —una línea `ANSWER: <x>`, ítems separados por `; `— y se corrige por F1 de conjuntos. Eso
-> no dice nada sobre las **proposiciones** que la salida afirma.
+> **YA NO ES PIZARRA — actualizado 2026-08-29.** `app/contracts.py` (688 líneas) implementa
+> **dos de las tres clases** de §2: las dos que se pueden cerrar **sin parsear prosa**.
+> Ejecutados y con test: `NumericVerdict` (§45), `CompletenessVerdict`, `AbsenceVerdict`,
+> `PresuppositionVerdict`, `verify_coverage` y `verify_obligations`.
+>
+> **La tercera sigue siendo pizarra**, y es la que exige interpretar texto libre. Está
+> marcada como tal adentro del documento, no acá arriba: el encabezado decía «nada de acá
+> entra al paper» y eso ya es falso para dos tercios del archivo.
+>
+> **Lo que `ANSWER_CONTRACT` hace sigue siendo otra cosa**, y no hay que confundirlos:
+> restringe el **formato** de la salida —una línea `ANSWER: <x>`, ítems separados por `; `—
+> y se corrige por F1 de conjuntos. Eso no dice nada sobre las **proposiciones** que la
+> salida afirma, que es de lo que trata este documento.
+>
+> Deuda medida que sí sigue abierta: **cero de 2.554 filas del registro tienen veredicto de
+> contrato** (`X-5i`), porque `verify_coverage` exige `domain_keys` y el registro viejo no
+> los lleva. El código existe y nunca corrió sobre datos. Eso es distinto de no existir.
 
 ---
 

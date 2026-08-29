@@ -97,16 +97,36 @@ que lo que antes se creía ahora se sondea o se difiere. El costo es **cobertura
 nunca corrección. Un ratchet yerra hacia la cautela por construcción.
 
 La pérdida de cobertura de una subida en una región es la fracción de requests de esa región
-cuya evidencia queda por debajo del piso nuevo. **Es medible sobre el registro y no está
-medida todavía** — queda como el pendiente que cierra esta cota, porque sin ese número la
-Proposición 1 acota una cantidad de eventos y no una cantidad de daño.
+cuya evidencia queda por debajo del piso nuevo.
+
+**Medida el 2026-08-28** (`bench/analysis/_analyze_ratchet_cost.py`, `T-4b`), y el resultado
+corrige cómo se lee la cota:
+
+| nivel | brazos admisibles | cobertura | u(mejor fijo) |
+|---|---:|---:|---:|
+| A0 · A1 · A2 | 5 | 100% | 0,6101 |
+| **A3** | **2** | **40%** | **0,4221** |
+
+**El ratchet es gratis hasta A2 y cuesta todo de una vez en A3.** A0/A1/A2 declaran
+`admissible_patterns=None`, así que subir ahí no compra garantía de catálogo ni cuesta
+cobertura; el único escalón con precio se lleva **60% del catálogo y 31% de la utilidad**.
+
+Eso cambia la lectura de la Proposición 1. «A lo sumo dos subidas» invita a imaginar un daño
+que se acumula despacio, y lo medido es lo contrario: **una sola transición tiene precio, y
+ahí es abrupto.** Las otras dos son gratis porque no hacen nada.
+
+Y el promedio esconde a quien paga: la región `many/no_oracle/loose/chain` pierde **−0,5000**
+con n=4, mientras que en el corpus de sonda la media es **0,0000** con una sola región
+perdiendo 0,0877.
 
 ---
 
 ## Qué queda abierto, dicho como corresponde
 
-- **La pérdida de cobertura por endurecimiento no está medida** (Parte 3). Sin ella, el
-  «daño total acotado» está acotado en eventos, no en efecto.
+- **La Parte 3 ya está medida** (`T-4b`, 2026-08-28), así que el «daño total acotado» está
+  acotado en eventos **y** en efecto. Lo que queda abierto es más fino: la medición es sobre
+  **un** registro y **un** corpus, y el precio del escalón A2→A3 depende del catálogo — si
+  entran paradigmas certificables, ese 60% baja sin que la cota cambie.
 - La independencia de los dos splits vale **condicionada en `q`**. Si `q` variara dentro de
   la región —o sea, si la región mezclara sub-poblaciones—, los splits estarían correlacionados
   y el producto sería optimista. Detectar eso es exactamente lo que hace el buscador de

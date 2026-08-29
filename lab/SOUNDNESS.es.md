@@ -70,7 +70,7 @@ el mismo acto con mejor caligrafía.
 No dice nada de la prosa que los envuelve, y la prosa la escribe el código en la plantilla.
 Una plantilla que diga *«el saldo NO supera {x}»* con `x` correcto produce una salida sound
 y falsa. **Eso no es un defecto de la implementación: es la frontera de la familia entera**,
-y `redteam.py` la mide en vez de suponerla.
+y `bench/audits/_redteam_binding.py` la mide en vez de suponerla.
 
 **2. La procedencia es del registro, no del mundo.** `COMPUTED` significa que alguien la
 computó y la asentó, no que sea verdad. El teorema traslada confianza desde el piso hacia la

@@ -26,68 +26,157 @@
 
 ---
 
-## Qué sigue, en orden
+## Qué sigue: una sola cosa
 
-> **El criterio del orden es uno solo: qué desbloquea más cosas por token gastado.** No es
-> importancia — `A-1` (arrancar el producto) es lo más importante de la lista y va último,
-> porque el autor decidió que se construye a partir de lo que el banco pruebe.
+> **Sincronizado 2026-08-29.** Quedan **24 pendientes vivos, y 22 son la misma corrida.**
+> No son 24 trabajos: son la matriz de la corrida homogénea, mirada por casi tantos
+> lados. Los dos que **no** son la corrida salieron de leer los `.md` contra el código el
+> 2026-08-29: **`X-5h`** (`seal_replay` declarado y sin lector) y **`AR-5`** (la dosis de
+> brazo, que existe como función y no la exige ningún análisis). Los dos son código.
 >
-> **Sincronizado 2026-08-28.** Los tres primeros de la versión anterior ya se hicieron: la
-> regla de parada está impuesta, `C-COMPLETE` está cableado, y de los dos lo que queda es
-> **correrlos**. El cuello se movió de «no está construido» a «no está medido».
+> Lo de **producto** se mudó a `PRODUCTO.es.md` y lo del **paper** a `PAPER.es.md`. No están
+> cerrados — van en otro momento, y el orden lo fijó el autor: **lab primero** (terminado,
+> probado, afinado, verificado, testeado), después el paper con iteraciones de ida y vuelta,
+> y el producto al final. Tenerlos en archivos separados es lo que impide que se cuelen.
 
-**Ahora, y no cuesta tokens**
+### La luz verde: la corrida light pasa, y ahora prueba algo (2026-08-29)
 
-1. **`X-4d` — descontar la declaración de tools del costo comparado.** El único pendiente
-   que puede **cambiar un resultado ya publicado**, y sale de replayar sellado el registro y
-   recomputar. Su primera corrida quedó retirada: partía de un sobrecosto estimado por
-   `calls` que resultó falso, y el recorte de piso inflaba los ratios.
-2. **`S-4` — el techo del acoplamiento.** Tres opciones de diseño escritas, ninguna elegida.
-   Bloquea el cierre de la sonda, y es el único de los tres «ahora» que necesita una
-   **decisión del autor** y no trabajo.
-3. **`U-4` — que `coverage_demanded` dispare el contrato.** Hoy lo dispara que la tarea
-   declare `domain_keys`, que coincide para `C9` y no para `C2`/`C4`. Cablearlo es la parte
-   fácil; lo que sigue abierto es que en `C2` el dominio es **semántico** y enumerarlo **es**
-   resolver la tarea.
+**Se puede lanzar.** `bench/runs/_run_homogenea_light.py` corre la matriz entera —13
+patrones × 7 factores sobre las 4 tareas más baratas— con **0 errores** y 8,2M tokens
+contabilizados, todo desde caché. Pero el cambio que importa no es que pase: es **qué puede
+probar ahora**.
 
-**Las corridas, en orden de lo que decide más por token**
+Antes imprimía «0 errores, la matriz corre entera», y eso era verdad y era insuficiente:
+**un factor que no llega al modelo tampoco da error — da exactamente la base.** Ya había
+pasado tres veces en un día (`offer_board`, `terse_tools`, `compact_material`). Ahora cada
+factor se compara contra la base y reporta cuántas filas movió:
 
-4. **`P20` — la regla de parada, con el factor encendido.** El premio está medido (**33%**
-   del gasto) y la señal también (`barren_peak` 1,17 contra 2,28). `P20b` es la que puede
-   matarla: si la utilidad cae más que el piso de ruido, ahorrar tokens contestando peor no
-   es ahorrar.
-5. **`U-6` — P19 sobre `C9`.** `P19d` es un control que **puede matar a la celda**: con
-   `width=4` el dominio declarado y las unidades en alcance coinciden, así que si C9 se
-   comporta igual en `w=4` y `w=48`, la distinción no compra nada. Corpus verificado 38/38.
-6. **`P21` — ofrecer `read_all` en `basic`.** No existía en la variante de **todos** los
-   estudios, y nadie lo decidió midiendo. `P21a` puede volverlo irrelevante: si los modelos
-   lo ignoran, queda al lado de las tools de memoria de trabajo — ofrecidas y sin usar.
-7. **`F-2` — descontaminar «el efecto `dag_strategy`».** La pizarra está soldada adentro de
-   ese brazo, así que su ventaja mezcla dos cosas que nadie separó.
-8. **`M-1` — el brazo en prosa (E1).** Implementado, sin correr, ~26 llamadas: el control
-   más barato que queda.
+| factor | filas movidas | veredicto |
+|---|---|---|
+| `hyde` | 26 / 52 | cableado verificado |
+| `prune` | 24 / 52 | cableado verificado |
+| `board` · `read_all` · `terse` | 20 / 52 cada uno | cableado verificado |
+| `managed` | **0 / 52** | inerte, **con explicación medida** — ver abajo |
 
-**Lo que sigue abierto y no tiene camino escrito**
+**`managed` no está roto, y eso se midió en vez de suponerse.**
+`bench/audits/_diagnose_managed.py` envuelve `manage_history` y cuenta dos cosas que las
+filas no pueden mostrar: **61 llamadas, 0 demociones.** El camino se recorre; la condición
+no se cumple. Sólo demota resultados de tool con TEXTO COMPLETO, y en `w4` (4 unidades) el
+modelo busca una vez y lee una vez: lo único que queda en la historia previa es un `search`,
+cuyas entradas traen `summary` y no `text`, y ésos se saltean a propósito. La lectura cae
+siempre en el último batch, que por definición no se demota. **`w4` no tiene historia que
+compactar, y `managed` es exactamente el factor que compacta historia.** Su cableado se
+verifica en la primera celda `w16` de la campaña — no antes, y la corrida lo dice en vez de
+darlo por bueno.
 
-9. **`P-7` — el producto no cierra el bucle.** El último de la familia P, y conviene mirarlo
-   con lo aprendido: `P-3`, `P-5` y `P-6` resultaron ser todos **la misma forma** — una
-   capacidad completa que nadie podía usar porque el dato no llegaba a donde se decide.
-10. **`K-6` — corpus con entidades de verdad.** Condición (a) para revivir el patrón de
-    grafo, y donde vive el quinto punto ciego del corpus.
-11. **`G-2` — la plataforma.** `ARQUITECTURA.es.md` propone la pila entera y **ninguna
-    pieza está ejecutada ni medida**.
-12. **`A-1` — arrancar el producto.** Lo más grande. Va después de que el registro madure,
-    por decisión del autor.
+### Tres cosas que aparecieron al hacerlo, y que no eran hallazgos sino defectos
 
-**Y una que no es técnica**
+- **El corpus de la campaña vivía en una carpeta temporal de sesión.** `gold_h1` —las 78
+  tareas sobre las que corre todo— estaba en el scratchpad y se iba a borrar solo. Su
+  receta **no estaba escrita en ningún lado**. Ahora vive en `corpus/gold_h1`, verifica
+  entero (11 celdas en PASS, 39/39 saltos de cadena exigiendo resolver una variante), y la
+  receta está en el docstring del script y en `corpus/README.es.md`.
+- **`load_rows` volteaba cualquier archivo con una fila podada.** La guarda de mezcla de
+  analizadores contaba a una fila **infactible** como «tokenizador sin declarar». Una fila
+  podada por aritmética no ejecuta, no busca y no tokeniza: no tiene tokenizador que
+  declarar. Con dos `direct` infactibles —lo normal— volteaba la corrida entera, y el
+  mensaje hablaba de tokenizadores. Arreglado con test (`test_science.py` §49), incluido el
+  caso que **sigue** levantando: una fila EJECUTADA sin analizador sí es del régimen viejo.
+- **Dos corridas light a la vez appendean al mismo `.jsonl`.** El lock impide el archivo
+  corrupto, no el conteo doble: el resumen salió con `terse` en 77 filas de 52. Se corre de
+  a una, y está escrito en el docstring.
 
-- **`R-5` — 29 commits locales sin pushear.** Repo privado; no se pushea sin confirmación.
+### El presupuesto de la BASE, ahora medido y no estimado
+
+Con el costo por celda medido en la light y **la poda aritmética aplicada** —que es gratis
+y es la regla de la casa:
+
+| | |
+|---|---|
+| celdas que corren | **750** de 1.014 (**264 podadas a costo cero, 26%**) |
+| tokens proyectados | **~265M** (contra 395M sin contar la poda) |
+| plata, a tarifa nano | **~USD 56**, y ~32 si el caché del proveedor sirve la mitad de la entrada |
+| dónde se va | `dag_strategy` 70M · `supervisor` 41M · `handoff` 39M · `react` 39M · `reflection` 38M · `gist_reader` 27M |
+
+La poda es la que hace barato esto: `direct` corre 6 tareas de 78, `streaming_scan` y
+`extract_compute` 12, `map_reduce` 24. **Lo que se sabe que no entra no se paga.**
+
+**Lo que sigue siendo la decisión del autor** no es la plata: son las **horas de reloj**, y
+que una corrida en background muere con la sesión.
+
+---
+
+**La corrida homogénea, y qué cierra cada parte**
+
+| lo que se corre | cierra |
+|---|---|
+| **BASE** — 13 patrones × 78 tareas × repeat 3, `hybrid`/`basic`/`nano` | el ranking homogéneo; `D-4` (handoff), `P-2b` (drift, que sólo necesita episodios), `P-2e` |
+| `hybrid` contra `hybrid`+rama HyDE | `H-3` `AR-3` `AR-4` |
+| `{basic, managed}` sobre los 5 con historia | `C-4` (primer brazo: compactar historia) |
+| `{compact_material, sin}` sobre los que arman prompt grande | `C-4` (segundo brazo: podar material) |
+| `{offer_board, sin}` | `F-2b` |
+| `{offer_read_all, sin}` | `D-1b` |
+| `{terse_tools, sin}` | `X-4c` |
+| `{none, low, medium, high}` de `reasoning_effort`, **sólo nano** | `X-5s` |
+| el brazo en prosa (E1) | `M-1` |
+| **A2 con la sonda encendida** | `S-5` — la corrida que nunca ocurrió, sin la cual la calibración da cero |
+| celdas B2, D1 y C9 del corpus nuevo | `O-2` `O-3` `X-5i` `U-6` |
+| `luna` y `terra`; `terra` sólo en C3 | `M-3` `M-5` `M-4` (mitad), `P27f` |
+| tasa de error del barato al piso de A2 | `X-5g` |
+| los siete brazos de REC | `REC-4` |
+
+**Lo que la corrida NO cierra, y hay que hacer aparte**
+
+- [x] **`_benefit_on` sobre brecha neta — CERRADO el 2026-08-29, y el resultado es que la
+  cláusula NO se promueve.** El diagnóstico era correcto: con utilidad sola el beneficio da
+  `+0,0000` **por construcción**, porque el paradigma después de reparar es el mismo
+  `fallback`. Lo que una cláusula de adquisición compra no es utilidad, es **no tener que
+  sondear** (83k tokens medidos en `P17b`) contra los `max_tokens` que la cláusula declara.
+  Ya está implementado: `_benefit_on` toma `lambda_cost`, `probe_tokens` y `clause_tokens`,
+  y opera sobre la **razón** de costo contra el más barato de la tarea —la convención del
+  banco—, no sobre tokens absolutos.
+
+  **Y a λ=0 devuelve exactamente lo de antes, así que no reinterpreta ningún veredicto
+  viejo.** Barrido medido sobre el mundo de validate (n=8), piso de ruido `0,0655`:
+
+  | λ | beneficio |
+  |---|---|
+  | 0,00 | `+0,0000` — reproduce el veredicto anterior |
+  | 0,02 | `+0,0124` |
+  | **0,05** (el λ de decisión del banco) | **`+0,0311`** — adentro del ruido |
+  | 0,10 | `+0,0622` — todavía adentro |
+  | 0,20 | `+0,1244` — recién acá supera el piso |
+
+  **Veredicto honesto: la cláusula no se gana la promoción al λ con el que este banco
+  decide.** Necesita λ=0,2, cuatro veces más, para salir del ruido. `aceptada: False`,
+  `clausula promovida: False`. El mundo final **no se consumió** —`validate_ok` fue falso,
+  así que el ledger sigue entero y se puede gastar cuando haya algo que valga gastarlo.
+
+  Lo que esto cierra: el eje faltaba y ahora está, y se puede medir. Lo que NO cierra: que
+  esta clase de cláusula valga. Hoy, medida en su propio eje, no alcanza.
+- **`M-4` corpus natural.** Su otra mitad —segunda familia de modelos— ya está.
+
+**El presupuesto, con lo medido hoy**
+
+`w48` es **483k tokens de material por tarea** contra 40k de `w4`: **12×**, y con 21 tareas
+de cada width es ~66% del gasto. Los factores se **tamizan en w4+w16** (42 tareas, ~1/3 del
+costo) y sólo los que muestran señal se confirman en `w48`. El criterio es explícito: con 26
+tareas pareadas el error estándar es ~0,034, así que un factor que no se ve ahí es más chico
+que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
+
+**La base no se recorta.** `w48` es el único régimen donde el material no entra en ventana
+(483k contra los 272k de nano), y ése es el régimen que el banco existe para medir.
 
 ---
 
 ## Resumen — todo de un vistazo
 
-`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **59 abiertos · 16 en curso · 52 cerrados** (2026-08-28)
+`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **14 abiertos · 10 en curso · 147 cerrados** (contados 2026-08-29)
+
+> **El contador se cuenta, no se recuerda.** Decía «59 abiertos · 16 en curso · 52
+> cerrados» y los números reales eran 14, 10 y 147: se había escrito a mano y quedado
+> viejo. Un contador que miente es peor que no tenerlo, porque se lee con la autoridad
+> de una medida. Se recuenta con `grep -c '^- \[ \]' PENDIENTES.es.md`.
 
 > **Las dos tesis que el autor pidió sostener quedaron cerradas el 2026-08-28.**
 > **Hebbiana**: establecida en su único sentido vivo —asociación entre pares sobre el
@@ -109,10 +198,47 @@
 
 **Catálogo — la misma vara que a los candidatos nuevos**
 - [x] **K-7** · **`map_reduce` a `standby` por decisión del autor (2026-08-28): no se le gasta más cuota de medición.** La evidencia acompaña: gana **una** celda de 33 en las que compite, la aritmética lo poda en **180 de 270** filas —así que la mayor parte de lo que se pagaría ya se sabe que no va a correr— y en `P20` su reducción fue **0,0%**, porque su fan-out lo fija el código y no tiene nada que ahorrar donde el resto ahorra. Su dato histórico se replaya igual
+- [x] **K-9** · **`supervisor` entra al catalogo: el tercero de la familia de sub-agentes, y
+  el que faltaba** (`app/paradigms/supervisor.py`, P28a-d registradas antes de correr). El
+  catalogo tenia los dos extremos —plan fijo con replan (`dag_strategy`) y particion fija
+  (`handoff`)— y no el del medio, que es justo lo que hoy se llama «subagentes»: un
+  orquestador que despacha de a uno **segun lo que vaya encontrando**. Las llamadas NO estan
+  decididas de antemano, y eso es otro grafo de control, no otro prompt.
+  **Y el sub-agente recibe UN PEDAZO de contexto** (correccion del autor): con la superficie
+  completa esto era `react` con mas pasos y una llamada de coordinacion de mas. El alcance
+  lo recorta el **codigo** —una busqueda sobre la sub-pregunta, `SUB_SCOPE_UNITS = 8`— y no
+  el modelo enumerando ids: si el modelo dibujara la frontera del sub-agente, ahi si se
+  cruzaria el invariante. El recorte es de la VISTA, asi que no puede leer afuera porque las
+  unidades no estan.
+  **Dos defectos que aparecieron al construirlo**: (a) le puse la cota de factibilidad de
+  «ve el contenido entero» y quedaba admisible en **6 de 78** tareas —un veredicto sobre una
+  cota mal elegida, no sobre el patron—; corre `_run_tool_loop` como `react`, asi que su
+  gasto es una DECISION y va en `WORST_CASE_ONLY`. (b) `_sub_surface` de `handoff` **no
+  propagaba** `terse_tools`, `offer_board`, `demand_obligations` ni `shared_state`: esos
+  factores no existian adentro de un sub-agente. Ahora es `ToolSurface.scoped()`, en la
+  clase, donde `replace` los lleva todos — un olvido de campo en una copia a mano es
+  invisible
 - [x] **K-8** · **`handoff` entra al catálogo como candidato nuevo**, con predicción registrada antes de correr como todos
 - [x] K-3 · **la falsación de `graph_traverse` (P10a) sobrevive a su objeción más seria**: el índice está 100% anclado en el texto y las dos cadenas C3 están conectadas — la travesía tenía las aristas y aun así dio u=0,000. Riesgo de diseño registrado aparte: el índice **no exige** anclaje, así que otro corpus podría envenenarlo en silencio
 - [x] **K-5** · `graph_traverse` **en `standby`**, no retirado, con sus dos condiciones de revival escritas en el ejecutable: (a) un corpus con resolucion de entidades real y (b) un indice con la disciplina de la sonda. La falsacion vale «donde resolver entidades es gratis», que no es lo mismo que «vale»
-- [ ] **K-6** · **Corpus con entidades de verdad**: variantes de superficie, abreviaturas, anáfora, correferencia entre documentos. Sin eso, **ningún patrón de grafo se puede medir donde tiene sentido** — y es el mismo agujero estructural que el detector heredado del gold
+- [x] **K-6** · **hecho: el corpus tiene entidades de verdad** (`corpus/generate.py`,
+  `corpus/verify.py`). Variantes de superficie por persona y por firma, anafora con
+  concordancia, y la referencia cruzada en forma NO canonica — medido: **36,5% de las
+  menciones son invisibles a un `keyword_search` del nombre completo** y el **100% de los
+  saltos de cadena C3 exige resolver una variante**. Con **guarda de ambiguedad**: una forma
+  que matchea a dos personas se descarta, porque destruye la verdad derivable. El gold vive
+  en `entities.json` con las menciones contadas contra el TEXTO, no contra la intencion del
+  generador. Y el verificador sigue siendo independiente: resuelve **por matching contra los
+  canonicos**, no regenerando las variantes —si la regla estuviera mal coincidirian en el
+  error— y no lee `entities.json`, que seria el generador verificandose solo.
+  **Tres defectos que aparecieron al hacerlo**, los tres silenciosos: (a) `--hard` tenia su
+  PROPIO constructor de documentos y seguia escribiendo el nombre completo, asi que todos
+  los corpus reales —que van con `--hard`— habrian verificado 100%, declarado entidades y no
+  medido nada; lo atrapo la guarda de correferencia nueva y la linea quedo en un solo
+  helper. (b) El enumerador de nombres era degenerado en los dos sentidos —rotando el nombre
+  las 22 primeras comparten apellido, rotando el apellido las 54 primeras se llaman todas
+  «Marta»—; ahora varian los dos. (c) El pool de 18 apellidos no alcanzaba: con 40 personas
+  **ninguna** admitia apellido pelado, la variante mas dificil. Ampliado a 54
 - [x] **K-4** · **el catálogo vive en el ejecutable**: `CATALOG` con cinco estados —activo, retirado, standby, infactible, en revisión— cada uno con su **razón** y su **condición de revival**. `pointer_chase` y `graph_traverse` dejan de estar disponibles; el rechazo trae el porqué en vez de mandar a buscarlo a un documento
 - [x] **K-1** · `plan_execute` **retirado** por decision del autor (2026-08-28). Vive en el `CATALOG` con estado `retired`, su razon y su condicion de revival, y `RETIRED` se deriva de ahi — no hay lista paralela que pueda driftear
 - [x] K-2 · `map_reduce` **no** está dominado — gana una celda. Reemplazarlo por handoff cambiaría cobertura medida por un brazo sin medir: van **uno contra otro**, no uno en lugar del otro
@@ -121,7 +247,11 @@
 - [ ] M-1 · brazo en PROSA (E1) — implementado, sin correr
 - [x] **M-2** · **instrumentada, y el hallazgo es por qué faltaba** (lección 6.4). La retención —si la evidencia leída **sobrevive** hasta la llamada que responde— ya se registra por fila como ratio de caracteres. `basic` da **1,000** y `managed` **0,281**. Y en `basic` es 1,0 **por construcción** —no hay compactación— que es la variante de **todos** los estudios medidos: la medida no faltaba por descuido, **no tenía nada que decir donde se midió**. Medirla de verdad exige correr en `managed`/`cognitive`
 - [ ] **M-3** · transferencia de θ entre familias de modelos — **y ahora está acotado qué se rompería** (`MODELO_Y_CONSTANTES.es.md`): los **mecanismos** son independientes del modelo por construcción; las **magnitudes** no. El 33% evitable **se encoge** con un modelo que para solo; el barrido de λ **se corre entero** y el orden de los brazos puede darse vuelta; las asociaciones de orden pueden desvanecerse por **falta de varianza de secuencia**, que no es lo mismo que falta de señal
-- [ ] M-4 · corpus natural + segunda familia
+- [~] **M-4** · **la mitad esta hecha: la segunda familia existe y esta medida.** `luna` y
+  `terra` responden con herramientas (smoke 2026-08-29) y entran a la corrida homogenea —
+  `terra` solo donde `nano` no alcanza (C3), por decision del autor. Lo que sigue abierto es
+  el **corpus natural**: todo lo medido corre sobre mundos generados, y ninguna medida dice
+  que un corpus real se comporte igual. Es la mitad cara y la unica que sigue siendo `M-4`
 - [ ] M-5 · C3 profundo en nano
 
 **El catálogo confunde dimensiones ortogonales**
@@ -134,6 +264,51 @@
 - [~] **H-3** · **el cobro está arreglado, falta la corrida** (P26a-d). El defecto era peor que «sin λ»: la fila cobraba `result.usage` —lo que el paradigma se acordó de sumar— y la generación de HyDE **no aparece ahí por construcción**, porque el paradigma nunca la vio. Se comparaba una recuperación **gratis** contra una **paga**. Ahora cobra el **medidor de la celda**, con `retrieval_tokens` aparte y una guarda que levanta si el paradigma declara más que el medidor. Y algo que ya fallaba callado: **la ruta de error ya usaba el medidor**, así que una celda que crasheaba se cobraba bien y una que andaba se cobraba de menos
 - [x] **F-4** · **escrito**: `PATRON_O_FACTOR.es.md`. La prueba es una — un patron se distingue por su ESTRUCTURA DE CONTROL DE FLUJO, y se decide con cuatro preguntas (cuantas llamadas y quien las decide; quien elige la proxima accion; si hay estado compartido y quien lo escribe; si un paso puede cambiar el plan). Contraprueba: si la diferencia se describe sin dibujar otro grafo de control, no es un patron. Incluye la clasificacion de todo lo que hay hoy y los tres factores que siguen **soldados adentro de un brazo**, que es lo que impide atribuirles nada
 
+**Consistencia entre patrones — auditoria del 2026-08-29 (`historico/AUDITORIA-PATRONES-2026-08-29.es.md`)**
+
+> Pedido del autor: que los trece manejen igual el estado, llamen a las mismas tools,
+> tengan el mismo retrieval y el blackboard a disposicion. **Dos ejes se sostienen y
+> cuatro son deuda**, y ninguno de los cuatro cambia un numero publicado — cambian **que
+> se puede promediar**, que es peor de descubrir tarde. Lo que SI se sostiene:
+> `surface_for` no recibe el nombre del paradigma, asi que el menu de tools es identico
+> por construccion y no por convencion; y la dispersion del USO es la variable dependiente
+> del banco, no una falta de uniformidad.
+
+- [x] **C-1** · **hecho: son dos lecturas y se cuentan aparte** (`tools.py`,
+  `test_science.py` §54). `read_one` ahora deja rastro en `units_read_structural`, y
+  `usage()` reporta ademas `units_read_any` y `relevant_units_read_any`. **No se sumo a
+  `units_read` a proposito**: sumarlo moveria todo numero publicado y, peor, borraria la
+  distincion que el pendiente existia para preservar — `units_read` sigue significando «lo
+  que el modelo eligio leer». La union **no es la suma**: una unidad leida por codigo y
+  despues por tool se cuenta una vez, y el test lo fija. Y un desvio que se atajo en el
+  camino: el bloque cayo primero adentro de `_coverage()`, que es lo que el MODELO lee —
+  ahi habria cambiado el prompt y con eso cualquier comparacion contra el registro
+- [x] **C-2** · **hecho: `arm_dose` es una sola definicion** (`app/metrics.py`,
+  `test_science.py` §54), cableada al analizador de P26. Vive en el codigo y no en cada
+  analizador porque recomputada en tres lugares serian tres definiciones, y la primera vez
+  que una difiera **nadie se entera**: las tres imprimen un numero plausible. Devuelve
+  **`None` y no 0,0** cuando el paradigma no busco nunca — un `gist_reader` no recibio
+  tratamiento cero, no recibio tratamiento, y meterlo al promedio como caso tratado que no
+  respondio es justo la lectura equivocada. Medido sobre P26: `react` **73,3%**,
+  `rewoo` 58,0%, `dag_strategy` **12,6%**, `gist_reader` N/A
+- [x] **C-3** · **la tool de board ya llega al modelo, y el defecto era peor que el default
+  apagado.** `_run_tool_loop` —el UNICO sitio del repo que manda `tools`— llamaba a
+  `specs_for` **sin pasar `terse` ni `offer_board`**, asi que `offer_board=True` habria
+  corrido entero y medido CERO: la tool jamas aparecia en la lista que el modelo ve, y
+  `F-2b` habria concluido «el board no compra nada» por cableado. Los dos factores tenian
+  test sobre `specs_for` y **ninguno sobre el camino**, que es como un factor pasa de estar
+  implementado a estar ejecutado (`test_science.py` §56). `terse_tools` verificado sobre lo
+  que el modelo REALMENTE recibe: 2.135 → 1.315 chars, **−38,4%**, que coincide con lo que
+  `X-4c` habia medido sobre la spec. Correrlo sigue siendo `F-2b`
+- [ ] **C-4** · **la comparacion de memoria/olvido no esta implicada en ningun resultado:
+  43 filas de 3.679 (1,2%)** — `basic` 3.053, `cognitive` 27, `managed` 16. Y un limite
+  estructural que acota el enunciado: la compactacion vive en `_run_tool_loop`, asi que
+  **solo alcanza a los CINCO patrones que llevan historia** (`react`, `map_reduce`,
+  `reflection`, `dag_strategy`, `handoff`); los otros ocho no reenvian historia y no tienen
+  nada que olvidar. La corrida es `{basic, managed} × {los cinco}`, y el resultado se
+  enuncia acotado a esos cinco. Confirma `M-2` con el conteo: `react` da retencion 1,000
+  **por construccion** en la variante de todos los estudios
+
 **«Anti-RAG» — la máquina existe (REC), le falta una pieza**
 - [x] **AR-0** · **el retriever ya es factor y ahora está guardado**: archivo propio por brazo, `Row.retriever` estampado, y guarda de mezcla en la lectura. Lo que faltaba no era la estructura sino que **nada impidiera promediar dos brazos** — y esa es la única guarda posible ahí, porque huella y vocabulario no los distinguen
 - [x] **AR-1** · contratos de completitud — **implementado y cableado**: `C-COMPLETE` corre sobre la respuesta con el dominio declarado por el caller, y cada fila guarda su veredicto aparte de la utilidad. Su limite quedo escrito donde vive: a nivel prosa **no puede ver lo que sobra** —solo busca las claves declaradas— y detectarlo exigiria extraer entidades del texto, que es justo lo que no se acepta como sensor
@@ -142,10 +317,21 @@
 - [~] **AR-4** · **baseline honesto: es P26d.** Toda comparación de paradigmas de este banco corrió bajo **un solo** brazo de recuperación. Predecir que el orden no cambia es predecir que los resultados existentes sobreviven — y es la predicción que más dolería perder. Falta correrla
 
 **El agujero aguas arriba de todo**
-- [ ] **G-1** · **la ingesta no se mide** — y de las tres cosas que este renglón afirmaba, **una es falsa**: «independiente del patrón» quedó **refutado** por `G-3`, porque `graph_traverse` construye y persiste su índice **adentro del request**. Sigue en pie que es asíncrona y de una sola vez, y que por eso no contamina la comparación entre brazos — verificado sobre el registro. Lo que fija el espacio sigue sin medirse: `n_units`, la región, el denominador de cobertura, cuánto ve la sonda. Y su economía es otra: se amortiza sobre todas las consultas futuras, así que el resultado de λ **no le aplica**
+- [x] **G-1** · **la ingesta se mide: `ingest_tokens` es una columna de la fila**, aparte de
+  `cost_tokens`, mas `ingest_calls` y `ingest_units_read` en el `Ingested`. Con eso su
+  economia deja de estar mezclada con la de responder: se amortiza sobre todas las consultas
+  futuras y antes caia entera sobre una fila arbitraria. Lo que sigue sin medirse es su
+  MAGNITUD, y eso ya no es instrumentacion sino una corrida
 - [x] **G-3** · **medido, y la preocupacion quedo refutada por el registro.** El mecanismo es real —`graph_traverse` construye y persiste su indice adentro del request, leyendo cada unidad con la llamada que REGISTRA lecturas, asi que la fila que lo paga carga `fraction_read` del corpus entero—. Pero **ninguna fila del registro lo ejercio**: las 6 filas del brazo tienen `fraction_read = 0,000` y costo 188-268 tokens porque el indice ya estaba en disco. La leccion 8.6 da `-0,241` con todas y `-0,242` sin el brazo. Nada que corregir; queda la regla `G-4`
-- [ ] **G-4** · **regla de producto, ahora con la medicion que la respalda** (leccion 3.5): si la ingesta es asincrona, de una vez y compartida, **ningun paradigma deberia construir estado derivado propio adentro de un request**. Dos razones separadas: **economica** —el costo del indice cae sobre una fila arbitraria y promediar el brazo mezcla amortizar con responder— y **de instrumentacion** —construir lee, y leer se registra—. Falta implementarlo: levantar el indice de `graph_traverse` a la etapa de ingesta, que es tambien la condicion (b) de su revival en `K-5`
-- [ ] **G-2** · `ARQUITECTURA.es.md` propone la pila entera (Docling, sensor de OCR, procedencia página+bbox) y **ninguna pieza está ejecutada ni medida**
+- [x] **G-4** · **hecho, y con la mitad que la regla original tenia mal.** La ingesta es una
+  etapa (`app/ingest.py`) y el paradigma la CONSUME. Pero el defecto no era QUE se
+  construyera adentro del request, era **QUIEN lo pagaba**: un paradigma que no puede
+  construir su indice deja de ser medible, asi que el fallback al vuelo existe (decision del
+  autor, 2026-08-29) y su gasto va a `ToolSurface.ingest_tokens`, que el runner **descuenta**
+  de `cost_tokens` — en la ruta de exito **y en la de error**, porque esa asimetria ya costo
+  una vez (`H-3`). Se mide contra el medidor de la celda y no contra los tokens del indice:
+  uno servido del cache no gasto nada ahora, y cobrarlo inventaria gasto
+- → **G-2** se mudó a `PRODUCTO.es.md` (2026-08-29). No está cerrado: va en otro momento.
 
 **Ontología de la pregunta** (`ONTOLOGIA_PREGUNTAS.es.md`, pizarra)
 - [x] **O-1** · **cerrado: medido, y el trabajo que abrió ya se hizo.** La supersesión estaba en el material y **ninguna pregunta la interrogaba** — 5 cuentas enmendadas, 0 preguntas sobre domicilio, 0 golds en un valor vigente: las enmiendas eran **sólo distractor**, costaban tokens y no medían nada. De ahí salió `C8`, y `P18` la corrió: **el 100% de los errores son el valor superado**, no una dispersión de ciudades
@@ -164,12 +350,19 @@
 - [x] **P-18** · **`gold_guards` despierta las siete guardas** (`_audit_inerte.py`): de 4 disparadores que **nunca dispararon** en 407 tareas, hoy los siete disparan. 38 tareas, verificadas, cero llamadas al modelo
 - [~] **X-5i** · **no se puede medir con el registro actual: cero de 2.554 filas tienen veredicto de contrato.** `verify_coverage` exige `domain_keys` y `gold_p18` no tiene celdas con dominio declarado. Depende de la **corrida B** (`gold_guards`, que sí trae C9, B2 y D1). El mecanismo —«un contrato que se niega es una falla detectada sin oráculo»— sigue en pie y sin número
 - [x] **X-5j** · **el modelo caro YA estaba desplegado** (verificado con `az` en la suscripción VS Enterprise, no la de trabajo). `foundryopencode` —el mismo recurso que nano, o sea **mismo endpoint y misma key**— tiene `gpt-5.6-sol` (1000 TPM) y `gpt-5.6-terra` (500 de 1000). `gpt-5.6-luna` está **disponible y sin desplegar**, con 1000 TPM libres. Cableado: `Settings.model_deployments` + `ModelPool` (§52) + `serve` planifica con el barato y **ejecuta con el que el plan eligió**. Falta sólo el deployment de luna, que el clasificador de permisos bloqueó
-- [ ] **X-5k** · **desplegar `gpt-5.6-luna`** — el comando está listo y lo bloqueó el clasificador; lo tiene que correr el autor. `sol` ya consume su cuota entera y `terra` la mitad, así que luna es el único con 1000 TPM libres. Y una pregunta abierta que **ninguna medición contesta todavía**: cuál de los tres es «el caro» del catálogo — `Capability` es ordinal, así que meter tres pares en el orden equivocado no rompe nada visiblemente, sólo rutea mal
+- [x] **X-5k** · **`luna` esta desplegado y responde: medido, no supuesto** (smoke del
+  2026-08-29, una llamada real por modelo con un prompt que OBLIGA a usar la tool). `nano`,
+  `luna` y `terra` **corren los tres con herramientas**; `luna` razona por defecto (5 tokens
+  de razonamiento) y `terra` 0 en ese prompt. `reasoning_effort` explicito junto con tools:
+  `nano` **acepta**, `luna` y `terra` dan **HTTP 400** con el mensaje del proveedor.
+  Y esto cierra ademas un rotulo que `config/tariffs.json` traia escrito: decia que `luna` y
+  `sol` "se declaran por familia y NO estan medidos individualmente". `luna` ya lo esta;
+  `sol` sigue sin medir y esta fuera del catalogo por defecto
 - [x] **L-1** · **la latencia estaba en 2.369 filas y nadie la leía** (`_analyze_latency.py`, lección 5.19; planteo del autor). `dag_strategy` tiene la utilidad más alta y es **11,5× más lento** que `rewoo`, que queda a **0,030**. Con los 35× de tokens ya sabidos: tres centésimas contra un orden de magnitud en tiempo **y** en plata. Y no es función del costo — `map_reduce` es el más barato **por llamada** (2,00 s) y el cuarto más lento **por celda**, porque hace 9,9
 - [x] **L-2** · **el TTFT venía en la respuesta todo el tiempo** (lección 5.20). Escribí que no se podía medir sin streaming y sin reescribir el cliente. Azure lo devuelve en `usage.latency_checkpoint` — **400 de 400** entradas de caché lo traen— y como el caché guarda el **cuerpo completo**, el registro entero se rellena **sin gastar un token**. Se toma `user_visible_ttft_ms`: `engine_ttft_ms` da 22 ms donde el visible da 356, un factor **16**, y sería reportar una latencia que nadie experimenta
 - [x] **E-1** · **el motor emite sus acciones de razonamiento con `yield`** (`app/events.py`, `_answer_stream`, lección 5.23; idea del autor). El proveedor **esconde** el razonamiento del modelo; el de MAPO —poda, creencias tipadas, dial, contratos— se emite entero, **antes de que exista un token** y sin gastar ninguno. Vocabulario cerrado de 14 tipos, y tres reglas de orden verificadas: un terminal, nada después, y **`decision` antes que cualquier `token`** — un stream que invierte eso desmiente el producto en pantalla. `_answer()` **consume** el stream: una sola implementación
 - [x] **E-2** · **`handoff` no tenía aritmética de factibilidad** y estaba en el `REGISTRY`: el endpoint del producto reventaba con cualquier request. Nunca se notó porque nada fuera del banco recorre el catálogo entero. La cota sale de la forma del patrón —alcances × vueltas, las dos fijadas por código— y **no se compara contra el material entero**: un agente ve sólo su alcance, y compararlo contra el total lo declararía infactible justo donde el reparto lo hace posible
-- [ ] **E-3** · **el stream todavía no sale por HTTP.** `_answer_stream` emite y `Event.as_sse()` serializa, pero el endpoint sigue devolviendo el bloque. Falta el SSE resumible que propone `ARQUITECTURA.es.md` — y con él la guarda que ya está escrita ahí: **A3 buffea la respuesta hasta verificar citas**, así que `token` no puede salir antes de que el contrato lo permita
+- → **E-3** se mudó a `PRODUCTO.es.md` (2026-08-29). No está cerrado: va en otro momento.
 - [x] **L-4** · **registro rellenado, 2154 de 2154 llamadas del caché** (lección 8.10). `reasoning_tokens` y TTFT presentes en **480/480** filas de nano y 48/48 de terra, sin gastar un token. Tres guardas que le faltaban, cada una descubierta rompiendo algo: **borraba antes de saber si iba a funcionar** (402 filas de nano desaparecieron cuando una guarda cortó la corrida después del `unlink`; ahora restaura ante `BaseException`), **la regla de standby impedía el replay** —y su propio mensaje decía «su dato histórico se replaya igual»—, y **toleraba «unas pocas» llamadas reales** en vez de exactamente las celdas que habían fallado por infra
 - [x] **P27** · **el modelo caro gana 0,48 y no se paga** (lección 5.24). `terra` **+0,4833** sobre nano en las 8 tareas que discriminan, gana 10 de 16 celdas, y a **+USD 0,0717/celda** necesitaría 0,54 para pagarse: **P27c confirmada, pierde por poco**. **P27b refutada** y era la que tenía mecanismo: la ganancia es **plana** (+0,5000 en piso contra +0,4778 en margen), o sea **nivel y no capacidad selectiva** — y si gana parejo **no hay nada que la región pueda aprender**. **P27d refutada**: tokens y plata coinciden. Y sin predecir: el caro tiene **TTFT más bajo** (318 vs 346 ms) **emitiendo 490 tokens de razonamiento por celda**
 - [x] **P27e** · **la ventaja del caro depende del PARADIGMA, no de la tarea** (`_analyze_p27e.py`, lección 5.25). Barridos todos los ejes del registro, sólo el paradigma supera la variabilidad interna (dispersión **+0,7843** contra sd 0,5046): **`react` +0,8755** y **`rewoo` +0,0912**. El caro le compra casi un punto a uno y nada al otro. Eso **rescata `X-5b` por una razón distinta de la que di**: el par es la acción no porque el modelo se elija, sino porque **su efecto vive en la interacción** — elegir modelo mirando la tarea no compra nada, elegirlo junto con el paradigma compra 0,88
@@ -184,9 +377,24 @@
 - [x] **X-5p** · **NO hay bloqueante — me equivoqué dos veces** (lección 7.19, corrección del autor). Medido con un prompt difícil: `terra` corre con herramientas **y razonando** al default (66 tokens). Lo que rechaza es el **nivel explícito** junto con tools. Mis dos conclusiones previas salieron de leer documentación sin ejecutar, y después de una prueba con prompt **trivial que no podía fallar**. El pool ya no se niega: **registra** que en ese modelo el esfuerzo —y parte del costo— lo decide el modelo y no la configuración
 - [x] **X-5q** · **los tokens de razonamiento se facturan como SALIDA, y están medidos**: `terra` emite ~66-70 en un prompt difícil, `nano` **cero**. Así que «mismo precio por token» **compara dos unidades distintas**, y del lado del `5.6` parte del gasto la decide el modelo. El registro todavía no los separa (`completion_tokens` los mete juntos): eso es `X-5r`
 - [x] **X-5r** · **`reasoning_tokens` capturado**, de `completion_tokens_details`. Ahora el registro separa lo que el modelo decidió gastar **pensando** de lo que gastó **respondiendo** — y en un `5.6` esa fracción no la controla nadie de este lado
-- [ ] **X-5s** · **`reasoning_effort` como FACTOR, y sólo se puede en `nano`** (lección 7.19). Con tools, `nano` acepta el nivel explícito (`low` → 35 tokens de razonamiento) y los `5.6` dan HTTP 400. Es un eje del MODELO que no es paradigma ni fraseo, así que entra cruzado `{none, low, medium, high} × {patrones}` — y la predicción obvia a registrar antes de correr es que el razonamiento paga donde la cadena es larga (C3, C5) y **no** donde la tarea es de extracción (C1, C2)
+- [ ] **X-5s** · **`reasoning_effort` como FACTOR, y ahora esta MEDIDO que solo se puede en
+  `nano`** (leccion 7.19, verificado individualmente el 2026-08-29). Antes era una
+  declaracion por familia; ahora hay una llamada por modelo: `nano` acepta el nivel
+  explicito junto con tools (`low` → 7 tokens de razonamiento), `luna` y `terra` dan **HTTP
+  400**. Es un eje del MODELO que no es paradigma ni fraseo, asi que entra cruzado
+  `{none, low, medium, high} × {patrones}` **solo en nano** — y la prediccion a registrar
+  antes de correr es que el razonamiento paga donde la cadena es larga (C3, C5) y **no**
+  donde la tarea es de extraccion (C1, C2)
 - [x] **X-5n** · **el escalón de contexto largo está modelado** (`Model.money_for`, `config/tariffs.json`). Es un **acantilado y no una pendiente**: por encima de 272k de entrada, los `5.6` cobran la tarifa larga por el **request entero**, no marginalmente. Modelarlo como pendiente sub-proyectaría **justo en el borde**, que es donde una cota de admisión decide. Medido: `deep` salta **2,44×** al cruzar el umbral y `nano` sólo crece proporcional (1,31×) porque no tiene escalón. Los otros dos ejes —caché y escritura— siguen documentados y sin consumidor, y **por eso no se declaran**
-- [ ] **P-16** · **estimar contra el corpus, no contra el registro** (lección 8.9). Estimé `P26` en 362k leyendo un archivo de resultados que era **parcial** —90 filas sobre 6 de 32 tareas— y gastó **12,2M**: error de **34×**. Un archivo de resultados no declara si está completo. La regla nueva es aritmética sobre `len(tasks.json) × brazos × repeat`, que cuesta lo mismo y no se puede equivocar así
+- [x] **P-16** · **hecho: `bench/_estimate.py`** (`test_science.py` §55). El conteo de
+  celdas sale de `tasks.json` y pasarle un `.jsonl` de resultados **levanta** — devolver un
+  numero plausible es peor que romper, y es el modo de falla que costo 34x. El costo por
+  celda si viene del registro, con **mediana** y no media (una celda descontrolada arrastra
+  la media justo donde no hay que equivocarse), y un paradigma sin medir deja el total en
+  **SIN N** en vez de heredar el promedio de otros: entre el mas caro y el mas barato del
+  catalogo hay ~30x. Retrodiccion sobre P26: **23,8M contra 12,4M reales** — cota superior
+  de 1,9x, contra la estimacion vieja que erraba **18x por debajo**. Una cota que sobreestima
+  es lo que se le pide a una cota de gasto
 - [x] **U-3** · **DESCARTADO por medicion** (O-4b): elicitar la demanda cuesta una llamada por request y el ranking de paradigmas **no se mueve** contra su propio null (`p = 1,000` / `p = 0,447`). Si alguna vez se elicita, es para `C-COMPLETE` — no para el router
 - [x] **U-4** · **el disparador es tipado y sabe cuándo NO corresponde** (`verify_coverage`, `test_science.py` §38). Son **dos** condiciones y ninguna alcanza sola: la tarea exige cobertura **y** su dominio es enumerable. Exigirla sobre un dominio `semantic` haría que el contrato **reemplace** al paradigma en vez de verificarlo (lección 8.7); sobre uno `from_scope` verificaría lo que se midió que no predice corrección (`+0,018`). Y `None` significa **sin contrato**, distinto de un contrato cumplido
 - [ ] **U-6** · **correr P19** — predicciones a-d registradas en `README.md` antes de existir una fila. `P19d` es el control que puede matar a la celda: con `width=4` el dominio declarado y las unidades en alcance **coinciden**, asi que si C9 se comporta igual en w=4 y w=48, la distincion entre los dos dominios no compra nada y la celda solo mide ancho. Costo **sin estimar**
@@ -195,9 +403,38 @@
 
 **REC — implementado, sin registrar y sin medir**
 - [x] **REC-1** · **preregistradas como `P22a`–`P22f`** en `README.md`, con fecha y con **numero**. La version en prosa no era un preregistro: «no supera costo y piso de ruido» no tiene una cifra adentro, y una afirmacion sin cifra se lee despues en la direccion en que hayan ido los datos. Con dos disciplinas que este registro ya pago: baseline el router de **P17** —no el de P15, cuya seleccion nunca dispara— y toda diferencia sobre **intervalo bootstrap pareado**. `P22f` (reproducibilidad) es la mas barata y va primero: si falla, ninguna de las otras cinco significa nada
-- [ ] **REC-2** · congelar política, presupuesto, umbrales y regla ANTES del mundo final
-- [ ] **REC-3** · generar el mundo final — `gold_transfer` está reservado a diagnóstico
-- [ ] **REC-4** · correr los siete brazos *(caro; compite con P17 por cuota)*
+- [x] **REC-2** · **congelado ANTES, y con digest** (`bench/runs/_run_rec.py`,
+  `results/nano/rec_prereg.json`). Criterio, piso de ruido **medido** (0,0655), `min_tasks`,
+  fallback, politica y clausula candidata se escriben primero, se les saca un digest sin
+  fecha —igual que el resto de los digests del repo— y ese digest entra al certificado. Un
+  congelamiento que vive en la cabeza del que corre el script no congela nada: quien audite
+  puede ver contra que criterio se decidio, no contra cual se dice que se decidio
+- [x] **REC-3** · **mundo final generado y NO gastado.** Tres mundos disjuntos por
+  identidad de tarea, de partir `gold_transfer` en tercios **deterministas** (8/8/10) — un
+  split aleatorio haria que el mismo registro produjera veredictos distintos, y entonces el
+  veredicto describiria el split. El final **no se consulto**: `validate` no supero el piso,
+  asi que el `FinalLedger` no se reclamo y el held-out sigue entero. Eso es el diseno
+  funcionando, no una corrida incompleta
+- [x] **REC-4** · **CORRIDO, gratis, y el veredicto es NO PROMOVIDA — con contenido**
+  (2026-08-29). El ciclo no llama al modelo: lee utilidades y costos ya pagados.
+  **Lo que hizo falta para que el resultado significara algo.** La primera corrida dio
+  beneficio **+0,0000 en los tres mundos** y eso NO era un veredicto: el paradigma después
+  de reparar es el mismo `fallback`, así que `u(after) − u(fallback)` es cero **por
+  construcción**. Lo que una cláusula de adquisición compra no es utilidad, es **no
+  sondear** — y con una métrica de utilidad pura **ninguna cláusula de esta clase se
+  promovería jamás**, no porque no valgan sino porque se las medía en el eje equivocado.
+  `_benefit_on` pasó a **brecha neta**, con la convención del banco (λ sobre razón de costo
+  contra el más barato, no tokens absolutos) y con `lambda_cost = 0` reproduciendo exacto lo
+  anterior.
+  **El veredicto, con λ congelado ANTES del barrido (0,05)**: beneficio validate **+0,0311**
+  contra un piso de ruido **0,0655**. No supera. El barrido dice a qué precio empezaría a
+  valer: **λ=0,20**. El mundo final **no se gastó** — `validate` no pasó, el `FinalLedger`
+  no se reclamó y el held-out sigue entero.
+  **Y un error propio, atajado antes de publicarlo.** Usé los «83k tokens» de `P17b` como
+  costo de UNA sonda, y `P17b` dice «**0 de 14**: la sonda corrió, costó 83k tokens» — es el
+  TOTAL sobre 14 tareas. El por-tarea son **5.928**, y con los 83k el beneficio salía
+  inflado **14×** y la cláusula se promovía. Un agregado leído como un por-unidad: la forma
+  exacta de error que `_sanity.py` existe para atajar
 - [x] **REC-0** · **desbloqueado: P17 cerró.** El diagnóstico era correcto —«router P15 congelado» es un router cuya selección **nunca dispara**, así que servía de baseline sólo para medir la cascada— y la condición que ponía ya se cumple: el baseline de REC es el de P17, con detectores honestos y cascada 2/26. **REC deja de estar bloqueado**; lo que queda de REC es correrlo (`REC-4`)
 
 **Producto — capa de decisión**
@@ -220,10 +457,10 @@
 - [x] **P-11** · dependencia invertida: `app/verify.py` es el verificador del **producto** y `grading` es la cara del **banco** sobre el mismo primitivo. Relocación pura, verificada re-puntuando 390 filas: **0 discrepancias**
 
 **Lo más grande, y no estaba en la lista**
-- [ ] **A-1** · arrancar el producto — *el motor nuevo no existe*
-- [ ] **A-2** · decidir qué se porta de `legacy/`
-- [ ] **A-2b** · cosecha de `legacy/`: `context_guard` **sí** (mecanismo, no sus constantes) · `hyde` al producto pero medirlo acá puede no significar nada · el prompt de suficiencia **no**
-- [ ] **A-3** · separar producto de banco ANTES de portar
+- → **A-1** se mudó a `PRODUCTO.es.md` (2026-08-29). No está cerrado: va en otro momento.
+- → **A-2** se mudó a `PRODUCTO.es.md` (2026-08-29). No está cerrado: va en otro momento.
+- → **A-2b** se mudó a `PRODUCTO.es.md` (2026-08-29). No está cerrado: va en otro momento.
+- → **A-3** se mudó a `PRODUCTO.es.md` (2026-08-29). No está cerrado: va en otro momento.
 
 **Apareció al aplicar B2**
 - [x] **X-1** · un solo constructor `payload_for(task)` en `features.py` — los tres sitios lo usan
@@ -241,20 +478,74 @@
 - [x] **X-5d** · **la comparación entre modelos va al ANÁLISIS** (§42, `load_rows`). La guarda levanta si un archivo mezcla decodificaciones y **está bien**: promediar entre modelos no mide un paradigma, mide el modelo. El estudio multi-modelo se arma uniendo estudios por modelo. Queda escrito para que nadie «arregle» la guarda creyendo que estorba
 - [x] **X-5e** · **contestada con lo ya pagado** (lección 5.4): la hipótesis del autor se confirma **condicionada a la dificultad**. En `gold_deep` el modelo caro usa **0,81×** los tokens del barato; en `gold_v2`, **1,90×**. Puntos de equilibrio **1,24×** y **0,53×** por token. Sobrio: aun donde gana, 1,24× no alcanza para pagarse — y eso **fortalece** el caso del ruteo, porque el uso correcto del caro es exactamente donde gana. Convertirlo a plata es `X-5a`, no esto
 - [x] **X-5f** · **dos modelos eligiendo por caso** (`Router.plan(models=...)`). Orden de cotas: **dial primero, plata después** — al revés, un descuento compraría permiso. `A3 + USD 0,02` **se abstiene** en vez de bajar de modelo, que es el caso que prueba el orden. Sin catálogo el plan dice `model=''`, que es el régimen medido hasta hoy: decirlo vacío es distinto de mentir un nombre por omisión
+- [ ] **AR-5** · **toda comparación de brazos está ponderada por una dosis que ningún
+  análisis exige declarar.** El brazo de recuperación sustituye **sólo** a `hybrid` —la tool
+  `search`—; `keyword_search` y `semantic_search` salen fijas del runner. Así que la dosis
+  de tratamiento que recibe cada paradigma es la fracción de sus búsquedas que va por
+  `search`, y está medida (auditoría del 2026-08-29, eje 4):
+
+  | paradigma | dosis |
+  |---|---:|
+  | `react` | **70,1 %** |
+  | `rewoo` | 59,5 % |
+  | `dag_strategy` | 16,3 % |
+  | `gist_reader` | **0 %** |
+
+  Eso **no invalida P26, lo explica**: `gist_reader` sale idéntico al token porque no recibe
+  tratamiento, y `dag_strategy` —el líder del corpus— recibe **una sexta parte** del que
+  recibe `react`. Un efecto de brazo promediado sobre paradigmas es un efecto ponderado por
+  esa dosis.
+
+  **La función existe** (`app.metrics.arm_dose`, con tests en `test_science.py`, y devuelve
+  `None` y no `0,0` cuando el paradigma nunca buscó — la distinción importa). Lo que falta
+  no es implementarla: es que **algo la exija**. Hoy la usa **un solo análisis**
+  (`_analyze_p26.py`) y ninguna otra comparación de brazos está obligada a condicionar por
+  ella. Es la corrida `hybrid` contra `hybrid`+HyDE la que va a producir el número, así que
+  `AR-3` y `AR-4` tienen que reportarse **condicionales a la dosis**, no promediados.
+
+  Encontrado leyendo `historico/AUDITORIA-PATRONES-2026-08-29.es.md` contra el código: la
+  auditoría lo dejó escrito como deuda y era la única de sus tres deudas que no había
+  llegado a esta lista.
+
+- [ ] **X-5h** · **`seal_replay` es una garantía declarada que NO impone nadie** (encontrado
+  el 2026-08-29 cruzando `README.md` contra `assurance.py`). El perfil de `A3_CERTIFIED`
+  lleva `seal_replay=True` y **ningún camino del repo lo lee**: `grep` da cero fuera de
+  `assurance.py`. El sellado que sí existe —`LLMClient._sealed`, `embeddings.py`— es un
+  mecanismo aparte que se activa por otra vía y **el dial no lo enciende**.
+
+  Es exactamente la falla de `theta_may_learn_online`, que vivía en el perfil sin lector y
+  cuya invariante se cumplía **por casualidad** hasta que `serve.py` la impuso de verdad. La
+  diferencia es que aquélla se cumplía por accidente y ésta **no se cumple**: A3 promete
+  replay sellado y no lo hay.
+
+  No es una corrida: es código. Y no lo atrapa `_audit_declarado.py`, porque el nombre **sí**
+  se lee —lo lee el propio `PROFILES`— y lo que falta es que alguien lo consulte para
+  DECIDIR. Es la cuarta variante de la misma familia de defecto.
+
 - [ ] **X-5g** · **¿necesita A2 un piso de capacidad?** Es empírica y hoy está en `None` a propósito. Ponerle `DEEP` obliga a pagar 25× en cada request contable; no ponérselo admite el modelo barato donde hay que rendir cuentas. Se decide midiendo la tasa de error del barato al piso de procedencia de A2, no argumentando
 - [x] **X-5h** · **las tres proyecciones que faltaban, llenas** (§44). `react` y `reflection` proyectan **llamadas** desde sus propios `max_iterations` —su GASTO es una decisión del modelo, su CANTIDAD DE LLAMADAS la fija el código, y confundirlas era lo que los dejaba sin proyectar—; `rewoo` y `dag_strategy` proyectan **tokens**, este último `content × ramas` porque cada rama ve el material entero y arrastra el blackboard (la medición lo respalda: 89.834 contra 30.000 de contenido, ~3×). **Ningún par queda sin cotizar en plata.** Y el test dejó de fijar el defecto: prueba el mecanismo sobre la función, para que sobreviva a que hoy ningún brazo lo dispare
 - [x] **X-2** · **el diagnostico estaba mal y el arreglo era otro.** El split prompt/completion **existia** en `Usage` desde siempre; lo que pasaba es que la FILA guardaba solo el total y la informacion se tiraba al escribir. Ya lo lleva. Y el gasto acumulado esta medido desde el cache (`_analyze_spend.py`): **66,4M tokens**, de los cuales la salida es el **1,7%** — eso valida que barrer lambda sobre el total sea un proxy razonable ACA. La tarifa se declara por entorno (`MAPO_PRICE_IN_PER_M` / `_OUT_PER_M`) y **no se inventa**: un precio inventado produce un numero que parece una medicion
 
 **Riesgos que nadie estaba mirando**
 - [x] **R-1** · **CONCLUIDA A ESCALA** (`_replay_full.py`): **390 de 390 filas** de `gold_p17` replayadas selladas por el camino del runner, **0 llamadas vivas** y **0 discrepancias** en utilidad, respuesta y costo. No 27 celdas: el registro entero. La causa del fracaso anterior era que la fila no decia con que modelo se produjo; cerrado estampando la huella, con guarda de mezcla (`test_science.py` §25)
-- [ ] R-2 · celdas † de la grilla congelada `gpt-5-chat`
+- [x] **R-2** · **SE SACA: dejo de significar algo** (2026-08-29). Eran las celdas † que
+  quedaron sin correr cuando se congelo la grilla `gpt-5-chat`, y valian mientras esa grilla
+  fuera el brazo de comparacion multi-modelo. **La corrida homogenea la reemplaza entera**:
+  corpus nuevo con entidades, tokenizador corregido, otro plantel y otros modelos medidos.
+  Completar huecos de una grilla que ya no es la referencia no agrega evidencia a nada — y
+  el dato historico se replaya igual. Se cierra con el motivo adentro en vez de borrarse,
+  porque saber que existio explica por que el brazo multi-modelo arranca de cero
 - [x] **R-3** · **barrido hecho, y encontró lo más caro que había.** El paper decía que `P8` **no había corrido**, y había corrido: 32 filas en `gold_holdout` sin veredicto computado desde el 2026-08-26. Evaluada como estaba enunciada, **dos de cinco no transfieren** y la regla de decisión registrada dispara: los veredictos por celda pasan a **corpus-locales**. Corregido en los dos papers
 - [x] R-4 · `lab/ui/index.html` — **es la UI de prueba del autor**; se adopta
 - [x] **R-5** · **pusheado.** `origin/main` al día; el respaldo con los 33 mensajes originales queda en `respaldo-pre-squash-2026-08-28`
 
 **Decisiones dinámicas que hoy no gobierna nadie**
 - [x] **D-1** · **medido de punta a punta.** El premio: **33% del gasto evitable** a igual utilidad. La señal: `barren_peak` **1,17 contra 2,28**. La regla: impuesta por código. Y **P20 corrida**: `P20a` **REFUTADA** —baja 2,6%, no ≥10%— porque `P20d` también lo es: tras el rechazo el modelo **re-emite la búsqueda el 69%**. `P20b` **CONFIRMADA**: cortar **no cuesta utilidad**. La corrección que se sigue es estructural y vive en `D-1c`
-- [ ] **D-1c** · **rechazar no es quitarle la decisión al modelo: quitársela es no ofrecerle la herramienta.** Medido en `P20d`: el modelo esquiva el rechazo reintentando con otras palabras el **69%** de las veces, así que la regla le agregó una vuelta en vez de quitar el desperdicio — y eso deja el flujo de control donde estaba, que es lo que el invariante prohíbe. La corrección: pasado el límite, las búsquedas **salen de la lista de specs** de las llamadas siguientes. `P20b` ya establece que cortar **no cuesta utilidad**, así que el riesgo no es contestar peor — es que el 33% siga sin ser alcanzable
+- [x] **D-1c** · **ya estaba implementado y NO estaba llegando al modelo.** `withdrawn()`
+  saca las busquedas de las specs y `_run_tool_loop` lo pasaba — pero llamaba a `specs_for`
+  **sin `terse` ni `offer_board`**, y ese es el unico sitio del repo que manda la declaracion
+  de tools. Verificado ahora sobre el camino y no sobre la funcion (`test_science.py` §56),
+  que es la diferencia entre un factor implementado y uno ejecutado
 - [~] **D-1b** · **`read_all` no existe en `basic`**, que es la variante de TODOS los estudios medidos: el modelo nunca pudo pedir el material entero aunque entrara comodo en su presupuesto, y eso **nadie lo decidio midiendo** — es consecuencia de en que lista quedo la tool. Expuesto como factor `offer_read_all`, apagado por defecto, ofreciendolo **sin** arrastrar el resto de la contabilidad. La guarda de tamano ya estaba y es lo que lo hace seguro. **P21a-d registradas**; falta correrlo
 - [x] **D-2** · **desbloqueado y corrido: 93 misses → 0.** La causa era exactamente la de `R-1` — el script reconstruía sólo `results_dir`, así que corría con la huella del **modelo congelado** y fallaba el 100% de las claves sin que nada lo dijera. Con los ajustes correctos: **102 de 112 celdas** reconstruidas, **0 misses sellados**, 0 fallos de paradigma, **0 tokens**. Las secuencias están materializadas y las transiciones contadas por brazo — `rewoo` repite búsqueda (`search→search` 35), `dag_strategy` alterna (`keyword_search→read` 54)
 - [x] **D-3** · **el código dibuja el grafo** (`dag_shape`, §48, lección 5.16). El modelo proponía la forma y el código la aceptaba, con topes fijos de **4 y 3** iguales para 3 unidades y para 400. Ahora se deriva por aritmética: **una unidad da una rama** —un DAG de un nodo, dicho en vez de fingir descomposición—. Y la cota es **la misma fórmula que factibilidad proyecta**: iba a inventar un `EST_CALL_TOKENS` y no hacía falta, y una aritmética paralela podría elegir un grafo que su propia cota prohíbe
@@ -294,12 +585,13 @@
 
 **Paper**
 - [x] **W-1** · **re-encuadrado en los dos archivos.** El punto no era el orden de las secciones: era que **el Teorema 1 es una IDENTIDAD** —una descomposicion algebraica exacta, verdadera por construccion— y **ninguna medicion puede falsarla**. Lo empirico es solo si sus terminos satisfacen la desigualdad, que es una pregunta sobre un ruteador. Y los terminos **nunca se separaron**: el margen fue 0 en todas las tareas, asi que `alpha` y `beta` no se distinguen de siempre-fallback y la identidad se cumple **vacuamente**. El AURC degenerado (0,000 contra techo +0,400) es la misma cosa vista desde la curva. Queda dicho que el trabajo que un lector le acreditaria a §5.1 lo hace §5.2
-- [ ] W-3 · integrar el hallazgo de nano (P13)
-- [ ] W-4 · endorser de arXiv, o Zenodo con DOI
+- → **W-3** se mudó a `PAPER.es.md` (2026-08-29). No está cerrado: va en otro momento.
+- → **W-4** se mudó a `PAPER.es.md` (2026-08-29). No está cerrado: va en otro momento.
 
-**Plataforma** — `ARQUITECTURA.es.md` es una propuesta entera, **nada implementado**
-- [ ] Docling + `pypdfium2` · [ ] Postgres como ledger · [ ] Weaviate + `live_pointer`
-- [ ] work table → DBOS · [ ] FastAPI con SSE resumible · [ ] on-prem / Docker
+**Plataforma**
+- → **las seis piezas de la pila se mudaron a `PRODUCTO.es.md`** (2026-08-29). No están
+  cerradas: son construcción, no medición, y el orden del autor las pone últimas. Estaban
+  acá midiendo el mismo trabajo dos veces, porque `G-2` de aquel archivo ya las cubría.
 
 **Fases de la tesis**
 - [x] F0 · P15 cerrada y registrada
@@ -307,9 +599,9 @@
 - [x] **F2** · **routers rivales: E2 corrido.** El brazo que falta es **E1, y es `M-1`** —implementado, sin correr, ~26 llamadas—. Una fase abierta cuyo único resto ya tiene número propio es un duplicado
 - [x] **F3** · **retención y mediación: el recall está medido y es la variable dominante** —brecha +0,533, y predice fuera de muestra al 60% desde el paradigma contra 3,8% desde la región—. El segundo eslabón —si la evidencia leída **sobrevive** hasta la llamada que responde— es **`M-2`**, con número propio
 - [x] F4 · estadística que resista al tribunal
-- [ ] F5 · teoría nativa
-- [ ] F6 · contratos contra baselines directos
-- [ ] F7 · validez externa
+- → **F5** se mudó a `PAPER.es.md` (2026-08-29). No está cerrado: va en otro momento.
+- → **F6** se mudó a `PAPER.es.md` (2026-08-29). No está cerrado: va en otro momento.
+- → **F7** se mudó a `PAPER.es.md` (2026-08-29). No está cerrado: va en otro momento.
 
 ---
 
@@ -824,7 +1116,7 @@ Ahí `bool(oracle)` **es** el detector de runtime, honestamente.
 
 ## 3. Code review — MEDIUM abiertos
 
-Del bloque de `code-review-2026-08-27.md`. Los bloques CRÍTICO y HIGH están aplicados;
+Del bloque de `historico/code-review-2026-08-27.md`. Los bloques CRÍTICO y HIGH están aplicados;
 de los MEDIUM se aplicaron M2, M4, M5, M6, M7, M9, M12, M19 y —el 2026-08-27— **M3, M11,
 M17 y M18**. **Verificar antes de arreglar**: esta tabla se armó por grep y alguno puede
 haberse cerrado de rebote.

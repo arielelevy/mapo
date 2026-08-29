@@ -68,6 +68,13 @@ datos, no un flujo: puede colgarse de cualquier patrón que tenga más de un pas
 | `pointer_chase` | bucle guiado por código siguiendo referencias literales |
 | `extract_compute` | extracción estructurada por unidad, cómputo exacto en código |
 | `streaming_scan` | pasada única sobre el corpus con estado acotado |
+| `handoff` | agentes con alcance propio y transferencia **autorizada por código**: las llamadas las acota la cantidad de alcances, no un bucle que el modelo corta |
+| `supervisor` | orquestador que despacha el próximo sub-agente **después** de ver lo que volvió el anterior — las llamadas **no** están decididas de antemano |
+
+Y los dos que están en el registro pero **fuera del ruteo**, que es donde esta prueba se
+aplicó con consecuencias: `cot` quedó afuera porque **el fraseo no es un patrón** (mismo
+grafo de control que `direct`, misma utilidad, nunca más barato), y `plan_execute` por
+dominado. Los dos siguen ejecutándose para replay.
 
 **Factores** — no entran al catálogo; se cruzan contra él:
 
@@ -77,24 +84,41 @@ datos, no un flujo: puede colgarse de cualquier patrón que tenga más de un pas
 | variante de superficie | `basic`, `accounting`, `cognitive` | medido |
 | dial de garantía | A0–A3 | medido |
 | respuesta hipotética antes de buscar | `{con, sin}` | decidido, **sin medir** |
-| pizarra compartida | `{con, sin}` | **sin medir** — hoy está soldada adentro de un brazo |
+| pizarra compartida (`shared_state`) | `{con, sin}` | **extraída** a `app/board.py` y cruzable; el brazo `dag_strategy` ya no la tiene soldada. Falta correrla |
 | contratos de afirmación | `{con, sin}` | `C-NUM` y `C-COMPLETE` implementados; `C-COMPLETE` **cableado**, veredicto por fila |
 | **regla de parada** (`stop_on_barren`) | `0` / `N` | implementado, apagado por defecto, **P20a-d registradas** |
 | **ofrecer `read_all`** (`offer_read_all`) | `{con, sin}` | implementado, apagado por defecto, **P21a-d registradas** |
+| **descripciones cortas de tools** (`terse_tools`) | `{con, sin}` | implementado, **P24a-d registradas**. Las descripciones son 55% del payload, y acortarlas no cambia quién decide la próxima acción — de ahí que sea factor |
+| **ofrecer la pizarra a todos** (`offer_board`) | `{con, sin}` | implementado. Es la extracción del factor que estaba soldado adentro de `dag_strategy` — ver «la consecuencia que ya se pagó», abajo |
+| **podar el material** (`compact_material`) | `{con, sin}` | implementado. Acorta lo que el modelo recibe sin tocar el grafo de control |
+| **compactar la historia** (`managed`) | `{basic, managed}` | implementado. Mismas tools que `basic` **a propósito**: lo que cambia no es lo que el modelo PUEDE llamar, sino lo que el harness le HACE a la historia |
+
+> **Los cuatro de arriba llegaron con la misma cicatriz.** `offer_board`, `terse_tools` y
+> `compact_material` se implementaron y **no llegaban al modelo**: la única función del repo
+> que declara las tools no los recibía. Tenían test sobre `specs_for` y ninguno sobre el
+> **camino**. Un factor inerte no da error — da exactamente la base, que es el resultado más
+> difícil de distinguir de «no sirve». Hoy lo atrapa `test_science.py` §59 y la corrida
+> light comparando cada factor contra la base.
 
 ---
 
-## La consecuencia que ya se pagó
+## La consecuencia que ya se pagó, y cómo se saldó
 
-Dos de esos factores están hoy **soldados adentro de un brazo**. La pizarra vive dentro de
-un solo patrón, así que cualquier ventaja de ese patrón mezcla dos cosas que nadie separó:
-su descomposición, y tener estado compartido.
+La pizarra vivía **soldada adentro de `dag_strategy`**, y no la usaba nadie más. Eso tiene
+una consecuencia medible: `dag_strategy` es de los mejores del catálogo, y cualquier ventaja
+suya mezclaba dos cosas que nadie había separado — su descomposición, y tener estado
+compartido.
 
 > **Un factor plegado adentro de un brazo no se puede atribuir.** El brazo gana, y no se
 > sabe cuál de las dos mitades ganó — lo que además impide dárselo a los demás.
 
-Por eso el orden correcto es: **extraer el factor, medirlo cruzado, y recién entonces
-decidir dónde vive.** Medirlo plegado produce un número que no responde ninguna pregunta.
+**Saldada** (2026-08-29): la pizarra vive en `app/board.py`, es una **dimensión**
+(`shared_state`) que se cruza contra todo el catálogo, y `offer_board` la ofrece como tool a
+cualquier patrón. Lo que falta es correrla, no extraerla.
+
+El orden correcto quedó escrito por haberlo pagado: **extraer el factor, medirlo cruzado, y
+recién entonces decidir dónde vive.** Medirlo plegado produce un número que no responde
+ninguna pregunta.
 
 ---
 

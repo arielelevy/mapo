@@ -79,9 +79,19 @@ no exactitud del router ni cercanía a la etiqueta del oráculo.
 7. Tocar final una sola vez.
 8. No reutilizar el final para corregir el mismo claim.
 
-La implementación actual de consolidación no cumple todavía el punto 7 porque construye
-theta con todos los episodios antes de evaluar final. Es deuda bloqueante para una nueva
-afirmación de automejora.
+**El punto 7 ya se cumple** (cerrado 2026-08-27, `test_consolidation.py`). La
+implementación construía θ con **todos** los episodios y después le entregaba a la guarda de
+promoción ese mismo bloque final — o sea, se corregía el propio examen. Hoy **la candidata
+se ajusta sin el bloque final**, y el final lo toca únicamente la guarda.
+
+Junto con eso se cerró el punto 2, que fallaba por otro lado: un **episodio** es una celda
+`(tarea, paradigma)` con utilidad media, no un trial. Antes tres réplicas de una tarea
+contaban como tres evidencias, y una réplica con suerte cobraba un refuerzo que la media de
+su paradigma nunca ganó.
+
+Lo que **sigue abierto** de esta lista no es el 7 sino el 8: el mundo final es de un solo
+uso y el ledger lo impone, pero eso vale por *claim* — reusarlo para corregir el **mismo**
+claim sigue dependiendo de que quien lo escriba no lo intente.
 
 ## Artefactos mínimos
 

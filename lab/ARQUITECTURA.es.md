@@ -239,7 +239,90 @@ Una versión de índice fija: `embedder + dim + normalización + parser_version 
 chunker_version + hash de manifiesto del corpus`. Eso es lo que hace replayable una
 decisión: si cambia cualquiera de esos campos es otro índice, y el EXPLAIN lo dice.
 
-### 4.2 Puerta de salida
+### 4.2 La fusión se clava, no se hereda (decisión del autor, 2026-08-29)
+
+**`fusionType: rankedFusion` explícito en toda colección.** No es una preferencia de
+estilo: **Weaviate cambió su default de RRF a Relative Score Fusion en la v1.24**, así que
+un cluster que se actualiza sin fijarlo cambia de método de fusión **en silencio**. El
+banco fusiona por RRF sobre rangos (`RRF_K`, `app/retrieval.py`), y si producción fusionara
+distinto, el banco mediría otra cosa que la que se ejecuta — que es el único modo de falla
+que este documento existe para evitar.
+
+**Cuál de las dos, decidido midiendo y no argumentando.** Se implementaron las dos en el
+banco (`HybridRetriever(fusion=...)`) y se compararon por `recall@k` contra las unidades
+portadoras que el corpus declara — gratis, porque la fusión opera sobre rankings ya
+computados y los embeddings están cacheados:
+
+| corpus | fusión | R@1 | R@3 | R@5 | R@10 |
+|---|---|---|---|---|---|
+| previo a K-6 | RRF | 0,454 | 0,624 | 0,709 | 0,791 |
+| previo a K-6 | relative_score | 0,472 | 0,652 | **0,763** | 0,825 |
+| con entidades (K-6) | RRF | **0,532** | **0,797** | 0,899 | 0,971 |
+| con entidades (K-6) | relative_score | 0,508 | 0,772 | 0,909 | 0,971 |
+
+**El efecto se da vuelta según el corpus y en los dos queda dentro del ruido** (máximo 1,72
+errores estándar en el viejo; ≤0,62 en el nuevo). No hay evidencia de que ninguna sea
+mejor, así que la decisión pasa a otro criterio: **RRF**, porque no depende de una
+normalización min-max cuyo resultado se mueve cuando cambia el *peor* elemento de la lista,
+y porque es la fusión bajo la que corrió todo el registro.
+
+Lo que **no** es opcional: banco y producción usan **la misma**. Si algún día se elige
+Relative Score, se cambia en los dos lados a la vez y con el número que lo justifique.
+
+### 4.3 El analizador es parte del contrato, no un detalle del motor
+
+La tokenización decide qué puede encontrar BM25, y una diferencia ahí hace que el banco y
+producción busquen distinto aunque los dos digan «BM25». **La colección declara su
+analizador y tiene que coincidir con `app/retrieval.tokenise`.**
+
+Se descubrió midiendo, y era un defecto real: el banco filtraba todo token de uno o dos
+caracteres (`len(t) > 2`), lo que con el corpus previo no costaba nada —ningún nombre traía
+iniciales— y con el corpus de entidades **destruía la única señal que desambigua**:
+
+    tokenise("M. Cavallero")  ->  ['cavallero']
+    tokenise("I. Cavallero")  ->  ['cavallero']      <- IDÉNTICO
+
+Corregido a lo que hace un motor real: **sin filtro de largo, con lista de palabras
+vacías**, dejando que el IDF pondere. El mismo par pasó a puntuar 0,875 contra 0,182.
+
+### 4.4 NER en la ingesta, y por qué eso no es una función de la base
+
+**Ninguna base de datos hace NER**: lo que ofrecen Weaviate, OpenSearch y Elastic es un
+pipeline que corre *un modelo* durante la ingesta. El modelo ya lo tenemos. Así que el NER
+vive en la **etapa de ingesta** (`app/ingest.py`), y tiene que **agrupar, clusterizar y
+deduplicar** superficies: sin eso `M. Cavallero` y `Marta Cavallero` son dos nodos
+distintos y el grafo se fragmenta — con el corpus de entidades eso es peor que no tener
+NER.
+
+### 4.5 Los dos motores que se evaluaron y no se eligieron
+
+- **ClickHouse — descartado, y no por versión.** Desde 25.6 tiene HNSW y sus índices
+  full-text llegaron a GA, pero es un *acceleration engine, not a relevance engine*: **no
+  soporta TF-IDF ni BM25** y no guarda posiciones de palabra (hay issue abierto pidiendo
+  Okapi BM25). Sin scoring no hay ranking, y sin ranking no hay fusión: `hybrid` combina
+  **rangos**, no filas. Sirve como store analítico, no como motor de recuperación.
+- **OpenSearch 2.19 — evaluado, no elegido.** Es el que más se acerca a las tres cosas:
+  hybrid como compound query más search pipeline de normalización, k-NN nativo, y desde
+  **2.14 el ML inference processor**, que corre modelos en la ingesta con NER nombrado
+  explícitamente entre los tipos soportados. Queda como **puerta de salida documentada**:
+  si el NER en ingesta se vuelve el cuello, es el candidato, y el `Retriever` Protocol de
+  §4.2 hace que sea una clase y no una migración.
+
+### 4.6 Lo que NO entra al banco
+
+**Weaviate va en el producto y no en el banco** (decisión del autor, 2026-08-29). El banco
+mantiene su recuperación en proceso —BM25 propio, denso sobre vectores cacheados, RRF— por
+la regla del repo: si el ejecutor necesitara un runtime para correr, dejaría de medir lo
+que producción ejecuta. Y hay una razón medida además de la regla: a la escala del banco
+—1.689 vectores, 107 MB— el índice no es cuello de nada, así que meterlo cambiaría *qué se
+mide* (el BM25 y la tokenización pasarían a ser los de Weaviate) sin comprar velocidad.
+
+Lo que sí queda como obligación: **verificar la coincidencia**, no suponerla. Misma fusión
+(§4.2) y mismo analizador (§4.3), comprobados contra la colección viva.
+
+---
+
+### 4.7 Puerta de salida
 
 Todo detrás del `Retriever` Protocol que ya existe (`app/retrieval.py`). Si Weaviate
 dejara de alcanzar, cambiar de motor es una clase, no una migración.
