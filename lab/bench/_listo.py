@@ -70,6 +70,24 @@ def main() -> None:
             f"desde una receta escrita no es reproducible."
         )
 
+    # HAY ALGO QUE LANZAR, y este chequeo faltaba — que es el peor de los que faltaban.
+    #
+    # La primera version de este archivo verificaba las ocho condiciones y decia «la
+    # campaña se puede lanzar» cuando **el runner de la campaña no existia**: habia
+    # `_run_homogenea_light.py` y `_run_campana.py`, que es otra campaña, mas vieja y de
+    # tres brazos. O sea: se estaban chequeando las precondiciones de una corrida que
+    # nadie podia correr.
+    #
+    # Es la misma familia que todo lo demas de esta tanda —algo declarado que nadie
+    # ejecuta— cometida por mi y sobre el propio protocolo.
+    runner = Path("bench/runs/_run_homogenea.py")
+    if not runner.exists():
+        raise SystemExit(
+            f"No existe `{runner}`. Las ocho condiciones no significan nada sin algo que "
+            f"lanzar: verificar las precondiciones de una corrida que no tiene runner es "
+            f"exactamente el error que este archivo existe para no cometer."
+        )
+
     fallaron: list[str] = []
     for etiqueta, comando, gasta in PASOS:
         marca = "$" if gasta else " "
