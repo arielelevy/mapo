@@ -1791,6 +1791,45 @@ por eso se registra en vez de improvisarse.
 
 ---
 
+### 5.21 Los precios reales, y el que no era el caro · `VERIFICADO`
+
+Los aranceles eran **referencia inventada** puesta a mano. Los reales, de la API de precios
+de Azure y confirmados contra la página, Global Standard `eastus2`, 2026-08-28:
+
+| modelo | entrada | salida | cacheada | escritura | largo:ent | largo:sal |
+|---|---:|---:|---:|---:|---:|---:|
+| `gpt-5.4-nano` | **0,20** | **1,25** | 0,02 | — | — | — |
+| `gpt-5.6-luna` | **0,20** | **1,20** | 0,02 | 0,25 | 0,40 | 1,80 |
+| `gpt-5.6-terra` | 2,00 | 12,00 | 0,20 | 2,50 | 4,00 | 18,00 |
+| `gpt-5.6-sol` | 5,00 | 30,00 | 0,50 | 6,25 | 10,00 | 45,00 |
+
+**Mi referencia erraba 4× en la entrada de nano** (0,05 contra 0,20). Que las conclusiones
+de `X-5a` sobrevivan no fue suerte: se enunciaron sobre **lo invariante al arancel** y se
+barrió el rango de ×1 a ×32. La proporción real salida/entrada es ~6× en los cuatro, bien
+adentro del barrido donde el orden aguantó. **Es la primera vez que la disciplina de
+«afirmar sólo lo invariante» se cobra sola.**
+
+> **Y el hallazgo que ningún número inventado habría dado: `luna` sale lo mismo que `nano`.**
+> No es el modelo caro del catálogo — es de clase nano, y 4% más barato en salida. Si resulta
+> más capaz al mismo precio, **eso no es una pregunta de ruteo sino de sustitución**: se
+> cambia el barato y se termina. Los caros de verdad son `terra` (**9,8×**) y `sol` (**24,5×**).
+
+**Tres ejes de precio que el banco no modela**, y ahora están escritos:
+
+- **contexto largo cuesta el doble** de entrada y 1,5× de salida. La cota de ventana de
+  `check_pair` tiene un gemelo económico que no existe.
+- **la entrada cacheada sale 10× menos.** `X-4b` concluyó que esa vía no existe —el prefijo
+  estable mide 567 tokens contra un umbral de 1.024— y eso **sigue en pie**, pero el premio
+  es **90% de descuento**, no un margen.
+- **escribir al caché se cobra en los `5.6` y no en nano.** Es la asimetría menos obvia: en
+  `sol` la escritura sale **6,25**, más que la **entrada** de `terra`. Un prefijo que cambia
+  seguido paga escritura sin llegar a cobrar lectura nunca.
+
+**No los declaré como constantes.** Un campo que nadie consume es exactamente la falla que
+este repo se pasó el día encontrando. Van documentados, y entran cuando algo los use.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una
