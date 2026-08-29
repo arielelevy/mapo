@@ -170,6 +170,21 @@ class Row:
     # puede saber si algun paradigma se sale de esa proporcion.
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    # LOS TOKENS DE ENTRADA QUE EL PROVEEDOR SIRVIO DE SU CACHE, y son el unico campo que
+    # separa lo que cuesta `0,20` por millon de lo que cuesta `0,02` — un factor 10.
+    #
+    # POR QUE FALTABA Y POR QUE IMPORTA (2026-08-29). `Usage` lo parsea de cada respuesta
+    # desde que existe, y la fila no lo llevaba: moria en el proceso. Consecuencia medida
+    # al estimar la campana: el **98,9% del gasto es ENTRADA**, asi que la unica palanca de
+    # costo que no toca la ciencia es cuanta de esa entrada el proveedor sirve barata — y
+    # desde el registro era imposible saberlo. Se proyectaban 263M de tokens a precio
+    # completo sin poder decir si la mitad se serviria a un decimo.
+    #
+    # NO ES `cached_calls`, que es NUESTRO cache de disco y evita la llamada entera. Este
+    # es del proveedor y ABARATA una llamada que si ocurrio. Confundirlos daria cero
+    # justamente donde hay ahorro: una corrida sin aciertos de disco puede tener el 90% de
+    # su entrada cacheada del lado del proveedor.
+    provider_cached_tokens: int = 0
     # VEREDICTO DE `C-COMPLETE`, cuando la tarea declara un dominio enumerable.
     #
     # `None` = la tarea no declara dominio, o sea que NO HAY CONTRATO — distinto de un
@@ -917,6 +932,7 @@ class Runner:
                 cost_tokens=max(0, spent.total_tokens - ingest_tokens),
                 prompt_tokens=spent.prompt_tokens,
                 completion_tokens=spent.completion_tokens,
+                provider_cached_tokens=spent.provider_cached_tokens,
                 ingest_tokens=ingest_tokens,
                 # Lo que el paradigma NO vio: recuperacion, y cualquier otra cosa que
                 # gaste fuera de sus propias llamadas. Cero es legitimo aca —significa que
@@ -1007,6 +1023,7 @@ class Runner:
                 cost_tokens=max(0, spent.total_tokens - ingest_tokens),
                 prompt_tokens=spent.prompt_tokens,
                 completion_tokens=spent.completion_tokens,
+                provider_cached_tokens=spent.provider_cached_tokens,
                 ingest_tokens=ingest_tokens,
                 calls=spent.calls,
                 wall_seconds=round(time.perf_counter() - started, 3),

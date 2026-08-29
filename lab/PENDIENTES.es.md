@@ -183,7 +183,7 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
 
 ## Resumen — todo de un vistazo
 
-`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **14 abiertos · 10 en curso · 149 cerrados** (contados 2026-08-29)
+`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **16 abiertos · 10 en curso · 149 cerrados** (contados 2026-08-29)
 
 > **El contador se cuenta, no se recuerda.** Decía «59 abiertos · 16 en curso · 52
 > cerrados» y los números reales eran 14, 10 y 147: se había escrito a mano y quedado
@@ -480,12 +480,102 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   cambiar el plan. Así que se mide cruzado —`{reparto fijo, reparto aprendido} × {handoff,
   supervisor}`— y no como un brazo nuevo.
 
-  **La tensión que hay que resolver ANTES, y es de diseño.** El reparto aprendido no cruza
-  el invariante —el código sigue decidiendo— pero **sí** convierte una estadística en
-  control de flujo. Y el `supervisor` tiene la versión aguda del mismo problema escrita en
-  su docstring: si el modelo dibujara la frontera del sub-agente, ahí sí se cruzaría. El
-  casillero que parece correcto es un **prior sobre el orden sugerido**, no una regla que
-  reparta. Esa decisión es del autor y por eso esto no se hizo solo.
+  **La tensión que declaré ESTABA MAL, y estresarla la refutó** (2026-08-29, a pedido del
+  autor). Había escrito que «el reparto aprendido convierte una estadística en control de
+  flujo». Las dos objeciones que eso implica se cayeron al medirlas:
+
+  **(1) No toca el grafo de control.** `bench/audits/_audit_factor_o_patron.py` corre
+  `handoff` con tres repartos distintos sobre las mismas celdas:
+
+  | | |
+  |---|---|
+  | respetan la misma **cota** de control | **8 de 8** |
+  | cambian la respuesta | 2 de 8 |
+
+  Las cotas que el patrón **declara** —`SCOPES` alcances, `MAX_TURNS_PER_AGENT` vueltas—
+  se sostienen bajo los tres. Lo que se mueve es **qué ve cada agente**, o sea la vista. Es
+  un factor por la prueba de las cuatro preguntas, hecha dato en vez de leída.
+
+  Y hay **precedente en el propio código**: el `supervisor` ya elige el alcance de su
+  sub-agente con `surface.hybrid.rank(...)` —una función estadística— y su docstring dice
+  exactamente por qué no cruza: *«si el modelo eligiera las unidades, la frontera la estaría
+  dibujando el sensor»*. **El invariante es sobre quién dibuja la frontera, no sobre si la
+  función es estadística.** Un reparto aprendido lo dibuja el código.
+
+  **(2) No es leakage.** `FORBIDDEN_ATTRIBUTES` prohíbe **partir el espacio de features
+  por** `utility` —«partir sobre la respuesta describe el gold»—, y `association.py`
+  **refuerza desde** el resultado, que es lo que hace θ. Son operaciones distintas.
+
+  **Y el reparto COMPRA algo, que era lo que faltaba saber:** en `c8-000-w4` el reparto
+  contiguo saca `u = 1,000` donde el actual saca `0,000`. No es una simetría inocua.
+
+  **Lo que sí queda como condición, y son tres, ninguna bloqueante:**
+
+  1. **Pasa por la partición en tres** de `consolidation.py`, como todo lo que se aprende:
+     `search` propone, `validate` puntúa, `final` sólo la guarda de promoción.
+  2. **Viaja adentro del bundle firmado**, o `P23c` se cae. Esa predicción dice que
+     réplicas del mismo caso autorizan **el mismo** conjunto de transferencias; con un
+     reparto aprendido eso sigue valiendo —mismo θ ⇒ mismo reparto⇒ mismas
+     transferencias— **sólo si** el reparto es parte de θ y no un estado suelto.
+  3. **Se mide cruzado**: `{reparto fijo, reparto aprendido} × {handoff, supervisor}`, no
+     como brazo nuevo.
+
+  **Así que esto ya no espera una decisión de diseño: espera la corrida**, como el resto.
+  Lo que sigue siendo del autor es si vale gastar en un factor más.
+
+- [ ] **X-6** · **el 98,9% del gasto es ENTRADA, y sólo el 3,8% se sirve del caché del
+  proveedor** (medido el 2026-08-29, a pedido del autor: «¿se puede optimizar la corrida?»).
+
+  La entrada cacheada del proveedor cuesta **`0,02` por millón contra `0,20`** — un factor
+  **10**. Así que la única palanca de costo que **no toca la ciencia** es cuánta entrada se
+  sirve barata. Medido sobre `w16` con `react` y `dag_strategy`: **9.088 de 239.903 tokens
+  de entrada**, o sea 3,8%. El resto se paga entero.
+
+  **Por qué no se puede aprovechar hoy, y el número es exacto:**
+
+  | | |
+  |---|---|
+  | declaración de tools | 533 tokens |
+  | contrato de respuesta | 34 tokens |
+  | **prefijo estable total** | **568 tokens** |
+  | umbral del proveedor | **1.024 tokens** |
+  | | **faltan 456** |
+
+  El caché exige que los **primeros 1.024 tokens sean idénticos**, y después acierta cada
+  128 más. Con 568 no engancha nunca al arranque; lo poco que se cachea hoy (10% en una
+  celda de `dag_strategy`) es historia acumulada que cruza el umbral **por accidente**, en
+  las conversaciones largas.
+
+  **Y `stable_prefix_first` —el factor que existe para esto— está INERTE.** `framed()` en
+  `app/paradigms/__init__.py` implementa el orden correcto y **ningún paradigma la llama**:
+  cero callers en todo el repo. Es la **quinta** vez que aparece la misma familia de
+  defecto, y la primera en que el nombre lo lee sólo su propia definición.
+
+  Su docstring además ya decía la verdad y nadie la cruzó con el resto: *«NO ALCANZA POR SI
+  SOLO — el prefijo estable mide ~567 tokens contra un umbral de 1.024»*. O sea que
+  cablearlo tampoco compra caché **hasta que el prefijo crezca**. Son dos trabajos:
+  conectarlo, y decidir si el prefijo debe crecer a propósito.
+
+  **Cuidado con la segunda mitad.** Engordar el prefijo para cruzar 1.024 cambia lo que el
+  modelo lee, así que **es un factor y hay que medirlo**, no una optimización que se aplica.
+  Y hay un antecedente que lo desaconseja como reflejo: `terse_tools` existe porque las
+  descripciones son el **55% del payload** y la hipótesis es que **acortarlas** ayuda.
+  Engordar y acortar el mismo texto son factores opuestos y no se pueden decidir por
+  intuición — se cruzan.
+
+- [ ] **X-6b** · **lo que NO se puede recortar de la campaña, dicho con números** para que
+  no vuelva a preguntarse. Las palancas obvias están todas cerradas por una razón escrita:
+
+  | palanca | qué ahorra | qué cuesta |
+  |---|---|---|
+  | `repeat` 3 → 1 | 67% (263M → 88M) | **el piso de ruido POR CELDA**, que es regla del repo. Sin dispersión ninguna diferencia es decidible, y la campaña entera reportaría números que no se pueden defender |
+  | sacar `w48` | 61% (160M) | **el único régimen donde el material no entra en ventana** — 455k de material medio contra los 272k de nano. Es el régimen que el banco existe para medir |
+  | sacar `dag_strategy` | 27% (70M) | el único mejor en 8 celdas de 96, y el comparador de `P28c` |
+  | bajar `max_tokens` de salida | **1,1%** | nada, y por eso tampoco sirve: la salida es una centésima parte del gasto |
+
+  El tamizado en `w4`+`w16` (26% del costo) **sí** es el plan escrito — pero vale para los
+  **factores**, no para la BASE: los factores se tamizan barato y sólo los que muestran
+  señal se confirman en `w48`.
 
 - [ ] **P-2g** · **la asociación aprendida se fabrica como creencia y NINGUNA REGLA la
   consume** (pregunta del autor, 2026-08-29: «¿está extendida la plasticidad al orden de
