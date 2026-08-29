@@ -630,6 +630,28 @@ class Runner:
     # -- execution ---------------------------------------------------------
 
     def existing_keys(self) -> set[tuple[str, str, int]]:
+        """Las celdas MEDIDAS. Una fila de `infra_error` no cuenta como medida.
+
+        EL BUG QUE ESTO ARREGLA (2026-08-29), y es de los que sólo aparecen en una corrida
+        larga. Toda fila se appendea al `.jsonl`, incluidas las de infraestructura. Esto
+        las contaba como hechas, así que **una celda que se caía por un 429 quedaba
+        salteada para siempre**: el resume la veía presente y no la volvía a intentar.
+
+        Lo grave es que el sistema entero está construido sobre la promesa contraria.
+        `BENCHMARK.es.md` §Infraestructura dice, palabra por palabra, que un error de cuota
+        o transporte «debe quedar elegible para completar el trial faltante», y
+        `load_rows` ya las excluye de toda estadística. O sea: la fila no puntuaba **y**
+        bloqueaba su propio reintento — el peor de los dos mundos, y en silencio, porque
+        el conteo de celdas del plan seguía dando completo.
+
+        En una campaña de horas con 429s esperables, eso no es un caso raro: es el modo en
+        que la corrida termina con huecos que nadie ve. `repeat=3` con un trial perdido
+        deja una celda promediada sobre dos, y ninguna estadística lo denuncia.
+
+        Y NO ROMPE EL CONTEO. Al reintentar se appendea una fila NUEVA con la misma clave,
+        así que el archivo queda con dos —la infra y la buena—. `load_rows` excluye las de
+        infraestructura por defecto, con lo cual aguas abajo sobrevive exactamente una.
+        """
         if not self._results_path.exists():
             return set()
         keys: set[tuple[str, str, int]] = set()
@@ -637,6 +659,8 @@ class Runner:
             if not line.strip():
                 continue
             row = json.loads(line)
+            if row.get("infra_error"):
+                continue
             keys.add((row["task_id"], row["paradigm"], row.get("trial", 0)))
         return keys
 

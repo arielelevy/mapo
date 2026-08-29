@@ -2918,6 +2918,57 @@ def check_retrieval_is_a_factor(ok: bool) -> bool:
 
     print("\n--- 49. la recuperacion es un factor, y se cobra ---")
 
+    # UN 429 NO PUEDE BLOQUEAR SU PROPIO REINTENTO (2026-08-29). Toda fila se appendea al
+    # `.jsonl`, incluidas las de infraestructura, y `existing_keys` las contaba como hechas:
+    # una celda caida por cuota quedaba salteada PARA SIEMPRE en el resume.
+    #
+    # Lo grave es que el sistema esta construido sobre la promesa contraria —
+    # `BENCHMARK.es.md` dice que un error de cuota «debe quedar elegible para completar el
+    # trial faltante»— y `load_rows` ya las excluia de toda estadistica. La fila no puntuaba
+    # Y bloqueaba su reintento, en silencio, porque el conteo de celdas seguia dando
+    # completo. En una campaña de horas eso no es un caso raro: es como termina con huecos.
+    import tempfile as _tmp
+    from app.runner import Runner
+
+    class _RunnerFalso:
+        """Sólo el metodo bajo prueba: construir un `Runner` real exige corpus y red."""
+        def __init__(self, path):
+            self._results_path = path
+        existing_keys = Runner.existing_keys
+
+    def _escribir(filas):
+        f = Path(_tmp.mkdtemp()) / "r.jsonl"
+        f.write_text(chr(10).join(json.dumps(x) for x in filas), encoding="utf-8")
+        return f
+
+    buena = {"task_id": "t1", "paradigm": "react", "trial": 0}
+    caida = {"task_id": "t2", "paradigm": "react", "trial": 0, "infra_error": True}
+    fallada = {"task_id": "t3", "paradigm": "react", "trial": 0,
+               "error": "ToolFailure: el paradigma se equivoco"}
+
+    claves = _RunnerFalso(_escribir([buena, caida, fallada])).existing_keys()
+    ok &= check("una celda medida cuenta como hecha",
+                ("t1", "react", 0) in claves)
+    ok &= check("una celda caida por INFRAESTRUCTURA no cuenta: tiene que poder "
+                "reintentarse, o un 429 la pierde para siempre",
+                ("t2", "react", 0) not in claves)
+    ok &= check("y una que FALLO DE VERDAD si cuenta — el paradigma se equivoco y ese "
+                "cero es la medicion, no un hueco",
+                ("t3", "react", 0) in claves)
+
+    # Al reintentar quedan DOS filas con la misma clave. Aguas abajo tiene que sobrevivir
+    # una sola, o la celda pesaria el doble.
+    from app.runner import load_rows as _lr
+    dos = _escribir([dict(caida, cost_tokens=10, fingerprint="A", region_vocabulary="V",
+                          retriever="hybrid", analyzer="v2-stopwords"),
+                     dict(caida, infra_error=False, cost_tokens=20, fingerprint="A",
+                          region_vocabulary="V", retriever="hybrid",
+                          analyzer="v2-stopwords")])
+    ok &= check("tras el reintento el archivo tiene las dos filas y el analisis ve UNA: "
+                "`load_rows` excluye las de infraestructura por defecto",
+                len(_lr(dos)) == 1 and _lr(dos)[0]["cost_tokens"] == 20)
+
+
     # EL EFECTO DE BRAZO SE ESTRATIFICA POR DOSIS, O NO SE PROMEDIA (`AR-5`, 2026-08-29).
     #
     # `arm_dose` existia y la usaba UN analizador. Tener la funcion no es tener la guarda:

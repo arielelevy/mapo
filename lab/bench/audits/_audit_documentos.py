@@ -150,7 +150,34 @@ def main() -> None:
                 )
             vistos[numero] = i
 
-    # 4. ENLACES. Ya no es sobre el catalogo, pero es la misma clase: algo que el documento
+    # 4. EL ESPEJO DEL PAPER. `paper-en.md` es canonico y `paper-es.md` es su espejo, y la
+    #    regla es que toda edicion va a los DOS **en la misma posicion**. `PENDIENTES.es.md`
+    #    la escribe y dice que ya se rompio: «un bloque quedo antes del parrafo de
+    #    verificacion en un archivo y despues en el otro».
+    #
+    #    No se comparan los TITULOS —estan en idiomas distintos— sino la SECUENCIA DE
+    #    NIVELES, que es la estructura y sobrevive a la traduccion. Dos archivos que dicen
+    #    lo mismo en distinto lugar empiezan a decir cosas distintas.
+    titulo = re.compile(r"^(#{1,6}) ", re.M)
+    en = RAIZ / "whitepaper" / "paper-en.md"
+    es = RAIZ / "whitepaper" / "paper-es.md"
+    if en.exists() and es.exists():
+        niveles = {
+            f: [len(m.group(1)) for m in titulo.finditer(f.read_text(encoding="utf-8"))]
+            for f in (en, es)
+        }
+        if niveles[en] != niveles[es]:
+            detalle = f"{len(niveles[en])} titulos en -en contra {len(niveles[es])} en -es"
+            for i, (a, b) in enumerate(zip(niveles[en], niveles[es]), 1):
+                if a != b:
+                    detalle = f"divergen en el titulo {i} (nivel {a} contra {b})"
+                    break
+            hallazgos.append(
+                f"whitepaper/paper-en.md y paper-es.md NO son espejo: {detalle}. "
+                f"Toda edicion va a los dos, en la misma posicion."
+            )
+
+    # 5. ENLACES. Ya no es sobre el catalogo, pero es la misma clase: algo que el documento
     #    afirma y se puede derivar.
     enlace = re.compile(r"\]\(([^)#:]+\.(?:md|py|json|svg))\)")
     for doc in RAIZ.rglob("*.md"):
