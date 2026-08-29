@@ -523,13 +523,24 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   **Así que esto ya no espera una decisión de diseño: espera la corrida**, como el resto.
   Lo que sigue siendo del autor es si vale gastar en un factor más.
 
-- [ ] **X-6** · **el 98,9% del gasto es ENTRADA, y sólo el 3,8% se sirve del caché del
-  proveedor** (medido el 2026-08-29, a pedido del autor: «¿se puede optimizar la corrida?»).
+- [ ] **X-6** · **el 98,9% del gasto es ENTRADA, y el caché del proveedor sirve entre el 2%
+  y el 4%** (medido el 2026-08-29, a pedido del autor: «¿se puede optimizar la corrida?»).
 
   La entrada cacheada del proveedor cuesta **`0,02` por millón contra `0,20`** — un factor
   **10**. Así que la única palanca de costo que **no toca la ciencia** es cuánta entrada se
-  sirve barata. Medido sobre `w16` con `react` y `dag_strategy`: **9.088 de 239.903 tokens
-  de entrada**, o sea 3,8%. El resto se paga entero.
+  sirve barata.
+
+  | dónde se midió | entrada servida del caché |
+  |---|---|
+  | 4 celdas de `w16` (`react`, `dag_strategy`) | 9.088 / 239.903 = **3,8%** |
+  | el registro **entero** de la light (46 filas, todo `w4`) | 24.704 / 1.052.328 = **2,3%** |
+  | `w48` — el 61% del gasto de la campaña | **sin medir** |
+
+  > **El 3,8% se reportó primero como si fuera el número general y no lo es.** Salió de
+  > cuatro celdas. Es la regla de la casa aplicada a mí mismo: **un número derivado se
+  > verifica en la granularidad donde vive, no en la que resultó cómoda.** El agregado dice
+  > 2,3%; el `w48`, que es donde está el 61% del gasto y donde las conversaciones son más
+  > largas, **no se midió** — y es justo donde el caché tendría más para agarrar.
 
   **Por qué no se puede aprovechar hoy, y el número es exacto:**
 
