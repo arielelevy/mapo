@@ -27,9 +27,13 @@ token, y separa dos modos de falla que se confunden de rutina: a map-reduce lo a
 **cardinalidad**, no el tamaño total.
 
 Segundo, **la selección paga sólo bajo una condición precisa**. Damos el Teorema del Valor
-de Selección, `π·α·G > (1−π)·β·L`, y sus corolarios: un ruteador obligado a elegir siempre
-no tiene control sobre su tasa de falsos positivos, así que la cobertura óptima está
-generalmente muy por debajo de uno. Mostramos además que donde existe un detector de falla
+de Selección —`Σⱼ π_j·α_j·G_j > Σⱼ ν_j·β_j·L_j`, una descomposición exacta **por destino**
+sobre un catálogo de `k` brazos— y sus corolarios: un ruteador obligado a elegir siempre no
+controla ni cuán seguido se equivoca ni cuánto cuesta cada error, y la cobertura óptima está
+por debajo de uno siempre que alguna pérdida fuera ruteada. El umbral de imposibilidad queda
+parametrizado por la **selectividad de pérdida** `ρ`, la razón entre pérdida realizada y
+distribucional: un ruteador que se equivoca seguido pero barato puede superar la cota
+clásica y capturar valor igual. Mostramos además que donde existe un detector de falla
 barato, escalar domina a predecir — un ruteador que se equivoca paga una pérdida de
 calidad, una cascada paga una pérdida de costo — lo que particiona el problema por
 **verificabilidad** y no por tipo de tarea.
@@ -464,62 +468,163 @@ modelo**.
 
 ## 5.1 El Teorema del Valor de Selección
 
-Sea `p⋆` el fallback y `p_s` un especialista. Sea `S = {t : u(t,p_s) > u(t,p⋆)}` con
-`π = Pr[t ∈ S]`. Sea `α = Pr[rutear a p_s | t ∈ S]` y `β = Pr[rutear a p_s | t ∉ S]`, y sean
-`G_α`, `L_β` la ganancia y la pérdida medias **condicionadas a los subconjuntos ruteados**.
-
-**Teorema 1.** `V(r) − V(p⋆) = π·α·G_α − (1−π)·β·L_β`, exactamente. Por lo tanto la selección
-le gana al mejor paradigma fijo si y sólo si
+Sea `p⋆` el fallback y `p_1 … p_k` los especialistas. Sea `Δ_j(t) = u(t,p_j) − u(t,p⋆)`.
+Para cada brazo, partir el espacio de tareas **en tres** — la tercera parte no es un
+tecnicismo, y §5.1.1 muestra qué cuesta colapsarla:
 
 ```
-π · α · G_α  >  (1 − π) · β · L_β
+S₊ʲ = { Δ_j > 0 }   ganancia estricta   π_j = Pr[S₊ʲ]
+S₀ʲ = { Δ_j = 0 }   empate              τ_j = Pr[S₀ʲ]
+S₋ʲ = { Δ_j < 0 }   pérdida estricta    ν_j = Pr[S₋ʲ]
 ```
 
-Condicionar la ganancia y la pérdida a los subconjuntos *ruteados* y no a `S` hace la
-identidad exacta sin ningún supuesto de independencia, y separa la calidad de cobertura
-(`α`, `β`) de la calidad de selección dentro de la cobertura (`G_α` frente al `G`
-incondicional).
+y sean, **condicionadas a lo efectivamente ruteado**,
+
+```
+α_j = Pr[rutear a p_j | S₊ʲ]      G_j = E[  Δ_j | rutear a p_j , S₊ʲ ]
+β_j = Pr[rutear a p_j | S₋ʲ]      L_j = E[ −Δ_j | rutear a p_j , S₋ʲ ]
+```
+
+**Teorema 1.** Para todo `k ≥ 1`,
+
+```
+V(r) − V(p⋆)  =  Σⱼ ( π_j · α_j · G_j  −  ν_j · β_j · L_j )
+```
+
+*exactamente*, sin ningún supuesto de independencia. Por lo tanto la selección le gana al
+mejor paradigma fijo si y sólo si `Σⱼ π_j α_j G_j > Σⱼ ν_j β_j L_j`.
+
+*Demostración.* `V(r) − V(p⋆) = E[Δ_{r(t)}(t)·1{r(t) ≠ p⋆}]`. Descomponiendo por destino
+queda `Σⱼ Pr[rutear a p_j]·E[Δ_j | rutear a p_j]`, y partiendo cada esperanza condicional
+según el signo de `Δ_j`: la parte de `S₊ʲ` pesa `π_j α_j` con media `G_j`, la de `S₋ʲ` pesa
+`ν_j β_j` con media `−L_j`, y **`S₀ʲ` aporta exactamente cero** porque ahí `Δ_j = 0`. ∎
+
+Dos decisiones lo vuelven exacto y no aproximado. Condicionar `G` y `L` a los subconjuntos
+*ruteados* elimina todo supuesto de independencia entre dónde vive la ganancia y dónde el
+ruteador elige ir. Y descomponer **por destino** en vez de por un único «especialista» lo
+hace valer para un catálogo: con `k` brazos, equivocarse tiene un *destino*, y mandar una
+tarea a un brazo apenas peor no es el mismo evento que mandarla al peor de doce.
 
 **Corolario 1 (precisión sobre cobertura).** Cuando `p⋆` es casi óptimo en regiones amplias,
 `G` es chico y `L` grande, así que la condición exige `β → 0` incluso a costa de `α`. El
 recall no es el objetivo.
 
-**Corolario 2 (umbral de imposibilidad).** `β_max = π·α·G_α / ((1−π)·L)`. Cualquier ruteador
-por encima le pierde a siempre-fallback por buenos que sean sus especialistas. Acá `L` debe
-ser la pérdida **distribucional**, no la realizada: computado desde la pérdida realizada el
-umbral es circular, y un ruteador perfecto — que no realiza pérdida — reportaría un límite
-infinito y parecería no tener restricción.
+### 5.1.1 Un empate no es un misruteo
 
-**Corolario 3 (cobertura óptima).** Con una confianza calibrada y un umbral variable, el valor
-capturado es unimodal en la cobertura y el óptimo generalmente tiene cobertura ≪ 1. Un
-ruteador obligado a elegir no tiene control alguno sobre `β`.
+`S` se define con desigualdad *estricta*, así que los empates quedan afuera. Una versión
+anterior de este teorema definía `β` sobre el complemento de `S₊`, lo que le cobraba al
+ruteador haber ruteado sobre un empate — un acto que no cuesta absolutamente nada.
+Construido: un ruteador que rutea sólo donde gana o empata, y nunca donde pierde, registra
+**β = 0,714 sin haber hecho un solo daño**.
 
-**Identidad.** La brecha del oráculo iguala `π·G`. Los 17,1pp reportados para una suite
-publicada *son* `π·G` para esa suite, lo que permite recuperar el `β` implícito de un ruteador
-a partir de sus números de portada.
+El producto `β·L` seguía siendo correcto, porque `L` absorbía el cero. Pero `β` sola dejaba
+de ser la *tasa* de misruteo, y el Corolario 2 usa `β` y `L` por separado. Definir `β` sobre
+`S₋` restituye la lectura que un lector espera, y deja el Teorema 1 intacto: los empates
+aportan cero a los dos lados.
 
-Todo lo anterior está verificado en `tests/test_science.py` contra distribuciones cuyos
-términos se conocen por construcción, incluido el caso negativo en el que se confirma que un
-ruteador por encima de `β_max` captura valor negativo.
+No es un caso de borde en ningún catálogo donde varios paradigmas resuelven la misma tarea.
+En el nuestro, un brazo es el más barato al empatar en 46 de 96 celdas.
 
-**Qué es el Teorema 1, y qué no es.** Es una *identidad*: una descomposición algebraica
-exacta de una diferencia, verdadera por construcción. **Ninguna medición puede falsarla**, y
-nada en este paper debe leerse como que la confirmó. Lo empírico es sólo si sus términos
-satisfacen la desigualdad sobre una distribución dada — y eso es una pregunta sobre un
-ruteador, no sobre el teorema.
+### 5.1.2 El umbral de imposibilidad, y contra qué pérdida se mide
+
+Definir, por brazo,
+
+```
+L̄_j = E[ −Δ_j | S₋ʲ ]     la pérdida media de la TAREA        (no depende del ruteador)
+ρ_j = L_j / L̄_j           la SELECTIVIDAD DE PÉRDIDA          (ρ_j := 1 cuando β_j = 0)
+```
+
+**Corolario 2.** El ruteador le pierde a siempre-fallback si y sólo si
+`Σⱼ π_j α_j G_j < Σⱼ ν_j β_j ρ_j L̄_j`, y con un solo brazo
+
+```
+β_max(ρ) = π · α · G / ( ν · ρ · L̄ )
+```
+
+| `ρ` | qué ruteador es | qué hace el umbral |
+|---|---|---|
+| **ρ = 1** | **ciego a la magnitud de la pérdida** — se equivoca de forma representativa | el enunciado clásico, y ahí es exacto |
+| ρ < 1 | evita las equivocaciones caras | se **afloja** |
+| ρ > 1 | anti-calibrado: falla justo donde más duele | se **endurece** |
+
+**Por qué el parámetro es necesario y no un refinamiento.** Enunciado sólo con la pérdida
+distribucional, el umbral no es una imposibilidad. Alcanzan tres tareas: una ganancia de
+`+0,10` con probabilidad `0,10`, ruteada; una pérdida de `−0,001` con `0,45`, ruteada; y una
+de `−1,00` con `0,45`, *no* ruteada. Entonces `β = 0,500` supera `β_max = 0,0222` por 23× y
+el ruteador **igual captura `+0,00955`**. Un ruteador que se equivoca *seguido pero barato*
+es exactamente lo que produce un ruteo selectivo bien construido.
+
+Tampoco alcanza con sustituir por la pérdida realizada: un ruteador perfecto no realiza
+pérdida, así que el umbral reportaría infinito y parecería no imponer restricción alguna —
+la objeción que motivó la forma distribucional en primer lugar. **Las dos objeciones son
+correctas.** Se disuelven juntas en cuanto la pérdida realizada entra como *factor de la
+pérdida* y no como *denominador de un umbral*: con `β = 0` el término entero se anula antes
+de que `ρ` se consulte.
+
+**Corolario 2b.** Un ruteador obligado a elegir no controla ni `β` ni `ρ`. Uno selectivo
+controla los dos — y `ρ` es la palanca más barata: bajar `β` exige acertar más seguido;
+bajar `ρ` sólo exige abstenerse donde la apuesta es cara. Eso le da al Corolario 1 un
+mecanismo y no sólo una desigualdad, y `ρ` se recupera de cualquier registro que reporte
+pérdida potencial y realizada.
+
+### 5.1.3 Cobertura óptima
+
+Sea `V(c)` el valor capturado a cobertura `c`, admitida bajando un umbral de confianza.
+Entonces `dV/dc = E[Δ | tarea marginal en c]`, y por lo tanto:
+
+**(a)** `V` es unimodal **si y sólo si** `c ↦ E[Δ | marginal en c]` es no creciente — es
+decir, si y sólo si la señal de confianza ordena las tareas por *ganancia esperada*. **La
+calibración sola no da eso.** La calibración restringe la probabilidad de ganar; el valor
+depende de su magnitud. Construido, con `Pr[acertar | κ] = κ` exactamente en cada grupo:
+tres grupos con `E[Δ]` de `+0,008`, `−0,170` y `+0,593` a confianzas `0,90`, `0,60` y `0,30`
+producen una curva de valor capturado que **sube, baja y vuelve a subir**, con su óptimo en
+**cobertura total**.
+
+**(b)** Sin ningún supuesto: la cobertura óptima es `< 1` siempre que alguna tarea con
+`Δ_{r(t)}(t) < 0` fuera ruteada a cobertura total. Esto es lo que el argumento necesita, y
+se sigue en una línea — sacar un término negativo aumenta la suma.
+
+**Corolario 3.** Afirmamos (b). Afirmar unimodalidad afirma más de lo que el diseño
+necesita, y regala un contraejemplo.
+
+### 5.1.4 La identidad de la brecha del oráculo, y su alcance
+
+Con un solo especialista, la brecha del oráculo iguala `π·G`, lo que permite recuperar el
+`β` implícito de un ruteador publicado a partir de sus números de portada. **Con `k` brazos
+no factoriza**: la brecha es `E[maxⱼ Δ_j⁺]`, que no es `π_j·G_j` de ningún par fijo. Los
+17,1pp reportados para una suite publicada pueden leerse como `π·G` sólo donde ese trabajo
+reporte un *par*; sobre una grilla, la lectura del `β` implícito no está disponible.
+
+### 5.1.5 Qué es el Teorema 1, y qué no es
+
+Es una *identidad*: una descomposición algebraica exacta, verdadera por construcción.
+**Ninguna medición puede falsarla**, y nada en este paper debe leerse como que la confirmó.
+Lo empírico es sólo si sus términos satisfacen la desigualdad sobre una distribución dada —
+una pregunta sobre un ruteador, no sobre el teorema.
+
+El Teorema 1 y los tres corolarios están verificados en `tests/test_science.py` contra
+distribuciones cuyos términos se conocen por construcción. La identidad se chequeó además
+sobre 4.000 distribuciones al azar con `k` de 1 a 4 —3.269 de ellas con empates— con
+discrepancia máxima `1,67 × 10⁻¹⁶`. Los Corolarios 2 y 3 están enunciados arriba en su forma
+corregida; los contraejemplos que forzaron la corrección se reproducen ahí.
 
 **Y la distinción importa acá porque los términos nunca se separaron.** En los dos corpus
 held-out el margen de decisión del ruteador fue **0 en todas las tareas**, así que la curva
 riesgo–cobertura colapsa a un solo punto en el origen: **AURC 0,000** contra un techo de
 **+0,400**. Un ruteador que nunca se abstiene no tiene `α` ni `β` distintos de
-siempre-fallback, así que la identidad se cumple **vacuamente** — con `π·α·G_α` y
-`(1−π)·β·L_β` medidos sobre una cobertura que el ruteador no eligió.
+siempre-fallback, así que la identidad se cumple vacuamente — con los dos términos medidos
+sobre una cobertura que el ruteador no eligió.
 
 > **El trabajo que un lector podría acreditarle a §5.1 lo hace §5.2.** El teorema de
 > selección aporta la contabilidad; toda afirmación falsable que este registro llegó a
 > resolver es sobre dominancia de cascada y sensibilidad del detector. Presentarlos en este
 > orden es una decisión de exposición, no una de prioridad — y la lectura honesta es que la
 > rama de selección de la partición de más abajo **sigue sin ejercitarse**.
+
+**Una observación une las tres correcciones.** `π`, `α` y `β` responden *si* el ruteador
+acierta; `G`, `L` y `ρ` responden *cuánto cuesta cuando no*. Cada lugar donde el enunciado
+anterior falló —el umbral, los empates, la unimodalidad— es un lugar donde esos dos ejes se
+trataron como uno.
 
 ## 5.2 Dominancia de la cascada, y su corrección medida
 
@@ -530,7 +635,7 @@ intento barato se desperdicia y la buena respuesta llega de todas formas tras es
 Con sensibilidad de detector `s`:
 
 ```
-regret(ruteador) = (1−π)·β·L
+regret(ruteador) = ν·β·ρ·L̄
 regret(cascada)  = E[costo de la escalera] + (1−s)·L
 ```
 

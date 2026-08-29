@@ -23,8 +23,12 @@ candidate topologies before any token is spent, and it separates two failure mod
 are routinely conflated: map-reduce is bounded by *cardinality*, not by total size.
 
 Second, **selection pays only under a precise condition**. We give the Selection Value
-Theorem, `π·α·G > (1−π)·β·L`, and its corollaries: a router obliged to always choose has no
-control over its false-positive rate, so optimal coverage is generally well below one. We
+Theorem — `Σⱼ π_j·α_j·G_j > Σⱼ ν_j·β_j·L_j`, an exact decomposition **by destination** over a
+catalogue of `k` arms — and its corollaries: a router obliged to always choose controls
+neither how often it errs nor how much each error costs, and optimal coverage is below one
+whenever any loss would be routed. The impossibility threshold is parameterised by **loss
+selectivity** `ρ`, the ratio of realised to distributional loss: a router that errs often
+but cheaply can exceed the classical bound and still capture value. We
 further show that where a cheap failure detector exists, escalation dominates prediction —
 a router that misroutes pays a quality loss, a cascade pays a cost loss — which partitions
 the problem by verifiability rather than by task type.
@@ -436,61 +440,162 @@ this line of work has: the structure decides more than the model does.
 
 ## 5.1 The Selection Value Theorem
 
-Let `p⋆` be the fallback and `p_s` a specialist. Let `S = {t : u(t,p_s) > u(t,p⋆)}` with
-`π = Pr[t ∈ S]`. Let `α = Pr[route to p_s | t ∈ S]` and `β = Pr[route to p_s | t ∉ S]`, and
-let `G_α`, `L_β` be the mean gain and mean loss **conditioned on the routed subsets**.
-
-**Theorem 1.** `V(r) − V(p⋆) = π·α·G_α − (1−π)·β·L_β`, exactly. Hence selection beats the
-best fixed paradigm iff
+Let `p⋆` be the fallback and `p_1 … p_k` the specialists. Let `Δ_j(t) = u(t,p_j) − u(t,p⋆)`.
+For each arm, partition the task space **in three** — the third part is not a technicality,
+and §5.1.1 shows what collapsing it costs:
 
 ```
-π · α · G_α  >  (1 − π) · β · L_β
+S₊ʲ = { Δ_j > 0 }   strict gain    π_j = Pr[S₊ʲ]
+S₀ʲ = { Δ_j = 0 }   tie            τ_j = Pr[S₀ʲ]
+S₋ʲ = { Δ_j < 0 }   strict loss    ν_j = Pr[S₋ʲ]
 ```
 
-Conditioning the gain and loss on the *routed* subsets rather than on `S` makes the identity
-exact with no independence assumption, and it separates coverage quality (`α`, `β`) from
-selection quality within coverage (`G_α` versus the unconditional `G`).
+and let, **conditioned on what was actually routed**,
+
+```
+α_j = Pr[r → p_j | S₊ʲ]      G_j = E[  Δ_j | r → p_j , S₊ʲ ]
+β_j = Pr[r → p_j | S₋ʲ]      L_j = E[ −Δ_j | r → p_j , S₋ʲ ]
+```
+
+**Theorem 1.** For every `k ≥ 1`,
+
+```
+V(r) − V(p⋆)  =  Σⱼ ( π_j · α_j · G_j  −  ν_j · β_j · L_j )
+```
+
+*exactly*, with no independence assumption. Hence selection beats the best fixed paradigm iff
+`Σⱼ π_j α_j G_j > Σⱼ ν_j β_j L_j`.
+
+*Proof.* `V(r) − V(p⋆) = E[Δ_{r(t)}(t)·1{r(t) ≠ p⋆}]`. Decomposing by destination gives
+`Σⱼ Pr[r→p_j]·E[Δ_j | r→p_j]`, and splitting each conditional expectation by the sign of
+`Δ_j`: the `S₊ʲ` part carries weight `π_j α_j` with mean `G_j`, the `S₋ʲ` part carries
+`ν_j β_j` with mean `−L_j`, and **`S₀ʲ` contributes exactly zero** because `Δ_j = 0` there. ∎
+
+Two choices make this exact rather than approximate. Conditioning `G` and `L` on the
+*routed* subsets removes any independence assumption between where gain lives and where the
+router chooses to go. Decomposing **by destination** rather than by a single "specialist"
+makes it hold for a catalogue: with `k` arms, misrouting has a *destination*, and sending a
+task to a slightly worse arm is not the same event as sending it to the worst of twelve.
 
 **Corollary 1 (precision over coverage).** When `p⋆` is near-optimal over wide regions, `G`
 is small and `L` large, so the condition demands `β → 0` even at the cost of `α`. Recall is
 not the objective.
 
-**Corollary 2 (impossibility threshold).** `β_max = π·α·G_α / ((1−π)·L)`. Any router above
-it loses to always-fallback however good its specialists are. `L` here must be the
-*distributional* loss, not the realised one: computed from the realised loss the threshold
-is circular, and a perfect router — which realises no loss — would report an infinite
-bound and appear unconstrained.
+### 5.1.1 Ties are not misroutes
 
-**Corollary 3 (optimal coverage).** With a calibrated confidence and a variable threshold,
-captured value is unimodal in coverage and the optimum generally has coverage ≪ 1. A router
-obliged to choose has no control over `β` at all.
+`S` is defined by a *strict* inequality, so ties fall outside it. An earlier statement of
+this theorem defined `β` over the complement of `S₊`, which charged a router for routing on
+a tie — an act that costs exactly nothing. Constructed: a router that routes only where it
+gains or ties, and never where it loses, records **β = 0.714 with zero harm done**.
 
-**Identity.** The oracle gap equals `π·G`. The 17.1pp reported for a published suite *is*
-`π·G` for that suite, which allows a router's implied `β` to be recovered from its headline
-numbers.
+The product `β·L` was still correct, because `L` absorbed the zero. But `β` alone stopped
+being the misroute *rate*, and Corollary 2 uses `β` and `L` separately. Defining `β` over
+`S₋` restores the reading a reader expects, and leaves Theorem 1 untouched: ties contribute
+zero to both sides.
 
-All of the above is verified in `tests/test_science.py` against distributions whose terms
-are known by construction, including the negative case where a router above `β_max` is
-confirmed to capture negative value.
+This is not a corner case in any catalogue where several paradigms solve the same task. In
+ours, one arm is the cheapest at a tie in 46 of 96 cells.
 
-**What Theorem 1 is, and what it is not.** It is an *identity*: an exact algebraic
-decomposition of a difference, true by construction. It cannot be falsified by any
-measurement, and nothing in this paper should be read as having confirmed it. What is
-empirical is only whether its terms satisfy the inequality on a given distribution — and
-that is a question about a router, not about the theorem.
+### 5.1.2 The impossibility threshold, and the loss it must be measured against
 
-**The distinction matters here because the terms were never separated.** Across both
-held-out corpora the router's decision margin was **0 on every task**, so the
-risk–coverage curve collapses to a single point at the origin: **AURC 0.000** against a
-ceiling of **+0.400**. A router that never abstains has no `α` and no `β` distinct from
-always-fallback, so the identity holds vacuously — with `π·α·G_α` and `(1−π)·β·L_β` both
-measured on a coverage the router did not choose.
+Define, per arm,
 
-> **The work a reader might credit to §5.1 is done by §5.2.** The selection theorem
-> supplies the accounting; every falsifiable claim this record actually settled is about
-> cascade dominance and detector sensitivity. Presenting them in this order is a
-> presentation choice, not a claim of priority — and the honest reading is that the
-> selection branch of the partition below has still not been exercised.
+```
+L̄_j = E[ −Δ_j | S₋ʲ ]     the task distribution's mean loss   (independent of the router)
+ρ_j = L_j / L̄_j           the router's LOSS SELECTIVITY       (ρ_j := 1 when β_j = 0)
+```
+
+**Corollary 2.** The router loses to always-fallback iff
+`Σⱼ π_j α_j G_j < Σⱼ ν_j β_j ρ_j L̄_j`, and for a single arm
+
+```
+β_max(ρ) = π · α · G / ( ν · ρ · L̄ )
+```
+
+| `ρ` | the router | the threshold |
+|---|---|---|
+| **ρ = 1** | **blind to loss magnitude** — its mistakes are distributionally representative | the classical statement, and there it is exact |
+| ρ < 1 | avoids the expensive mistakes | **relaxes** |
+| ρ > 1 | anti-calibrated: fails where it hurts most | **tightens** |
+
+**Why the parameter is necessary, and not a refinement.** Stated with the distributional
+loss alone, the threshold is not an impossibility. Three tasks suffice: a gain of `+0.10` at
+probability `0.10` routed; a loss of `−0.001` at `0.45` routed; a loss of `−1.00` at `0.45`
+*not* routed. Then `β = 0.500` exceeds `β_max = 0.0222` by 23×, and the router still captures
+`+0.00955`. A router that errs *often but cheaply* is exactly what a well-built selective
+router produces.
+
+Nor can the realised loss simply be substituted: a perfect router realises no loss, so the
+threshold would report infinity and appear to impose no constraint at all — the objection
+that motivated the distributional form in the first place. **Both objections are correct.**
+They dissolve together once the realised loss enters as a *factor of the loss* rather than
+as the *denominator of a threshold*: when `β = 0` the whole term vanishes before `ρ` is
+consulted.
+
+**Corollary 2b.** A router obliged to choose controls neither `β` nor `ρ`. A selective one
+controls both — and `ρ` is the cheaper lever: lowering `β` requires being right more often;
+lowering `ρ` only requires declining where the bet is expensive. This gives Corollary 1 a
+mechanism rather than only an inequality, and `ρ` is recoverable from any record that
+reports potential and realised loss.
+
+### 5.1.3 Optimal coverage
+
+Let `V(c)` be captured value at coverage `c`, admitted by lowering a confidence threshold.
+Then `dV/dc = E[Δ | task marginal at c]`, and therefore:
+
+**(a)** `V` is unimodal **iff** `c ↦ E[Δ | marginal at c]` is non-increasing — that is, iff
+the confidence signal orders tasks by *expected gain*. **Calibration alone does not give
+this.** Calibration constrains the probability of gaining; the value depends on its
+magnitude. Constructed, with `Pr[correct | κ] = κ` exactly in every group: three groups with
+`E[Δ]` of `+0.008`, `−0.170`, `+0.593` at confidences `0.90`, `0.60`, `0.30` produce a
+captured-value curve that goes **up, down, and up again**, with its optimum at **full
+coverage**.
+
+**(b)** Without any assumption: the optimal coverage is `< 1` whenever some task with
+`Δ_{r(t)}(t) < 0` would be routed at full coverage. This is what the argument requires, and
+it follows in one line — removing a negative term increases the sum.
+
+**Corollary 3.** We claim (b). Claiming unimodality claims more than the design needs, and
+concedes a counterexample.
+
+### 5.1.4 The oracle-gap identity, and its scope
+
+With a single specialist, the oracle gap equals `π·G`, which lets a published router's
+implied `β` be recovered from its headline numbers. **With `k` arms it does not factor**: the
+gap is `E[maxⱼ Δ_j⁺]`, which is not `π_j·G_j` for any fixed pair. The 17.1pp reported for a
+published suite may be read as `π·G` only where that work reports a *pair*; over a grid, the
+implied-`β` reading is unavailable.
+
+### 5.1.5 What Theorem 1 is, and what it is not
+
+It is an *identity*: an exact algebraic decomposition, true by construction. It cannot be
+falsified by any measurement, and nothing in this paper should be read as having confirmed
+it. What is empirical is only whether its terms satisfy the inequality on a given
+distribution — a question about a router, not about the theorem.
+
+Theorem 1 and the three corollaries are verified in `tests/test_science.py` against
+distributions whose terms are known by construction. The identity was additionally checked
+over 4,000 random distributions with `k` from 1 to 4 — 3,269 of them containing ties —
+with maximum discrepancy `1.67 × 10⁻¹⁶`. Corollaries 2 and 3 are stated in their corrected
+form above; the counterexamples that forced the correction are reproduced there.
+
+**And the distinction matters here because the terms were never separated.** Across both
+held-out corpora the router's decision margin was **0 on every task**, so the risk–coverage
+curve collapses to a single point at the origin: **AURC 0.000** against a ceiling of
+**+0.400**. A router that never abstains has no `α` and no `β` distinct from
+always-fallback, so the identity holds vacuously — with both terms measured on a coverage
+the router did not choose.
+
+> **The work a reader might credit to §5.1 is done by §5.2.** The selection theorem supplies
+> the accounting; every falsifiable claim this record actually settled is about cascade
+> dominance and detector sensitivity. Presenting them in this order is a presentation
+> choice, not a claim of priority — and the honest reading is that the selection branch of
+> the partition below has still not been exercised.
+
+**One observation ties the three corrections together.** `π`, `α` and `β` answer *whether*
+the router is right; `G`, `L` and `ρ` answer *how much it costs when it is not*. Each place
+the earlier statement failed — the threshold, the ties, the unimodality — is a place where
+those two axes were treated as one.
 
 ## 5.2 Cascade dominance, and its measured correction
 
@@ -498,10 +603,11 @@ A **router** that errs pays `L`, a quality loss: a worse answer is delivered and
 recovers it. A **cascade** that errs pays `cost(p_1)`, a cost loss: the cheap attempt is
 wasted and the good answer still arrives after escalation.
 
-With detector sensitivity `s`:
+With detector sensitivity `s`, and writing the router's regret for a single arm — the
+two-arm case of Theorem 1, which is the comparison a cascade replaces:
 
 ```
-regret(router)  = (1−π)·β·L
+regret(router)  = ν·β·ρ·L̄
 regret(cascade) = E[ladder cost] + (1−s)·L
 ```
 
