@@ -2854,11 +2854,39 @@ def check_model_is_an_action(ok: bool) -> bool:
     ok &= check("y el motivo dice en que eje murio",
                 vp[("deep", "direct")].axis == "money")
 
-    # AUSENTE NO ES CERO, en la proyeccion. `dag_strategy` no proyecta tokens, y cobrarle
-    # 0 lo declaraba admisible en el modelo caro justo al brazo que mide 59x `direct`.
-    dag = check_pair(DEEP, "dag_strategy", docs, barato)
-    ok &= check("un paradigma sin proyeccion no se cobra gratis: se declara no evaluado",
-                dag.axis == "money_unevaluated" and dag.projected_tokens is None)
+    # AUSENTE NO ES CERO, en la proyeccion. Este aserto CAMBIO, y el cambio es la
+    # historia: fijaba que `dag_strategy` no proyectaba tokens y por eso su cota de plata
+    # se declaraba «no evaluada». Era correcto — y estaba fijando un DEFECTO, no una
+    # propiedad. `X-5h` lleno las tres proyecciones que faltaban, asi que hoy TODOS los
+    # paradigmas se pueden cotizar.
+    #
+    # El mecanismo tiene que seguir probado igual: un paradigma nuevo puede nacer sin
+    # proyeccion, y entonces cobrarle cero lo declararia admisible en el modelo caro por
+    # no saber cuanto gasta. Se prueba sobre la funcion, no sobre un brazo que la dispare.
+    from app.feasibility import check as _feasibility_check
+    sin_proyeccion = [
+        p for p in ("direct", "react", "map_reduce", "dag_strategy", "rewoo",
+                    "gist_reader", "reflection", "handoff")
+        if _feasibility_check(p, docs, barato).projected_tokens is None
+    ]
+    ok &= check("hoy TODOS los paradigmas proyectan: no queda ninguno sin cotizar",
+                not sin_proyeccion)
+
+    class _SinProyectar:
+        feasible, reason, axis = True, "", ""
+        projected_calls, projected_tokens = 3, None
+
+    import app.feasibility as _feas
+    _orig = _feas.check
+    try:
+        _feas.check = lambda *a, **k: _SinProyectar()
+        v = _feas.check_pair(DEEP, "inventado", docs, barato)
+        ok &= check("y si alguno naciera sin proyeccion, NO se cobra gratis: la cota de "
+                    "plata se declara no evaluada en vez de aprobar por no saber",
+                    v.axis == "money_unevaluated" and v.projected_tokens is None
+                    and v.feasible)
+    finally:
+        _feas.check = _orig
 
     ok &= check("la capacidad es ORDINAL, no un puntaje que se compense con costo",
                 FAST.capability < DEEP.capability

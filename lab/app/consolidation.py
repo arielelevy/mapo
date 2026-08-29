@@ -65,8 +65,16 @@ VALIDATION_RETENTION = 0.5
 # Minimum episodes on BOTH sides of a split. A split that isolates three episodes is
 # noise wearing the costume of a rule.
 MIN_SIDE_EPISODES = 12
-# Consecutive cycles a stat may sit at the weight floor before it is pruned.
-PRUNE_AFTER_CYCLES = 3
+# NO HAY PODA POR CICLOS, y sacarla fue una decision y no una omision.
+#
+# Habia un `PRUNE_AFTER_CYCLES = 3` que nadie leia: la poda iba a esperar tres ciclos
+# consecutivos en el piso de peso antes de sacar una estadistica. La regla que SI corre es
+# `weight <= floor and episodes == 0`, y es MAS FUERTE que el contador: nunca saca nada que
+# tenga evidencia, por desfavorable que sea.
+#
+# Con esa guarda, un contador solo demoraria sacar entradas con CERO episodios — o sea,
+# provablemente vacias. Demorar eso no compra nada y cuesta un campo por estadistica que
+# alguien tendria que mantener sincronizado entre ciclos.
 
 
 # -- stage 1: prioritised replay ----------------------------------------------

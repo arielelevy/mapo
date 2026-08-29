@@ -86,10 +86,16 @@ BUDGET_OVERSHOOT_TOLERANCE = 1.15
 # hops x unit, knowable here and enforced identically at runtime.
 POINTER_HOP_CAP = 6
 
-# Paradigms that read every unit BY DEFINITION, so their spend is a guarantee and not a
-# worst case. The distinction is what lets the check prune map_reduce without also
-# pruning the selective paradigms, whose only advantage is that they may read less.
-GUARANTEED_FULL_READ = frozenset({"direct", "cot", "map_reduce"})
+# LOS QUE RECORREN EL ALCANCE ENTERO POR CONSTRUCCION viven en `paradigms`, no aca.
+#
+# Habia una `GUARANTEED_FULL_READ` en este modulo que NADIE consultaba, y una
+# `TRAVERSES_SCOPE` en `paradigms` que el router SI consulta: la misma propiedad escrita
+# dos veces, una de ellas muerta. Y ya diferian — la de aca incluia `cot`, que esta
+# retirado— que es como empiezan a separarse dos listas de lo mismo.
+#
+# Se elimino la muerta en vez de cablearla: la viva ya gobierna la precondicion de
+# cobertura (`U-2`), que es el unico consumidor que la propiedad necesita.
+
 
 
 @dataclass(frozen=True)
@@ -133,6 +139,20 @@ def _content_tokens(documents: dict[str, str], unit_ids: list[str]) -> int:
 # cap their own iterations, so `content` is a worst case and pruning on it would discard
 # their only advantage. They are feasible here and bounded at runtime instead.
 WORST_CASE_ONLY = frozenset({"react", "reflection"})
+
+# CUANTAS LLAMADAS PUEDE HACER CADA UNO EN EL PEOR CASO. Su GASTO es una decision del
+# modelo, pero su CANTIDAD DE LLAMADAS no: la fija el codigo con `max_iterations`. Que el
+# gasto sea indeterminado no vuelve indeterminado al conteo, y confundir las dos cosas es
+# lo que dejaba a estos brazos sin proyeccion.
+#
+# POR QUE IMPORTA AHORA Y NO ANTES. Mientras `projected_calls` solo se imprimia, un `None`
+# no molestaba. Desde que `check_pair` cobra plata sobre la proyeccion, un brazo sin
+# proyectar no se puede cotizar — y se declara «no evaluado», que es correcto y es peor
+# que evaluarlo cuando se puede.
+WORST_CASE_CALLS = {
+    "react": 20,        # paradigms.__init__: _run_tool_loop(max_iterations=20)
+    "reflection": 4 + 8,  # borrador (4) + revision (8)
+}
 
 # Every name this layer has arithmetic for. Kept explicit so an unknown one raises
 # instead of falling through the last branch as "feasible".
@@ -222,15 +242,23 @@ def check(
     if paradigm == "dag_strategy":
         # 4 sub-questions x 10 iterations x (1 + 3 replans), plus plan/verify/synthesise.
         projected = 4 * 10 * 4 + 4 + 1
+        # LOS TOKENS: cada rama puede ver el material entero —nada le impide leerlo— y
+        # ademas arrastra el blackboard, que crece con lo que las ramas anteriores
+        # encontraron. La cota superior honesta es contenido x ramas, y la medicion la
+        # respalda: `dag_strategy` mide 89.834 tokens por celda contra 30.000 de
+        # contenido, o sea ~3x. Proyectarlo como `content` a secas seria sub-proyectar,
+        # que en una cota de admision es el error caro.
+        dag_tokens = content * 4
         if projected > MAX_ORCHESTRATION_CALLS:
             return Verdict(
                 False,
                 f"worst-case orchestration is {projected} calls, above the "
                 f"{MAX_ORCHESTRATION_CALLS} cap",
                 projected_calls=projected,
+                projected_tokens=dag_tokens,
                 axis="cardinality",
             )
-        return Verdict(True, projected_calls=projected)
+        return Verdict(True, projected_calls=projected, projected_tokens=dag_tokens)
 
     if paradigm == "plan_execute":
         return Verdict(True, projected_calls=5 * 4 + 2)
@@ -254,7 +282,13 @@ def check(
     if paradigm == "rewoo":
         # Two LLM calls plus at most MAX_PLAN_STEPS tool executions, none of which
         # involve the model. Its spend is bounded by construction.
-        return Verdict(True, projected_calls=2)
+        #
+        # LOS TOKENS SON EL CONTENIDO COMO COTA SUPERIOR, y no `None`. La segunda llamada
+        # recibe la evidencia que los pasos juntaron, que en el peor caso es todo el
+        # material. Es una cota floja —`rewoo` mide 2.549 tokens por celda contra 30.000
+        # de contenido— y una cota floja sirve igual: la cota de plata la usa para
+        # RECHAZAR, y rechazar de mas es conservador. `None` no permite ni eso.
+        return Verdict(True, projected_calls=2, projected_tokens=content)
 
     if paradigm == "handoff":
         # ALCANCES DISJUNTOS, y de ahi sale la cota entera. `SCOPES` agentes, cada uno con
@@ -381,6 +415,7 @@ def check(
 
     return Verdict(
         True,
+        projected_calls=WORST_CASE_CALLS[paradigm],
         projected_tokens=content,
         axis="worst_case_only",
     )
