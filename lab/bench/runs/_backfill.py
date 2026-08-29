@@ -90,9 +90,28 @@ def main() -> None:
     print(f"{len(antes)} filas · copia en {copia.name}")
     destino.unlink()
 
-    filas = runner.run_cross_product(
-        paradigms=brazos, repeat=replicas, task_ids=tareas, resume=False,
-    )
+    try:
+        filas = runner.run_cross_product(
+            paradigms=brazos, repeat=replicas, task_ids=tareas, resume=False,
+            # UN REPLAY PUEDE LEER BRAZOS EN STANDBY. La regla de standby es no GASTAR en
+            # ellos, y aca no se gasta: la guarda de abajo compara `calls` contra
+            # `cached_calls` y levanta si algo salio al proveedor. Sin esto, un registro que
+            # contiene un brazo despriorizado no se podria rellenar nunca — y quedaria con
+            # campos en cero que se leen igual que ceros medidos.
+            replay_only=True,
+        )
+    except BaseException:
+        # SE RESTAURA ANTE CUALQUIER FALLA, incluido Ctrl-C. El archivo se borro ANTES de
+        # correr, asi que una excepcion a mitad —o una guarda del runner que se dispara
+        # antes de la primera celda— deja el registro INEXISTENTE y lo pagado perdido
+        # salvo por la copia. Ya paso: 402 filas de `nano` desaparecieron porque la guarda
+        # de standby corto la corrida despues del `unlink`.
+        #
+        # `BaseException` y no `Exception` a proposito: una interrupcion tiene que
+        # restaurar igual, y es el caso mas probable en una corrida larga.
+        shutil.copy2(copia, destino)
+        print(f"restaurado {destino.name} desde la copia — el registro no se perdio")
+        raise
     # LO QUE DECIDE ES CUANTAS LLAMADAS SALIERON, no cuantos tokens se reportan. Un
     # acierto de cache REPORTA el uso de la llamada original —que es lo correcto para
     # medir el paradigma— asi que `cost_tokens` de un rellenado perfecto es el mismo que
@@ -100,6 +119,15 @@ def main() -> None:
     llamadas = sum(r.calls for r in filas)
     servidas = sum(r.cached_calls for r in filas)
     reales = llamadas - servidas
+    # LAS CELDAS QUE HABIAN FALLADO POR INFRA SI VUELVEN A LLAMAR, y eso es correcto: un
+    # 429 que agoto el presupuesto de reintento nunca escribio entrada de cache, asi que
+    # no hay nada que replayar. Se toleran EXACTAMENTE esas y ninguna mas — tolerar «unas
+    # pocas» convertiria la guarda en una advertencia, que es lo que no se quiere.
+    fallidas = {(r["task_id"], r["paradigm"], r["trial"]) for r in antes
+                if r.get("infra_error")}
+    margen = sum(
+        r.calls for r in filas if (r.task_id, r.paradigm, r.trial) in fallidas
+    )
 
     if len(filas) < len(antes):
         shutil.copy2(copia, destino)
@@ -108,15 +136,18 @@ def main() -> None:
             f"la copia: un registro con menos filas que antes perdio algo pagado."
         )
     print(f"{len(filas)} filas escritas")
-    if reales:
+    if reales > margen:
         raise SystemExit(
-            f"{reales} de {llamadas} llamadas salieron al proveedor de verdad, y tenian "
+            f"{reales} de {llamadas} llamadas salieron al proveedor y solo {margen} "
+            f"estaban justificadas por celdas con `infra_error` en el registro original. "
+            f"Las otras tenian "
             f"que ser CERO: {servidas} vinieron del cache. O el cache no cubria estas "
             f"celdas, o el payload cambio y las claves dejaron de acertar. En los dos "
             f"casos esto no es un rellenado — es una corrida nueva escrita encima de una "
             f"vieja. La copia quedo en {copia.name}."
         )
-    print(f"{llamadas} llamadas, {servidas} del cache, {reales} al proveedor — gratis, "
+    print(f"{llamadas} llamadas, {servidas} del cache, {reales} al proveedor "
+          f"({margen} justificadas por celdas que habian fallado por infra) — gratis, "
           f"como tenia que ser")
 
     nuevas = load_rows(destino)

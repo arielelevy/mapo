@@ -575,6 +575,7 @@ class Runner:
         repeat: int = 1,
         task_ids: list[str] | None = None,
         workers: int = 1,
+        replay_only: bool = False,
     ) -> list[Row]:
         """Como `_run_cross_product`, con un solo escritor por archivo de resultados.
 
@@ -587,6 +588,7 @@ class Runner:
             return self._run_cross_product(
                 paradigms=paradigms, limit=limit, resume=resume,
                 repeat=repeat, task_ids=task_ids, workers=workers,
+                replay_only=replay_only,
             )
 
     def _run_cross_product(
@@ -597,6 +599,7 @@ class Runner:
         repeat: int = 1,
         task_ids: list[str] | None = None,
         workers: int = 1,
+        replay_only: bool = False,
     ) -> list[Row]:
         """Run the cross product, `repeat` times per cell.
 
@@ -619,10 +622,23 @@ class Runner:
                     if entry.revives_when:
                         line += f"\n    revive si: {entry.revives_when}"
                     lines.append(line)
-                raise ValueError(
-                    f"Estos paradigmas no se corren:\n{chr(10).join(lines)}\n"
-                    "Su dato historico se replaya desde las filas ya pagadas."
-                )
+                # `replay_only` LEVANTA ESTA GUARDA, y por eso existe. El mensaje decia
+                # «su dato historico se replaya desde las filas ya pagadas» y despues
+                # impedia el replay: decia una cosa y hacia la contraria.
+                #
+                # La regla de standby es NO GASTAR en ese brazo, no no-leerlo. Un replay
+                # no gasta —lo garantiza quien lo llama, comparando `calls` contra
+                # `cached_calls` y levantando si algo salio al proveedor— asi que rellenar
+                # campos nuevos sobre filas ya pagadas no viola nada. Sin esto, un
+                # registro que contiene un brazo despriorizado no se puede rellenar nunca,
+                # y queda con campos en cero que se leen igual que ceros medidos.
+                if not replay_only:
+                    raise ValueError(
+                        f"Estos paradigmas no se corren:\n{chr(10).join(lines)}\n"
+                        "Su dato historico se replaya desde las filas ya pagadas. Si esto "
+                        "ES un replay, pasa `replay_only=True` — y garantiza que no sale "
+                        "ninguna llamada, que es lo unico que la regla de standby protege."
+                    )
         selected = paradigms or sorted(set(REGISTRY) - RETIRED)
         # An explicit task list beats `limit`: probing whether a specific feature cell
         # discriminates needs those tasks, not the first N in generation order.
