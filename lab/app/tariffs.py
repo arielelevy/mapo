@@ -57,6 +57,10 @@ class TariffDetail:
     # cambiar que modelo juega un papel cambie TODAS sus propiedades a la vez: tenerlos
     # hardcodeados por papel hacia que `fast: luna` heredara las de nano y mintiera.
     context_input_tokens: int | None
+    # Por encima de esto, el request ENTERO se cobra a la tarifa larga. `None` = sin
+    # escalon. Es un acantilado y no una pendiente: modelarlo como pendiente
+    # sub-proyecta justo en el borde, que es donde la cota tiene que acertar.
+    long_context_threshold: int | None
     reasons_by_default: bool
     explicit_effort_with_tools: bool
 
@@ -99,6 +103,9 @@ def _build(raw: dict[str, Any]) -> tuple[dict[str, TariffDetail], str]:
             long_context_prompt=d.get("long_context_prompt"),
             long_context_completion=d.get("long_context_completion"),
             context_input_tokens=d.get("context_input_tokens"),
+            long_context_threshold=(
+                raw.get("long_context_threshold_input_tokens") or {}
+            ).get(nombre),
             # SIN DEFAULT BENIGNO. Si el JSON no lo declara, se asume que razona y que NO
             # deja fijar el esfuerzo: las dos son la suposicion CARA, y equivocarse hacia
             # el lado caro cuesta plata mientras que hacia el barato cuesta un HTTP 400 a

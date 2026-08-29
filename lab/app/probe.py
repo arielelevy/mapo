@@ -73,6 +73,26 @@ class ProbeResult:
     unit_id: str
     resolved: list[str]
     claimed: list[str]
+    # RECUPERABILIDAD: si lo que falta se puede ENCONTRAR con las herramientas que hay.
+    # `P-1`.
+    #
+    # POR QUE NO ES LO MISMO QUE ACOPLAMIENTO, que es lo que la sonda medía y alcanzaba
+    # para una sola decision. El acoplamiento dice que la respuesta necesita algo que esta
+    # en otra unidad; la recuperabilidad dice si esa otra unidad se puede ALCANZAR. Son
+    # dos preguntas y llevan a dos acciones opuestas:
+    #
+    #   acoplado y recuperable      hay que buscar. Serializar y seguir el puntero
+    #   acoplado y NO recuperable   buscar no sirve: lo que falta no esta en alcance, y
+    #                               la respuesta correcta es decir que falta, no gastar
+    #
+    # Sin este eje las dos se ven iguales desde la decision, y la segunda se rutea como
+    # la primera: se paga una busqueda que no puede terminar bien.
+    #
+    # MISMA ASIMETRIA DE PROCEDENCIA que el acoplamiento, y por la misma razon. Que una
+    # referencia RESUELVA es observable —el id esta en alcance—; que NO exista en ninguna
+    # de las cuarenta y siete unidades que no se leyeron es una unidad de silencio.
+    retrievable: bool | None = None
+    retrievable_provenance: "Provenance | None" = None
     cost_tokens: int = 0
     calls: int = 0
 
@@ -85,6 +105,11 @@ class ProbeResult:
             "unit_id": self.unit_id,
             "resolved_references": self.resolved,
             "claimed_references": self.claimed,
+            "retrievable": self.retrievable,
+            "retrievable_provenance": (
+                self.retrievable_provenance.value
+                if self.retrievable_provenance else None
+            ),
             "cost_tokens": self.cost_tokens,
             "calls": self.calls,
         }
@@ -227,6 +252,8 @@ def probe_coupling(
             unit_id="",
             resolved=[],
             claimed=[],
+            retrievable=None,
+            retrievable_provenance=None,
         )
 
     # F2.2: the unit is chosen by DETERMINISTIC retrieval over the question, not by
@@ -331,6 +358,11 @@ def probe_coupling(
             unit_id=target,
             resolved=resolved,
             claimed=claimed,
+            # RESUELVE ⇒ RECUPERABLE, y es OBSERVADO: el id nombrado esta en alcance, asi
+            # que lo que falta se puede alcanzar. Es el mismo hecho que hace observable al
+            # acoplamiento, leido en el otro eje.
+            retrievable=True,
+            retrievable_provenance=Provenance.OBSERVED,
             cost_tokens=usage.total_tokens,
             calls=usage.calls,
         )
@@ -350,6 +382,15 @@ def probe_coupling(
             unit_id=target,
             resolved=[],
             claimed=claimed,
+            # NOMBRO PUNTEROS Y NINGUNO EXISTE. Eso SI es evidencia sobre la
+            # recuperabilidad, y en el sentido negativo: lo que el sensor cree que falta
+            # NO esta en alcance. Es observable —se verificaron los ids contra el alcance,
+            # que es finito— asi que no hereda la asimetria del acoplamiento.
+            #
+            # Y es el caso que mas importa: acoplado y NO recuperable significa que buscar
+            # no puede terminar bien, y la respuesta correcta es decir que falta.
+            retrievable=False,
+            retrievable_provenance=Provenance.OBSERVED,
             cost_tokens=usage.total_tokens,
             calls=usage.calls,
         )
@@ -366,6 +407,11 @@ def probe_coupling(
         unit_id=target,
         resolved=[],
         claimed=claimed,
+        # NO SE NOMBRO NINGUN PUNTERO. No hay nada que verificar, asi que no hay lectura:
+        # `None` y no `False`. Decir «no recuperable» aca seria afirmar algo sobre las
+        # unidades que no se leyeron desde una sola que no menciono ninguna.
+        retrievable=None,
+        retrievable_provenance=None,
         cost_tokens=usage.total_tokens,
         calls=usage.calls,
     )

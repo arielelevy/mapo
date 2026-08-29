@@ -13,7 +13,8 @@
     "escritura sale mas que la ENTRADA de `terra`, asi que un prefijo que cambia seguido",
     "paga escritura sin llegar a cobrar lectura nunca.",
     "",
-    "context_input_tokens es la ventana de ENTRADA (la total incluye 128.000 de salida). reasons_by_default y explicit_effort_with_tools estan MEDIDOS con una llamada real sobre un prompt dificil, no leidos de la documentacion: terra razona 70 tokens al default y 66 con herramientas, y rechaza (HTTP 400) que se le pase el nivel explicito junto con tools; nano no razona al default pero SI acepta el nivel con tools. `luna` y `sol` se declaran por familia y NO estan medidos individualmente — es lo que hay, y decirlo es distinto de fingir que se probaron."
+    "context_input_tokens es la ventana de ENTRADA (la total incluye 128.000 de salida). reasons_by_default y explicit_effort_with_tools estan MEDIDOS con una llamada real sobre un prompt dificil, no leidos de la documentacion: terra razona 70 tokens al default y 66 con herramientas, y rechaza (HTTP 400) que se le pase el nivel explicito junto con tools; nano no razona al default pero SI acepta el nivel con tools. `luna` y `sol` se declaran por familia y NO estan medidos individualmente — es lo que hay, y decirlo es distinto de fingir que se probaron.",
+    "long_context_threshold_input_tokens: por encima de ese numero de tokens de ENTRADA, los 5.6 cobran la tarifa larga PARA EL REQUEST ENTERO — no marginalmente por los tokens que exceden. Es un acantilado, no una pendiente, y una cota que lo modele como pendiente sub-proyecta justo en el borde. `nano` es `null`: no tiene escalon, cobra igual a cualquier largo."
   ],
   "source": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/ + prices.azure.com/api/retail/prices",
   "verified_on": "2026-08-28",
@@ -86,5 +87,11 @@
     "fast": "nano",
     "deep": "terra",
     "max": "sol"
+  },
+  "long_context_threshold_input_tokens": {
+    "nano": null,
+    "luna": 272000,
+    "terra": 272000,
+    "sol": 272000
   }
 }

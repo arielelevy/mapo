@@ -88,6 +88,10 @@ class Model:
     # cuando hacerlo, y lo hace tambien mientras usa herramientas. Y esos tokens se
     # facturan como SALIDA, asi que comparar «precio por token» contra un modelo que no
     # razona compara dos unidades distintas.
+    # Por encima de este numero de tokens de ENTRADA, el request entero se cobra a la
+    # tarifa larga. `None` = sin escalon.
+    long_context_threshold: int | None = None
+    long_context_tariff: Tariff | None = None
     reasons_by_default: bool = False
 
     # SI ACEPTA `reasoning_effort` EXPLICITO JUNTO CON HERRAMIENTAS. Esta es la
@@ -106,10 +110,23 @@ class Model:
             raise ValueError("Una ventana de contexto no puede ser <= 0.")
 
     def money_for(self, prompt_tokens: int, completion_tokens: int) -> float:
-        """Plata de una proyeccion. Se usa ANTES de correr, sobre tokens proyectados."""
+        """Plata de una proyeccion. Se usa ANTES de correr, sobre tokens proyectados.
+
+        EL ESCALON DE CONTEXTO LARGO ES UN ACANTILADO, no una pendiente: por encima del
+        umbral el request ENTERO se cobra al doble, no solo los tokens que exceden.
+        Modelarlo como pendiente sub-proyectaria justo en el borde — que es exactamente
+        donde una cota de admision tiene que acertar, porque es donde decide.
+        """
+        arancel = self.tariff
+        if (
+            self.long_context_threshold is not None
+            and self.long_context_tariff is not None
+            and prompt_tokens > self.long_context_threshold
+        ):
+            arancel = self.long_context_tariff
         return (
-            prompt_tokens * self.tariff.prompt_per_mtok
-            + completion_tokens * self.tariff.completion_per_mtok
+            prompt_tokens * arancel.prompt_per_mtok
+            + completion_tokens * arancel.completion_per_mtok
         ) / 1_000_000
 
 
@@ -125,10 +142,18 @@ def _from_role(papel: str, capability: Capability) -> Model:
             f"de `check_pair` la consume: sin ella, o se inventa un numero o se admite "
             f"cualquier plan. Se levanta."
         )
+    largo = (
+        Tariff(name=f"{d.name}-long/{d.tariff.name.split('/')[-1]}",
+               prompt_per_mtok=d.long_context_prompt,
+               completion_per_mtok=d.long_context_completion)
+        if d.long_context_prompt and d.long_context_completion else None
+    )
     return Model(
         name=papel,
         context_tokens=d.context_input_tokens,
         tariff=d.tariff,
+        long_context_threshold=d.long_context_threshold,
+        long_context_tariff=largo,
         capability=capability,
         reasons_by_default=d.reasons_by_default,
         explicit_effort_with_tools=d.explicit_effort_with_tools,
