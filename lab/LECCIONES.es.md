@@ -2121,6 +2121,50 @@ veces.
 
 ---
 
+### 5.26 Dos políticas a dos granularidades, cada una donde vive su efecto · `MEDIDO`
+
+Si el efecto del modelo vive en el paradigma (5.25), θ tendría que aprender **pares** — y eso
+multiplica bins, que es el mecanismo exacto por el que **P15 fracasó**. Contarlo no necesita
+ninguna corrida: sale del registro. Sobre 2.494 episodios, con el piso de evidencia en 8:
+
+| partición | bins | cruzan el piso | episodios visibles |
+|---|---:|---:|---:|
+| `región × paradigma` **(hoy)** | 128 | 63% | 91% |
+| `región × modelo × paradigma` | 134 | 60% | 90% |
+| **`modelo × paradigma`** (sin región) | **13** | **77%** | **100%** |
+| `paradigma` solo | 11 | 73% | 100% |
+
+**Y la segunda fila engaña, así que primero hay que desarmarla.** «128 → 134 bins» parece
+decir que agregar el modelo casi no multiplica. Es falso: `terra` cubre **5 de 24 regiones** y
+`nano` 22, con **3 en común**. El número es barato *porque la grilla está desbalanceada*. Con
+la grilla completa los bins **se duplican**, y ése es el mecanismo de P15 intacto.
+
+**La fila que importa es la tercera, y no es obvia.** `P27e` midió que **la región no explica
+nada** de la ventaja del modelo — dispersión +0,1667 contra una sd interna de 0,5046. Si el
+efecto no interactúa con la región, **partir por región para elegir modelo es puro costo**:
+paga la multiplicación de bins sin comprar discriminación.
+
+> Entonces la política correcta no es una sino **dos, a granularidades distintas**:
+>
+> | qué se elige | dónde se aprende | por qué ahí |
+> |---|---|---|
+> | el **paradigma** | `región × paradigma` | la región **sí** explica cuál conviene |
+> | el **modelo** | `modelo × paradigma` | ahí vive el efecto, y **no** en la región |
+>
+> **13 bins, 77% por encima del piso, 100% de los episodios visibles.** No multiplica nada
+> y esquiva el mecanismo de P15 entero.
+
+**Lo que hace correcta a esta decisión no es que sea elegante: es que la partición se eligió
+midiendo dónde está el efecto, en vez de al revés.** P15 falló por agregar un segmento que
+parecía informativo y no lo era. Acá se midió primero que la región no informa sobre el
+modelo, y recién después se sacó del esquema.
+
+**Un bin por debajo del piso no es «menos confiable»: es invisible.** El router cae al prior
+y la partición no gobierna nada — así que un esquema donde la mayoría queda debajo no tiene
+menos precisión, **no se usa**.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una
