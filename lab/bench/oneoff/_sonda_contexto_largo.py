@@ -1,4 +1,4 @@
-"""SONDA MANUAL (2026-08-29). Resultado en  AR-6.
+"""SONDA MANUAL (2026-08-29). Resultado en PENDIENTES.es.md, AR-6.
 
 PRUEBA MANUAL: `direct` sobre C3 con `terra`, sin la poda de presupuesto.
 
