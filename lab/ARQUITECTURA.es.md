@@ -10,10 +10,16 @@ re-litiguen cada vez.
 ruteo, EXPLAIN — y su deuda. Este documento define la **física**: dónde corre, con qué
 persistencia, con qué ingesta y con qué backend.
 
-Punto de partida real: hoy el producto persiste en JSONL bajo `results/`, recibe los
-documentos como un dict en memoria (`app/serve.py`, `Request.documents`) y expone
-endpoints sin streaming (`app/main.py`). Eso alcanza para el banco y no alcanza para un
-producto.
+Punto de partida real: hoy el producto persiste en JSONL bajo `results/` y recibe los
+documentos como un dict en memoria (`app/serve.py`, `Request.documents`). Eso alcanza para
+el banco y no alcanza para un producto.
+
+**Y sobre el streaming, con la precisión que faltaba** (2026-08-29): `_answer_stream`
+(`serve.py`) **sí** emite los eventos tipados con `yield`, y `Event.as_sse()`
+(`events.py`) los serializa. Lo que no existe es el **endpoint**: `answer` es `def`, no
+`async def`, y consume el generador entero para devolver un dict. O sea que la escalera de
+decisión ya tiene quién la produzca y le falta el caño — que es `E-3` en `PRODUCTO.es.md`,
+y viene con la guarda de §6.1: **A3 buffea la respuesta hasta verificar las citas**.
 
 ## 0. Restricciones fijadas por el autor (2026-08-27)
 
@@ -99,7 +105,7 @@ Tres razones para no adoptarlo ahora:
 
 ### 2.2 LangGraph: descartado, no pospuesto
 
-- Los trece paradigmas **son** la unidad medida. Reescribirlos como grafos cambia lo que
+- Los paradigmas **son** la unidad medida. Reescribirlos como grafos cambia lo que
   el banco mide: viola la regla de isomorfismo de raíz.
 - Sus checkpointers guardan estado *entre* nodos, no *dentro*. Las olas de
   `dag_strategy` y el bucle de la sonda son intra-nodo: no compraría durabilidad

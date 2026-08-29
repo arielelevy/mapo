@@ -189,7 +189,7 @@ era saber **cuál abrir**:
 | documento | responde |
 |---|---|
 | `app/README.es.md` | qué hace cada módulo del producto, y en qué estado está |
-| `app/paradigms/README.es.md` | el catálogo: 15 registrados, 13 que se corren, y por qué los otros no |
+| `app/paradigms/README.es.md` | el catálogo: 15 registrados, 12 que corren la campaña, 8 activos — y por qué cada uno está donde está |
 | `bench/README.md` | cómo se corre el banco, y los tres barridos que buscan la misma falla |
 | `corpus/README.es.md` | las 11 celdas, la receta de `gold_h1`, y por qué el corpus tiene entidades |
 | `tests/README.es.md` | qué demuestra y qué **no** demuestra cada suite |

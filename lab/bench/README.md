@@ -13,6 +13,7 @@ producto no sabe que el banco existe.** Estaba escrita en `CLAUDE.md` y no se ve
 | `oneoff/` | 13 | migraciones y arreglos que ya corrieron. Arqueología, no herramientas |
 | `_sanity.py` | | cotas que un número derivado tiene que pasar **antes** de reportarse |
 | `_estimate.py` | | qué va a costar una corrida, **contado del corpus**. Se corre solo: `py bench/_estimate.py` |
+| `_listo.py` | | **las ocho condiciones para lanzar, de una.** Falla si alguna no se cumple |
 
 > **Los conteos se cuentan.** Decían 27/22/9 y eran 35/27/10 — se habían escrito a mano.
 > Se recuentan con `ls bench/<carpeta>/*.py | grep -v __init__ | wc -l`.
@@ -76,10 +77,24 @@ legítima. Lo que no puede pasar es que sea una **sorpresa**.
 
 ## Antes de gastar un token
 
+**Una sola cosa:**
+
+```
+py bench/_listo.py
+```
+
+Las ocho condiciones del protocolo, y **falla si alguna no se cumple**. Estaban repartidas
+en cinco comandos y tres documentos; acordarse de correrlas no es una garantía. Lo que no
+gasta va primero, por la misma razón que la poda aritmética corre antes de inferir.
+
+Las piezas, si hace falta correr una sola:
+
 ```
 py tests/test_science.py           # completo
 py tests/test_consolidation.py     # completo
 py corpus/verify.py --corpus corpus/<nombre>
+py bench/audits/_audit_documentos.py    # los .md vivos contra el catalogo
+py bench/audits/_audit_afirmaciones.py  # lo afirmado, re-derivado del registro
 ```
 
 Y **la corrida light, que no es opcional**:
@@ -88,7 +103,8 @@ Y **la corrida light, que no es opcional**:
 py bench/runs/_run_homogenea_light.py
 ```
 
-Ejercita la matriz entera —13 patrones × 7 factores— sobre las 4 tareas más baratas. No
+Ejercita la matriz entera —el plantel de `campaign_roster()` × 7 factores— sobre las 4
+tareas más baratas. No
 mide nada: prueba que la matriz **corre**, y desde el 2026-08-29 prueba algo más difícil,
 que **cada factor llega al modelo**. Un factor desconectado no da error: da exactamente la
 base, y eso ya pasó cuatro veces. Ahora cada factor reporta cuántas filas movió respecto de

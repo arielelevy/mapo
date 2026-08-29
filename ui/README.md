@@ -35,7 +35,7 @@ espera la API de FastAPI. Sin motor levantado, dejá el selector en `demo`.
 
 ### La escalera de decisión es lo primero
 
-Los trece paradigmas se tachan por etapa —factibilidad, garantía, θ— con **motivo tipado
+Los paradigmas del catálogo se tachan por etapa —factibilidad, garantía, θ— con **motivo tipado
 en cada tachadura**, antes de que exista un token. Es el trace del router renderizado, no
 una animación. La numeración `01/02/03/04` no decora: es la secuencia real del router, y
 el orden carga información.

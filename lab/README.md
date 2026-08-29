@@ -227,7 +227,7 @@ no sabe que el banco existe.**
    │    rules · assurance · router · policy   │   │  corpus/ · tests/      │
    │    rec · certify · consolidation         │   │  bench/                │
    │                                          │   │                        │
-   │  + los 13 paradigmas de `paradigms/`     │   │  mide EXACTAMENTE lo   │
+   │  + los paradigmas de `paradigms/`        │   │  mide EXACTAMENTE lo   │
    │  + la superficie de tools                │   │  que producción corre  │
    └──────────────────────────────────────────┘   └────────────────────────┘
                         ▲
@@ -288,17 +288,24 @@ historico/            snapshots fechados: valían el día que se escribieron
 
 ## El catálogo hoy
 
-Son **15 registrados** y **13 que se corren**. Los dos que quedan afuera están afuera por
+Son **15 registrados**, **12 que corren la campaña** y **8 activos**. El plantel no se
+escribe a mano: sale de `campaign_roster()`, que lo deriva del catálogo y exige
+**nombrar** cada excepción. Los que quedan afuera están afuera por
 decisión escrita, no por olvido:
 
 | fuera del ruteo | por qué |
 |---|---|
 | `cot` | **la ingeniería de prompts no es un patrón.** Dominado por `direct` en toda celda medida: misma utilidad, nunca más barato. Se conserva sólo como control nulo — es la evidencia de que el andamiaje por prompt no compra nada |
 | `plan_execute` | retirado por dominado (2026-08-29) |
+| `map_reduce` | **retirado 2026-08-29 por decisión del autor**: su nicho está vacío. Donde el material entra lo domina `direct`; donde no entra, la aritmética lo poda (180 filas de 270). Gana 1 celda de 33 |
+| `pointer_chase` | **P14a falsificado** — nunca tocó una unidad relevante. Sus frenos (P14b) sí se confirmaron, y el mecanismo sobrevive a la muerte del patrón |
 
-Dos más están en `standby`: `map_reduce` (gana 1 celda de 33, y la aritmética lo poda en
-180 de 270 filas) y `graph_traverse` (falsificado, con dos condiciones de revival escritas
-en el ejecutable). Su dato histórico se replaya igual.
+Y uno en **`standby`**, que es distinto de retirado: `graph_traverse` (falsificado en `P10a`,
+con dos condiciones de revival escritas en el ejecutable — `gold_h1` ya cumple una).
+
+**El dato histórico de todos ellos se replaya igual.** Un brazo que no se corre sigue en el
+`REGISTRY`: las filas ya pagadas hay que poder leerlas, y borrar la función volvería
+irreproducible el registro que la midió.
 
 Los patrones se distinguen por **estructura de control de flujo**, jamás por fraseo. Lo que
 cambia lo que el modelo recibe sin cambiar quién decide la próxima acción es un **factor**,
@@ -334,6 +341,18 @@ py bench\runs\_run_homogenea_light.py
 
 # 5. Recién ahí, la campaña.
 ```
+
+**O todo de una, que es lo que conviene:**
+
+```powershell
+py bench\_listo.py
+```
+
+Corre las **ocho condiciones** —los dos tests, la verificación del corpus, las tres
+auditorías, la estimación y la corrida light— y **falla si alguna no se cumple**. El
+protocolo estaba repartido en cinco comandos y tres documentos, y «me acordé de correr
+todo» no es una garantía: es una intención. Lo barato va primero, así una falla barata no
+obliga a haber pagado la cara.
 
 **El paso 4 no es opcional.** La campaña completa son decenas de millones de tokens y
 horas de reloj; un paradigma que explota o un factor que no llega al modelo se descubriría

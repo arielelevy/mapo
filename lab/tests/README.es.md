@@ -75,7 +75,7 @@ Cada una de esas se contesta con una corrida, no con un test. Dónde está cada 
 ## Y una prueba que no está acá, pero es del mismo tipo
 
 **La corrida light** (`bench/runs/_run_homogenea_light.py`) es un test de integración que
-cuesta tokens: ejercita los 13 patrones contra los 7 factores y verifica que **cada factor
+cuesta tokens: ejercita el plantel entero contra los 7 factores y verifica que **cada factor
 llegue al modelo**, comparando cada uno contra la base. Un factor desconectado no da error
 —da exactamente la base—, así que ningún test unitario lo ve. Va después de estas dos
 suites y antes de cualquier campaña.

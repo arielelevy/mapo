@@ -51,7 +51,7 @@ piezas está ejecutada.
 **Consola de prueba: `ui/`** (Vite + React 19 + TypeScript; `npm install && npm run dev`).
 Consume los mismos eventos tipados de `/v1/answer` y trae un modo demo para trabajarla sin
 motor y sin gastar tokens. Tres cosas que la hacen fiel al producto y no hay que romper:
-la **escalera de decisión** —los trece paradigmas tachándose por factibilidad, garantía y
+la **escalera de decisión** —el plantel entero tachándose por factibilidad, garantía y
 θ ANTES de que exista un token—; `done`/`gated`/`deferred` **estructuralmente distintos**,
 no tres colores del mismo cartel; y `irreversible`/`shared_writes`/`regulated` **declarados
 por el caller, jamás inferidos del texto** (`serve.py` los asienta como COMPUTED 1.0).
@@ -65,8 +65,9 @@ mata cada unidad antes de gastar nada. Detalle en `ui/README.md`.
    - **`lab/app/`** — hoy contiene DOS cosas que no son lo mismo y que se separan
      cuando se arranque el producto: la **capa de decisión** (factibilidad aritmética
      → creencias con procedencia → dial A0–A3 → ruteo selectivo con abstención →
-     EXPLAIN) más los 13 paradigmas, que SON producto; y el **banco de medición**
-     (runner, grading, metrics, corpus, tests, scripts `_*.py`), que NO lo es.
+     EXPLAIN) más los paradigmas del catálogo, que SON producto; y el **banco de
+     medición**
+     (runner, grading, metrics, corpus, tests, `bench/`), que NO lo es.
    - **`legacy/agentic/`** — capa de ejecución anterior (LangGraph), **CONGELADA**.
      No es el producto y no se evoluciona. Se conserva como referencia de lo único
      que resolvió y el banco nunca tuvo que modelar: búsqueda sobre índice real,

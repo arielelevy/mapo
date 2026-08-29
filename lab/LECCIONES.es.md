@@ -1877,7 +1877,7 @@ contra un umbral de 1.024).
 > *«support the Chat Completions API and function tools, **but not both at the same time**
 > unless `reasoning_effort` is `none`. Use the Responses API for tool calling.»*
 
-**Los trece paradigmas de este producto son bucles de herramientas sobre Chat Completions.**
+**Los paradigmas de este producto son bucles de herramientas sobre Chat Completions.**
 Así que luna al mismo precio **no es un reemplazo directo**: o se apaga el razonamiento —y
 entonces para qué— o se reescribe el cliente contra la Responses API.
 
