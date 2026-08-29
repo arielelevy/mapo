@@ -186,6 +186,15 @@ class Row:
     # Lo que el modelo decidio gastar PENSANDO, facturado como salida. Cero en un modelo
     # que no razona, y eso es un cero MEDIDO, no un ausente.
     reasoning_tokens: int = 0
+    # CUANTAS LLAMADAS SE SIRVIERON DEL CACHE. Existia en `Usage` y no llegaba a la fila,
+    # asi que desde el registro era imposible distinguir una celda que se PAGO de una que
+    # se replayo — y `cost_tokens` no lo dice: un acierto reporta el uso de la llamada
+    # ORIGINAL, que es lo correcto para medir el paradigma y lo equivocado para saber si
+    # una corrida gasto.
+    #
+    # Se noto al escribir el rellenado desde cache: la guarda «tiene que gastar cero»
+    # miraba `cost_tokens` y habria reventado sobre un rellenado perfecto.
+    cached_calls: int = 0
     # Espera antes del primer token: la de la primera llamada —lo que alguien espera antes
     # de ver nada— y la acumulada sobre todas, porque en un bucle de herramientas cada
     # vuelta vuelve a esperar.
@@ -819,6 +828,7 @@ class Runner:
                 # todo el gasto fue del paradigma— porque el medidor siempre existe.
                 retrieval_tokens=max(0, spent.total_tokens - result.usage.total_tokens),
                 reasoning_tokens=spent.reasoning_tokens,
+                cached_calls=spent.cached_calls,
                 first_ttft_ms=spent.first_ttft_ms,
                 ttft_ms_total=spent.ttft_ms_total,
                 completeness=contract,

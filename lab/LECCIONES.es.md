@@ -1999,6 +1999,40 @@ es la falla más difícil de creer cuando aparece.
 
 ---
 
+### 8.10 La guarda que iba a proteger el rellenado medía la cosa equivocada · `EJECUTADO`
+
+Rellenar el registro con campos nuevos sale **gratis**: el caché guarda el cuerpo completo,
+así que re-correr sirve todo del disco. La guarda obvia es *«tiene que gastar cero»*, y la
+escribí así:
+
+```python
+gasto = sum(r.cost_tokens for r in filas)
+if gasto: raise ...
+```
+
+**Habría reventado sobre un rellenado perfecto.** Un acierto de caché **reporta el uso de la
+llamada original** —que es lo correcto para medir el paradigma, y lo equivocado para saber
+si una corrida gastó—. El `cost_tokens` de un rellenado impecable es **idéntico** al de la
+corrida que copia.
+
+Lo que decide es `calls - cached_calls`, y ahí apareció el segundo defecto: **`cached_calls`
+existía en `Usage` y nunca llegaba a `Row`.** Desde el registro era imposible distinguir una
+celda que se **pagó** de una que se **replayó**. Es la misma forma de siempre —capturado y
+no propagado— y esta vez impedía justamente verificar que algo fue gratis.
+
+**Y hubo un tercer error, más caro, en la primera versión.** El rellenado tomaba el corpus y
+los paradigmas por argumento, y la corrida original había cubierto **8 de 32 tareas**. Las
+otras 24 no tenían entrada de caché: empezó a pagarlas de verdad. La copia previa salvó el
+registro, y el arreglo es que **el alcance se lea del archivo** — un rellenado que no
+reproduce exactamente la corrida original no es un rellenado.
+
+> Tres defectos en una herramienta de veinte líneas cuyo único trabajo es *no gastar*. Los
+> tres se ven igual desde afuera: el script corre y escribe filas. **La única razón por la
+> que aparecieron es que la guarda tenía que dar un número exacto —cero— y no un «parece
+> bien».**
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

@@ -1,0 +1,129 @@
+"""Rellenar el registro con campos nuevos, DESDE EL CACHE. Cero tokens. `L-4`.
+
+DE DONDE SALE LA POSIBILIDAD. El cache es content-addressed y guarda el CUERPO COMPLETO de
+cada respuesta, no un resumen: ahi estan `completion_tokens_details.reasoning_tokens` y el
+bloque `latency_checkpoint` con el tiempo al primer token. Cuando se agrega un campo a
+`Row`, volver a correr con `resume=False` re-ejecuta cada celda contra el cache y escribe
+las filas otra vez, ahora con el campo. **Ninguna llamada sale al proveedor.**
+
+POR QUE HACE FALTA HACERLO Y NO ALCANZA CON AGREGAR EL CAMPO. Las filas viejas no lo
+tienen, y un analizador que promedie sobre ellas reporta cero. Cero de un campo que nunca
+se capturo se lee EXACTAMENTE igual que cero medido — es la misma trampa que este banco ya
+piso tres veces, y la unica forma de cerrarla es que el dato exista.
+
+SE VERIFICA CONTRA LAS LLAMADAS, NO CONTRA LOS TOKENS. Un acierto de cache REPORTA el uso
+de la llamada original —lo correcto para medir el paradigma, lo equivocado para saber si
+una corrida gasto— asi que `cost_tokens` de un rellenado perfecto es identico al de la
+corrida que copia. La primera version de esta guarda miraba tokens y habria reventado sobre
+todo rellenado sano. Lo que decide es `calls - cached_calls`, y tiene que dar cero.
+
+Y SE HACE COPIA ANTES. Reescribir un registro es la operacion mas destructiva del banco: si
+el cache no cubre, el archivo queda con menos filas que antes y lo pagado se perdio.
+"""
+
+# Corre DESDE `lab/`: las rutas de datos son relativas al CWD. El prologo solo
+# resuelve los imports, que es lo que se rompe al salir de la raiz.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+import argparse
+import os
+import shutil
+import sys
+import time
+from dataclasses import replace
+
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+from app.config import Settings
+from app.runner import Runner, load_rows
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--corpus", required=True)
+    ap.add_argument("--model-dir", required=True,
+                    help="subcarpeta de results/ (nano, terra, ...)")
+    ap.add_argument("--deployment", required=True)
+    ap.add_argument("--temperature-zero", action="store_true",
+                    help="la corrida original fijo temperature=0 (nano). Sin esto se "
+                         "omite, como en los 5.6. La huella depende de esto, y con la "
+                         "huella equivocada NINGUNA clave de cache acierta.")
+    args = ap.parse_args()
+
+    base = Settings.from_env()
+    s = replace(
+        base,
+        endpoint=os.environ["MAPO_NANO_ENDPOINT"].rstrip("/"),
+        api_key=os.environ["MAPO_NANO_KEY"],
+        chat_deployment=args.deployment,
+        temperature=0.0 if args.temperature_zero else None,
+        results_dir=base.results_dir / args.model_dir,
+    )
+    runner = Runner(s, args.corpus, retriever_arm="hybrid", surface_variant="basic")
+    destino = runner._results_path  # noqa: SLF001
+    if not destino.exists():
+        print(f"{destino} no existe. Nada que rellenar — se dice, no se supone.")
+        return
+
+    antes = load_rows(destino)
+    # EL ALCANCE SALE DEL ARCHIVO, no de argumentos. Un rellenado tiene que reproducir
+    # EXACTAMENTE la corrida original: si corre tareas o brazos que no estaban, esas
+    # celdas no tienen entrada de cache y se pagan de verdad — y entonces esto deja de
+    # ser un rellenado y pasa a ser una corrida nueva escrita encima de una vieja.
+    #
+    # Ya paso: la primera version tomaba los paradigmas por argumento y el corpus entero,
+    # y arranco a pagar 24 tareas que nunca se habian corrido. La copia salvo el registro.
+    tareas = sorted({r["task_id"] for r in antes})
+    brazos = sorted({r["paradigm"] for r in antes})
+    if not tareas or not brazos:
+        print("El registro no declara tareas ni brazos: no hay alcance que reproducir.")
+        return
+    print(f"alcance leido del registro: {len(tareas)} tareas x {brazos}")
+    replicas = max(
+        len([r for r in antes
+             if r["task_id"] == tareas[0] and r["paradigm"] == brazos[0]]), 1
+    )
+    copia = destino.with_suffix(destino.suffix + f".pre-backfill-{int(time.time())}")
+    shutil.copy2(destino, copia)
+    print(f"{len(antes)} filas · copia en {copia.name}")
+    destino.unlink()
+
+    filas = runner.run_cross_product(
+        paradigms=brazos, repeat=replicas, task_ids=tareas, resume=False,
+    )
+    # LO QUE DECIDE ES CUANTAS LLAMADAS SALIERON, no cuantos tokens se reportan. Un
+    # acierto de cache REPORTA el uso de la llamada original —que es lo correcto para
+    # medir el paradigma— asi que `cost_tokens` de un rellenado perfecto es el mismo que
+    # el de la corrida que copia. Mirar eso habria hecho fallar todo rellenado sano.
+    llamadas = sum(r.calls for r in filas)
+    servidas = sum(r.cached_calls for r in filas)
+    reales = llamadas - servidas
+
+    if len(filas) < len(antes):
+        shutil.copy2(copia, destino)
+        raise SystemExit(
+            f"El rellenado produjo {len(filas)} filas y habia {len(antes)}. Se restauro "
+            f"la copia: un registro con menos filas que antes perdio algo pagado."
+        )
+    print(f"{len(filas)} filas escritas")
+    if reales:
+        raise SystemExit(
+            f"{reales} de {llamadas} llamadas salieron al proveedor de verdad, y tenian "
+            f"que ser CERO: {servidas} vinieron del cache. O el cache no cubria estas "
+            f"celdas, o el payload cambio y las claves dejaron de acertar. En los dos "
+            f"casos esto no es un rellenado — es una corrida nueva escrita encima de una "
+            f"vieja. La copia quedo en {copia.name}."
+        )
+    print(f"{llamadas} llamadas, {servidas} del cache, {reales} al proveedor — gratis, "
+          f"como tenia que ser")
+
+    nuevas = load_rows(destino)
+    for campo in ("reasoning_tokens", "first_ttft_ms", "ttft_ms_total"):
+        con = sum(1 for r in nuevas if campo in r)
+        print(f"  {campo:<18} presente en {con}/{len(nuevas)} filas")
+
+
+if __name__ == "__main__":
+    main()
