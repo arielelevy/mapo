@@ -2073,6 +2073,54 @@ manda en cada respuesta.
 
 ---
 
+### 5.25 La ventaja del modelo caro no depende de la tarea: depende del PARADIGMA · `MEDIDO`
+
+`P27b` mató el argumento con el que se construyó el ruteo por modelo —la ventaja del caro
+**no** depende de la dificultad: +0,5000 donde nada funcionaba contra +0,4778 donde algo
+funcionaba a medias—. Así que la pregunta pasó a ser si varía en **algún** eje. Barridos
+todos los que el registro declara:
+
+| partición | dispersión entre grupos |
+|---|---:|
+| **por paradigma** | **+0,7843** |
+| por celda | +0,3167 |
+| por región | +0,1667 |
+| por material (bulk/chico) | +0,1333 |
+| *(referencia: sd dentro del conjunto)* | *0,5046* |
+
+**Sólo el paradigma supera la variabilidad interna.** Y no por poco:
+
+| | ganancia | n | sd |
+|---|---:|---:|---:|
+| **`react`** | **+0,8755** | 8 | 0,231 |
+| **`rewoo`** | **+0,0912** | 8 | 0,385 |
+
+**El modelo caro le compra casi un punto entero a `react` y nada a `rewoo`.**
+
+> Y eso **rescata `X-5b` por una razón distinta de la que le di.** Yo argumenté que el par
+> `(modelo, paradigma)` era la acción porque el modelo se elige y no se observa. Es cierto y
+> no era el punto: el par es la acción porque **el efecto del modelo vive en la
+> interacción**. Elegir modelo mirando la tarea no compra nada; elegirlo **junto con el
+> paradigma** compra 0,88 en una de las dos ramas.
+
+**El mecanismo plausible, y va como hipótesis.** `react` decide qué leer en cada vuelta —3,3
+llamadas por celda— y `rewoo` planifica una vez y ejecuta —2 llamadas, sin decisión
+intermedia—. Un modelo mejor ayuda donde hay **más decisiones por celda**, y en `rewoo` la
+única decisión ya se tomó en el plan.
+
+**La explicación alternativa que hay que descartar antes de creerle a la primera.** `rewoo`
+podría no ganar porque su techo es **estructural**: si su plan inicial no alcanza, ningún
+modelo lo salva dentro de esa topología. Eso predice algo distinto y falsable — que la
+ganancia de `rewoo` sea chica **también** en tareas donde su plan sí alcanzaba— y con 16
+celdas no se puede separar de la primera.
+
+**Un aviso sobre la tabla.** La partición «por razonamiento» da **exactamente** los mismos
+números que la de paradigma, y no es un segundo hallazgo: el razonamiento está determinado
+por el paradigma en estas celdas. Reportarlas como dos ejes sería contar el mismo efecto dos
+veces.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una
