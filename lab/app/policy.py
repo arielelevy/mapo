@@ -147,12 +147,20 @@ class Episode:
     utility: float
     cost_tokens: int
     was_best: bool
+    # CON QUE MODELO CORRIO. Vacio significa «un solo modelo», que es el regimen en el que
+    # se midio todo hasta hoy — y es distinto de nombrar uno por omision.
+    #
+    # POR QUE EN EL EPISODIO Y NO DERIVADO DEL ARCHIVO. Un episodio es la unidad de
+    # aprendizaje y de auditoria: si el modelo saliera de la carpeta donde cayo la fila,
+    # mover un archivo cambiaria lo que theta aprendio.
+    model: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "region": self.region,
             "paradigm": self.paradigm,
+            "model": self.model,
             "utility": self.utility,
             "cost_tokens": self.cost_tokens,
             "was_best": self.was_best,

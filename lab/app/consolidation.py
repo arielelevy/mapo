@@ -436,6 +436,37 @@ def _task_of(record: dict[str, Any]) -> str:
     return (record.get("context") or {}).get("task_id", "")
 
 
+def accumulate_model_stats(
+    model_stats: dict[str, dict[str, Stat]], episodes: Iterable[Episode]
+) -> int:
+    """Acumular episodios en la SEGUNDA politica: `paradigma -> modelo -> Stat`.
+
+    POR QUE NO PARTE POR REGION, que es la decision entera. `P27e` midio que la ventaja
+    del modelo vive en el PARADIGMA (dispersion +0,7843) y que la REGION no explica nada
+    (+0,1667, contra una sd interna de 0,5046). Partir por region pagaria la
+    multiplicacion de bins —el mecanismo por el que `P15` fracaso— sin comprar
+    discriminacion: contado sobre 2.494 episodios, `modelo x paradigma` son 13 bins con el
+    100% de los episodios visibles, contra 134 bins con el 90% agregando la region.
+
+    UN EPISODIO SIN MODELO NO ENTRA, y no entra en un bin llamado «vacio». Es el regimen
+    de un solo modelo, donde la pregunta «cual conviene» no existe: meterlo bajo una clave
+    vacia crearia un tercer modelo fantasma que competiria con los reales.
+
+    Devuelve cuantos entraron, para que el reporte pueda decir cuantos se ignoraron.
+    """
+    entrados = 0
+    for e in episodes:
+        if not e.model:
+            continue
+        stat = model_stats.setdefault(e.paradigm, {}).setdefault(e.model, Stat())
+        stat.episodes += 1
+        stat.utility_sum += e.utility
+        stat.cost_sum += e.cost_tokens
+        stat.wins += 1 if e.was_best else 0
+        entrados += 1
+    return entrados
+
+
 def sleep_cycle(
     incumbent: PolicyBundle,
     rows: list[dict[str, Any]],
@@ -494,6 +525,33 @@ def sleep_cycle(
         tau=tau if tau is not None else incumbent.tau,
         notes=f"sleep cycle {cycle}: replayed {len(ordered)} episodes by surprise",
     )
+
+    # ---- stage 1b: la SEGUNDA politica (`P27g`, `P27i`)
+    #
+    # Sobre el MISMO conjunto de ajuste que theta, y no sobre todos los episodios: si se
+    # alimentara con el bloque final, la guarda de promocion validaria al candidato con
+    # datos que el candidato ya vio — que es exactamente el defecto que la etapa 1 arreglo
+    # para la primera politica, y repetirlo aca lo reintroduciria por la puerta de al lado.
+    candidate.model_stats = {
+        par: {m: Stat(**vars(st)) for m, st in modelos.items()}
+        for par, modelos in incumbent.model_stats.items()
+    }
+    entrados = accumulate_model_stats(candidate.model_stats, fitting)
+    sin_modelo = len(fitting) - entrados
+    if entrados:
+        candidate.model_version = incumbent.model_version + 1
+        report.notes.append(
+            f"segunda politica: {entrados} episodios acumulados por (paradigma, modelo)"
+            + (f"; {sin_modelo} sin modelo declarado quedaron afuera" if sin_modelo else "")
+        )
+    elif sin_modelo:
+        # SE DICE. Un registro entero sin modelo declarado no es un error —es el regimen
+        # de un solo modelo— pero dejarlo callado haria que la segunda politica parezca
+        # implementada y viva cuando en realidad nunca recibio nada.
+        report.notes.append(
+            f"segunda politica: ninguno de los {sin_modelo} episodios declara modelo, asi "
+            f"que no se acumulo nada. Es el regimen de un solo modelo, no una falla"
+        )
 
     # ---- stage 2: abstraction
     if validate_ids:

@@ -1,0 +1,36 @@
+{
+  "_comment": [
+    "Segundos por llamada al modelo, MEDIDOS sobre el registro (no declarados a mano).",
+    "Fuente: bench/analysis/_analyze_latency.py sobre 2.369 filas con `wall_seconds`.",
+    "",
+    "POR QUE POR LLAMADA Y NO POR CELDA. La latencia tiene un componente FIJO por llamada",
+    "—la ida y vuelta— que los tokens no expresan, y los paradigmas se diferencian sobre",
+    "todo en CUANTAS llamadas hacen: `map_reduce` es el mas barato por llamada (2,00 s) y",
+    "el cuarto mas lento por celda, porque hace 9,9. Un numero por celda mezclaria las dos",
+    "cosas y no serviria para proyectar una topologia distinta.",
+    "",
+    "ADVERTENCIA QUE VA ARRIBA Y NO AL PIE. El banco corre con concurrencia y comparte",
+    "cuota consigo mismo, asi que estos numeros INCLUYEN espera por rate limit. Sirven",
+    "para comparar brazos entre si —todos sufren lo mismo— y NO como cota de lo que un",
+    "request solo tardaria. Una cota de admision construida con ellos es CONSERVADORA, que",
+    "es el lado correcto para equivocarse: rechaza de mas, no admite de mas."
+  ],
+  "source": "bench/analysis/_analyze_latency.py",
+  "measured_on": "2026-08-28",
+  "rows": 2369,
+  "unit": "seconds_per_model_call",
+  "note_on_default": [
+    "`default` es el MAXIMO de los medidos y no su promedio. Un paradigma sin medicion",
+    "propia se proyecta con el peor caso conocido: suponerle el promedio lo admitiria en",
+    "presupuestos donde el peor medido no entra, y una cota que admite de mas no es cota."
+  ],
+  "default": 3.3,
+  "per_call_seconds": {
+    "map_reduce": 2.00,
+    "react": 2.19,
+    "graph_traverse": 2.54,
+    "reflection": 2.63,
+    "rewoo": 3.02,
+    "plan_execute": 3.27
+  }
+}

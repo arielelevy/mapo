@@ -29,7 +29,9 @@ not a degradation. It is the difference between a bounded system and a runaway.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 from .tools import SUMMARY_CHARS
 
@@ -441,6 +443,48 @@ def admissible(
 PROJECTED_COMPLETION_SHARE = 0.15
 
 
+# LATENCIA POR LLAMADA, medida y leida de `config/latency.json`. `L-3`.
+#
+# POR QUE ES UNA COTA DURA Y NO UN TERCER EJE DE LAMBDA. `lambda` expresa una PREFERENCIA
+# —cuanta calidad vale una unidad de costo— y el tiempo casi nunca es eso: un request con
+# un usuario esperando tiene un techo, no una tasa de cambio. Un brazo que gana 0,030 de
+# utilidad y tarda 11,5x (leccion 5.19) no es «caro»: es inservible para quien espera.
+#
+# Va con la ventana y la plata, que son las otras dos cotas duras, y NO con lambda.
+_LATENCY_PATH = Path(__file__).resolve().parent.parent / "config" / "latency.json"
+
+
+def _load_latency() -> tuple[dict[str, float], float]:
+    if not _LATENCY_PATH.exists():
+        raise FileNotFoundError(
+            f"No existe {_LATENCY_PATH}. La latencia por llamada es un dato MEDIDO y vive "
+            f"en un JSON: sin el, cualquier numero que el codigo usara seria inventado."
+        )
+    raw = json.loads(_LATENCY_PATH.read_text(encoding="utf-8"))
+    por_llamada = {k: float(v) for k, v in (raw.get("per_call_seconds") or {}).items()}
+    default = raw.get("default")
+    if default is None:
+        raise ValueError(
+            f"{_LATENCY_PATH.name} no declara `default`. Un paradigma sin medicion propia "
+            f"necesita con que proyectarse, y elegirlo en el codigo seria inventarlo."
+        )
+    return por_llamada, float(default)
+
+
+LATENCY_PER_CALL, LATENCY_DEFAULT = _load_latency()
+
+
+def projected_seconds(paradigm: str, calls: int | None) -> float | None:
+    """Segundos proyectados. `None` si el paradigma no proyecta llamadas.
+
+    AUSENTE NO ES CERO, igual que en la plata: sin proyeccion de llamadas no hay tiempo
+    que proyectar, y cobrarle cero lo admitiria en cualquier presupuesto por no saber.
+    """
+    if calls is None:
+        return None
+    return calls * LATENCY_PER_CALL.get(paradigm, LATENCY_DEFAULT)
+
+
 def check_pair(
     model: "Model",
     paradigm: str,
@@ -478,6 +522,32 @@ def check_pair(
             projected_tokens=verdict.projected_tokens,
             axis="window",
         )
+
+    # LA COTA DE TIEMPO, y va ANTES que la de plata a proposito: si el request no se
+    # puede contestar a tiempo, cuanto sale es una pregunta que ya no importa.
+    budget_seconds = task.get("budget_seconds")
+    if budget_seconds is not None:
+        segundos = projected_seconds(paradigm, verdict.projected_calls)
+        if segundos is None:
+            return Verdict(
+                True,
+                f"{paradigm} no proyecta llamadas, asi que la cota de TIEMPO no se evaluo. "
+                f"No proyectado no es instantaneo",
+                projected_calls=verdict.projected_calls,
+                projected_tokens=verdict.projected_tokens,
+                axis="latency_unevaluated",
+            )
+        if segundos > float(budget_seconds):
+            return Verdict(
+                False,
+                f"{paradigm} proyecta ~{segundos:.0f}s ({verdict.projected_calls} "
+                f"llamadas) contra un techo de {float(budget_seconds):.0f}s. El tiempo es "
+                f"una COTA y no una preferencia: un brazo que gana utilidad y no llega no "
+                f"gana",
+                projected_calls=verdict.projected_calls,
+                projected_tokens=verdict.projected_tokens,
+                axis="latency",
+            )
 
     budget_usd = task.get("budget_usd")
     if budget_usd is None:
