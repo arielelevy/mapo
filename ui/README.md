@@ -187,14 +187,24 @@ De `../lab/app/main.py`. Ninguno de estos endpoints streamea, y ninguno lleva pr
 ### Los tres desajustes, en orden de tamaño
 
 **1. La consola manda `unit_ids`; el motor toma `documents`.** El real recibe los textos
-completos del caller. Mandar ids presupone que hay un índice y que hay workspaces, y no
-hay ninguna de las dos cosas. Ese es el hueco grande: es toda la capa de ingesta e índice
-que `ARQUITECTURA.es.md` propone y que nada implementa. No se cierra renombrando un
-campo.
+completos del caller. Mandar ids presupone que hay un índice y que hay workspaces.
 
-**2. No hay streaming.** `POST /answer` es `def`, no `async def`, y devuelve un dict. La
-escalera que se dibuja por etapas y los tokens que llegan de a uno son la propuesta §6,
-no una capacidad. Contra el motor de hoy, el modo `motor` de esta consola falla.
+Actualizado 2026-08-29: **la ingesta ya existe como etapa** (`app/ingest.py`), con su gasto
+en columna propia y la regla que impone —ningún paradigma construye estado derivado adentro
+de un request—. Lo que sigue faltando es lo otro: **el índice y los workspaces**. Así que el
+hueco se achicó y no se cerró, y no se cierra renombrando un campo.
+
+**2. El streaming existe en el motor y no sale por HTTP.** Actualizado 2026-08-29:
+`_answer_stream` (`serve.py:280`) **sí** emite los eventos tipados con `yield`, y
+`Event.as_sse()` (`events.py:84`) los serializa. Lo que falta es el endpoint: `answer`
+(`serve.py:168`) es `def`, no `async def`, y consume el generador entero para devolver un
+dict.
+
+O sea, la escalera que se dibuja por etapas ya tiene quién la produzca; le falta el caño.
+Es `E-3` en `lab/PRODUCTO.es.md`, y viene con una guarda que ya está escrita en
+`ARQUITECTURA.es.md`: **A3 buffea la respuesta hasta verificar las citas**, así que un
+`token` no puede salir antes de que el contrato lo permita. Contra el motor de hoy, el modo
+`motor` de esta consola sigue fallando.
 
 **3. La consola no manda `oracle` ni `probe`.** `oracle` no es decorativo: su presencia
 es lo que hace **admisible una cascada** —escalar ante un fallo observado necesita un

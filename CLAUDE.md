@@ -25,10 +25,16 @@ incompleto. Lee siempre la primera unidad, la verificación de referencias neces
 fortalecerse, el replanning reutiliza la región previa, no conserva una única historia
 pre/post, y el costo no integra la utilidad total. Además P15 fue refutada: θ perdió
 `-0,087` contra el mejor fijo porque el vocabulario de región no representa continuidad
-u horizonte. La dirección aprobada, todavía NO implementada, es Reparación Epistémica
-Contrafactual: diseño en `lab/PATRON_REC.es.md`; arquitectura y deuda en
-`lab/DISENO.es.md`. Nada de eso entra al paper hasta ejecutarse y medirse.
-Handoff exhaustivo para retomar sin el chat: `lab/CIERRE-2026-08-27.es.md`.
+u horizonte. La dirección aprobada es Reparación Epistémica Contrafactual, y desde el
+2026-08-29 **está implementada y corrida**: `rec.py` (diagnóstico contrafactual mínimo,
+esquema de intervenciones cerrado y firmado) y `certify.py` (tres mundos disjuntos, mundo
+final de un solo uso, instalación fail-closed). Se corre con `bench/runs/_run_rec.py`.
+**El veredicto medido es que la cláusula NO se promueve**: la métrica neta —el eje que
+faltaba, porque lo que una cláusula compra es *no sondear*, no utilidad— da `+0,0311`
+contra un piso de ruido de `0,0655` al λ=0,05 con que decide el banco, y sólo cruza a
+λ=0,2. `aceptada: False`; el mundo final no se consumió. Diseño en `lab/PATRON_REC.es.md`;
+arquitectura y deuda en `lab/DISENO.es.md`. Nada entra al paper hasta ejecutarse y medirse.
+Handoff exhaustivo para retomar sin el chat: `lab/historico/CIERRE-2026-08-27.es.md`.
 
 **Arquitectura de plataforma (PROPUESTA, 2026-08-27): `lab/ARQUITECTURA.es.md`.** Fija
 las decisiones físicas del producto: on-prem/Docker; NO Temporal todavía (work table en
@@ -135,5 +141,6 @@ paradigma es el caso medido primero, no el alcance del producto.
   CONGELADA como primer modelo. Detalle completo en `lab/CLAUDE.md`.
 - `lab` YA vive en `D:\Apps\MAPO\lab` (mudado 2026-08-27, corridas
   terminadas, conteos verificados). Los veredictos P10–P14 y P13a-c están en
-  `lab/README.md` §Findings y `lab/notes/`. Auditoría de código completa
-  en `lab/code-review-2026-08-27.md` (bloque crítico ya aplicado).
+  `lab/historico/BITACORA-PREDICCIONES.es.md` y `lab/notes/` — la cronología salió de
+  `lab/README.md` el 2026-08-29, donde ocupaba 1.400 de sus 1.687 líneas. Auditoría de código completa
+  en `lab/historico/code-review-2026-08-27.md` (bloque crítico ya aplicado).

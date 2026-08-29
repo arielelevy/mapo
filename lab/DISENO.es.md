@@ -287,26 +287,30 @@ implicaba tener detector, y por eso el banco no podía medir selección.
 
 Medido sin gastar un token (`_analyze_p17_mechanism.py`): sobre `gold_p17`, aplicar los
 dos sitios hace caer la cascada de **22 a 2** de 26, y deja **14 tareas esperando la
-sonda** — que es el único lugar de donde la selección puede salir. El cambio está listo
-pero espera a que P16 cierre su veredicto congelado: tocarlo con una corrida a mitad de
-camino disolvería la única garantía que hace que registrar una predicción valga algo.
+sonda** — que es el único lugar de donde la selección puede salir. **P16 ya cerró** (2026-08-27: P16a refutada
+en −1,2888, P16c decisiva, P16d 26/26, 0 infra, 13,95M tokens), así que el bloqueante que
+este párrafo declaraba —«no tocar `features.py` / `rules.py` / `policy.py` con una corrida
+a mitad de camino»— **ya no aplica**. El cambio está listo y lo que falta es aplicarlo.
+
+Y conviene decir por qué el bloqueante existía, porque la regla sigue viva aunque el
+bloqueo no: tocar el código de decisión con una corrida a mitad de camino disolvería la
+única garantía que hace que registrar una predicción valga algo.
 
 ## 9. Mapa documental
 
-| Documento | Alcance |
+**El índice canónico está en [`CLAUDE.md`](CLAUDE.md) §«Qué documento es cada cosa».**
+
+Acá había una segunda tabla con los mismos documentos, y pasó lo previsible: se
+desincronizó. Declaraba `CONTRATOS.es.md` como «pizarra, no implementado» cuando
+`app/contracts.py` tiene 688 líneas y cierra dos de sus tres clases, y no conocía
+`PAPER.es.md`, `PRODUCTO.es.md` ni `historico/BITACORA-PREDICCIONES.es.md`. **Dos índices
+del mismo repo empiezan a decir cosas distintas**, y el que nadie mantiene es el que
+miente.
+
+Lo único que es propio de este documento, y que el índice no dice:
+
+| | |
 |---|---|
-| `PENDIENTES.es.md` | **Todo lo que falta, en un solo lugar.** Fuente única de "qué queda". |
-| `LECCIONES.es.md` | **Lo que el banco probó**, cada regla con su medición. Material de paper. |
-| `COTA_RATCHET.es.md` | La cota nativa del ratchet (T-4): terminación acotada en vez de varianza. |
-| `CONTRATOS.es.md` | Semántica de los contratos de afirmación (T-1). **Pizarra**, no implementado. |
-| `ONTOLOGIA_PREGUNTAS.es.md` | Qué exige un request, por eje, y cuáles el corpus puede medir. **Pizarra**. |
-| `MEDICION.es.md` | El mecanismo de medición, definido por lo que se niega a hacer. |
-| `DISENO.es.md` | Arquitectura lógica, decisiones, garantías y deuda. |
-| `ARQUITECTURA.es.md` | Arquitectura de plataforma: orquestación, ingesta, persistencia y backend. **Propuesta.** |
-| `PATRON_REC.es.md` | Patrón implementado (`rec.py`, `certify.py`) y protocolo de investigación. |
-| `app/README.es.md` | Mapa de módulos del producto. |
-| `app/paradigms/README.es.md` | Catálogo y estado de paradigmas. |
-| `BENCHMARK.es.md` | Protocolo del banco y validez científica. |
-| `corpus/README.es.md` | Gold, generación, verificación y leakage. |
-| `tests/README.es.md` | Qué demuestra y qué no demuestra cada suite. |
-| `CIERRE-2026-08-27.es.md` | Handoff exhaustivo, hallazgos finos y orden de reanudación. |
+| **qué contesta `DISENO.es.md`** | qué hay **hoy** en el ejecutable, y cuáles de sus deudas están **comprobadas** — no supuestas |
+| **qué NO contesta** | qué falta (`PENDIENTES.es.md`), qué probó el banco (`LECCIONES.es.md`), ni cómo va a ser la plataforma (`ARQUITECTURA.es.md`, que es propuesta) |
+| **la distinción que lo gobierna** | §2: una afirmación es **ejecutada**, **deuda** o **propuesta**, y mezclarlas es el error que este documento existe para no cometer |

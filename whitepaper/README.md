@@ -25,7 +25,7 @@ así que las magnitudes son indicativas. Los **mecanismos** son más firmes que 
 magnitudes, porque descansan en trazas de uso de herramientas y no en tamaños de efecto.
 
 **La amenaza de validez más grande está en curso de cierre** (2026-08-26): predicciones
-P1-P5 registradas antes de correr (README del harness), barrido de factibilidad a costo
+P1-P5 registradas antes de correr (`../lab/historico/BITACORA-PREDICCIONES.es.md`), barrido de factibilidad a costo
 cero completado sobre los 4 corpus (`results/feasibility_sweep.json` en el harness), y el
 estudio pagado gold_v2 ↔ gold_deep (emparejado, `repeat=3`, piso de ruido por celda) en
 ejecución.
