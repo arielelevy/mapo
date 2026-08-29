@@ -510,9 +510,43 @@ class Router:
                     f"{profile.min_capability.name if profile.min_capability else 'any'} "
                     f"y ningun modelo factible para {paradigm} la alcanza."
                 )
-            elegido = min(permitidos, key=lambda m: (m.capability, m.name))
-            model_name = elegido.name
-            if len(permitidos) > 1:
+            # LA SEGUNDA POLITICA OPINA ACA, y no antes. El orden es precondicion ->
+            # aritmetica -> aprendido, y ninguna de las dos primeras es negociable: theta
+            # puede preferir el caro y el dial haberlo prohibido, o el presupuesto haberlo
+            # podado, y en los dos casos gana la cota. Un aprendizaje que pudiera levantar
+            # una precondicion no seria una preferencia: seria una manera de evadirla.
+            #
+            # Se consulta por PARADIGMA y no por region, porque ahi vive el efecto (`P27e`:
+            # dispersion +0,1667 por region contra +0,7843 por paradigma). Partir por
+            # region multiplicaria los bins sin comprar discriminacion — el mecanismo de
+            # `P15`, contado en `P27g`.
+            aprendido, margen = self._theta.best_model(paradigm, self._theta.tau)
+            preferido = next(
+                (m for m in permitidos if m.name == aprendido), None
+            ) if aprendido else None
+
+            if preferido is not None:
+                elegido = preferido
+                model_name = elegido.name
+                notes.append(
+                    f"modelo {elegido.name}: theta lo prefiere para {paradigm} por "
+                    f"{margen:.3f} sobre el siguiente, y el dial y el presupuesto lo "
+                    f"admiten"
+                )
+            else:
+                elegido = min(permitidos, key=lambda m: (m.capability, m.name))
+                model_name = elegido.name
+                if aprendido:
+                    # THETA OPINO Y NO SE PUDO SEGUIR. Eso no es lo mismo que no haber
+                    # opinado, y el registro tiene que distinguirlo: si el caro se poda
+                    # sistematicamente por presupuesto, lo aprendido no gobierna nada y
+                    # nadie se entera mirando cual corrio.
+                    notes.append(
+                        f"theta prefiere {aprendido} para {paradigm} (margen {margen:.3f}) "
+                        f"y NO es admisible: el dial o el presupuesto lo podaron. Corre "
+                        f"{elegido.name}"
+                    )
+            if preferido is None and len(permitidos) > 1:
                 notes.append(
                     f"modelo {elegido.name}: el mas barato de "
                     f"{[m.name for m in permitidos]} que el dial admite"

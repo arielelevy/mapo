@@ -181,6 +181,27 @@ class PolicyBundle:
     # value, the router interprets it. The alternative -- importing Assurance here --
     # would make the thing that is signed depend on the thing that reads it.
     floors: dict[str, int] = field(default_factory=dict)
+    # LA SEGUNDA POLITICA: que MODELO conviene para cada paradigma. `P27g`.
+    #
+    # POR QUE NO VA ADENTRO DE `stats`. `stats` esta indexado por REGION, y `P27e` midio
+    # que la region **no explica nada** de la ventaja del modelo: dispersion +0,1667
+    # contra una sd interna de 0,5046. Partir por region para elegir modelo pagaria la
+    # multiplicacion de bins —que es el mecanismo por el que `P15` fracaso— sin comprar
+    # discriminacion. Contado sobre el registro: `modelo x paradigma` son 13 bins con el
+    # 100% de los episodios visibles, contra 134 bins con el 90% si se agrega la region.
+    #
+    # POR QUE ES POLITICA Y NO UN CAMPO MAS. Cambia que se ejecuta, asi que tiene que
+    # estar versionada, firmada, y no ser instalable por fuera del camino de promocion —
+    # la misma razon que `floors` y `trusts_elicited`.
+    #
+    # Indexada `paradigma -> modelo -> Stat`, y en ese orden a proposito: la pregunta que
+    # el router hace es «para ESTE paradigma, que modelo», no al reves.
+    model_stats: dict[str, dict[str, Stat]] = field(default_factory=dict)
+    # LA VERSION DE LA SEGUNDA POLITICA, separada de `version`. Dos politicas que se
+    # promueven y revierten juntas son una sola con dos nombres: si la de modelo regresa,
+    # revertirla no puede obligar a revertir tambien la de paradigmas, que puede estar
+    # perfectamente bien. Son promociones independientes o no son dos politicas.
+    model_version: int = 0
     # SI LA CREDENCIA ELICITADA SE GANO EL DERECHO A DECIDIR.
     #
     # Va acá por la MISMA razón que `floors`, y no al lado: **cambia lo que un request
@@ -216,6 +237,34 @@ class PolicyBundle:
     def stat(self, region: str, paradigm: str) -> Stat:
         return self.stats.get(region, {}).get(paradigm, Stat())
 
+    def model_stat(self, paradigm: str, model: str) -> Stat:
+        """Lo aprendido sobre ese modelo PARA ese paradigma. `Stat()` vacio si nada."""
+        return self.model_stats.get(paradigm, {}).get(model, Stat())
+
+    def best_model(self, paradigm: str, tau: float) -> tuple[str | None, float]:
+        """El modelo que conviene para ese paradigma, y por cuanto. `None` si no se sabe.
+
+        DEVUELVE `None` EN TRES CASOS DISTINTOS y ninguno se puede confundir con «el
+        barato»: sin datos, con un solo modelo visto, o con margen por debajo de `tau`.
+        En los tres, quien llama cae a su regla —el dial y el presupuesto— y el registro
+        dice que theta no opino, que es distinto de que haya opinado a favor del barato.
+
+        SOLO CUENTAN LOS MODELOS QUE CRUZAN EL PISO DE EVIDENCIA. Un bin por debajo no es
+        menos confiable: es invisible, y promediarlo con uno que si cruza le presta
+        confianza que no tiene.
+        """
+        vistos = {
+            m: st for m, st in self.model_stats.get(paradigm, {}).items()
+            if st.episodes >= MIN_EPISODES_FOR_CONFIDENCE
+        }
+        if len(vistos) < 2:
+            return None, 0.0
+        orden = sorted(vistos.items(), key=lambda kv: -kv[1].mean_utility)
+        margen = orden[0][1].mean_utility - orden[1][1].mean_utility
+        if margen < tau:
+            return None, margen
+        return orden[0][0], margen
+
     def paradigms_for(self, region: str) -> dict[str, Stat]:
         return self.stats.get(region, {})
 
@@ -236,6 +285,11 @@ class PolicyBundle:
                 for region, paradigms in sorted(self.stats.items())
             },
             "floors": dict(sorted(self.floors.items())),
+            "model_version": self.model_version,
+            "model_stats": {
+                par: {m: st.as_dict() for m, st in sorted(modelos.items())}
+                for par, modelos in sorted(self.model_stats.items())
+            },
             "clauses": sorted(
                 (json.dumps(c, sort_keys=True, ensure_ascii=False) for c in self.clauses)
             ),
@@ -266,6 +320,16 @@ class PolicyBundle:
                 for region, paradigms in sorted(self.stats.items())
             },
             "floors": dict(sorted(self.floors.items())),
+            "model_version": self.model_version,
+            "model_stats": {
+                par: {m: st.as_dict() for m, st in sorted(modelos.items())}
+                for par, modelos in sorted(self.model_stats.items())
+            },
+            "model_version": self.model_version,
+            "model_stats": {
+                par: {m: st.as_dict() for m, st in sorted(modelos.items())}
+                for par, modelos in sorted(self.model_stats.items())
+            },
             "clauses": list(self.clauses),
         }
 
@@ -291,6 +355,11 @@ class PolicyBundle:
                 for region, paradigms in raw["stats"].items()
             },
             floors={k: int(v) for k, v in (raw.get("floors") or {}).items()},
+            model_version=int(raw.get("model_version") or 0),
+            model_stats={
+                par: {m: Stat.from_dict(d) for m, d in (modelos or {}).items()}
+                for par, modelos in (raw.get("model_stats") or {}).items()
+            },
             clauses=list(raw.get("clauses") or []),
             signature=raw.get("signature", ""),
             notes=raw.get("notes", ""),

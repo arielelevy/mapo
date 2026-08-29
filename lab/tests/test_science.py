@@ -1944,6 +1944,104 @@ def check_handoff_authorisation(ok: bool) -> bool:
     return ok
 
 
+def check_second_policy(ok: bool) -> bool:
+    """§54: la SEGUNDA politica —que modelo por paradigma— y su orden respecto de las cotas.
+
+    POR QUE DOS POLITICAS Y NO UNA CON UN EJE MAS. `P27e` midio que la ventaja del modelo
+    caro vive en el PARADIGMA (+0,8755 en `react`, +0,0912 en `rewoo`) y que la REGION no
+    explica nada (dispersion +0,1667 contra una sd interna de 0,5046). Meter el modelo
+    adentro de `stats` —indexado por region— pagaria la multiplicacion de bins sin comprar
+    discriminacion, que es exactamente el mecanismo por el que `P15` fracaso. Contado sobre
+    2.494 episodios: `modelo x paradigma` son 13 bins con el 100% de los episodios
+    visibles, contra 134 bins con el 90% si se agrega la region.
+
+    EL ORDEN ES PRECONDICION -> ARITMETICA -> APRENDIDO, y no es negociable. Theta puede
+    preferir el caro y el dial haberlo prohibido, o el presupuesto haberlo podado. Un
+    aprendizaje que pudiera levantar una precondicion no seria una preferencia: seria una
+    manera de evadirla.
+
+    Y TRES `None` QUE SON TRES COSAS DISTINTAS: sin datos, con un solo modelo por encima
+    del piso de evidencia —un modelo solo no es una comparacion—, y con margen por debajo
+    de tau. En los tres, quien llama cae a su regla y el registro dice que theta no opino,
+    que NO es lo mismo que haber opinado a favor del barato.
+    """
+    from app.models import CATALOG
+    from app.paradigms import COST_PRIORS
+    from app.policy import MIN_EPISODES_FOR_CONFIDENCE, PolicyBundle, Stat
+    from app.router import Router
+
+    print("\n--- 54. la segunda politica: que modelo por paradigma ---")
+
+    def st(n, u):
+        return Stat(episodes=n, utility_sum=u * n)
+
+    piso = MIN_EPISODES_FOR_CONFIDENCE
+    b = PolicyBundle.cold_start("react", 0.05)
+    b.model_stats = {
+        "react": {"fast": st(piso + 4, 0.20), "deep": st(piso + 4, 0.88)},
+        "rewoo": {"fast": st(piso + 4, 0.56), "deep": st(piso + 4, 0.60)},
+        "gist_reader": {"fast": st(piso - 5, 0.90), "deep": st(piso + 4, 0.10)},
+    }
+    b.model_version = 1
+    b.sign()
+
+    ok &= check("va ADENTRO del payload firmado, como `floors` y `trusts_elicited`",
+                b.verify())
+    b.model_stats["react"]["deep"] = st(piso + 4, 0.01)
+    ok &= check("editarla invalida la firma: no se instala por fuera de la promocion",
+                not b.verify())
+    b.model_stats["react"]["deep"] = st(piso + 4, 0.88)
+    b.sign()
+
+    # CON TOLERANCIA Y NO IGUALDAD EXACTA. El margen es una resta de medias en punto
+    # flotante y da 0,6799999999999999: un aserto de igualdad exacta sobre eso falla por
+    # la representacion y no por el comportamiento — un test que miente en contra.
+    nombre, margen = b.best_model("react", b.tau)
+    ok &= check("con margen, theta nombra el modelo y dice por cuanto",
+                nombre == "deep" and abs(margen - 0.68) < 1e-9)
+    ok &= check("con margen por debajo de tau, NO opina — 0,04 < 0,05",
+                b.best_model("rewoo", b.tau)[0] is None)
+    ok &= check("con un solo modelo por encima del piso tampoco: uno solo no es una "
+                "comparacion, y promediar el otro le prestaria confianza que no tiene",
+                b.best_model("gist_reader", b.tau)[0] is None)
+    ok &= check("y sobre un paradigma nunca visto tampoco",
+                b.best_model("no_visto", b.tau)[0] is None)
+
+    ok &= check("su version es SEPARADA: revertir una no obliga a revertir la otra",
+                b.model_version == 1 and b.version != b.model_version)
+
+    docs = {f"u{i}": "x" * 4000 for i in range(30)}
+    base = {"unit_ids": list(docs), "budget_tokens": 200_000, "question": "q",
+            "task_id": "t", "has_oracle": True}
+    router = Router(b, COST_PRIORS, "react")
+
+    def plan(task, **kw):
+        return router.plan(task, region="many/oracle/loose", candidates=["react"],
+                           documents=docs, **kw)
+
+    con = plan(base, models=CATALOG)
+    ok &= check("el router la CONSUME: sin catalogo seria una politica que nadie lee",
+                con.model == "deep")
+    ok &= check("y el EXPLAIN dice que fue theta y por cuanto margen",
+                any("theta lo prefiere" in n for n in con.notes))
+
+    podado = plan(dict(base, budget_usd=0.02), models=CATALOG)
+    ok &= check("el presupuesto GANA sobre lo aprendido: la cota no se negocia",
+                podado.model == "fast")
+    ok &= check("y se registra que theta opino y NO se pudo seguir — distinto de no haber "
+                "opinado, y sin eso nadie ve que lo aprendido no gobierna nada",
+                any("NO es admisible" in n for n in podado.notes))
+
+    vacio = PolicyBundle.cold_start("react", 0.05).sign()
+    sin = Router(vacio, COST_PRIORS, "react").plan(
+        base, region="many/oracle/loose", candidates=["react"], documents=docs,
+        models=CATALOG,
+    )
+    ok &= check("sin nada aprendido cae a la regla —el mas barato que el dial admite—",
+                sin.model == "fast")
+    return ok
+
+
 def check_tariffs_are_data(ok: bool) -> bool:
     """§53: los aranceles son DATOS y se leen de un JSON, no constantes en un .py.
 
@@ -2122,66 +2220,6 @@ def check_model_pool(ok: bool) -> bool:
     ok &= check("las ventanas son de ENTRADA, no la total: 272k nano, 922k los 5.6",
                 _models.FAST.context_tokens == 272_000
                 and _models.DEEP.context_tokens == 922_000)
-    return ok
-
-
-def check_tariffs_are_data(ok: bool) -> bool:
-    """§53: los aranceles son DATOS y se leen de un JSON, no constantes en un .py.
-
-    POR QUE. Un precio es una clausula del contrato con el proveedor: cambia sin avisar, no
-    lo decide nadie de este lado, y actualizarlo no deberia tocar codigo. Mientras fueron
-    constantes fueron **referencia inventada** —0,05/0,40 para nano cuando el real es
-    0,20/1,25, un error de 4x en entrada— y nada podia notarlo, porque un numero puesto a
-    mano se lee igual de seguro que uno verificado.
-
-    Y EL CARGADOR FALLA FUERTE. Un arancel sin fecha no se puede auditar; uno sin precio
-    haria parecer gratis a un modelo que no lo es; un papel sin declarar decidiria el
-    precio del producto en silencio. Los tres levantan.
-    """
-    import json
-    import tempfile
-    from app.tariffs import (
-        DECLARADOS, DEEP, DETAILS, EMBEDDINGS, NANO, VERIFIED_ON, _build, breakeven,
-    )
-
-    print("\n--- 53. los aranceles son datos ---")
-
-    ok &= check("se leen del JSON y traen fecha de verificacion",
-                bool(VERIFIED_ON) and len(VERIFIED_ON) == 10)
-    ok &= check("la fecha viaja adentro del nombre, asi que el reporte la estampa",
-                NANO.name.endswith(VERIFIED_ON))
-    ok &= check("los cuatro modelos estan, con su deployment real",
-                {d.deployment for d in DETAILS.values()} >= {
-                    "gpt-5.4-nano", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"})
-    ok &= check("`luna` cuesta lo mismo que `nano`: NO es el caro, es clase nano",
-                DECLARADOS["luna"].prompt_per_mtok
-                == DECLARADOS["nano"].prompt_per_mtok)
-    ok &= check("y los caros son caros: terra ~10x, sol ~24x",
-                9.0 < breakeven(NANO, DECLARADOS["terra"], 0.15) < 11.0
-                and 23.0 < breakeven(NANO, DECLARADOS["sol"], 0.15) < 26.0)
-    ok &= check("el papel `deep` es una DECISION declarada en el JSON, no una derivacion",
-                DEEP is DECLARADOS["terra"])
-    ok &= check("los ejes que el calculo no usa se CONSERVAN en vez de perderse",
-                DETAILS["sol"].cache_write == 6.25
-                and DETAILS["terra"].long_context_prompt == 4.00)
-    ok &= check("y nano no cobra escritura de cache, que es la asimetria menos obvia",
-                DETAILS["nano"].cache_write is None
-                and DETAILS["sol"].cache_write is not None)
-    ok &= check("los embeddings tambien: HyDE los paga aparte de su llamada",
-                EMBEDDINGS.get("text-embedding-3-large") == 0.143)
-
-    for roto, porque in (
-        ({"tariffs": {"x": {"prompt": 1, "completion": 2, "deployment": "d"}}},
-         "sin fecha"),
-        ({"verified_on": "2026-01-01",
-          "tariffs": {"x": {"completion": 2, "deployment": "d"}}}, "sin precio"),
-        ({"verified_on": "2026-01-01", "tariffs": {}}, "sin ningun arancel"),
-    ):
-        try:
-            _build(roto)
-            ok &= check(f"un JSON {porque} levanta", False)
-        except ValueError:
-            ok &= check(f"un JSON {porque} LEVANTA en vez de inventar el numero", True)
     return ok
 
 
@@ -3351,6 +3389,7 @@ def main() -> int:
     ok = check_coverage_precondition_abstains(ok)
     ok = check_model_pool(ok)
     ok = check_tariffs_are_data(ok)
+    ok = check_second_policy(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1
