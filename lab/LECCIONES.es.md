@@ -1830,6 +1830,58 @@ este repo se pasó el día encontrando. Van documentados, y entran cuando algo l
 
 ---
 
+### 5.22 «¿Tiene sentido nano si sale lo mismo que luna?» — sí, y por lo que no era el precio · `VERIFICADO`
+
+Pregunta del autor, y destapa un **bloqueante** que invalida parte de lo que había cableado.
+Se me ocurrieron tres razones. **Sólo una sobrevivió, y no era ninguna de las dos primeras.**
+
+**Razón 1 — contexto largo. FALSA para este banco.** Los `5.6` cobran el doble por encima
+de **272.000 tokens de entrada**, y para el **request entero**, no marginalmente. Nano no
+tiene ese escalón. Sonaba decisivo. Medido contra el registro:
+
+```
+p50 entrada por llamada:   5.881       máx:  30.292
+llamadas sobre 272.000:    0 / 648  (0,00%)
+```
+
+**Ni una.** El argumento no aplica, y lo digo en vez de dejarlo en la lista porque suena bien.
+
+**Razón 2 — escritura de caché.** luna la cobra (0,25) y nano no. Real, y **casi moot**: el
+caché del proveedor no llega a engancharse (`X-4b`: el prefijo estable mide 567 tokens
+contra un umbral de 1.024).
+
+**Razón 3 — la que decide, y es de capacidad, no de precio.** Los `gpt-5.6` son modelos de
+**razonamiento**, y la documentación es explícita:
+
+> *«support the Chat Completions API and function tools, **but not both at the same time**
+> unless `reasoning_effort` is `none`. Use the Responses API for tool calling.»*
+
+**Los trece paradigmas de este producto son bucles de herramientas sobre Chat Completions.**
+Así que luna al mismo precio **no es un reemplazo directo**: o se apaga el razonamiento —y
+entonces para qué— o se reescribe el cliente contra la Responses API.
+
+> Y hay una cuarta que el «mismo precio» esconde entera: **los tokens de razonamiento se
+> facturan como salida** y no aparecen en el contenido. luna cobra 1,20 por millón de salida
+> contra 1,25 de nano, pero emite tokens que nano no emite. **Comparar precio por token
+> entre un modelo que razona y uno que no es comparar dos unidades distintas.**
+
+**Y de paso encontré que las ventanas estaban mal en `models.py`.** Tenía 400.000 para los
+dos. Lo correcto:
+
+| | ventana de entrada | total |
+|---|---:|---:|
+| `gpt-5.4-nano` | **272.000** | 400.000 |
+| `gpt-5.6-*` | **922.000** | 1.050.000 |
+
+`check_pair` compara contra `projected_tokens`, que son tokens de **prompt**. Usar la total
+admitiría planes que no entran, porque la salida ocupa 128.000 de esa cifra. Estaban las dos
+mal: 400.000 es la total de nano y ni siquiera la de terra.
+
+**El pool ahora se niega a construirse con un modelo que no puede hacer lo que el producto
+hace**, y levanta al construir en vez de fallar a mitad de una corrida paga.
+
+---
+
 ### 4.6 La tesis Hebbiana, en tres estados que conviene no mezclar · `MEDIDO`
 
 Después de atacarla desde cuatro ángulos distintos, no es una tesis: son tres, y sólo una

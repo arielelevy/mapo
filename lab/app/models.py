@@ -63,9 +63,21 @@ class Model:
     """
 
     name: str
+    # Ventana de ENTRADA. La total incluye 128.000 de salida que el prompt no puede usar.
     context_tokens: int
     tariff: Tariff
     capability: Capability
+    # SI PUEDE LLAMAR HERRAMIENTAS SOBRE CHAT COMPLETIONS, que no es una obviedad y es lo
+    # que decide si un modelo sirve para este producto.
+    #
+    # Los `gpt-5.6` son modelos de RAZONAMIENTO y la documentacion es explicita: soportan
+    # Chat Completions y function tools, **pero no las dos a la vez** salvo con
+    # `reasoning_effort='none'`. Para herramientas hay que usar la Responses API.
+    #
+    # Los trece paradigmas de este producto son bucles de herramientas sobre Chat
+    # Completions. O sea que un `5.6` NO es reemplazo directo: o se apaga el razonamiento
+    # —y entonces para que se paga— o se reescribe el cliente.
+    tools_on_chat_completions: bool = True
 
     def __post_init__(self) -> None:
         if self.context_tokens <= 0:
@@ -82,11 +94,22 @@ class Model:
 # LOS DOS DEL CATALOGO. El precio ya NO es referencia: sale de `config/tariffs.json`,
 # verificado contra la API de precios de Azure y contra la pagina, 2026-08-28. La VENTANA
 # sigue siendo una declaracion del proveedor que no verifique — esta puesta a mano.
+# `context_tokens` es la ventana de ENTRADA, no la total. La cota de `check_pair` compara
+# contra `projected_tokens`, que son tokens de prompt: usar la total —400.000 y 1.050.000—
+# admitiria planes que no entran, porque la salida ocupa 128.000 de esa cifra.
+#
+# Estaban las DOS mal: tenia 400.000 para los dos, que es la TOTAL de nano y ni siquiera la
+# de terra. Verificado en la tabla de capacidades de Foundry, 2026-08-28.
 FAST = Model(
-    name="fast", context_tokens=400_000, tariff=ARANCEL_NANO, capability=Capability.FAST
+    name="fast", context_tokens=272_000, tariff=ARANCEL_NANO, capability=Capability.FAST
 )
 DEEP = Model(
-    name="deep", context_tokens=400_000, tariff=ARANCEL_DEEP, capability=Capability.DEEP
+    name="deep", context_tokens=922_000, tariff=ARANCEL_DEEP,
+    capability=Capability.DEEP,
+    # FALSE, y esto BLOQUEA el ruteo de dos modelos tal como esta cableado hoy. No es un
+    # detalle de configuracion: los paradigmas son bucles de herramientas sobre Chat
+    # Completions, y este modelo no puede hacer las dos cosas a la vez.
+    tools_on_chat_completions=False,
 )
 
 # El catalogo. Una lista y no un dict de nombre a modelo porque el orden importa: el

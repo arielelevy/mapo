@@ -2005,27 +2005,32 @@ def check_tariffs_are_data(ok: bool) -> bool:
 
 
 def check_model_pool(ok: bool) -> bool:
-    """§52: un cliente POR MODELO, y una huella del conjunto.
+    """§52: un cliente POR MODELO, una huella del conjunto, y el bloqueante de tools.
 
     POR QUE NO UN CLIENTE QUE CAMBIA DE DEPLOYMENT. La huella es la IDENTIDAD DE
     DECODIFICACION y va adentro de la clave de cache y de cada fila. Un solo cliente
     alternando deployment tendria UNA huella y DOS identidades atras: dos respuestas de
-    modelos distintos compartirian clave de cache, y el registro no podria decir cual
-    corrio. Un cliente por modelo hace la correspondencia 1:1 por construccion.
+    modelos distintos compartirian clave de cache. Un cliente por modelo hace la
+    correspondencia 1:1 por construccion.
 
     Y POR QUE EL POOL TIENE HUELLA PROPIA. `load_rows` se niega a leer un archivo que
-    mezcla decodificaciones, y esta bien. Pero una corrida RUTEADA usa dos modelos a
-    proposito — esa es su tesis— asi que sus filas tendrian dos huellas y la guarda las
-    rechazaria. La salida no es debilitar la guarda: la UNIDAD DE ANALISIS cambio. En una
-    grilla fija se mide un paradigma y el modelo es constante; en una ruteada se mide el
-    ROUTER. Dos experimentos, dos archivos, y la huella del conjunto hace al ruteado
-    internamente coherente y aun asi incomparable con el fijo.
+    mezcla decodificaciones. Una corrida RUTEADA usa dos modelos a proposito, asi que sus
+    filas tendrian dos huellas. La salida no es debilitar la guarda: la UNIDAD DE ANALISIS
+    cambio — en una grilla fija se mide un paradigma con el modelo constante; en una
+    ruteada se mide el ROUTER.
+
+    EL BLOQUEANTE, que aparecio despues de construir todo esto. Los `gpt-5.6` son modelos
+    de razonamiento y **no soportan Chat Completions + tools a la vez** salvo con
+    `reasoning_effort='none'`. Los paradigmas son bucles de herramientas sobre Chat
+    Completions. El pool se niega AL CONSTRUIR en vez de fallar a mitad de una corrida
+    paga, y este test lo fija para que nadie lo "arregle" sacando la guarda.
     """
-    from dataclasses import replace
+    from dataclasses import replace as _replace
     from app.config import Settings, _optional_deployments
+    from app import models as _models
     from app.pool import ModelPool
 
-    print("\n--- 52. un cliente por modelo, una huella del conjunto ---")
+    print("\n--- 52. un cliente por modelo, y el bloqueante de tools ---")
 
     try:
         base = Settings.from_env()
@@ -2033,36 +2038,56 @@ def check_model_pool(ok: bool) -> bool:
         ok &= check("sin entorno no se puede construir un pool — SIN N, y se dice", True)
         return ok
 
-    s = replace(base, model_deployments={"fast": "d-fast", "deep": "d-deep"},
-                temperature=0.0)
-    pool = ModelPool(s, s.model_deployments)
+    s = _replace(base, temperature=0.0)
     solo = ModelPool(s, {"fast": "d-fast"})
-
-    ok &= check("el catalogo efectivo son los que TIENEN deployment, no el catalogo entero",
-                [m.name for m in pool.models] == ["fast", "deep"])
-    ok &= check("y viene ordenado de menor capacidad a mayor: el empate cae del lado "
-                "barato sin una regla extra",
-                pool.models[0].capability < pool.models[1].capability)
-    ok &= check("cada modelo tiene SU cliente, y son distintos objetos",
-                pool.client_for("fast") is not pool.client_for("deep"))
-    ok &= check("y su propia huella: la correspondencia huella-modelo es 1:1",
-                len({m["fingerprint"] for m in pool.describe()["members"].values()}) == 2)
-    ok &= check("la huella del POOL no es la de ninguno de sus miembros",
-                pool.fingerprint() not in {
-                    m["fingerprint"] for m in pool.describe()["members"].values()})
-    ok &= check("un pool distinto da huella distinta — un archivo ruteado sigue siendo "
-                "incomparable con uno de un solo modelo",
-                pool.fingerprint() != solo.fingerprint())
-    ok &= check("y no depende del orden de configuracion",
-                ModelPool(s, {"deep": "d-deep", "fast": "d-fast"}).fingerprint()
-                == pool.fingerprint())
+    ok &= check("un pool de un modelo se construye y su huella es del CONJUNTO",
+                solo.fingerprint().startswith("pool[fast]#"))
+    ok &= check("la huella del pool no es la del miembro",
+                solo.fingerprint() not in {
+                    m["fingerprint"] for m in solo.describe()["members"].values()})
 
     try:
-        pool.client_for("gigante")
-        ok &= check("un modelo sin deployment levanta", False)
+        ModelPool(s, {"fast": "d-fast", "deep": "d-deep"})
+        ok &= check("un modelo sin tools sobre Chat Completions LEVANTA", False)
     except ValueError as exc:
-        ok &= check("un modelo sin deployment LEVANTA: un plan que dice `deep` y corre "
-                    "en `fast` es un registro que miente", "miente" in str(exc))
+        ok &= check("un modelo de razonamiento LEVANTA al construir, no a mitad de una "
+                    "corrida paga: los paradigmas son bucles de herramientas",
+                    "Responses API" in str(exc))
+
+    # LAS PROPIEDADES DEL CONJUNTO se prueban con un catalogo de dos que SI pueden. Se
+    # parchea el catalogo a proposito: lo que se verifica aca es la logica de la huella y
+    # del orden, no que exista hoy un caro utilizable — eso es `X-5p` y esta abierto.
+    original = _models.CATALOG
+    try:
+        _models.CATALOG = (
+            _models.FAST,
+            _replace(_models.DEEP, tools_on_chat_completions=True),
+        )
+        dos = ModelPool(s, {"fast": "d-fast", "deep": "d-deep"})
+        ok &= check("el catalogo efectivo son los que TIENEN deployment",
+                    [m.name for m in dos.models] == ["fast", "deep"])
+        ok &= check("ordenado de menor capacidad a mayor: el empate cae del lado barato",
+                    dos.models[0].capability < dos.models[1].capability)
+        ok &= check("cada modelo tiene SU cliente, y son objetos distintos",
+                    dos.client_for("fast") is not dos.client_for("deep"))
+        ok &= check("y su propia huella: la correspondencia huella-modelo es 1:1",
+                    len({m["fingerprint"]
+                         for m in dos.describe()["members"].values()}) == 2)
+        ok &= check("dos pools distintos dan huellas distintas — un archivo ruteado sigue "
+                    "siendo incomparable con uno de un solo modelo",
+                    dos.fingerprint() != solo.fingerprint())
+        ok &= check("y no depende del orden de configuracion",
+                    ModelPool(s, {"deep": "d-deep", "fast": "d-fast"}).fingerprint()
+                    == dos.fingerprint())
+        try:
+            dos.client_for("gigante")
+            ok &= check("un modelo sin deployment levanta", False)
+        except ValueError as exc:
+            ok &= check("un modelo sin deployment LEVANTA: un plan que dice `deep` y "
+                        "corre en `fast` es un registro que miente", "miente" in str(exc))
+    finally:
+        _models.CATALOG = original
+
     try:
         ModelPool(s, {"turbo": "x"})
         ok &= check("un nombre fuera del catalogo levanta", False)
@@ -2075,7 +2100,6 @@ def check_model_pool(ok: bool) -> bool:
     except ValueError:
         ok &= check("un pool vacio levanta, no cae al modelo de la base", True)
 
-    # El parseo de la variable es sobre pares enumerados, no sobre prosa, y falla fuerte.
     import os
     for malo in ("fast", "fast=,deep=x", "fast=a,fast=b"):
         os.environ["_MAPO_TEST_DEP"] = malo
@@ -2086,10 +2110,73 @@ def check_model_pool(ok: bool) -> bool:
             pass
     os.environ.pop("_MAPO_TEST_DEP", None)
     ok &= check("una variable mal formada levanta en vez de perder un deployment en el "
-                "parseo — perderlo haria correr con menos modelos de los configurados",
-                True)
+                "parseo", True)
     ok &= check("y sin variable el sistema corre con UN modelo, que es el regimen medido",
                 _optional_deployments("_MAPO_NO_EXISTE") == {})
+
+    ok &= check("las ventanas son de ENTRADA, no la total: 272k nano, 922k los 5.6",
+                _models.FAST.context_tokens == 272_000
+                and _models.DEEP.context_tokens == 922_000)
+    return ok
+
+
+def check_tariffs_are_data(ok: bool) -> bool:
+    """§53: los aranceles son DATOS y se leen de un JSON, no constantes en un .py.
+
+    POR QUE. Un precio es una clausula del contrato con el proveedor: cambia sin avisar, no
+    lo decide nadie de este lado, y actualizarlo no deberia tocar codigo. Mientras fueron
+    constantes fueron **referencia inventada** —0,05/0,40 para nano cuando el real es
+    0,20/1,25, un error de 4x en entrada— y nada podia notarlo, porque un numero puesto a
+    mano se lee igual de seguro que uno verificado.
+
+    Y EL CARGADOR FALLA FUERTE. Un arancel sin fecha no se puede auditar; uno sin precio
+    haria parecer gratis a un modelo que no lo es; un papel sin declarar decidiria el
+    precio del producto en silencio. Los tres levantan.
+    """
+    import json
+    import tempfile
+    from app.tariffs import (
+        DECLARADOS, DEEP, DETAILS, EMBEDDINGS, NANO, VERIFIED_ON, _build, breakeven,
+    )
+
+    print("\n--- 53. los aranceles son datos ---")
+
+    ok &= check("se leen del JSON y traen fecha de verificacion",
+                bool(VERIFIED_ON) and len(VERIFIED_ON) == 10)
+    ok &= check("la fecha viaja adentro del nombre, asi que el reporte la estampa",
+                NANO.name.endswith(VERIFIED_ON))
+    ok &= check("los cuatro modelos estan, con su deployment real",
+                {d.deployment for d in DETAILS.values()} >= {
+                    "gpt-5.4-nano", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"})
+    ok &= check("`luna` cuesta lo mismo que `nano`: NO es el caro, es clase nano",
+                DECLARADOS["luna"].prompt_per_mtok
+                == DECLARADOS["nano"].prompt_per_mtok)
+    ok &= check("y los caros son caros: terra ~10x, sol ~24x",
+                9.0 < breakeven(NANO, DECLARADOS["terra"], 0.15) < 11.0
+                and 23.0 < breakeven(NANO, DECLARADOS["sol"], 0.15) < 26.0)
+    ok &= check("el papel `deep` es una DECISION declarada en el JSON, no una derivacion",
+                DEEP is DECLARADOS["terra"])
+    ok &= check("los ejes que el calculo no usa se CONSERVAN en vez de perderse",
+                DETAILS["sol"].cache_write == 6.25
+                and DETAILS["terra"].long_context_prompt == 4.00)
+    ok &= check("y nano no cobra escritura de cache, que es la asimetria menos obvia",
+                DETAILS["nano"].cache_write is None
+                and DETAILS["sol"].cache_write is not None)
+    ok &= check("los embeddings tambien: HyDE los paga aparte de su llamada",
+                EMBEDDINGS.get("text-embedding-3-large") == 0.143)
+
+    for roto, porque in (
+        ({"tariffs": {"x": {"prompt": 1, "completion": 2, "deployment": "d"}}},
+         "sin fecha"),
+        ({"verified_on": "2026-01-01",
+          "tariffs": {"x": {"completion": 2, "deployment": "d"}}}, "sin precio"),
+        ({"verified_on": "2026-01-01", "tariffs": {}}, "sin ningun arancel"),
+    ):
+        try:
+            _build(roto)
+            ok &= check(f"un JSON {porque} levanta", False)
+        except ValueError:
+            ok &= check(f"un JSON {porque} LEVANTA en vez de inventar el numero", True)
     return ok
 
 

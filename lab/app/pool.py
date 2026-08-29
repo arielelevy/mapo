@@ -31,7 +31,13 @@ from dataclasses import dataclass, replace
 
 from .config import Settings
 from .llm import LLMClient
-from .models import CATALOG, Model
+from . import models as _models
+from .models import Model
+
+# EL CATALOGO SE LEE AL LLAMAR, no al importar. `from .models import CATALOG` liga la tupla
+# en tiempo de import, asi que cualquier cambio posterior al catalogo —un modelo nuevo, uno
+# retirado— no llegaria nunca hasta que el proceso se reinicie. Es una trampa silenciosa: el
+# sistema andaria con un catalogo viejo sin que nada avise.
 
 
 @dataclass(frozen=True)
@@ -60,7 +66,8 @@ class ModelPool:
         deployments: dict[str, str],
         sealed: bool = False,
     ) -> None:
-        conocidos = {m.name for m in CATALOG}
+        catalogo = _models.CATALOG
+        conocidos = {m.name for m in catalogo}
         desconocidos = sorted(set(deployments) - conocidos)
         if desconocidos:
             raise ValueError(
@@ -75,10 +82,24 @@ class ModelPool:
             )
 
         self._miembros: dict[str, PooledModel] = {}
-        for m in CATALOG:
+        for m in catalogo:
             if m.name not in deployments:
                 continue
             ajustes = replace(base, chat_deployment=deployments[m.name])
+            if not m.tools_on_chat_completions:
+                # SE LEVANTA AL CONSTRUIR, no al fallar la primera llamada. Los paradigmas
+                # son bucles de herramientas sobre Chat Completions y este modelo no
+                # soporta las dos cosas juntas: dejarlo entrar al pool haria que el ruteo
+                # eligiera un modelo que no puede ejecutar el plan, y el sintoma seria un
+                # error del proveedor a mitad de una corrida paga.
+                raise ValueError(
+                    f"El modelo {m.name!r} ({deployments[m.name]}) no soporta herramientas "
+                    f"sobre Chat Completions —es un modelo de razonamiento— y los "
+                    f"paradigmas de este producto son bucles de herramientas. Hace falta "
+                    f"la Responses API, o `reasoning_effort='none'`, que apaga justo lo "
+                    f"que se paga. Se levanta al construir el pool en vez de fallar a "
+                    f"mitad de una corrida."
+                )
             self._miembros[m.name] = PooledModel(
                 model=m,
                 deployment=deployments[m.name],
