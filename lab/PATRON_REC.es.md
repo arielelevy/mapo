@@ -1,10 +1,44 @@
 # Reparación Epistémica Contrafactual (REC)
 
-**Estado:** propuesta de investigación aprobada, no implementada y no medida.
+> **Estado, actualizado 2026-08-29: IMPLEMENTADA, CORRIDA, y el veredicto es que la
+> cláusula NO se promueve.** El encabezado anterior decía «no implementada y no medida», y
+> las dos mitades dejaron de ser ciertas.
 
-**Regla de publicación:** este patrón no entra al paper como contribución ejecutada
-hasta existir en el programa, superar pruebas negativas y producir una evaluación
-held-out preregistrada.
+**Qué existe y corre.** `rec.py` —el diagnóstico contrafactual mínimo, con orden de
+minimalidad explícito y esquema de intervenciones cerrado y firmado— y `certify.py` —tres
+mundos disjuntos, mundo final de un solo uso gastado ANTES de responder, instalación
+fail-closed sobre el bundle firmado—. Se corre con `bench/runs/_run_rec.py`.
+
+**Qué dio, y es un resultado y no un trámite.** El diagnóstico encuentra el déficit en
+**8 de 8** tareas del mundo de validate. Pero medido sobre **utilidad sola** el beneficio da
+`+0,0000` **exacto y por construcción**: el paradigma después de reparar es el mismo
+`fallback`, así que `u(después) − u(fallback)` es cero necesariamente.
+
+Eso no dice que la reparación no sirva — dice que **se la estaba midiendo en el eje
+equivocado**. Lo que una cláusula de adquisición compra no es utilidad: es **no tener que
+sondear**, y la sonda costó 83k tokens medidos en `P17b` contra los `max_tokens` que la
+cláusula declara. Con la métrica neta (`_benefit_on` con `lambda_cost`, `probe_tokens` y
+`clause_tokens`, operando sobre la **razón** de costo contra el más barato de la tarea, que
+es la convención del banco):
+
+| λ | beneficio en validate (n=8) | piso de ruido `0,0655` |
+|---:|---:|---|
+| 0,00 | `+0,0000` | reproduce exactamente el veredicto anterior |
+| 0,02 | `+0,0124` | adentro del ruido |
+| **0,05** — el λ con que decide el banco | **`+0,0311`** | **adentro del ruido** |
+| 0,10 | `+0,0622` | adentro, apenas |
+| 0,20 | `+0,1244` | recién acá supera el piso |
+
+**`aceptada: False`. `clausula promovida: False`.** El mundo final **no se consumió**:
+`validate_ok` fue falso, así que el ledger sigue entero y se puede gastar cuando haya algo
+que valga gastarlo — que es exactamente para lo que el ledger existe.
+
+**Lectura honesta:** la cláusula necesita λ = 0,2 —cuatro veces el λ de decisión— para
+salir del ruido. El eje faltaba y ahora está; lo que no está es que esta clase de cláusula
+valga a los precios con que este banco decide.
+
+**Regla de publicación:** este patrón entra al paper con **ese** veredicto, no con la
+promesa. Nada se afirma sin medida, cita o rótulo de hipótesis.
 
 ## 1. Problema observado
 

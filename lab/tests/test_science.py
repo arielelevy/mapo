@@ -2272,6 +2272,44 @@ def check_coverage_precondition_abstains(ok: bool) -> bool:
 
     print("\n--- 51. la precondicion de cobertura se abstiene por dial ---")
 
+    # `seal_replay` DEJA DE SER UNA GARANTIA DECLARADA SIN LECTOR (`X-5h`, 2026-08-29).
+    #
+    # A3 dice «Replay sealed from cache» y el campo existia desde siempre con CERO lectores
+    # fuera de `assurance.py`. Es la familia de `theta_may_learn_online`, y peor: aquella
+    # invariante se cumplia por casualidad —`Plasticity.apply` solo corre offline— y esta
+    # no se cumplia.
+    from app.assurance import PROFILES
+    from app.config import Settings
+    from app.llm import LLMClient, SealedCacheMiss
+
+    ok &= check("solo A3 declara replay sellado — si lo declarara otro nivel, sellar en "
+                "replay dejaria de significar «certificado»",
+                [a for a, pr in PROFILES.items() if pr.seal_replay]
+                == [Assurance.CERTIFIED])
+
+    vivo = LLMClient(Settings.from_env())
+    sellado = vivo.sealed_view()
+    ok &= check("la vista sellada esta sellada", sellado._sealed)  # noqa: SLF001
+    ok &= check("Y EL ORIGINAL NO: sellar no se contagia. El pool devuelve el MISMO "
+                "objeto por modelo, asi que mutar el flag dejaria sellado al cliente de "
+                "todos los requests siguientes — un sellado que se contagia aparece en "
+                "un request que no lo pidio",
+                not vivo._sealed and sellado is not vivo)  # noqa: SLF001
+    ok &= check("sellar dos veces es sellar una: devuelve el mismo objeto",
+                sellado.sealed_view() is sellado)
+    ok &= check("y comparten cache y namespace — lo unico que cambia es que un miss deja "
+                "de ser una llamada",
+                sellado.cache_root == vivo.cache_root
+                and sellado.fingerprint == vivo.fingerprint)
+    try:
+        sellado.complete(messages=[{"role": "user",
+                                    "content": "esto no puede estar en ningun cache"}])
+        ok &= check("un miss sellado levanta", False)
+    except SealedCacheMiss:
+        ok &= check("un miss sellado LEVANTA en vez de llamar en vivo: eso es lo que "
+                    "hace que un replay de A3 no pueda tocar el modelo en silencio", True)
+
+
     raiz = Path("corpus/gold_guards")
     if not (raiz / "tasks.json").exists():
         # SIN CORPUS NO SE INVENTA UNO. Se declara y se sigue: un test que fabrica su
@@ -2879,6 +2917,77 @@ def check_retrieval_is_a_factor(ok: bool) -> bool:
     from app.runner import load_rows
 
     print("\n--- 49. la recuperacion es un factor, y se cobra ---")
+
+    # EL EFECTO DE BRAZO SE ESTRATIFICA POR DOSIS, O NO SE PROMEDIA (`AR-5`, 2026-08-29).
+    #
+    # `arm_dose` existia y la usaba UN analizador. Tener la funcion no es tener la guarda:
+    # mientras nada la exija, la comparacion por defecto sigue siendo el promedio. Y la
+    # dispersion medida sobre el registro es enorme — `react` 70,1%, `dag_strategy` 16,3%,
+    # `gist_reader` 0% — asi que un promedio no estima el efecto del brazo: estima el
+    # efecto mezclado con la composicion del plantel, y cambiar el plantel lo mueve sin que
+    # el brazo cambie.
+    from app.metrics import arm_effect
+
+    def _fila(par, tarea, util, search, otras, **extra):
+        return {"paradigm": par, "task_id": tarea, "trial": 0, "utility": util,
+                "tool_usage": {"calls": {"search": search, "keyword_search": otras}},
+                **extra}
+
+    # Dosis parejas: 3/4 y 4/5 son 75% y 80%, cinco puntos de diferencia.
+    base = [_fila("react", "t1", 0.0, 3, 1), _fila("rewoo", "t1", 0.0, 4, 1)]
+    trat = [_fila("react", "t1", 1.0, 3, 1), _fila("rewoo", "t1", 0.5, 4, 1)]
+    efecto = arm_effect(base, trat)
+    ok &= check("con dosis parejas el efecto se promedia",
+                abs(efecto.pooled() - 0.75) < 1e-9)
+    ok &= check("y cada paradigma lleva su dosis al lado, no un promedio anonimo",
+                abs(efecto.per_paradigm["react"][1] - 0.75) < 1e-9)
+
+    # El caso MEDIDO: `react` 70% contra `dag_strategy` 16%. 54 puntos de dispersion.
+    base = [_fila("react", "t1", 0.0, 7, 3), _fila("dag_strategy", "t1", 0.0, 16, 84)]
+    trat = [_fila("react", "t1", 1.0, 7, 3), _fila("dag_strategy", "t1", 1.0, 16, 84)]
+    efecto = arm_effect(base, trat)
+    try:
+        efecto.pooled()
+        ok &= check("promediar sobre dosis dispares levanta", False)
+    except ValueError as exc:
+        ok &= check("promediar sobre dosis dispares LEVANTA, no avisa al lado: un aviso "
+                    "junto a un promedio invalido publica el promedio",
+                    "dispersion" in str(exc) and "react" in str(exc))
+    ok &= check("y el estrato sigue disponible aunque el promedio se niegue",
+                len(efecto.treated) == 2)
+
+    # `gist_reader` nunca busca: su delta no es evidencia sobre el brazo.
+    base = [_fila("react", "t1", 0.0, 4, 1), _fila("gist_reader", "t1", 0.0, 0, 0)]
+    trat = [_fila("react", "t1", 1.0, 4, 1), _fila("gist_reader", "t1", 1.0, 0, 0)]
+    efecto = arm_effect(base, trat)
+    ok &= check("un paradigma que NUNCA busca queda fuera de los tratados: no recibio "
+                "tratamiento cero, no recibio tratamiento",
+                efecto.untreated == ("gist_reader",))
+    ok &= check("y el promedio se calcula solo sobre los tratados — meterlo diluiria el "
+                "efecto con una celda que el brazo no toco",
+                abs(efecto.pooled() - 1.0) < 1e-9)
+
+    # Buscar SOLO por las tools que el brazo no sustituye tambien es sin tratar.
+    base = [_fila("dag_strategy", "t1", 0.0, 0, 9)]
+    trat = [_fila("dag_strategy", "t1", 1.0, 0, 9)]
+    ok &= check("buscar solo por las tools constantes entre brazos tampoco es tratamiento",
+                arm_effect(base, trat).untreated == ("dag_strategy",))
+    try:
+        arm_effect(base, trat).pooled()
+        ok &= check("sin ningun tratado, promediar levanta", False)
+    except ValueError as exc:
+        ok &= check("sin ningun tratado no hay efecto que promediar, y lo dice",
+                    "Ningun paradigma recibio tratamiento" in str(exc))
+
+    # Una celda podada no entra: comparar por posicion desalinearia las listas.
+    base = [_fila("direct", "t1", 0.0, 0, 0, infeasible=True),
+            _fila("react", "t1", 0.0, 4, 1)]
+    trat = [_fila("direct", "t1", 0.0, 0, 0, infeasible=True),
+            _fila("react", "t1", 1.0, 4, 1)]
+    ok &= check("las celdas infactibles no entran a la comparacion: no ejecutaron, asi "
+                "que no pueden mostrar efecto de brazo",
+                set(arm_effect(base, trat).per_paradigm) == {"react"})
+
 
     ok &= check("HyDE es un BRAZO y no una herramienta: el modelo no puede invocarlo",
                 "hybrid_hyde" not in {

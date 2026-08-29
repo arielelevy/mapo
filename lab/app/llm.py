@@ -397,6 +397,25 @@ class LLMClient:
         belongs under here too, for the same reason the completions do."""
         return self._cache_dir
 
+    def sealed_view(self) -> "LLMClient":
+        """El mismo cliente, sellado: un miss de cache LEVANTA en vez de llamar en vivo.
+
+        POR QUE UNA VISTA Y NO UN FLAG QUE SE PRENDE. Mutar `self._sealed` sellaria al
+        cliente para todos los que lo comparten — el pool devuelve el MISMO objeto por
+        modelo, asi que sellar para un request A3 dejaria sellado el de todos los que
+        vengan despues. Un sellado que se contagia es peor que no sellar: el sintoma
+        aparece en un request que no lo pidio.
+
+        La vista comparte el cache y el namespace porque son los mismos: lo unico que
+        cambia es que un miss deja de ser una llamada.
+
+        Y si ya esta sellado se devuelve a si mismo — sellar dos veces es lo mismo que
+        sellar una, y construir otro objeto solo agregaria una identidad mas que igualar.
+        """
+        if self._sealed:
+            return self
+        return LLMClient(self._settings, sealed=True)
+
     # -- cache -------------------------------------------------------------
 
     def _key(self, payload: dict[str, Any]) -> str:

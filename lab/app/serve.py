@@ -172,8 +172,13 @@ def answer(
     requested: Assurance = Assurance.STANDARD,
     probe: bool = True,
     store: Any = None,
+    replay: bool = False,
 ) -> Answer:
-    """Decide, then execute what was decided — and record both."""
+    """Decide, then execute what was decided — and record both.
+
+    `replay=True` vuelve a correr una decision ya registrada. Es lo que le da sentido a
+    `seal_replay` del perfil de garantia: ver `_answer_stream`.
+    """
     # EL DIAL DECLARABA UNA GARANTIA QUE NADIE IMPONIA. `theta_may_learn_online` vivia en
     # el perfil y no lo leia ningun camino: la invariante «nada aprende adentro de un
     # request» se cumplia porque `Plasticity.apply` solo se llama offline — o sea, por
@@ -183,7 +188,7 @@ def answer(
     # Se impone acá, alrededor del request ENTERO, y no adentro de cada paradigma: el
     # punto es que NADA en este tramo pueda acumular, venga de donde venga.
     with no_online_learning():
-        result = _answer(request, settings, bundle, requested, probe)
+        result = _answer(request, settings, bundle, requested, probe, replay)
 
     # EL PRODUCTO NO DEJABA RASTRO. `serve.py` decidia, ejecutaba, respondia — y no
     # escribia nada. Consecuencias, y son las mismas que el banco ya pago tres veces:
@@ -258,6 +263,7 @@ def _answer(
     bundle: PolicyBundle,
     requested: Assurance,
     probe: bool,
+    replay: bool = False,
 ) -> Answer:
     """La respuesta completa. CONSUME el stream, no reimplementa la decision.
 
@@ -267,7 +273,7 @@ def _answer(
     mas dificil de creer cuando aparece.
     """
     ultimo = None
-    for evento in _answer_stream(request, settings, bundle, requested, probe):
+    for evento in _answer_stream(request, settings, bundle, requested, probe, replay):
         ultimo = evento
     if ultimo is None or not ultimo.is_terminal:
         raise ValueError(
@@ -283,6 +289,7 @@ def _answer_stream(
     bundle: PolicyBundle,
     requested: Assurance,
     probe: bool,
+    replay: bool = False,
 ):
     task = request.as_task()
     # EL POOL SOLO EXISTE SI HAY CATALOGO. Con un solo modelo el sistema corre como
@@ -366,6 +373,32 @@ def _answer_stream(
     # EXPLAIN registraria una decision que no ocurrio.
     if pool and plan.model:
         client = pool.client_for(plan.model)
+
+    # `seal_replay` ERA UNA GARANTIA DECLARADA QUE NO IMPONIA NADIE (`X-5h`, 2026-08-29).
+    #
+    # El perfil de A3 dice «Replay sealed from cache» y lleva `seal_replay=True` desde que
+    # existe; `grep` daba CERO lectores fuera de `assurance.py`. Es la misma falla que
+    # `theta_may_learn_online`, con una diferencia que la empeora: aquella invariante se
+    # cumplia por casualidad —`Plasticity.apply` solo se llama offline— y esta **no se
+    # cumplia**. A3 prometia replay sellado y no habia ninguno.
+    #
+    # POR QUE SE IMPONE ACA Y NO ANTES. El nivel resuelto sale de `max(pedido, piso de
+    # creencias, piso aprendido)`, asi que no se conoce hasta que la decision termino. El
+    # cliente de PLANIFICACION se construye antes y no puede sellarse: sondear y sensar es
+    # como se AVERIGUA que el request es A3.
+    #
+    # POR QUE SOBRE EL REPLAY Y NO SOBRE LA RESPUESTA VIVA. Sellar la ejecucion original
+    # haria imposible contestar un A3: toda primera llamada es un miss de cache, asi que
+    # el nivel mas estricto seria el unico que nunca puede responder. Lo que la garantia
+    # promete no es que la respuesta salga del cache — es que **volver a correrla no pueda
+    # tocar el modelo en silencio**. Sin esto, un replay de A3 con el cache incompleto
+    # llamaba en vivo y devolvia otra cosa con cara de reproduccion.
+    #
+    # Y NO APLICA A LA DECISION, que es lo que hace que esto sea sobre la EJECUCION. Un
+    # auditor replaya las REGLAS sobre la base de creencias registrada y no llama al
+    # modelo ni una vez (`beliefs.py`). Lo unico que gasta llamadas es el paradigma.
+    if replay and plan.assurance.get("profile", {}).get("seal_replay"):
+        client = client.sealed_view()
 
     # LA LECTURA DE LA SONDA VIAJA A LA EJECUCION. Es el unico punto donde la creencia
     # medida y la superficie que el paradigma va a usar coexisten: antes la sonda medía

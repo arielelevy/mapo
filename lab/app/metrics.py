@@ -59,6 +59,117 @@ def arm_dose(tool_usage: dict[str, Any] | None) -> float | None:
     return calls.get(SEARCH_TOOL, 0) / total
 
 
+# EL EFECTO DE BRAZO, QUE SE NIEGA A PROMEDIAR SOBRE DOSIS DISPARES (`AR-5`, 2026-08-29).
+#
+# `arm_dose` existia desde la auditoria C-2 y la usaba UN solo analizador. Tener la funcion
+# no es tener la guarda: mientras nada la exija, la comparacion por defecto sigue siendo el
+# promedio, y un efecto de brazo promediado sobre paradigmas es un efecto **ponderado por
+# una dosis que nadie declaro**.
+#
+# La dispersion medida sobre el registro no es un detalle: `react` recibe 70,1% del
+# tratamiento, `rewoo` 59,5%, `dag_strategy` 16,3% y `gist_reader` **0%**. Un promedio sobre
+# esos cuatro no estima el efecto del brazo — estima el efecto del brazo mezclado con la
+# composicion del plantel, y cambiar el plantel mueve el numero sin que el brazo cambie.
+#
+# QUE HACE ESTO Y QUE NO. No corrige el efecto ni lo pondera: **estratifica y se niega a
+# colapsar** cuando los estratos no coinciden. Corregir exigiria un modelo de como la dosis
+# transforma el efecto, y no hay ninguno medido. Negarse es lo unico honesto que se puede
+# hacer con lo que hay.
+DOSIS_SIN_TRATAMIENTO = 0.0
+
+
+@dataclass(frozen=True)
+class ArmEffect:
+    """El efecto de cambiar de brazo, ESTRATIFICADO por dosis de tratamiento."""
+
+    #: efecto por paradigma: {paradigma: (delta de utilidad, dosis media)}
+    per_paradigm: dict[str, tuple[float, float | None]]
+    #: los que no reciben tratamiento (dosis 0 o None): su delta NO es evidencia del brazo
+    untreated: tuple[str, ...]
+
+    @property
+    def treated(self) -> dict[str, tuple[float, float]]:
+        return {
+            p: (d, dose) for p, (d, dose) in self.per_paradigm.items()
+            if p not in self.untreated and dose is not None
+        }
+
+    def pooled(self, max_spread: float = 0.25) -> float:
+        """El efecto promedio, SOLO si los tratados reciben dosis comparable.
+
+        `max_spread` es la diferencia maxima de dosis que se acepta antes de negarse. 0,25
+        no sale de una teoria: es «un cuarto de las busquedas», suficiente para que dos
+        paradigmas esten en el mismo regimen de tratamiento y bajo para no dejar pasar el
+        caso medido, donde `react` y `dag_strategy` difieren en 54 puntos.
+
+        Levanta en vez de devolver un numero con un aviso al lado. Un aviso junto a un
+        promedio invalido publica el promedio: `_sanity.py` existe por haber aprendido eso.
+        """
+        tratados = self.treated
+        if not tratados:
+            raise ValueError(
+                "Ningun paradigma recibio tratamiento del brazo: no hay efecto que "
+                "promediar. Los sin tratar son "
+                f"{list(self.untreated)} — su delta mide cualquier otra cosa."
+            )
+        dosis = [dose for _, dose in tratados.values()]
+        spread = max(dosis) - min(dosis)
+        if spread > max_spread:
+            detalle = ", ".join(
+                f"{p} {dose:.0%}" for p, (_, dose) in sorted(
+                    tratados.items(), key=lambda kv: -kv[1][1])
+            )
+            raise ValueError(
+                f"Las dosis van de {min(dosis):.0%} a {max(dosis):.0%} ({spread:.0%} de "
+                f"dispersion, tope {max_spread:.0%}): promediar el efecto sobre estos "
+                f"paradigmas lo pondera por una dosis que nadie declaro, y el numero se "
+                f"mueve al cambiar el plantel sin que el brazo cambie. Reporta por "
+                f"estrato. Dosis medidas: {detalle}."
+            )
+        return sum(d for d, _ in tratados.values()) / len(tratados)
+
+
+def arm_effect(
+    base: Iterable[dict[str, Any]], tratado: Iterable[dict[str, Any]]
+) -> ArmEffect:
+    """Delta de utilidad por paradigma entre dos brazos, con su dosis.
+
+    Se cruza por `(paradigma, tarea, trial)`: comparar por posicion desalinea en cuanto un
+    brazo poda una celda por factibilidad, y las diferencias que salen son corrimiento.
+    """
+    def indexar(filas):
+        out: dict[tuple, dict] = {}
+        for f in filas:
+            if f.get("infeasible") or f.get("infra_error"):
+                continue
+            out[(f.get("paradigm"), f.get("task_id"), f.get("trial"))] = f
+        return out
+
+    izq, der = indexar(base), indexar(tratado)
+    por_paradigma: dict[str, list[tuple[float, float | None]]] = {}
+    for clave, fila_b in izq.items():
+        fila_t = der.get(clave)
+        if fila_t is None:
+            continue
+        por_paradigma.setdefault(clave[0], []).append((
+            float(fila_t.get("utility", 0.0)) - float(fila_b.get("utility", 0.0)),
+            arm_dose(fila_t.get("tool_usage")),
+        ))
+
+    resumen: dict[str, tuple[float, float | None]] = {}
+    sin_tratar: list[str] = []
+    for paradigma, pares in por_paradigma.items():
+        deltas = [d for d, _ in pares]
+        dosis = [x for _, x in pares if x is not None]
+        media_dosis = sum(dosis) / len(dosis) if dosis else None
+        resumen[paradigma] = (sum(deltas) / len(deltas), media_dosis)
+        # `None` y 0,0 caen los dos aca y por razones distintas — «nunca busco» y «busco y
+        # nunca por el brazo»— pero la consecuencia es la misma: no recibio tratamiento.
+        if media_dosis is None or media_dosis <= DOSIS_SIN_TRATAMIENTO:
+            sin_tratar.append(paradigma)
+    return ArmEffect(resumen, tuple(sorted(sin_tratar)))
+
+
 @dataclass(frozen=True)
 class Observation:
     """One (task, paradigm) cell of the cross product."""

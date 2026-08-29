@@ -214,15 +214,44 @@ flowchart LR
 
 ### Lo que todavía impide llamarlo automejora segura completa
 
-1. Repetir una consolidación reaplica historia ya absorbida por el incumbente.
-2. Las particiones descubiertas se persisten pero no gobiernan el router.
-3. Algunas particiones usan truth de evaluación o variables posteriores a la ejecución.
-4. La calibración persistida no se inyecta en el router de producto.
-5. El producto no persiste de manera completa resultados y creencias para cerrar el
-   bucle.
-6. La promoción usa puntos estimados, sin incertidumbre ni certificado autenticado.
-7. El peso Hebbiano se actualiza en `policy.py` y `router.py` no lo lee nunca: hoy es
-   un número que se guarda, no una señal que decide.
+> **Recontado el 2026-08-29 contra el código.** Esta lista tenía siete puntos y cinco ya
+> estaban cerrados: se habían arreglado sin tachar el renglón. Una lista de deudas que
+> incluye deudas pagadas hace lo mismo que un contador desactualizado — se lee con la
+> autoridad de un diagnóstico.
+
+**Cerradas, con dónde verificarlo:**
+
+| deuda | cómo se cerró |
+|---|---|
+| ~~1. repetir una consolidación reaplica historia ya absorbida~~ | el peso y la cuenta de evidencia no se mueven al reaplicar el mismo registro, y **el bundle declara que salteó** (`already absorbed`). Un episodio nuevo sí entra: la guarda no congela el aprendizaje. `test_science.py` §28 |
+| ~~3. algunas particiones usan truth de evaluación o variables posteriores~~ | los ejes están **tipados por cuándo se conocen**: `DECISION_TIME_ATTRIBUTES` (las de φ), `POSTERIOR_ATTRIBUTES` (existen sólo después de correr) y `FORBIDDEN_ATTRIBUTES` (`truth_coupling`, `utility` — el oráculo). Partir sobre un prohibido **levanta**. Los posteriores no se tiran: sirven para diagnosticar, y lo que no pueden es volverse regla |
+| ~~4. la calibración persistida no se inyecta en el router~~ | el router lee `self._theta.trusts_elicited` desde el bundle firmado. Antes recibía un `Calibration` que **nadie construía** — cinco sitios lo pasaban y ninguno lo llenaba |
+| ~~5. el producto no persiste resultados y creencias~~ | `serve._record` deja rastro alrededor del request entero: sin registro no hay EXPLAIN que auditar, y sin log de creencias la calibración no se computa nunca — así que `trusts_elicited` no se ganaría jamás en producción |
+| ~~6. la promoción usa puntos estimados~~ | decide sobre un **intervalo**, no sobre un punto. `test_science.py` §29 |
+
+**Abiertas, y las dos son la misma forma de defecto:**
+
+1. **Las particiones descubiertas se persisten y no gobiernan el router.** La deuda 3
+   explicaba a ésta: una regla sólo puede gobernar si se la puede **evaluar en el momento
+   de decidir**, y los cuatro ejes originales fallaban eso. Ahora el tipo lo dice en vez de
+   que se descubra al intentar cablearlas — pero **cablearlas sigue sin hacerse**.
+
+2. **El peso Hebbiano se actualiza y `router.py` no lo lee nunca.** Con una precisión que
+   la versión anterior de este renglón no tenía: **está probado que no puede servir ahí.**
+   En el punto fijo `w* = 1,6p − 0,6` es monótona en la tasa de victorias y el router ya
+   ordena por esa tasa; una transformación monótona no cambia un argmax. Así que la deuda
+   real **no es** conectarlo al ruteo — es que su único sentido vivo, la asociación entre
+   **pares ordenados** de tools, produce creencias (`AssociationTable.as_beliefs()`,
+   `COMPUTED` sobre `POPULATION`) que **ninguna regla consume**. Es `P-2g`.
+
+> **Las dos abiertas son la misma familia**, y es la que este repo encontró cuatro veces en
+> dos días: algo que se declara o se produce y **nadie lee**. `theta_may_learn_online` vivía
+> en el perfil sin lector —la invariante se cumplía por casualidad— y hoy la impone
+> `serve.py`; `seal_replay` prometía replay sellado y no lo imponía nadie (`X-5h`, cerrado
+> el 2026-08-29); `arm_dose` existía y ningún análisis la exigía (`AR-5`, cerrado el mismo
+> día). **Ninguna la atrapa `_audit_declarado.py`**, porque en las cuatro el nombre *sí* se
+> lee: lo lee quien lo produce. Lo que falta es un consumidor, y eso es una propiedad del
+> cruce entre dos módulos, no de un nombre.
 
 ## 6. Decisiones de diseño
 

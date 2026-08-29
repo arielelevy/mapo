@@ -28,11 +28,23 @@
 
 ## Qué sigue: una sola cosa
 
-> **Sincronizado 2026-08-29.** Quedan **24 pendientes vivos, y 22 son la misma corrida.**
-> No son 24 trabajos: son la matriz de la corrida homogénea, mirada por casi tantos
-> lados. Los dos que **no** son la corrida salieron de leer los `.md` contra el código el
-> 2026-08-29: **`X-5h`** (`seal_replay` declarado y sin lector) y **`AR-5`** (la dosis de
-> brazo, que existe como función y no la exige ningún análisis). Los dos son código.
+> **Sincronizado 2026-08-29 (segunda pasada).** Quedan **23 pendientes vivos, y 22 son la
+> misma corrida.** No son veintitrés trabajos: son la matriz de la corrida homogénea,
+> mirada por veintidós lados.
+>
+> **Lo que era código y no corrida se hizo, así que ya no queda nada que no sea medición
+> — salvo uno.** Los tres que salieron de leer los `.md` contra el código:
+>
+> | | |
+> |---|---|
+> | **`X-5h`** | **cerrado** — `seal_replay` prometía replay sellado y no lo imponía nadie. Ahora `answer(replay=True)` usa un cliente sellado cuando el perfil resuelto lo exige, y un miss levanta |
+> | **`AR-5`** | **cerrado** — `metrics.arm_effect` estratifica por dosis y **se niega** a promediar sobre dosis dispares |
+> | **`P-2g`** | **abierto, y es el único vivo que no es la corrida.** La asociación aprendida se fabrica como creencia y ninguna regla la consume. No es código pendiente: es una **decisión de diseño del autor** —dónde entra un prior sobre el orden de tools sin que una estadística se vuelva control de flujo— y por eso no se hizo sola |
+>
+> Las tres son la misma familia, y este repo ya la encontró cuatro veces: **algo que se
+> declara o se produce y nadie lee.** Ninguna la atrapa `_audit_declarado.py`, porque en
+> todas el nombre *sí* se lee — lo lee quien lo produce. Lo que falta es un **consumidor**,
+> y eso es una propiedad del cruce entre dos módulos, no de un nombre.
 >
 > Lo de **producto** se mudó a `PRODUCTO.es.md` y lo del **paper** a `PAPER.es.md`. No están
 > cerrados — van en otro momento, y el orden lo fijó el autor: **lab primero** (terminado,
@@ -171,7 +183,7 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
 
 ## Resumen — todo de un vistazo
 
-`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **14 abiertos · 10 en curso · 147 cerrados** (contados 2026-08-29)
+`[x]` hecho · `[~]` empezado · `[ ]` no empezado — **13 abiertos · 10 en curso · 149 cerrados** (contados 2026-08-29)
 
 > **El contador se cuenta, no se recuerda.** Decía «59 abiertos · 16 en curso · 52
 > cerrados» y los números reales eran 14, 10 y 147: se había escrito a mano y quedado
@@ -444,6 +456,36 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
 - [x] **P-2c** · **ESTABLECIDA** con `P-2f` (`_analyze_p2f.py`): **3 de 13 celdas** tienen una transicion presente en todas las replicas exitosas y ausente en todas las fallidas, contra **mediana nula 0**, `p = 0,0078`. El `p = 0,055` anterior estaba medido con `n=3`, donde la **mediana nula era 7 de 13** — el criterio se satisfacia por casualidad. Con `n=9` el observado BAJA de 10 a 3 y el null cae a 0: lo que se cayo era el ruido. Debil y real: un corpus, un modelo, 3 celdas
 - [x] **P-2f** · corrida completa: 13 celdas x 9 trials en `gold_p17b` (gemelo byte-identico, para no tocar el veredicto congelado de P17). **117 filas**, y el piso de `p` por celda bajo de `>= 1/3` —donde ninguna celda podia dar significativa aunque la senal fuera perfecta— a `0,008` en 10 de 13
 - [x] **P-2d** · **resuelto, y el rango que faltaba no era un rango.** El reticulo ordena **como** se obtuvo una creencia; hacia falta ademas **sobre que es**. `Scope ∈ {REQUEST, POPULATION}` lo separa, y el piso de las acciones exige las dos cosas — asi la asociacion aprendida entra honesta como `COMPUTED` sobre `POPULATION` y queda **estructuralmente fuera de lo irreversible sin degradarle la procedencia**. `AssociationTable.as_beliefs()` la convierte, y afirma la **medicion** y no la recomendacion: el invariante «COMPUTED exige credencia 1,0» rechazo el primer intento —poner la fuerza como credencia— y tenia razon. `test_science.py` §37
+- [ ] **P-2g** · **la asociación aprendida se fabrica como creencia y NINGUNA REGLA la
+  consume** (pregunta del autor, 2026-08-29: «¿está extendida la plasticidad al orden de
+  tools y a los pesos del handoff?»). La respuesta medida es que **no**, y los tres estados
+  son distintos:
+
+  | superficie | estado |
+  |---|---|
+  | ruteo `(región, paradigma)` | el peso se actualiza y `router.py` no lo lee — y **está probado que no puede servir ahí**: en el punto fijo `w* = 1,6p − 0,6` es monótona en la tasa de victorias, y el router ya ordena por esa tasa. Redundante por demostración, no por descuido |
+  | **orden de tools** | **el único sentido vivo.** `association.py` aprende sobre pares ordenados —lo que la demostración de redundancia no alcanza, porque `(a → b)` no se recupera de las frecuencias marginales—. Establecida con `p = 0,0078`, débil: 3 celdas de 13, un corpus, un modelo. `P-2d` le dio rango honesto con `Scope.POPULATION`. **Y nada la lee** |
+  | handoff | no existe. El reparto lo fija el código (`SUB_SCOPE_UNITS = 8`) a propósito: si el modelo dibujara la frontera del sub-agente se cruzaría el invariante |
+
+  **Lo que falta no es evidencia ni rango: es un consumidor.** `AssociationTable.as_beliefs()`
+  produce creencias `COMPUTED`/`POPULATION` bien tipadas, y el único lector fuera de
+  `association.py` en todo el repo es `bench/analysis/_analyze_associations.py`. Ninguna
+  regla de `rules.py` las mira, así que la creencia entra a la base y no cambia una sola
+  decisión.
+
+  Es la **misma familia** que `X-5h` (`seal_replay`) y que `theta_may_learn_online` antes de
+  que `serve.py` lo impusiera: algo que se declara o se produce y nadie consume. Y no la
+  atrapa `_audit_declarado.py`, porque el nombre sí se lee — lo lee su propio módulo.
+
+  **Qué haría falta, y por qué no es obvio.** Una regla que ordene las tools por asociación
+  aprendida choca con el invariante por un lado inesperado: no lo cruza —el código sigue
+  decidiendo—, pero **sí** convierte una estadística en control de flujo. El casillero
+  correcto es un **prior sobre el orden sugerido en la descripción de las tools**, que es
+  factor y no patrón. Antes hay que decidir eso, y la decisión es del autor.
+
+  Va **antes** de `P-2e`: componer el patrón en vez de elegirlo presupone que las
+  asociaciones gobiernan algo, y hoy no gobiernan nada.
+
 - [ ] P-2e · componer el patrón en vez de elegirlo *(el techo)*
 - [x] **P-3** · **cerrado, y el efecto no era neutro.** El router recibia un objeto `Calibration` que **ninguno de los cinco sitios de construccion pasaba**, asi que `trustworthy` era False siempre — y sin confianza el piso derivado sube a `OBSERVED` en A2+, o sea que **A2 con piso `ELICITED` era inalcanzable por construccion**. La evidencia para ganarlo se computaba, se persistia y se tiraba. La correccion **no** fue pasar el parametro en los cinco: vive en el **bundle firmado**, por la misma razon que los pisos aprendidos — cambia lo que un request puede hacer, asi que es politica. Un parametro se puede olvidar; adentro del bundle no hay donde. `test_science.py` §32
 - [x] **P-4** · **cerrado, y habia una violacion del reticulo adentro.** `horizon_unknown` llevaba la credencia **y la procedencia** de `coupling` —el codigo lo decia: «estimated alongside coupling»—. Dos consecuencias: el horizonte no tenia evidencia propia (y la calibracion es **por proposicion** justamente porque un modelo puede ser confiable sobre una cosa y pesimo sobre otra), y **tras una sonda heredaba `OBSERVED`** — o sea que una proposicion que nadie midio alcanzaba el piso que las acciones irreversibles exigen. La sonda lee una unidad para testear **acoplamiento**. Ahora el horizonte declara lo suyo y la sonda no lo toca. Y el `0.8` inventado pasa a `ELICITED_PRIOR_CREDENCE`, declarado: no es una medicion, es un **prior**, y existe la maquinaria que puede desmentirlo. `test_science.py` §33
@@ -478,7 +520,7 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
 - [x] **X-5d** · **la comparación entre modelos va al ANÁLISIS** (§42, `load_rows`). La guarda levanta si un archivo mezcla decodificaciones y **está bien**: promediar entre modelos no mide un paradigma, mide el modelo. El estudio multi-modelo se arma uniendo estudios por modelo. Queda escrito para que nadie «arregle» la guarda creyendo que estorba
 - [x] **X-5e** · **contestada con lo ya pagado** (lección 5.4): la hipótesis del autor se confirma **condicionada a la dificultad**. En `gold_deep` el modelo caro usa **0,81×** los tokens del barato; en `gold_v2`, **1,90×**. Puntos de equilibrio **1,24×** y **0,53×** por token. Sobrio: aun donde gana, 1,24× no alcanza para pagarse — y eso **fortalece** el caso del ruteo, porque el uso correcto del caro es exactamente donde gana. Convertirlo a plata es `X-5a`, no esto
 - [x] **X-5f** · **dos modelos eligiendo por caso** (`Router.plan(models=...)`). Orden de cotas: **dial primero, plata después** — al revés, un descuento compraría permiso. `A3 + USD 0,02` **se abstiene** en vez de bajar de modelo, que es el caso que prueba el orden. Sin catálogo el plan dice `model=''`, que es el régimen medido hasta hoy: decirlo vacío es distinto de mentir un nombre por omisión
-- [ ] **AR-5** · **toda comparación de brazos está ponderada por una dosis que ningún
+- [x] **AR-5** · **CERRADO el 2026-08-29. Toda comparación de brazos estaba ponderada por una dosis que ningún
   análisis exige declarar.** El brazo de recuperación sustituye **sólo** a `hybrid` —la tool
   `search`—; `keyword_search` y `semantic_search` salen fijas del runner. Así que la dosis
   de tratamiento que recibe cada paradigma es la fracción de sus búsquedas que va por
@@ -507,7 +549,19 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   auditoría lo dejó escrito como deuda y era la única de sus tres deudas que no había
   llegado a esta lista.
 
-- [ ] **X-5h** · **`seal_replay` es una garantía declarada que NO impone nadie** (encontrado
+  **Cómo se resolvió: `metrics.arm_effect`, que estratifica y se NIEGA a colapsar.**
+  Devuelve el delta por paradigma **con su dosis al lado**, separa a los que no recibieron
+  tratamiento —dosis `0,0` o `None`, que son dos motivos distintos con la misma
+  consecuencia— y `pooled()` **levanta** si la dispersión de dosis entre los tratados pasa
+  el 25%. En el caso medido —`react` 70% contra `dag_strategy` 16%— levanta.
+
+  **No corrige el efecto ni lo pondera, a propósito.** Corregir exigiría un modelo de cómo
+  la dosis transforma el efecto, y no hay ninguno medido. Negarse es lo único honesto que
+  se puede hacer con lo que hay. Y levanta en vez de avisar al lado: **un aviso junto a un
+  promedio inválido publica el promedio**, que es exactamente la lección por la que existe
+  `_sanity.py`. `test_science.py` §49.
+
+- [x] **X-5h** · **CERRADO el 2026-08-29. `seal_replay` era una garantía declarada que NO imponía nadie** (encontrado
   el 2026-08-29 cruzando `README.md` contra `assurance.py`). El perfil de `A3_CERTIFIED`
   lleva `seal_replay=True` y **ningún camino del repo lo lee**: `grep` da cero fuera de
   `assurance.py`. El sellado que sí existe —`LLMClient._sealed`, `embeddings.py`— es un
@@ -521,6 +575,27 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   No es una corrida: es código. Y no lo atrapa `_audit_declarado.py`, porque el nombre **sí**
   se lee —lo lee el propio `PROFILES`— y lo que falta es que alguien lo consulte para
   DECIDIR. Es la cuarta variante de la misma familia de defecto.
+
+  **Cómo se resolvió, y las dos decisiones que tenía adentro.**
+
+  *Sobre el REPLAY y no sobre la respuesta viva.* Sellar la ejecución original haría
+  imposible contestar un A3: toda primera llamada es un miss de caché, así que el nivel más
+  estricto sería el único que nunca puede responder. Lo que la garantía promete no es que
+  la respuesta salga del caché — es que **volver a correrla no pueda tocar el modelo en
+  silencio**. `answer(..., replay=True)` sobre un plan cuyo perfil resuelto dice
+  `seal_replay` usa un cliente sellado, y un miss **levanta**.
+
+  *Una VISTA sellada, no un flag que se prende.* El pool devuelve el **mismo objeto** por
+  modelo: mutar `_sealed` dejaría sellado al cliente de todos los requests siguientes, y un
+  sellado que se contagia aparece en un request que no lo pidió. `LLMClient.sealed_view()`
+  comparte caché y namespace —lo único que cambia es que un miss deja de ser una llamada— y
+  devuelve `self` si ya está sellado.
+
+  *Y no aplica a la decisión.* Un auditor replaya las **reglas** sobre la base registrada y
+  no llama al modelo ni una vez. Lo único que gasta llamadas es el paradigma, así que la
+  garantía es sobre la EJECUCIÓN. Verificado en `test_science.py` §51, incluido que **sólo
+  A3** declare replay sellado — si lo declarara otro nivel, sellar dejaría de significar
+  «certificado».
 
 - [ ] **X-5g** · **¿necesita A2 un piso de capacidad?** Es empírica y hoy está en `None` a propósito. Ponerle `DEEP` obliga a pagar 25× en cada request contable; no ponérselo admite el modelo barato donde hay que rendir cuentas. Se decide midiendo la tasa de error del barato al piso de procedencia de A2, no argumentando
 - [x] **X-5h** · **las tres proyecciones que faltaban, llenas** (§44). `react` y `reflection` proyectan **llamadas** desde sus propios `max_iterations` —su GASTO es una decisión del modelo, su CANTIDAD DE LLAMADAS la fija el código, y confundirlas era lo que los dejaba sin proyectar—; `rewoo` y `dag_strategy` proyectan **tokens**, este último `content × ramas` porque cada rama ve el material entero y arrastra el blackboard (la medición lo respalda: 89.834 contra 30.000 de contenido, ~3×). **Ningún par queda sin cotizar en plata.** Y el test dejó de fijar el defecto: prueba el mecanismo sobre la función, para que sobreviva a que hoy ningún brazo lo dispare
