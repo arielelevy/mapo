@@ -993,10 +993,23 @@ concreto: híbrido es el default correcto, pero exponer sólo la vista fusionada
 agente nunca puede pedir coincidencia exacta para un identificador — y las respuestas de dos de
 nuestras celdas *son* identificadores.
 
-La calidad de recuperación es una variable registrada con cinco brazos: híbrido (BM25 + denso,
-fusión RRF), léxico, semántico, dos simulaciones degradadas a recall y precisión declarados, y un
-oráculo. Las simulaciones son funciones deterministas de `(tarea, consulta, unidad)`, así que la
-calidad de recuperación es un dial controlado y no otra fuente de ruido. Los vectores se cachean
+La calidad de recuperación está **implementada** como una variable con nueve brazos: híbrido
+(BM25 + denso, fusión RRF), HyDE, un híbrido con rerank, léxico, semántico, tres simulaciones
+degradadas a recall y precisión declarados, y un oráculo. Las simulaciones son funciones
+deterministas de `(tarea, consulta, unidad)`, así que la calidad de recuperación **puede
+ser** un dial controlado y no otra fuente de ruido.
+
+**Y el dial nunca se giró, cosa que decimos porque la frase de arriba invita a la lectura
+contraria.** Sobre todos los registros que este proyecto produjo —5.082 filas medidas, 210M
+de tokens— **dos de los nueve brazos corrieron alguna vez**: híbrido (4.598 filas) y HyDE
+(389). Léxico, semántico, el híbrido con rerank, el oráculo y las tres simulaciones
+degradadas tienen **cero filas**. Están implementados y probados; nunca se ejecutaron.
+
+Así que la calidad de recuperación no es una variable controlada en este registro: **es una
+constante**, clavada en híbrido en el 92% de las filas. Toda afirmación de §7 y §8 sobre
+topología es entonces una afirmación en un punto de un dial que el banco puede mover y nunca
+movió — incluido el hallazgo de §6.4 de que el denso solo le ganó al híbrido en la celda
+acoplada, que salió de una sonda suelta y no de la grilla. Los vectores se cachean
 por hash de contenido, así que después de una primera pasada la fusión es aritmética local.
 
 **Un hallazgo contra la visión recibida**: en la celda acoplada, denso solo midió recall 0,75,
@@ -1872,7 +1885,7 @@ gane al fallback — que sería un resultado, y se declara publicable **antes** 
 | `ANALYSIS.md` | el análisis de fallas de §8 completo, por paradigma y por celda |
 | `GATE.md` | ocho criterios binarios de publicación y su veredicto actual |
 | `PLAN.md` | historia de revisiones de la tesis, incluidos dos encuadres superados y por qué |
-| `D:\Apps\MAPO\lab` | el harness: **15 paradigmas registrados**, de los cuales 12 corren la campaña, 5 brazos de recuperación, 4 superficies de herramientas, 4 niveles de garantía, 12 herramientas, generador de corpus con verificador independiente, **573 aserciones chequeadas por máquina** (521 + 52 en dos suites) |
+| `D:\Apps\MAPO\lab` | el harness: **15 paradigmas registrados**, de los cuales 12 corren la campaña, 9 brazos de recuperación implementados **de los cuales 2 corrieron alguna vez**, 4 superficies de herramientas, 4 niveles de garantía, 12 herramientas, generador de corpus con verificador independiente, **573 aserciones chequeadas por máquina** (521 + 52 en dos suites) |
 
 Siete de los quince anti-patrones del catálogo son errores cometidos y medidos en el curso de este
 trabajo, incluidos dos que contradijeron nuestras propias predicciones publicadas.

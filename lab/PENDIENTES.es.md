@@ -956,6 +956,33 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   invisible»*— cometida en los campos que ese mismo docstring no enumeraba.
   `test_science.py` §63.
 
+- [ ] **X-19** · **siete de los nueve brazos de recuperación NUNCA corrieron, y el paper los
+  presentaba como variable controlada** (2026-08-30, del EDA sobre todos los registros).
+
+  Sobre **todo** lo que este proyecto midió —5.082 filas, 210M de tokens, 32 registros—:
+
+  | brazo | filas |
+  |---|---:|
+  | `hybrid` | 4.598 |
+  | `hybrid_hyde` | 389 |
+  | `hybrid_reranked` · `lexical` · `semantic` · `oracle` · `sim_r100_p25` · `sim_r40_p50` · `sim_r80_p50` | **0** |
+
+  **Están implementados, tienen test, y nunca se ejecutaron.** El paper decía *«la calidad de
+  recuperación es una variable registrada con cinco brazos… así que es un dial controlado y
+  no otra fuente de ruido»*. Las dos mitades eran engañosas: son **nueve** implementados, y
+  el dial **nunca se giró**.
+
+  **Por qué importa más que un conteo mal.** El argumento de §6.4 es que la superficie de
+  herramientas gobierna la varianza que se le atribuye a la topología, y que la recuperación
+  es un dial y no ruido. Con la recuperación **clavada en híbrido en el 92% de las filas**,
+  toda afirmación de §7 y §8 sobre topología está hecha **en un punto de ese dial**. Y las
+  simulaciones degradadas —que existen justamente para separar «falló el patrón» de «falló
+  el retriever»— nunca separaron nada.
+
+  Corregido en los dos archivos y en el apéndice. Lo que falta es correrlas: es el
+  experimento más barato que queda con más para decir, porque las simulaciones son funciones
+  **deterministas** de `(tarea, consulta, unidad)` y no dependen del modelo para variar.
+
 - [ ] **X-18** · **el premio de este corpus es de COSTO, no de calidad — y el router es
   estructuralmente ciego a él** (2026-08-30, del experimento del oráculo a mano; cero
   llamadas al modelo).

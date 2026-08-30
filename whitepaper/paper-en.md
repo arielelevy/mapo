@@ -962,10 +962,23 @@ specific mistake: hybrid is the right default, but exposing only the fused view 
 agent can never request exact matching for an identifier — and the answers in two of our
 cells *are* identifiers.
 
-Retrieval quality is a recorded variable with five arms: hybrid (BM25 + dense, RRF fusion),
-lexical, semantic, two degraded simulations at stated recall and precision, and an oracle.
-The simulations are deterministic functions of `(task, query, unit)`, so retrieval quality is
-a controlled dial rather than another noise source. Vectors are cached by content hash, so
+Retrieval quality is **implemented** as a variable with nine arms: hybrid (BM25 + dense,
+RRF fusion), HyDE, a reranked hybrid, lexical, semantic, three degraded simulations at
+stated recall and precision, and an oracle. The simulations are deterministic functions of
+`(task, query, unit)`, so retrieval quality **can be** a controlled dial rather than another
+noise source.
+
+**And the dial was never turned, which we state because the sentence above invites the
+opposite reading.** Across every record this project has produced — 5,082 measured rows,
+210M tokens — **two of the nine arms have ever run**: hybrid (4,598 rows) and HyDE (389).
+Lexical, semantic, the reranked hybrid, the oracle and all three degraded simulations have
+**zero rows**. They are implemented and tested; they have never been executed.
+
+So retrieval quality is not a controlled variable in this record: **it is a constant**, held
+at hybrid in 92% of rows. Every claim in §7 and §8 about topology is therefore a claim at
+one point of a dial the harness can move and never moved — including the finding of §6.4
+that dense alone beat hybrid on the coupled cell, which came from a one-off probe rather
+than from the grid. Vectors are cached by content hash, so
 after a first pass fusion is local arithmetic.
 
 **A finding against the received view**: on the coupled cell, dense alone measured recall
