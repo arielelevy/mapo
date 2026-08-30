@@ -114,6 +114,37 @@ def main() -> None:
         raise SystemExit(1)
 
     print(f"Las {len(PASOS)} condiciones se cumplen. La campaña se puede lanzar.")
+
+    # LA NOVENA PREGUNTA, Y ES OTRA PREGUNTA (2026-08-30). Las ocho de arriba contestan
+    # «¿el banco funciona?». Ésta contesta «¿este corpus puede contestar la pregunta del
+    # ruteo?», y son cosas distintas: un banco impecable sobre un corpus donde los brazos
+    # no se separan produce un resultado negativo perfectamente medido que **no significa
+    # lo que parece**.
+    #
+    # POR ESO AVISA Y NO BLOQUEA. Una campaña que mide FACTORES —costo por brazo, efecto
+    # de una herramienta, agotamiento del retriever— es válida sobre un corpus con poca
+    # varianza entre brazos. La que no es válida es la que quiere demostrar RUTEO.
+    # Bloquear las dos con el mismo portón obligaría a desactivarlo, y una guarda
+    # desactivada es peor que ninguna.
+    #
+    # Y salió tarde: sobre `gold_h1` la razón señal/ruido da **1,001** —la varianza entre
+    # brazos y el ruido entre réplicas coinciden a la cuarta decimal— y eso se supo
+    # DESPUÉS de pagar la campaña entera. Se podía haber sabido con una fracción: la
+    # descomposición necesita réplicas y varios brazos, no el producto cruzado completo.
+    print()
+    proceso = subprocess.run([PY, "bench/_potencia_corpus.py"], capture_output=True,
+                             text=True, encoding="utf-8", errors="replace")
+    if proceso.returncode == 0:
+        print("[ ] y el corpus separa los brazos por encima del ruido ... OK")
+    else:
+        print("[!] PERO ESTE CORPUS NO PUEDE DEMOSTRAR RUTEO:")
+        for linea in (proceso.stdout or "").strip().splitlines():
+            print(f"      {linea}")
+        print()
+        print("    NO bloquea: medir factores sobre este corpus sigue siendo válido.")
+        print("    Lo que no se puede es concluir sobre SELECCIÓN DE PARADIGMA — un")
+        print("    resultado negativo ahí diría «acá no se puede ver», no «no sirve».")
+
     print()
     print("  Lo que sigue NO lo decide esto:")
     print("    - la plata y las horas de reloj (ver `bench/_estimate.py`)")
