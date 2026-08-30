@@ -287,6 +287,30 @@ def _ttft(raw_usage: dict[str, Any]) -> int:
 
 @dataclass
 class Usage:
+    """Lo que UNA llamada al modelo consumió, desglosado por lo que se cobra distinto.
+
+    NO ES UN TOTAL, Y NO PUEDE SERLO. Entrada y salida se facturan entre 4 y 8 veces
+    distinto, y los paradigmas se diferencian justo en esa proporción: un brazo que lee
+    mucho y responde poco no se puede comparar con uno que hace lo inverso si los dos
+    reportan un número solo.
+
+    TRES DISTINCIONES QUE PARECEN SUTILES Y NINGUNA LO ES:
+
+      `provider_cached_tokens`  entrada que el PROVEEDOR sirvió de su caché. Distinto de
+                                `cached_calls`, que es NUESTRO caché de disco: aquél evita
+                                la llamada entera, éste la abarata
+      `reasoning_tokens`        se facturan como SALIDA y no aparecen en el contenido. Sin
+                                separarlos, `completion_tokens` mezcla lo que el modelo
+                                gastó PENSANDO con lo que gastó RESPONDIENDO — y en los
+                                `5.6` esa fracción no la controla nadie de este lado
+      `first_ttft_ms`           el tiempo al primer token de la PRIMERA llamada es lo que
+                                alguien espera; el total es otra cosa
+
+    `merge` acumula: un paradigma arma su `Usage` a medida que avanza y lo devuelve con la
+    respuesta, así que si revienta, la contabilidad muere con él — por eso los contadores
+    que tienen que sobrevivir viven en la superficie y no acá.
+    """
+
     prompt_tokens: int = 0
     # TOKENS DE ENTRADA QUE EL PROVEEDOR SIRVIO DE SU CACHE. Distinto de `cached_calls`,
     # que es NUESTRO cache de disco: aquel evita la llamada entera, este la abarata.
@@ -378,6 +402,19 @@ class Usage:
 
 @dataclass
 class Completion:
+    """La respuesta del modelo, normalizada, venga de la red o del caché.
+
+    `from_cache` NO ES UN DETALLE DE IMPLEMENTACIÓN: un acierto de caché reporta el
+    `Usage` de la llamada ORIGINAL, que es lo correcto para medir el paradigma y lo
+    equivocado para saber si una corrida gastó. Lo que separa «se pagó» de «se replayó»
+    es `calls - cached_calls`, y una guarda que mirara tokens habría reventado sobre todo
+    rellenado sano.
+
+    `model_version` viene del proveedor y puede diferir del deployment pedido: el
+    deployment es dónde se llamó, la versión es qué respondió. Guardar las dos es lo que
+    permite notar que un endpoint se actualizó abajo.
+    """
+
     text: str
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
@@ -386,7 +423,38 @@ class Completion:
 
 
 class LLMClient:
-    """Content-addressed Azure OpenAI client."""
+    """EL CLIENTE DEL MODELO: una llamada, su caché, su reintento y su traza.
+
+    ES EL ÚNICO LUGAR POR DONDE SALE UNA LLAMADA, y de ahí salen casi todas sus
+    responsabilidades.
+
+    EL CACHÉ ES DIRECCIONADO POR CONTENIDO, y la clave incluye la HUELLA —modelo, versión
+    de api, esfuerzo de razonamiento, seed y max—. Eso no es una optimización: es lo que
+    hace que un replay de la réplica `i` devuelva la réplica `i` y no otra muestra, y que
+    dos decodificaciones distintas no puedan compartir entrada ni por accidente. Cuando se
+    sacó `temperature` del payload hubo que sacarlo de la huella **en el mismo movimiento**:
+    dejarlo vivo en uno solo habría hecho que dos corridas a temperaturas distintas
+    compartieran clave.
+
+    EL MODO SELLADO (`sealed`) NO LLAMA A NADIE: un miss es un error, no una llamada. Y
+    distingue dos hechos que confundirlos vuelve indiagnosticable un replay fallido — que
+    la entrada **nunca estuvo**, o que estaba y estaba **rota**. El primero puede ser una
+    huella mal reconstruida; el segundo es daño en el disco.
+
+    LA RESTRICCIÓN QUE GOBIERNA TODO EL BANCO vive acá: en la familia `5.6`, Chat
+    Completions **no admite `tools` junto con `reasoning_effort` distinto de `none`**, y
+    falla incluso sin mandarlo, porque esos modelos default a `medium`. Todo paradigma de
+    este catálogo es un bucle de herramientas, así que hay dos caminos: la Responses API, o
+    `none` declarado. **No se fuerza desde acá**: sería arreglar un 400 escondiendo que el
+    modelo corre SIN RAZONAR, y eso cambia lo que se mide. Tiene que ser una elección de la
+    corrida, que entra a la huella y queda en cada fila.
+
+    LA TRAZA POR LLAMADA (`trace_to`) es opcional y **va acá y no en el bucle**: el bucle
+    compartido es 1 de los 27 sitios que llaman al modelo, así que enganchar en el cliente
+    los cubre a todos —planificación, verify, replan, síntesis, la extracción del guard,
+    los sub-agentes— y ninguno se puede olvidar de instrumentarse. No toca la fila, ni la
+    huella, ni la clave de caché.
+    """
 
     def __init__(self, settings: Settings, sealed: bool = False) -> None:
         self._settings = settings
@@ -479,6 +547,49 @@ class LLMClient:
 
     # -- completion --------------------------------------------------------
 
+    # LA TRAZA POR LLAMADA, y hasta hoy no habia ninguna. La fila agrega la CELDA
+    # entera: dice `calls=17` y `cost_tokens=234.341` y **no cual llamada costo que**.
+    # Con el costo creciendo como el cuadrado de las vueltas —la conversacion se
+    # reenvia entera cada turno— ese es exactamente el numero que hace falta y no
+    # estaba.
+    #
+    # VA EN EL CLIENTE Y NO EN EL BUCLE, a proposito: el bucle compartido es UN sitio
+    # de 27 que llaman al modelo. Enganchar aca cubre los 27 —planificacion, verify,
+    # replan, sintesis, la extraccion del guard, los sub-agentes— y ninguno se puede
+    # olvidar de instrumentarse.
+    #
+    # NO ES UN SDK NI UNA DEPENDENCIA. El banco es sin framework por diseno: un
+    # `.jsonl` es la traza, se lee con las mismas herramientas que el resto del
+    # registro, y no agrega una libreria al instrumento que mide.
+    _trace_sink: Any = None
+    _trace_ctx: dict[str, Any] = {}
+
+    def trace_to(self, path: Any, **contexto: Any) -> None:
+        """Escribir una linea por llamada a `path`. `contexto` va en cada linea."""
+        self._trace_sink = path
+        self._trace_ctx = contexto
+
+    def _trace(self, messages, tools, completion, from_cache: bool) -> None:
+        if self._trace_sink is None:
+            return
+        u = completion.usage
+        ventana = sum(len(str(m.get("content") or "")) for m in messages)
+        linea = {
+            **self._trace_ctx,
+            "turno": self._trace_ctx.get("_n", 0),
+            "mensajes": len(messages),
+            "ventana_chars": ventana,
+            "tools_declaradas": len(tools or []),
+            "prompt_tokens": getattr(u, "prompt_tokens", 0),
+            "completion_tokens": getattr(u, "completion_tokens", 0),
+            "from_cache": from_cache,
+            "tool_calls": [c["function"]["name"]
+                           for c in (completion.tool_calls or [])],
+        }
+        self._trace_ctx["_n"] = linea["turno"] + 1
+        with open(self._trace_sink, "a", encoding="utf-8") as f:
+            f.write(json.dumps(linea, ensure_ascii=False) + "\n")
+
     def complete(
         self,
         messages: list[dict[str, Any]],
@@ -537,7 +648,9 @@ class LLMClient:
         key = self._key(payload)
         cached = self._read_cache(key)
         if cached is not None:
-            return self._to_completion(cached, from_cache=True)
+            hecho = self._to_completion(cached, from_cache=True)
+            self._trace(messages, tools, hecho, from_cache=True)
+            return hecho
 
         if self._sealed:
             # DOS HECHOS DISTINTOS, y confundirlos es lo que hace indiagnosticable a un
@@ -582,7 +695,9 @@ class LLMClient:
             "body": body,
         }
         self._write_cache(key, record)
-        return self._to_completion(record, from_cache=False)
+        hecho = self._to_completion(record, from_cache=False)
+        self._trace(messages, tools, hecho, from_cache=False)
+        return hecho
 
     def _to_completion(self, record: dict[str, Any], from_cache: bool) -> Completion:
         body = record["body"]

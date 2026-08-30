@@ -209,10 +209,34 @@ def belief_from_dict(raw: dict[str, Any]) -> Belief:
 
 
 class BeliefBase:
-    """The set of beliefs a decision rests on, plus its own identity.
+    """LA BASE DE CREENCIAS: qué se sabe, con qué calidad de evidencia, y desde cuándo.
 
-    Superseded beliefs are retained. The base is append-only so that `digest()`
-    identifies the whole epistemic history of a decision, not just its final state.
+    ES EL SUSTRATO DE LA GARANTÍA. La promesa de este sistema tiene UNA forma —«misma base
+    de creencias ⟹ misma decisión»— y nunca «mismo prompt ⟹ misma respuesta». La diferencia
+    no es de matiz: la segunda es falsa para cualquier modelo, y la primera es verificable
+    porque esta clase es el estado del que la decisión depende.
+
+    LA PROCEDENCIA ES UN RETÍCULO ORDENADO:
+
+        ASSUMED  <  ELICITED  <  OBSERVED  <  COMPUTED
+
+    y una regla puede exigir un piso. `COMPUTED` significa que alguien lo computó y lo
+    asentó — **no** que sea verdad en el mundo. Esta clase transporta confianza desde el
+    piso hacia la salida; no la crea. Un sensor que miente se emite con procedencia
+    impecable, y eso es una frontera de la familia entera, no un defecto acá.
+
+    Y HAY UN EJE ORTOGONAL, `Scope ∈ {REQUEST, POPULATION}`: una creencia sobre ESTE pedido
+    no es lo mismo que una sobre la población de pedidos, y confundirlas deja que una
+    estadística global gobierne un caso particular.
+
+    EL MODELO ES SENSOR, NO DECISOR. Emite proposiciones que entran acá como `ELICITED`, y
+    una acción irreversible exige `COMPUTED`/`OBSERVED`: **la opinión del modelo no es
+    evidencia admisible para tomarla**. Ese invariante vive en el piso, no en el prompt,
+    porque un límite que se pide se puede desobedecer.
+
+    VIGENTE, NO HISTÓRICA: lo que se consulta es el estado AL DECIDIR. El ledger guarda
+    todo lo que alguna vez se creyó, con su cadena de hashes; esta clase responde qué se
+    cree ahora, que es la pregunta que una decisión necesita.
     """
 
     def __init__(self) -> None:

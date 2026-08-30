@@ -77,13 +77,34 @@ filtra por palabras vacías, como un motor real, y el IDF pondera.
 **Consecuencia medida**: 19 de 26 tareas de `gold_p17` cambian el orden que devuelve el
 léxico. **El registro anterior no es replayable** y está en
 `results/archivo-2026-08-29-pre-K6/` con su explicación. `load_rows` levanta si un archivo
-mezcla analizadores — es la única de las cuatro guardas de mezcla que ningún otro campo
+mezcla analizadores — es la única de las **cinco** guardas de mezcla que ningún otro campo
 podía detectar.
 
 **La fusión es un factor**: `HybridRetriever(fusion="rrf" | "relative_score")`. Medido, no
 hay evidencia de que una sea mejor —gana en un corpus, pierde en el otro, todo dentro del
 ruido— así que queda **RRF**, y en Weaviate va clavado (`rankedFusion`), no heredado del
 default, que cambió en su v1.24.
+
+## La superficie es parte del contrato (2026-08-29)
+
+`SURFACE_VERSION = "v2-agotamiento-compartido"`, y es la **quinta** guarda de mezcla.
+
+De dónde salió: `scoped()` no reataba `surfaced` —lo que alguna búsqueda ya trajo— ni los
+contadores de racha, así que **cada sub-agente arrancaba creyendo que nadie había
+buscado**. Medido: `supervisor` 370 búsquedas y `handoff` 158, las dos con **0 estériles**,
+contra 62,5% de `dag_strategy`. Ese cero no era chico, era estructural.
+
+**Y hasta dónde llega el cambio hay que decirlo con precisión.** En el régimen medido
+—`basic`, `stop_on_barren=0`, `stall_warnings=0` en todo el registro— es **sólo
+contabilidad**: las utilidades y los costos viejos no están comprometidos, y la corrección
+se hace **rellenando desde el caché, no re-corriendo**. Pasa a cambiar comportamiento en
+cuanto la variante sea `accounting`/`cognitive` —ahí el aviso entra al prompt— o
+`stop_on_barren > 0`.
+
+**La guarda es POR BRAZO, no por archivo.** `scoped()` lo llaman `handoff` y `supervisor` y
+nadie más; `dag_strategy` arma el alcance de otra forma. Levantar sobre el archivo entero
+volvería inservible un registro válido de 989 filas por un cambio que a diez de los doce
+brazos no los toca — y una guarda así se termina desactivando, que es peor que no tenerla.
 
 ## Precios y ventanas son INFORMACIÓN EXTERNA, no medición nuestra
 
@@ -198,6 +219,10 @@ era saber **cuál abrir**:
 > desincronizó —declaraba `CONTRATOS.es.md` como no implementado, y no conocía tres
 > archivos—. Se reemplazó por un puntero a acá el 2026-08-29. Dos índices del mismo repo
 > empiezan a decir cosas distintas, y el que nadie mantiene es el que miente.
+
+> **Cierre del 2026-08-29**: `historico/IMPLEMENTACION-2026-08-29.es.md` — el board,
+> el guard, los cinco defectos que destaparon, y el estado verificado al cerrar.
+> Es lo que hay que leer para retomar sin depender de acordarse de nada.
 
 **`historico/`** guarda los snapshots fechados —cierres de sesión, revisiones de código,
 auditorías— que valían el día que se escribieron y no describen el estado de hoy. Estaban

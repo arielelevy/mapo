@@ -373,9 +373,18 @@ Un archivo de resultados es una condición experimental, no una bolsa de filas. 
 | brazos de recuperación | la recuperación es un factor cruzado, no una constante |
 | analizadores léxicos | el tokenizador decide QUÉ encuentra BM25, y no deja rastro en ningún otro campo |
 | vocabularios de región | una etiqueta cuyo significado lo fija el vocabulario que la produjo |
+| **versiones de superficie** | un cambio de código en las herramientas cambia lo que un brazo puede ver, y **ninguna de las otras cuatro lo detecta** |
 
 La tercera es la más silenciosa: el brazo está en el nombre del archivo, el modelo en la
 huella, el vocabulario en su campo — el tokenizador no dejaba rastro en ninguno.
+
+**La quinta se agregó el 2026-08-29 y es la única que guarda POR BRAZO.** Arreglar el
+agotamiento del retriever adentro de los sub-agentes cambió lo que `handoff` y `supervisor`
+podían ver —reportaban **0% de búsquedas estériles sobre 528 búsquedas**, contra 62,5% de
+`dag_strategy`—, y eso no entra en la huella ni en ningún otro campo. Guarda por brazo
+porque `scoped()` lo llaman dos de los doce: levantar sobre el archivo entero volvería
+inservible un registro válido por un cambio que a los otros diez no los toca, **y una
+guarda así se termina desactivando, que es peor que no tenerla.**
 
 ---
 
@@ -392,6 +401,18 @@ huella, el vocabulario en su campo — el tokenizador no dejaba rastro en ningun
 - **Un defecto de construcción no es un hallazgo.** Un bug, un lock roto, un límite de
   tasa: se arreglan y se registran como trabajo. No entran a `LECCIONES.es.md` ni al paper,
   y no son premisa de ninguna conclusión.
+- **Un factor que no llega al modelo NO existe**: no falla, **corre y mide su ausencia**, y
+  el resultado se lee igual que un efecto nulo medido. Le pasó cuatro veces a este repo, la
+  última al board. `test_science.py` §59 lo impide estructuralmente.
+- **Todo módulo y toda clase declaran qué son.** Los 45 módulos y las 110 clases de `app/`
+  llevan su spec, con el piso escalado al tamaño de la clase —una de más de 80 líneas es
+  maquinaria y pide un párrafo, un contenedor de tres campos no—. Lo sostienen
+  `test_science.py` §65 y `bench/audits/_audit_specs.py`, que además cruza los invariantes
+  del producto contra los módulos que los hacen cumplir.
+- **Un conteo a mano en un documento se queda viejo.** Los que se pueden derivar, se
+  derivan: `_audit_documentos.py` cuenta los chequeos que el `main()` realmente corre y
+  levanta si un README dice otro número. Ya cazó dos —«33 secciones» cuando eran 51, y
+  «518 aserciones» en el apéndice del paper cuando eran 573.
 
 ---
 

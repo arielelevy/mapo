@@ -3,8 +3,10 @@
 > **Propuesta de §5.3, §5.4 y §5.5.** No hay que demostrar nada nuevo: los tres están
 > escritos, verificados con test y —dos de ellos— medidos. Lo que falta es que entren.
 >
-> **Nada de acá está todavía en `paper-en.md` ni en `paper-es.md`.** Cuando entre, va a los
-> dos, en la misma posición.
+> **APLICADO el 2026-08-29.** Entraron a `paper-en.md` y a `paper-es.md` como **§5.3, §5.4 y
+> §5.5**, en la misma posición. Este archivo queda como el razonamiento que las produjo —el
+> inventario contra el ejecutable, y por qué el préstamo de v1 era un error de categoría—,
+> no como una propuesta abierta. `F5` cerrada en `lab/PAPER.es.md`.
 
 ---
 

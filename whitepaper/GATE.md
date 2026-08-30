@@ -234,7 +234,10 @@ ruido tiene que estimarse por celda.**
 Aplicando el test de atribución — un efecto que sólo mueve la celda inestable no es un
 efecto — de los cuatro resultados del A/B:
 
-- `reflection` **+0,250 → retirado**. Salió entero de la celda que se da vuelta sola.
+- `reflection` **+0,250 → el efecto se retira**. Salió entero de la celda que se da vuelta
+  sola. **El brazo no**: el catálogo lo tiene activo (auditoría 2026-08-28, único mejor en 1
+  de 14, delgado y no dominado). Retirar un efecto no atribuible y retirar un brazo dominado
+  son dos criterios distintos, y sólo se cumplió el primero.
 - `dag_strategy` **+0,500 → +0,250**. La mitad era la misma celda. Su resultado de **costo**
   sobrevive limpio: 3,05× contra dispersión de réplica de 1,62×, y localizado en las dos
   celdas desbocadas que el mecanismo predice.

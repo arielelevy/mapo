@@ -33,6 +33,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from app.association import END, START, AssociationTable
 from app.config import Settings
+from app.policy import learnable_rows
 from app.runner import Runner
 
 base = Settings.from_env()
@@ -51,11 +52,16 @@ def main() -> None:
         try:
             runner = Runner(settings, corpus, retriever_arm="hybrid",
                             surface_variant="basic")
-            rows = list(runner.load_rows())
+            rows, descartadas = learnable_rows(runner.load_rows())
         except FileNotFoundError:
             continue
+        if descartadas.total:
+            print(f"  {corpus}: {descartadas}")
         for r in rows:
             rows_total += 1
+            # `learnable_rows` YA SACO lo que no es medicion. Antes esto se apoyaba en
+            # que una fila infactible no trae `sequence` — cierto, y ACCIDENTAL: la
+            # guarda dependia de un campo vacio en vez de decir que la fila no ejecuto.
             sequence = (r.get("tool_usage") or {}).get("sequence")
             if not sequence:
                 continue
@@ -161,6 +167,9 @@ def main() -> None:
         except FileNotFoundError:
             continue
         for r in rows:
+            # `learnable_rows` YA SACO lo que no es medicion. Antes esto se apoyaba en
+            # que una fila infactible no trae `sequence` — cierto, y ACCIDENTAL: la
+            # guarda dependia de un campo vacio en vez de decir que la fila no ejecuto.
             sequence = (r.get("tool_usage") or {}).get("sequence")
             if not sequence:
                 continue

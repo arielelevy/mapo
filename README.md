@@ -37,15 +37,14 @@ la mide, y el paper que la valida.
   artefacto EXPLAIN, reproducible por digest de la base de creencias. Los corpus, las
   predicciones registradas y la dirección REC viven acá.
 - **[`whitepaper/`](whitepaper/README.md)** — el paper (`paper-en.md` canónico,
-  `paper-es.md` espejo; **toda edición va a los dos, en la misma posición**). `GATE.md`
-  manda sobre qué se puede afirmar. Nada entra al paper sin implementación que lo corra en
-  `lab/`. [`whitepaper/artefactos/`](whitepaper/artefactos/README.md) versiona los
-  documentos visuales.
+  `paper-es.md` espejo; **toda edición va a los dos, en la misma posición**, y una
+  auditoría lo hace cumplir). `GATE.md` manda sobre qué se puede afirmar.
+  [`whitepaper/artefactos/`](whitepaper/artefactos/README.md) versiona los documentos
+  visuales.
 - **[`legacy/`](legacy/README.md)** — una capa de ejecución anterior, **CONGELADA**. No es
   el producto y no se evoluciona: se conserva como referencia de las partes que un
   despliegue real necesita y el banco nunca tuvo que modelar — búsqueda sobre índice real,
-  scoping por permisos, citas verificadas contra ese índice, streaming a un cliente. Se
-  revisó y reparó el 2026-08-27 (ver su README) para que lo que vale leer valga leerse.
+  scoping por permisos, citas verificadas contra ese índice, streaming a un cliente.
 - **[`ui/`](ui/README.md)** — la consola de prueba (Vite + React 19 + TypeScript). Consume
   los mismos eventos tipados de `/v1/answer` y trae un modo demo para trabajarla sin motor
   y sin gastar tokens.
@@ -67,39 +66,67 @@ producto nunca sabe que el banco existe.**
 
 ---
 
-## Dónde está el registro (2026-08-27)
+## Dónde está el registro (2026-08-29)
 
-**P15 — la afirmación del producto, refutada, y el mecanismo ES el hallazgo.** Sobre un
-mundo que θ nunca había visto (seed 47, 390 celdas, cero errores de infraestructura), el
+**La afirmación del producto sigue refutada, y el mecanismo ES el hallazgo.** Sobre un
+mundo que θ nunca había visto —seed 47, 390 celdas, cero errores de infraestructura— el
 ruteo por request perdió contra el mejor paradigma fijo por **−0,087**, más allá del piso
-de ruido — mientras reproducía cada decisión 26/26 desde su base de creencias registrada.
+de ruido, mientras reproducía cada decisión 26/26 desde su base de creencias registrada.
 
 Mecanismo verificado: **el vocabulario de región no tiene eje de horizonte**, así que las
-tareas que castigan una elección fija eran indistinguibles de las que la premian, y θ ruteó
-contra su propio veredicto registrado (P6b) porque ninguna etiqueta le dijo nunca que
-estaba en ese caso.
+tareas que castigan una elección fija eran indistinguibles de las que la premian. Reparar
+la validez del aprendizaje —agregación por episodio, holdout limpio— **deja el número
+idéntico**: la refutación no es un artefacto del procedimiento.
 
-Titular honesto: **seleccionar sin sensar pierde contra un default fijo fuerte.**
+**Y la campaña homogénea le puso un número a por qué.** Sobre las 21 tareas donde corrieron
+los nueve brazos: la brecha de oráculo da **+9,5 pp**, y contra el ruido **de cada tarea**,
+**ninguna de las 21 la supera**. En **17 de 21 el mejor fijo YA es el oráculo** — sólo 3
+tareas tienen un único mejor brazo.
 
-Chequeo de sensibilidad: reparar la validez del aprendizaje (agregación por episodio,
-holdout limpio) deja el número idéntico — la refutación no es un artefacto.
+> **θ no perdió por ser mal router: casi no había premio que capturar en ese estrato.** Es
+> el régimen que el paper ya llamaba «casi tautológico», ahora con el número.
 
-**La dirección que sigue: REC (Reparación Epistémica Contrafactual).** Una decisión
-registrada más una traza determinista pueden decir qué creencia mínima, a qué fuerza de
-evidencia, habría cambiado el plan — y qué observación acotada podría resolverla.
-Implementado hasta acá: el solucionador contrafactual (replay puro; las hipótesis nunca
-tocan el registro fáctico), cláusulas de adquisición que son borrador hasta certificarse, y
-el ciclo de certificación — tres mundos que no se solapan, un **mundo final de un solo uso**
-impuesto por un ledger, e instalación fail-closed sobre el bundle firmado de la política.
-Diseño: `lab/PATRON_REC.es.md`. Estado vivo: `whitepaper/artefactos/`.
+**Tres mecanismos medidos que apuntan al mismo lado.** El costo crece como `N²` y la
+cobertura como `N` —≤2 llamadas dan 9.779 tokens, ≥8 dan 136.432, por +0,122 de utilidad—
+porque la conversación se reenvía entera en cada vuelta. En el estrato ancho **dos de cada
+tres búsquedas no traen nada nuevo** (63,5%, con una racha de 21 seguidas) y **un sexto del
+material servido es texto que el agente ya tenía** (15,2%), mientras la retención cae. Las
+tres se atacan con lo mismo: máxima cobertura en mínimas llamadas.
+
+**La dirección REC tiene veredicto, y es negativo.** Reparación Epistémica Contrafactual
+está implementada y corrida —diagnóstico contrafáctico con esquema cerrado y firmado, tres
+mundos disjuntos, mundo final de un solo uso, instalación fail-closed— y **la cláusula no
+se promueve**: el beneficio neto da `+0,0311` contra un piso de ruido de `0,0655` al `λ`
+con que decide el banco. Diseño en `lab/PATRON_REC.es.md`.
+
+**Cierre de la sesión del 2026-08-29**, con todo lo implementado y verificado:
+`lab/historico/IMPLEMENTACION-2026-08-29.es.md`.
 
 ---
 
 ## El orden del trabajo
 
 **El producto se construye desde lo que el banco prueba, no al revés.** `lab/` sigue
-midiendo patrones y validándolos; el motor del producto arranca cuando ese registro esté
-lo bastante maduro como para construir desde ahí. Hasta entonces no se porta nada.
+midiendo patrones y validándolos; el motor arranca cuando ese registro esté lo bastante
+maduro. Hasta entonces no se porta nada.
 
 La arquitectura física, cuando arranque, ya está decidida y es reversible:
-`lab/ARQUITECTURA.es.md`.
+`lab/ARQUITECTURA.es.md`. On-prem y Docker, Weaviate, Postgres como ledger, FastAPI con SSE
+resumible. **Temporal todavía no** —entra sólo si se cumple uno de tres gatillos escritos—
+y **LangGraph nunca**. Observabilidad con Langfuse y su propio SDK, **con el producto y no
+antes**: hoy no hay servicio que trazar.
+
+---
+
+## Antes de gastar un token
+
+```powershell
+py tests\test_science.py            # 52 chequeos, 524 aserciones
+py tests\test_consolidation.py
+py corpus\verify.py --corpus corpus\<nombre>
+py bench\_listo.py                  # las ocho condiciones de lanzamiento
+```
+
+Y tres reglas que no son de estilo: **predicciones falsables registradas con fecha antes de
+correr**, **`repeat ≥ 3` con piso de ruido por celda**, y **estimar contra el corpus, nunca
+contra el registro** — estimar desde una corrida parcial costó una vez un error de 34×.

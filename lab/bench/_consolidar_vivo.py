@@ -37,7 +37,13 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from app.config import Settings
-from app.policy import Episode, Plasticity, PolicyBundle
+from app.policy import (Discarded, Episode, Plasticity, PolicyBundle,
+                        learnable_rows)
+
+# Lo descartado en la ultima pasada. LA LINEA DE ESTADO LO DICE: «141 episodios»
+# sin decir sobre cuantas filas se computo deja al lector suponiendo que fueron
+# todas, y hoy una de cada cinco es una celda que nunca ejecuto.
+ULTIMO_DESCARTE: list[Discarded] = []
 from app.runner import Runner
 
 CORPUS = "gold_h1"
@@ -71,9 +77,9 @@ def episodios(filas: list[dict]) -> list[Episode]:
     con suerte cobre el refuerzo que la media de su paradigma nunca gano.
     """
     celdas: dict[tuple[str, str], list[dict]] = {}
-    for f in filas:
-        if f.get("infeasible") or f.get("infra_error"):
-            continue
+    aptas, descartadas = learnable_rows(filas)
+    ULTIMO_DESCARTE.append(descartadas)
+    for f in aptas:
         celdas.setdefault((f["task_id"], f["paradigm"]), []).append(f)
 
     # El mejor de cada tarea se decide sobre la MEDIA de sus replicas, no sobre un trial.
@@ -125,8 +131,12 @@ def main() -> None:
         decidibles = [
             (r, p) for r, p in con_evidencia if cand.stat(r, p).episodes >= 3
         ]
+        d = ULTIMO_DESCARTE[-1] if ULTIMO_DESCARTE else None
+        # «141 episodios» sobre «539 filas» invita a suponer que las 539 se midieron, y
+        # hoy una de cada cinco es una celda que la aritmetica podo antes de correr.
         print(f"[{time.strftime('%H:%M')}] {len(filas):>5} filas "
-              f"(+{len(filas) - previo})  {len(eps):>4} episodios  "
+              f"(+{len(filas) - previo}, {d.total if d else 0} no medidas)  "
+              f"{len(eps):>4} episodios  "
               f"{len(regiones):>2} regiones  "
               f"{len(con_evidencia):>3} pares con evidencia  "
               f"{len(decidibles):>3} con n>=3"

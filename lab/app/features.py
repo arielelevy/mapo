@@ -34,6 +34,21 @@ from .llm import LLMClient, Usage
 
 
 class Availability(str, Enum):
+    """CUÁNDO se conoce un feature, y por eso si puede o no gobernar una decisión.
+
+    ES UN TIPO Y NO UNA CONVENCIÓN, y esa es la razón de que exista. Una regla sólo puede
+    gobernar si se la puede **evaluar al momento de decidir**; partir el espacio sobre algo
+    que recién se sabe después de ejecutar descubre una regla verdadera e **inaplicable**.
+
+      `COMPUTABLE`  se saca del request antes de gastar: cantidad de unidades, largo,
+                    presupuesto, las banderas que declara el caller
+      `DERIVED`     necesita el material o la ejecución. `truth_coupling` es el oráculo
+                    del extractor; `iterations` y `cost_tokens` son posteriores
+
+    El descubrimiento de particiones consulta esto y descarta los ejes `DERIVED`. Sin el
+    tipo, eso se descubriría recién al cablear la regla y ver que no hay con qué evaluarla.
+    """
+
     COMPUTABLE = "computable"
     DERIVED = "derived"
 

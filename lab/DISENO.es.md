@@ -268,6 +268,89 @@ flowchart LR
 | Sin LLM judge | El sesgo del juez está alineado con verbosidad y costo. | Premiar paradigmas caros por estilo. | Evaluación generativa subjetiva. |
 | Producto y banco separados | La medición debe observar exactamente lo servido. | Que producción conozca gold o que el banco mida otro sistema. | Dos caminos de decisión. |
 
+## 6bis. El board dirige y el guard acota — y el banco tiene el mecanismo partido
+
+> **Revisión del 2026-08-29**, disparada por una corrección del autor: *«el board o una
+> cola de evidencia y pendientes es GENERAL, no de `dag`»*, y *«el guard es para mantener
+> el contexto controlado»*. Las dos son correctas y las dos estaban mal modeladas.
+
+### El board no es memoria, es dirección
+
+Un board que sólo acumula hallazgos es un **log**: dice qué pasó y no cambia ninguna
+decisión. Lo que dirige una investigación es lo que dice **qué falta**:
+
+| lo que renderiza | qué decide |
+|---|---|
+| cobertura `N/M` | si seguir o cerrar |
+| **NO chequeados**, nombrados | dónde mirar ahora |
+| consultas ya emitidas — **no repetir** | qué no volver a gastar |
+| directiva derivada del número | la acción siguiente |
+
+Y por eso es **general**. Un agente solo tiene el mismo problema que un grupo: no sabe qué
+le falta, no sabe qué ya pidió, y su transcripción se compacta. Que el estado sea
+**compartido** entre varios o **propio** de uno es una dimensión distinta de si existe.
+
+**Cómo estaba, y es la trampa de siempre.** La cola llegaba al modelo por dos caminos y
+los dos eran particulares: la plantilla del sub-agente de `dag_strategy`, y el retorno de
+la tool `board` —que el modelo **llamó 1 vez en 125 llamadas**, 0,8%—. Un agente solo no
+podía llevar cola: el factor se prendía, corría entero y medía cero.
+
+**Cómo está ahora**: se inyecta en el **bucle de herramientas compartido**, el único del
+repo que manda la declaración de tools, así que alcanza a todo paradigma iterativo.
+Reemplaza en vez de apilar —N copias desactualizadas con la más vieja arriba cuestan el
+cuadrado de las vueltas— y **un board vacío no inyecta nada**: decir «no hay estado» en
+cada vuelta gasta ventana para no informar. `test_science.py` §61, 25 asserts.
+
+### El guard acota, y el banco no lo tiene
+
+La capa anterior —congelada, la única que corrió contra un índice real— acotaba el
+contexto por **crecimiento**: si creció más de 20k caracteres en una iteración, expulsa el
+`ToolMessage` grande más viejo y **lo reemplaza por un hallazgo extraído y enfocado en la
+pregunta**, que va al board. Nunca toca el prompt de sistema, la pregunta ni los mensajes
+del board.
+
+**El banco tiene dos compactaciones y NINGUNA extrae un hallazgo:**
+
+| | qué hace | qué se midió |
+|---|---|---|
+| `compact_history` (cognitive) | reemplaza por un stub **sólo las unidades que el modelo anotó** | el modelo escribió **1 nota en 28 filas**: casi nunca dispara |
+| `manage_history` (managed) | degrada incondicionalmente a stub con el id | llamada **61 veces sobre `w4`**, degradó **0 mensajes** |
+| *guard de la capa anterior* | expulsa por crecimiento y **crea** un hallazgo enfocado | **no está en el banco** |
+
+Las dos del banco **degradan**; la que falta **produce contenido nuevo**. Y esa diferencia
+es exactamente lo que le da algo al board que sostener.
+
+> **Son un solo mecanismo y el banco lo tiene partido.** El guard acota la ventana y
+> genera el hallazgo; el board lo conserva y con eso dirige lo que sigue. Con el board sin
+> destinatario y la compactación produciendo stubs en vez de hallazgos, **ninguna de las
+> dos mitades estaba entera**.
+
+**Consecuencia para la medición, y es una decisión de plata:** medir `board_queue` sola
+mide media máquina. La cola llevaría cobertura y pendientes —que ya sirven— pero sus
+*hallazgos* seguirían siendo lo que el modelo se acuerde de postear, no lo que la
+expulsión rescató. El orden correcto es **extracción en la expulsión primero, cola
+después**, o cruzar los dos ejes en la misma corrida.
+
+### Lo que la revisión NO encontró
+
+Se barrió la capa congelada módulo por módulo contra el banco. Lo demás está, o su
+ausencia es una decisión escrita:
+
+| pieza | estado |
+|---|---|
+| HyDE | **está** (brazo de la matriz liviana) |
+| caché | **está**, content-addressed en vez de Redis |
+| fusión RRF | **está**, y `relative_score` es un factor medido |
+| rerank | **está** como brazo opcional |
+| clasificación de estrategia por LLM | **reemplazada a propósito** por θ: el LLM no decide flujo de control |
+| pre-fetch / resolución de entidades | **omisión declarada** en `dag.py` §2 — son calidad de recuperación compartida por todas las estrategias, e incluirlas le daría al DAG una ventaja que los otros brazos no tienen |
+
+Y las dos auditorías de inercia que ya existían **no podían ver esto**:
+`_audit_declarado.py` busca nombres que nadie lee —y `render()` **sí** se leía—, y
+`_audit_inerte.py` busca guardas que ningún corpus dispara —y el board no es una guarda—.
+La falla vivía en el **camino hasta el prompt**, que es una tercera clase: algo que se
+lee, se ejecuta, tiene test que pasa, y **no llega al modelo**.
+
 ## 7. Dirección aprobada
 
 **Reparación Epistémica Contrafactual (REC)**. No agrega otro paradigma de respuestas:

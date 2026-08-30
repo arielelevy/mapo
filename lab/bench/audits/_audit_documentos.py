@@ -119,13 +119,46 @@ def main() -> None:
             if len(nombrados) != 1:
                 continue
             nombre = nombrados[0]
-            bajo = linea.lower()
+            # LO CITADO NO ES LO AFIRMADO. Un pendiente cerrado o una correccion citan el
+            # titulo viejo para explicar por que estaba mal — «ANALYSIS.md titulaba
+            # «reflection: retirado»» NO afirma que este retirado, afirma lo
+            # contrario. Se descuenta lo que esta entre comillas angulares, que es la
+            # convencion de cita del repo. No afloja el chequeo: los dos hallazgos reales
+            # que este barrido encontro el 2026-08-29 estaban SIN comillas, en un titulo y
+            # en una viñeta, que es exactamente donde vive una afirmacion.
+            bajo = re.sub(r"«[^»]*»", " ", linea).lower()
             for palabra, estados_malos in contrarios.items():
                 if palabra in bajo and CATALOG[nombre].status in estados_malos:
                     sospechas.append(
                         f"{doc.relative_to(RAIZ)}:{i}  llama «{palabra}» a "
                         f"`{nombre}`, que esta {CATALOG[nombre].status.value}"
                     )
+
+    # 2bis. EL CONTEO DE CHEQUEOS DE LAS SUITES. Un numero escrito a mano en un README
+    #       es lo primero que se queda viejo, y este se quedo dos veces: decia «33
+    #       secciones» cuando eran 51, y el apendice del paper decia 518 aserciones
+    #       cuando eran 573 — las dos veces porque alguien (yo) agrego tests y no volvio
+    #       a contar.
+    #
+    #       SE DERIVA, NO SE OPINA: los chequeos son las lineas `ok = check_...(ok)` del
+    #       `main()`, que es lo que realmente corre. Contar los `def check_` daria una
+    #       funcion definida y nunca llamada como si corriera, que es la version de este
+    #       mismo defecto un nivel mas abajo.
+    for suite, doc in (("test_science.py", "tests/README.es.md"),):
+        ruta = RAIZ / "lab" / "tests" / suite
+        indice = RAIZ / "lab" / doc
+        if not ruta.exists() or not indice.exists():
+            continue
+        corren = len(re.findall(r"^\s+ok = check_\w+\(ok\)", ruta.read_text(
+            encoding="utf-8"), re.M))
+        texto = indice.read_text(encoding="utf-8")
+        m = re.search(r"`" + re.escape(suite) + r"` — (\d+) chequeos", texto)
+        if m and int(m.group(1)) != corren:
+            hallazgos.append(
+                f"{doc}:  dice «{m.group(1)} chequeos» de `{suite}` y el `main()` corre "
+                f"{corren}. Un conteo a mano en un README se queda viejo en cuanto "
+                f"alguien agrega un test y no vuelve a contar."
+            )
 
     # 3. NUMEROS DE LECCION UNICOS. `LECCIONES.es.md` se cita POR NUMERO desde
     #    `PENDIENTES.es.md` y `DISENO.es.md` —una docena de referencias— asi que un numero

@@ -48,6 +48,25 @@ from .rules import ACTION_SPECIALISE, BeliefPolicy, standard_rules
 
 @dataclass(frozen=True)
 class SchemaEntry:
+    """UNA proposición que una intervención contrafáctica tiene permitido tocar.
+
+    El esquema es CERRADO Y FIRMADO a propósito: el diagnóstico contrafáctico pregunta
+    «¿qué creencia, de haber sido distinta, habría cambiado la decisión?», y sin un esquema
+    cerrado esa pregunta se contesta inventando la creencia que convenga. Lo que se puede
+    hipotetizar está declarado de antemano.
+
+    `reachable` es la restricción que impide prometer de más: es la procedencia MÁS FUERTE
+    que una adquisición real de esta proposición puede alcanzar. Una lectura acotada puede
+    **verificar que una continuación existe** (`OBSERVED`); no puede verificar una negación
+    global, así que una entrada no puede prometer lo que ninguna sonda sostiene.
+
+    `recompute_unmeasured` existe por un error cometido dos veces: el complemento
+    `coupling_unmeasured` tiene que **recomputarse** después de la hipótesis, exactamente
+    como lo computa `sense()` —desde si la creencia satisface el piso—. Una clausura
+    estática hacía que una hipótesis `ELICITED` diera vuelta una regla que exige
+    `OBSERVED`, afirmando un hecho computado que `sense()` nunca habría derivado.
+    """
+
     proposition: str
     alternatives: tuple[Any, ...]
     # The strongest provenance a real acquisition of this proposition can reach —
@@ -134,6 +153,17 @@ def decide_label(base: BeliefBase, policy: BeliefPolicy, fallback: str) -> PlanL
 
 @dataclass(frozen=True)
 class Intervention:
+    """La hipótesis: «si esta proposición hubiera valido esto, con esta procedencia».
+
+    Es el `do()` del diagnóstico contrafáctico, y lleva **procedencia y credencia** porque
+    sin ellas no es una hipótesis sino un deseo: cambiar un valor sin decir con qué calidad
+    de evidencia se lo habría sabido permite reparar cualquier decisión postulando
+    conocimiento que nadie podría haber tenido.
+
+    Una intervención sólo puede proponer una procedencia que su `SchemaEntry` declare
+    alcanzable. Esa es la única barrera entre reparar una decisión y racionalizarla.
+    """
+
     proposition: str
     value: Any
     provenance: Provenance

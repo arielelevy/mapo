@@ -14,7 +14,11 @@ py tests\test_consolidation.py
 
 ---
 
-## `test_science.py` — 33 secciones
+## `test_science.py` — 52 chequeos, 524 aserciones
+
+> El número sale de contar `ok = check_...(ok)` en `main()` y `[PASS]` en la corrida,
+> no de acordarse. Decía «33 secciones» y hacía rato que no era cierto — un conteo a
+> mano en un README es la primera cosa que se queda vieja.
 
 Cubre la capa de medición y las guardas que impiden que dos experimentos se promedien.
 Las que más se tocan:
@@ -23,11 +27,12 @@ Las que más se tocan:
 |---|---|
 | **álgebra** | brecha de oráculo, selección, cascada, riesgo-cobertura, grading exacto |
 | **el registro** | que sea autodescriptivo: con qué modelo, qué brazo, qué tokenizador, qué vocabulario de región |
-| **las cuatro guardas de mezcla** (§42, §49) | `load_rows` **levanta** si un archivo mezcla decodificaciones, brazos, analizadores léxicos o vocabularios. La del analizador es la única que ningún otro campo puede detectar |
+| **las cinco guardas de mezcla** (§42, §49, §64) | `load_rows` **levanta** si un archivo mezcla decodificaciones, brazos, analizadores léxicos, vocabularios de región o **versiones de superficie**. La del analizador es la única que ningún otro campo puede detectar; la de superficie es la única que es **por brazo**, porque el cambio que la motiva toca a dos de los doce |
 | **el dial** (§27, §47) | que imponga lo que declara, y que `max(pedido, piso, aprendido)` sea la única composición donde cada fuente sólo endurece |
 | **soundness** (§46) | el teorema del ensamblador: si `fill` emite, toda ranura viene de una creencia vigente con procedencia ≥ piso |
 | **la plata** (§41, §52, §53) | que sea una unidad y no un número; un cliente por modelo; los aranceles son datos |
 | **el catálogo** (§39, §58, §59) | que los 15 paradigmas corran de punta a punta sin gastar, y que **ningún factor quede inalcanzable** |
+| **el camino hasta el prompt** (§60–§64) | la familia de defectos que ninguna otra guarda ve: algo que se lee, se ejecuta, tiene test que pasa — y **no llega a donde tenía que llegar**. §60 que lo que no es medición no entre al aprendizaje y que un fracaso ejecutado **sí**; §61 que el board lleve lo que falta y llegue a **cualquier** agente, no sólo a `dag`; §62 que el guard acote por crecimiento y **rescate** lo que expulsa; §63 que el agotamiento del retriever sea de la **tarea** y no del sub-agente; §64 la quinta guarda de mezcla, **por brazo** y no por archivo |
 
 > **§59 es la que más veces salvó una corrida.** Prueba que cada factor booleano viaja
 > desde el runner hasta la declaración de tools. Sin ella, `offer_board=True` se habría

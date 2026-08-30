@@ -20,23 +20,20 @@
 
 ## Lo que falta para publicar
 
-- [ ] **W-5** · **el paper dice que `reflection` está retirado y el ejecutable lo tiene
-  activo** (encontrado el 2026-08-29 por `bench/audits/_audit_documentos.py`).
+- [x] **W-5** · **un título que producía una creencia falsa, corregido** (2026-08-29).
 
-  `ANALYSIS.md:310` titula **«`reflection`: retirado»** y `GATE.md:237` repite
-  **«`reflection` +0,250 → retirado»**. El cuerpo aclara qué se retiró: *«+0,250 salió
-  íntegro de `c3-002-h3`, y esa celda cambia de valor entre dos corridas de la misma
-  superficie. No es un efecto.»*
+  `ANALYSIS.md` titulaba **«`reflection`: retirado»** y `GATE.md` repetía **«+0,250 →
+  retirado»**, mientras el catálogo lo tiene **activo** — *«único mejor en 1 de 14: delgado,
+  no dominado»* (`_audit_catalog.py`, 2026-08-28).
 
-  **Lo retirado es el EFECTO, no el brazo.** Y el título dice lo otro. El catálogo, medido
-  cinco días después (`_audit_catalog.py`, 2026-08-28), lo tiene **activo**: *«único mejor
-  en 1 de 14: delgado, no dominado»*.
+  **Los dos hechos eran ciertos y el título los confundía.** Lo que no sobrevivió al test de
+  atribución fue **el efecto** —+0,250 salió íntegro de `c3-002-h3`, la celda que se da
+  vuelta sola—, no el brazo. Retirar un efecto no atribuible y retirar un brazo dominado son
+  criterios distintos, y sólo se cumplió el primero. Un número mal medido se puede chequear;
+  un título se cree.
 
-  Un lector del paper concluye que el brazo salió del catálogo, y no salió. No es un número
-  mal medido —los dos hechos son ciertos— es un **título que produce una creencia falsa**,
-  que es peor: el número se puede chequear y el título se cree.
-
-  Va a los **dos** archivos, en la misma posición.
+  Los dos archivos dicen ahora las dos cosas y por qué no se contradicen. `_audit_documentos.py`
+  ya no las señala.
 
   > **Y lo encontró una guarda, no una lectura.** Vale anotarlo porque la guarda es nueva y
   > su primera corrida encontró algo que cuatro pasadas de lectura no habían visto.
@@ -44,7 +41,34 @@
 
 - [ ] W-3 · integrar el hallazgo de nano (P13)
 
-- [ ] F5 · teoría nativa
+- [x] **F5** · **teoría nativa: los tres teoremas que estaban construidos entraron al paper**
+  (2026-08-29). `PENDIENTES.es.md` lo describía como *pizarra*, y contado contra el
+  ejecutable eso ya era falso: **T-3** (soundness del ensamblador, `test_science.py` §46),
+  **T-4** (cota nativa del ratchet, §22) con su **precio medido**, y **T-5** (quién fija el
+  dial, §47) estaban escritos, verificados con test y dos de ellos medidos. El paper los
+  ignoraba — «soundness», «ratchet» y «assurance dial» aparecían **cero veces** en
+  `paper-en.md`.
+
+  Entraron como **§5.3, §5.4 y §5.5** en los dos archivos, en la misma posición. Son
+  **resultados estructurales**: no dependen del corpus ni del modelo, así que son lo único
+  del paper que no queda condicionado a una corrida. La sección empírica está condicionada;
+  ésta no.
+
+  Lo que sigue abierto de la familia es **T-1** (semántica del contrato): dos de sus tres
+  clases están en `app/contracts.py`, y es lo que bloquea a `F6`.
+
+- [x] **W-6** · **§6.5: el banco leído como procedimiento de ajuste** (2026-08-29). Tesis del
+  autor, y encaja con lo que el ejecutable hace: el modelo está congelado, lo que se ajusta
+  es la capa de decisión, y se ajusta sobre el registro del producto cruzado — cero llamadas
+  nuevas. El paper describía la maquinaria (§6.3) sin nombrar lo que era.
+
+  Entró con el **inventario exacto** de qué se ajusta y en qué estado —incluidas las dos
+  filas donde el aprendizaje existe como medición y **no** como mecanismo: las asociaciones
+  de orden (`p = 0,0078`, ningún consumidor las lee) y el reparto del handoff (fijo)— y con
+  su **refutación medida**: `P15`, −0,087 sobre un mundo nuevo, causada por un vocabulario de
+  región sin eje de horizonte. De ahí sale la condición que el paper ahora enuncia y que
+  antes no tenía: **la representatividad hay que declararla sobre los ejes que el vocabulario
+  de región distingue**, y eso se chequea sobre un corpus antes de correrlo.
 
 - [ ] F6 · contratos contra baselines directos
 

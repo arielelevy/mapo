@@ -307,10 +307,16 @@ estrategia. **Una topología iterativa sobre un retriever que falla no necesita 
 topología ni mejor modelo — necesita saber que el retriever falló.** La señal que le
 faltaba era una línea de texto y valía una reducción de costo de 3×.
 
-### `reflection`: retirado
+### `reflection`: el EFECTO se retira, el BRAZO no
 
 +0,250 salió íntegro de `c3-002-h3`, y esa celda cambia de valor entre dos corridas de la
-misma superficie. **No es un efecto.** Se retira.
+misma superficie. **No es un efecto.** Se retira **la mejora medida**.
+
+**El brazo sigue en el catálogo**, y eso no es una contradicción sino dos hechos distintos:
+esta corrida no encontró una mejora atribuible, y una auditoría posterior del catálogo
+(2026-08-28) lo halló **único mejor en 1 de 14 celdas — delgado, pero no dominado**. Retirar
+un efecto que no sobrevive al test de atribución no retira el brazo que lo produjo; para eso
+haría falta que otro lo domine, que es un criterio distinto y no se cumplió.
 
 ### `plan_execute`: empeoró, y la predicción falló
 

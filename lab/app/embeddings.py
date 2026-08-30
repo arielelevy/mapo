@@ -27,7 +27,18 @@ from .llm import SealedCacheMiss, request_with_retry
 
 
 class EmbeddingClient:
-    """Azure OpenAI embeddings, cached by content hash."""
+    """LOS VECTORES, cacheados por CONTENIDO y en su propia cuenta.
+
+    Vive en un recurso distinto del modelo de chat (`AZURE_OPENAI_EMBEDDING_*`), con su
+    propia configuración, y eso no es un detalle de despliegue: el caché lleva namespace
+    por cuenta, así que dos endpoints no pueden servirse vectores el uno del otro.
+
+    EL CACHÉ ES POR CONTENIDO, no por unidad ni por corpus. Un texto que aparece en dos
+    corpus se embebe una vez, y regenerar un corpus con el mismo material no vuelve a
+    pagar. Después de la primera pasada, la fusión híbrida es aritmética local: eso es lo
+    que hace que la calidad de recuperación pueda ser un **dial controlado** y no otra
+    fuente de costo.
+    """
 
     def __init__(self, settings: Settings, deployment: str, sealed: bool = False) -> None:
         self._settings = settings

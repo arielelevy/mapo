@@ -30,6 +30,7 @@ from typing import Any, Callable
 from ..contracts import OBLIGATIONS_CONTRACT
 from ..llm import Completion, LLMClient, Usage
 from ..cognitive import compact_history, manage_history
+from ..context_guard import ContextGuard
 from ..tools import ToolFailure, ToolSurface, specs_for
 
 def framed(surface: Any, contrato: str, pregunta: str, cuerpo: str = "") -> str:
@@ -133,6 +134,24 @@ def traverses_scope(paradigm: str) -> bool:
 
 @dataclass
 class Result:
+    """Lo que devuelve un paradigma: la respuesta, lo que gastó, y CÓMO usó la superficie.
+
+    `transcript` y `tool_usage` no son telemetría de lujo: son la única forma de atribuir
+    una falla. Dos paradigmas con la misma respuesta y el mismo conteo de tokens pueden
+    haber usado la superficie de maneras completamente distintas —uno resumió antes de
+    leer, el otro batcheó, un tercero buscó ocho veces sin traer nada nuevo— y esa
+    diferencia es el objeto de estudio, no un detalle.
+
+    `raw_text` es el texto ANTES de parsear, y existe por un defecto medido: las
+    declaraciones tipadas de obligaciones —`POLARITY`, `PRESUPPOSES`— viven antes de la
+    línea `ANSWER:`, así que `answer` ya las descartó. Verificarlas sobre `answer` daría
+    «no declarada» SIEMPRE, y eso se leería como incumplimiento del modelo cuando sería un
+    defecto de plomería.
+
+    Vacío significa que el paradigma NO lo lleva, y el verificador **levanta** en vez de
+    reportar un incumplimiento inventado. Un paradigma que no lo carga es deuda visible.
+    """
+
     answer: str
     usage: Usage
     transcript: list[dict[str, Any]]
@@ -174,9 +193,33 @@ def _run_tool_loop(
     usage = Usage()
     iterations = 0
     completion = None
+    # EL GUARD VIVE POR LLAMADA, no por proceso: su umbral es de CRECIMIENTO entre
+    # iteraciones, asi que uno compartido entre tareas arrastraria el tamano de la
+    # anterior y disparara o callaria por el motivo equivocado.
+    guard = ContextGuard() if surface.context_guard else None
 
     for _ in range(max_iterations):
         iterations += 1
+        # LA COLA SE INYECTA ACA, y por eso es general. Este es el unico bucle de
+        # herramientas del repo, asi que inyectar aca alcanza a TODO paradigma
+        # iterativo — un agente solo con su propia cola de evidencia y pendientes, o un
+        # grupo compartiendo una. Antes el board solo llegaba por la plantilla del
+        # sub-agente de `dag_strategy` y por la tool `board`, que el modelo llamo cero
+        # veces: la cola existia y no la veia nadie.
+        #
+        # Y va ANTES de la llamada, no despues de la primera: un agente que ya gasto una
+        # vuelta sin saber que le falta ya emitio la consulta que la cola existia para
+        # evitar.
+        # PRIMERO ACOTAR, DESPUES DIRIGIR. El board se inyecta despues de expulsar
+        # para que su render ya incluya el hallazgo que la expulsion acaba de rescatar;
+        # al reves, el modelo veria un board una vuelta atrasado respecto de lo que se
+        # le acaba de sacar de la ventana.
+        if guard is not None and guard.needs_eviction(messages):
+            guard.evict(messages, surface.board_state, client,
+                        surface.question, usage)
+            surface.guard_stats = guard.as_dict()
+        if surface.board_state.queue_mode:
+            surface.board_state.inject(messages)
         # Se cuenta ACA porque este es el unico sitio del repo que manda la declaracion:
         # los otros 26 sitios que llaman al modelo lo hacen sin `tools`.
         surface.tooled_calls += 1
@@ -500,6 +543,24 @@ ParadigmFn = Callable[[LLMClient, ToolSurface, dict[str, Any]], Result]
 
 
 class Status(str, Enum):
+    """El estado de un brazo en el catálogo. Sus valores SON evidencia, no configuración.
+
+      `ACTIVE`         corre y compite
+      `RETIRED`        dominado por otro: misma utilidad, nunca más barato. Sale del
+                       catálogo de ruteo del motor
+      `STANDBY`        falsificado por una predicción registrada, con condiciones de
+                       revival escritas. No es lo mismo que retirado: puede volver si la
+                       condición se cumple
+      `INFEASIBLE`     la aritmética lo poda bajo presupuesto de producción. La
+                       infactibilidad ES el resultado
+      `UNDER_REVIEW`   candidato nuevo, con predicciones registradas antes de correr
+
+    EL CATÁLOGO NO SE TOCA PARA QUE UNA CORRIDA SALGA LINDA. Correr un brazo retirado exige
+    nombrarlo explícitamente y dejar la razón en el log: `baseline_roster()` obliga a
+    enumerarlos y `run_cross_product(baseline_reason=...)` la registra. Un estado que se
+    cambia por conveniencia deja de ser evidencia.
+    """
+
     ACTIVE = "active"
     RETIRED = "retired"
     STANDBY = "standby"

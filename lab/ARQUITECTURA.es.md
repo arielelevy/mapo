@@ -452,6 +452,94 @@ gold. Docling con procedencia es lo que lo hace posible.
 
 ---
 
+## 6bis. Observabilidad: Langfuse con su propio SDK, sin OpenTelemetry en el medio
+
+> **Decisión del autor (2026-08-29).** Vale la UI, y el SDK traza Python arbitrario y no
+> sólo llamadas al modelo. **No se instala OpenTelemetry como capa intermedia**: por
+> dentro el SDK ya es OTel, y ponerlo a mano agrega un plano que nadie pidió.
+
+### La decisión, y lo que se cede a cambio
+
+Planteé instrumentar con OTel y apuntar el exporter a Langfuse — cuesta lo mismo hoy y
+deja cambiar de backend cambiando un endpoint. El autor decidió lo contrario **y la
+decisión manda**: la ruta simple. Lo que se cede queda escrito para que sea una decisión y
+no una sorpresa: si algún día se cambia de backend, la instrumentación se reescribe, porque
+los decoradores y el cliente son de Langfuse.
+
+Lo que **no** se cede: el SDK de Python configura OTel solo al inicializarse, así que no
+hay nada que montar. Y para otros lenguajes —si algún día entra uno— ahí sí habría que
+armar OTel a mano contra el endpoint OTLP (`/api/public/otel`, HTTP JSON o protobuf; **no
+hay gRPC**).
+
+### Lo que se traza, y es la mitad difícil
+
+**Trazar las llamadas al modelo es lo fácil, y no es lo que distingue a este producto.**
+Cualquier tracer las muestra. Lo que hay que ver es **la decisión**, y el SDK traza
+funciones Python arbitrarias, así que puede:
+
+| span | qué tiene que quedar registrado |
+|---|---|
+| **factibilidad** | qué paradigmas se podaron por aritmética, con la cota y el número que la cruzó — **antes de que exista un token** |
+| **creencias** | cada proposición asentada, con su procedencia y su origen |
+| **dial** | `max(pedido, piso de creencias, piso aprendido)` y **cuál de los tres ganó** |
+| **ruteo** | la región, los brazos admisibles, el margen, y si **se abstuvo** |
+| **contratos** | el veredicto por ranura: qué se emitió y qué se rechazó, con el motivo |
+| **guard y board** | expulsiones, rescates, y la cobertura que el agente vio |
+
+> **Una traza dice qué llamadas ocurrieron. `EXPLAIN` y el ledger dicen qué creyó el
+> sistema y por qué decidió eso.** Langfuse no reemplaza a ninguno de los dos: los hace
+> mirables. El ledger sigue siendo la fuente de verdad, con su cadena de hashes.
+
+### Dos cosas que NO se delegan, y son las que evitan que el registro se corrompa
+
+**1. Los precios siguen saliendo de `config/tariffs.json`.** Langfuse trae su propia tabla
+de costos por modelo. Usarla sería un **segundo lugar donde vive el mismo hecho**, y el que
+nadie mantiene es el que miente. El costo que se reporta lleva su procedencia estampada
+(`usd@nano/2026-08-28`); el número de la UI es indicativo y no entra a ningún reporte.
+
+**2. La evaluación NO es de Langfuse.** Su historia de evals gira alrededor de
+**LLM-as-judge**, y acá el gold se verifica **independiente del generador** y se califica
+por **exact match, sin juez**. Esa mitad de la herramienta no se usa, y decirlo es parte de
+la decisión: *Langfuse entra como observabilidad, no como evaluador.* Si algún día aparece
+un score en su UI, no es el número del banco.
+
+### El banco no se toca
+
+`lab/` sigue con su `.jsonl` por fila y su traza por llamada en `results/<modelo>/traces/`,
+sin dependencia. **El banco es sin framework por diseño**: un SDK adentro del instrumento
+que mide cambia lo que mide. Y el `.jsonl` es replayable, entra en un diff, y se puede
+releer dentro de un año sin que ningún servicio esté vivo.
+
+La frontera es la misma de siempre: **el banco importa al producto; el producto no sabe que
+el banco existe.** Langfuse vive del lado del producto.
+
+### La pila, y lo que Langfuse mismo dice de ella
+
+Self-hosted son **seis piezas**: Postgres, **ClickHouse**, Redis/Valkey, un blob store
+S3-compatible (MinIO en el compose oficial), el web server y un worker. Todas con
+**timezone en UTC**, que es requisito y no recomendación.
+
+`docker-compose` es *«la forma más simple de probarlo»* y **su propia documentación lo
+desaconseja para producción**: *«le falta alta disponibilidad, capacidad de escalar, y
+backup»*, y recomiendan Kubernetes.
+
+**Para este caso concreto eso pesa menos de lo que parece, salvo una cosa.** El producto es
+**single-tenant y on-prem**: no hace falta escalar horizontalmente ni alta disponibilidad —
+si Langfuse se cae, el producto sigue respondiendo, porque la traza es observación y no
+camino crítico. **Lo que sí hace falta es el backup**, y ése es el único ítem de los tres
+que hay que resolver a mano.
+
+> **Y es más pesado que lo que ya se pospuso.** ClickHouse es un segundo motor de base con
+> su propia operación, y Temporal —una sola dependencia— quedó diferido hasta que se
+> cumpla un gatillo escrito. Esto entra igual porque el autor decidió que la UI lo vale;
+> queda anotado para que la asimetría sea visible y no un olvido.
+
+### Orden
+
+Entra **con el producto, no antes**. Hoy no hay servicio que trazar: `serve.py` existe y el
+motor no. Cuando el producto arranque, el primer span es el de **factibilidad** — si sólo
+se instrumenta una cosa, que sea la que ocurre antes del primer token.
+
 ## 7. Topología on-prem
 
 ```

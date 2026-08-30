@@ -1452,3 +1452,70 @@ because they are the reason the harness exists:
    recorded in `notes/`: the graph_traverse disk index is keyed by corpus only, so
    the nano rows reused the chat-built graph — irrelevant here (falsified on both),
    but any surviving index-bearing candidate must key its memo by model fingerprint.
+
+## P29 — el board y el guard son UN mecanismo (registradas 2026-08-29, ANTES de correr)
+
+**Corrida**: `bench/runs/_run_board.py --modelo luna` · `{cola, sin} × {guard, sin}` ·
+`react` + `dag_strategy` · las 21 tareas de `w16` · `repeat 3`. Estimado contra el corpus:
+~25M tokens los cuatro brazos, **sin** contar las llamadas de extracción del guard, que
+son la parte que no se puede proyectar desde el material.
+
+**De dónde sale**: la capa congelada —la única que corrió contra un índice real— tenía el
+guard y el board como **dos piezas de un mismo mecanismo**: el guard acota la ventana por
+crecimiento y **produce** un hallazgo enfocado en la pregunta; el board lo conserva y con
+eso **dirige** lo que sigue. El banco tenía las dos mitades rotas por separado — el board
+sólo llegaba por la plantilla de `dag` y por una tool que el modelo llamó **1 vez en 125**,
+y el guard no existía: las dos compactaciones del banco **degradan** y ninguna **produce**.
+
+| # | predicción | qué la refuta |
+|---|---|---|
+| **P29a** | **`ambos` > `cola`** y **`ambos` > `guard`** en utilidad neta. Si son un mecanismo, cada mitad sola vale menos que las dos | que una mitad sola iguale o supere al cruce: serían dos mecanismos independientes y la tesis de «una máquina» cae |
+| **P29b** | **`guard` baja el costo** contra `base` en `react`, **neto de las llamadas de extracción**. Es la prueba dura: la extracción se paga, así que el ahorro tiene que superar lo que cuesta | que el neto sea ≥ 0. Sería un mecanismo que cobra por no ahorrar, y se retira |
+| **P29c** | **`cola` sube la utilidad en `react` más que en `dag_strategy`**. `dag` ya coordina con su board estructural; `react` es el agente solo, que es donde la cola no existía | que el efecto sea igual o mayor en `dag`: la cola estaría comprando coordinación de grupo y no dirección de investigación |
+| **P29d** | el guard **dispara** en `w16`: `guard_evictions > 0` en la mayoría de las celdas de `react` | cero expulsiones. Sería un factor inerte y `w16` el estrato equivocado — el umbral de 20k caracteres es del régimen anterior y habría que declararlo de nuevo |
+| **P29e** | `guard_evicted_nothing` **> 0 en alguna celda**: parte del material recuperado no aporta a la pregunta. Eso es información sobre la **recuperación**, no sobre el modelo | que sea 0 en todas: la recuperación no traería nada irrelevante en `w16`, que contradiría el recall medido |
+
+**Lo que NO se predice, y se dice para no leerlo después como si se hubiera acertado**: la
+magnitud. `repeat 3` sobre 21 tareas da un piso de ruido por celda que hay que calcular
+sobre el registro terminado, y las decisiones van contra la **brecha neta**, no contra las
+medias crudas.
+
+**Y una amenaza declarada antes**: los brazos con guard hacen **una llamada más al modelo
+por expulsión**, así que su conteo de llamadas no es comparable con `base` sin ajustar. El
+costo en tokens sí lo es, y es el eje que decide.
+
+## P30 — máxima cobertura, mínimas llamadas (registradas 2026-08-29, ANTES de correr)
+
+**Corrida**: `bench/runs/_run_cobertura.py --modelo luna` · `react` · las 21 tareas de
+`w16` · `repeat 3` · dos brazos: `readall` (la tool sola sobre `basic`) y `accounting`
+(`read_all` **más** `coverage`). El `base` no se corre: lo produce la corrida del board
+sobre las mismas tareas, y correrlo de nuevo sería appendear al mismo `.jsonl` desde dos
+procesos.
+
+**El número que la motiva, medido sobre 704 celdas ya pagadas:**
+
+| | celdas | tokens | `u` |
+|---|---:|---:|---:|
+| ≤ 2 llamadas al modelo | 234 | **9.779** | 0,509 |
+| ≥ 8 llamadas | 65 | **136.432** | 0,631 |
+
+**14× más tokens por +0,122 de utilidad.** La causa es estructural y no del modelo: la
+conversación se reenvía entera en cada vuelta, así que el costo de `N` llamadas crece como
+`N²` mientras la cobertura crece como `N`. Y ningún brazo pasa hoy de **1,6 unidades por
+llamada** — `read_all` las lee todas en una, y **no está ofrecido en `basic`**, que es la
+variante de todos los estudios medidos.
+
+| # | predicción | qué la refuta |
+|---|---|---|
+| **P30a** | `readall` baja el costo de `react` **≥ 3×** contra `base` en `w16`, con `u` dentro del ruido de la celda. No predigo 10×: el 14× del registro compara poblaciones distintas de tareas, no el mismo brazo con y sin la tool | menos de 3×, o `u` que cae más allá del ruido. Sería un ahorro que se paga con calidad |
+| **P30b** | `unidades por llamada` sube de **1,41 a más de 5** en `readall` | que se quede debajo de 2: el modelo tendría `read_all` y no lo usaría, y el resultado sería sobre **adopción**, no sobre el mecanismo — el mismo nulo que dio el board como tool |
+| **P30c** | `accounting` **supera a `readall`**: sin `coverage` el modelo no sabe que le conviene pedir todo | que empaten o que `accounting` pierda. Entonces la tool que informa cobertura no cambia la decisión, y el paquete de contabilidad se evalúa distinto |
+| **P30d** | la traza por llamada muestra que la **ventana crece de forma superlineal** en `base` y **plana** en `readall` | que crezca parecido en los dos: la premisa `N²` sería falsa y el ahorro vendría de otro lado que hay que nombrar |
+
+**Lo que NO se predice**: que esto generalice fuera de `react`. `dag_strategy` y
+`reflection` entran después si el cruce dice algo — un solo brazo hace la corrida barata y
+el mecanismo, si existe, tiene que verse ahí primero.
+
+**Amenaza declarada antes**: `accounting` cambia **dos cosas** a la vez —trae `read_all`
+y `coverage`— así que su efecto no es atribuible a `coverage` sola. `readall` es el brazo
+que aísla, y por eso van los dos.

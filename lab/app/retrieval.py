@@ -120,6 +120,19 @@ class CorpusView:
 
 
 class Retriever(Protocol):
+    """El contrato de un brazo de recuperación: ordenar unidades, y decir qué es.
+
+    ES UN `Protocol` Y NO UNA CLASE BASE porque la calidad de recuperación es un FACTOR
+    medido, no una pieza fija: híbrido, léxico, semántico, dos degradaciones simuladas a
+    recall y precisión declarados, y un oráculo. Las simulaciones son funciones
+    deterministas de `(tarea, consulta, unidad)`, así que la calidad del retriever es un
+    dial controlado y no otra fuente de ruido.
+
+    `describe()` no es opcional ni decorativo: es lo que hace que la fila diga bajo qué
+    recuperación se produjo. Un banco que no reporta la calidad de su superficie de
+    recuperación no compara topologías — compara un retriever envuelto de N maneras.
+    """
+
     def rank(self, view: CorpusView, query: str, limit: int) -> list[str]: ...
     def describe(self) -> dict[str, Any]: ...
 

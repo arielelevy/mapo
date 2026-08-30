@@ -104,6 +104,24 @@ POINTER_HOP_CAP = 6
 
 @dataclass(frozen=True)
 class Verdict:
+    """¿Puede este paradigma CORRER esta tarea? Aritmética pura, cero llamadas al modelo.
+
+    Es la primera decisión de la capa, y la más barata: se contesta con cantidades que la
+    tarea ya declara —cuántas unidades, de qué largo, con qué presupuesto— antes de gastar
+    un token. Una política aprendida que gasta episodios descubriendo que un brazo no entra
+    en 500 unidades está aprendiendo aritmética por el camino caro.
+
+    LA INFACTIBILIDAD **ES** UN RESULTADO, no un salteo. Se registra como fila con
+    `infeasible=True` y su motivo, y separa dos modos de falla que se confunden de rutina:
+    un brazo puede ser infactible por **cardinalidad** —no puede sostener tantas unidades
+    juntas— o por **presupuesto**, que son cosas distintas y piden arreglos distintos.
+
+    `reason` no es cosmético: dos brazos infactibles por motivos opuestos se ven iguales
+    desde el archivo, y confundirlos fue lo que hizo parecer que `map_reduce` escalaba —
+    pasa la cota de contexto por construcción, porque nunca sostiene las unidades juntas, y
+    falla la de presupuesto, porque igual las paga a todas.
+    """
+
     feasible: bool
     reason: str = ""
     # AUSENTE NO ES CERO, y aca costo caro. Cada rama de `check` llenaba SOLO el eje que

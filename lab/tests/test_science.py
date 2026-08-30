@@ -3698,6 +3698,490 @@ def check_money_is_a_unit_not_a_number(ok: bool) -> bool:
     return ok
 
 
+def check_every_module_and_class_declares_itself(ok: bool) -> bool:
+    """§65: todo modulo y toda clase de `app/` dicen QUE SON. La spec vive en el codigo.
+
+    POR QUE ES UN TEST Y NO UNA CONVENCION. Este repo se lee mas de lo que se escribe: la
+    mitad de los defectos de hoy —el board que no llegaba a nadie, el guard que no
+    disparaba, el agotamiento invisible en un sub-agente— se encontraron LEYENDO, y una
+    clase sin docstring es una que nadie puede auditar sin reconstruirla de memoria.
+
+    Al 2026-08-29 faltaban **20 clases**, entre ellas `Row` y `Runner`: la unidad del
+    registro y la clase que lo produce. Estaban sin declarar y todo el resto del repo las
+    referencia.
+
+    QUE EXIGE, Y QUE NO. Exige que exista y que no sea un renglon de compromiso —«hace X»
+    no es una spec—. No exige que sea correcta: eso no lo puede saber un test, se sabe
+    leyendo, y para eso tiene que estar escrita.
+    """
+    import ast
+
+    # Una clase de mas de 80 lineas es MAQUINARIA, no un registro de datos, y tiene que
+    # decir que hace, que decide, y que NO hace. 250 caracteres es un parrafo: el piso mas
+    # bajo con el que se puede decir las tres cosas.
+    GRANDE, SPEC_MINIMA = 80, 250
+
+    print("\n--- 65. todo modulo y toda clase declaran que son ---")
+
+    sin_modulo, sin_clase, cortas = [], [], []
+    modulos = clases = 0
+    for f in sorted(Path("app").rglob("*.py")):
+        arbol = ast.parse(f.read_text(encoding="utf-8"))
+        modulos += 1
+        doc = ast.get_docstring(arbol)
+        if not doc:
+            sin_modulo.append(str(f))
+        for n in ast.walk(arbol):
+            if not isinstance(n, ast.ClassDef):
+                continue
+            clases += 1
+            d = ast.get_docstring(n)
+            if not d:
+                sin_clase.append(f"{f.name}:{n.name}")
+            elif n.end_lineno - n.lineno > GRANDE and len(d) < SPEC_MINIMA:
+                # EL PISO LO FIJA EL TAMANO DE LA CLASE, no un numero plano, y la primera
+                # version de esta guarda lo tenia plano y estaba mal. Un renglon alcanza
+                # para `AlreadyRunning` —una excepcion— o para `Link`, y NO alcanza para
+                # `ToolSurface`, que tenia 778 lineas y 70 caracteres de documentacion.
+                #
+                # Exigirle prosa a un contenedor de tres campos produce comentarios de
+                # relleno, que es peor que no tenerlos: le enseñan al lector que la
+                # documentacion de este repo no dice nada.
+                cortas.append(f"{f.name}:{n.name} "
+                              f"({n.end_lineno - n.lineno} lineas, {len(d)} chars)")
+
+    ok &= check(f"los {modulos} modulos de `app/` tienen docstring "
+                f"({sin_modulo or 'ninguno falta'})", not sin_modulo)
+    ok &= check(f"las {clases} clases tambien ({sin_clase or 'ninguna falta'})",
+                not sin_clase)
+    ok &= check(f"y ninguna clase de mas de {GRANDE} lineas se despacha con un renglon "
+                f"({cortas or 'ninguna'})", not cortas)
+    return ok
+
+
+def check_surface_version_guards_the_sensitive_arms(ok: bool) -> bool:
+    """§64: la QUINTA guarda de mezcla — la version de la superficie, y es POR BRAZO.
+
+    `X-8` cambio comportamiento medido: un sub-agente ahora VE el agotamiento del
+    retriever, y antes arrancaba creyendo que nadie habia buscado nada. **Ninguna de las
+    cuatro guardas anteriores lo detecta** —miran decodificacion, brazo de recuperacion,
+    analizador y vocabulario de region— y la huella tampoco lo lleva: es modelo, api,
+    esfuerzo, seed y max. Un `.jsonl` habria mezclado dos regimenes en silencio.
+
+    POR BRAZO Y NO POR ARCHIVO, y esa es la decision que la vuelve usable: `scoped()` lo
+    llaman `handoff` y `supervisor` y nadie mas. Levantar sobre el archivo entero
+    convertiria un registro valido de 900 filas en inservible por un cambio que a diez de
+    los doce brazos no los toca — y una guarda asi se termina desactivando, que es peor
+    que no tenerla.
+    """
+    import json
+    import tempfile
+    from app.runner import load_rows
+    from app.tools import SURFACE_SENSITIVE_ARMS, SURFACE_VERSION
+
+    print("\n--- 64. la version de la superficie, guardada por brazo ---")
+
+    def escribir(filas):
+        f = Path(tempfile.mkdtemp()) / "r.jsonl"
+        f.write_text("\n".join(json.dumps(x) for x in filas), encoding="utf-8")
+        return f
+
+    base = {"task_id": "t", "fingerprint": "A", "region_vocabulary": "V1",
+            "analyzer": "v2-stopwords"}
+    viejo = dict(base, paradigm="handoff")
+    nuevo = dict(base, task_id="u", paradigm="handoff",
+                 surface_version=SURFACE_VERSION)
+
+    ok &= check("`handoff` y `supervisor` son los brazos sensibles, y son los que llaman "
+                "a `scoped()`",
+                set(SURFACE_SENSITIVE_ARMS) == {"handoff", "supervisor"})
+    ok &= check("un archivo todo del regimen viejo se lee sin quejarse: la AUSENCIA del "
+                "campo no levanta sola", len(load_rows(escribir([viejo, dict(viejo, task_id='v')]))) == 2)
+    ok &= check("y uno todo del nuevo tambien",
+                len(load_rows(escribir([nuevo, dict(nuevo, task_id='w')]))) == 2)
+    try:
+        load_rows(escribir([viejo, nuevo]))
+        ok &= check("mezclar versiones en un brazo sensible levanta", False)
+    except ValueError as exc:
+        ok &= check("mezclar versiones en un brazo sensible levanta, y dice cual",
+                    "handoff" in str(exc) and "superficie" in str(exc).lower())
+
+    # LO QUE LA GUARDA NO PUEDE HACER: voltear el registro por brazos que no cambiaron.
+    r_viejo = dict(base, paradigm="react")
+    r_nuevo = dict(base, task_id="u", paradigm="react", surface_version=SURFACE_VERSION)
+    ok &= check("un brazo NO sensible mezcla versiones sin levantar: el cambio no lo "
+                "toca, y voltear 900 filas por eso vuelve inutil a la guarda",
+                len(load_rows(escribir([r_viejo, r_nuevo]))) == 2)
+
+    # Y UNA INFACTIBLE NO DECLARA SUPERFICIE PORQUE NO EJECUTO — el mismo matiz que la
+    # guarda del analizador tuvo que aprender.
+    inf = dict(base, task_id="z", paradigm="handoff", infeasible=True)
+    ok &= check("una fila infactible no cuenta: no ejecuto, no tiene superficie que "
+                "declarar", len(load_rows(escribir([nuevo, inf]))) == 2)
+    return ok
+
+
+def check_retriever_exhaustion_is_of_the_task(ok: bool) -> bool:
+    """§63: el agotamiento del retriever es de la TAREA, no del sub-agente.
+
+    LO ENCONTRO EL REGISTRO, con un cero que no era chico sino estructural:
+
+        supervisor    370 busquedas,   0 esteriles   (0,0%)
+        handoff       158 busquedas,   0 esteriles   (0,0%)
+        dag_strategy  661 busquedas, 413 esteriles  (62,5%)
+
+    `scoped()` reata por REFERENCIA todo lo que es de la tarea, y no reataba `surfaced`
+    —lo que alguna busqueda ya trajo— ni los contadores de racha. Asi que cada
+    sub-agente arrancaba con el conjunto vacio y **toda busqueda suya parecia traer algo
+    nuevo**, aunque el padre ya la hubiera hecho. Los `int` ademas no se pueden reatar:
+    `replace` los copia por valor, asi que ahora viven en un objeto.
+
+    Y NO ES SOLO CONTABILIDAD. El aviso «las ultimas N busquedas no trajeron nada nuevo»
+    —la senal que midio 3,05x de reduccion de costo, el resultado mas fuerte del banco—
+    no podia dispararse adentro de un sub-agente. Ese resultado esta medido solo sobre
+    los brazos que NO descomponen, y los que descomponen son los que mas buscan.
+    """
+    from app.retrieval import CorpusView
+    from app.tools import ToolSurface
+
+    print("\n--- 63. el agotamiento del retriever es de la tarea ---")
+
+    docs = {f"u{i}": "texto " * 50 for i in range(6)}
+    def superficie():
+        v = CorpusView(task_id="t", documents=docs, unit_ids=list(docs),
+                       relevant_units=["u0"])
+        return ToolSurface(view=v, hybrid=None, semantic=None, lexical=None,
+                           variant="basic", budget_tokens=50_000)
+
+    s = superficie()
+    s._note_search(["u0", "u1"])
+    ok &= check("una busqueda que trae algo nuevo no cuenta como esteril",
+                s.barren_total == 0 and s.barren_searches == 0)
+    s._note_search(["u0"])
+    ok &= check("repetir lo ya visto SI cuenta", s.barren_total == 1)
+
+    sub = s.scoped(["u2", "u3"])
+    ok &= check("el sub-agente comparte `surfaced`: lo que el padre ya vio, ya esta visto",
+                sub.surfaced is s.surfaced)
+    ok &= check("y comparte los contadores POR REFERENCIA — un `int` no se puede reatar, "
+                "`replace` lo copia por valor", sub.barren is s.barren)
+
+    sub._note_search(["u0"])
+    ok &= check("una busqueda del sub que repite lo del padre es ESTERIL, y antes "
+                "parecia nueva", s.barren_total == 2)
+    sub._note_search(["u2"])
+    ok &= check("y lo que el sub descubre vuelve al padre: sin eso, el padre repetiria "
+                "la busqueda que su sub-agente ya hizo", "u2" in s.surfaced)
+    ok &= check("la racha del padre se reinicia cuando el SUB encuentra algo",
+                s.barren_searches == 0)
+
+    fuente = Path("app/tools.py").read_text(encoding="utf-8")
+    ok &= check("y queda atado en `scoped`, que es el unico sitio donde olvidarlo es "
+                "invisible", "sub.surfaced = self.surfaced" in fuente
+                and "sub.barren = self.barren" in fuente)
+    return ok
+
+
+def check_guard_bounds_and_rescues(ok: bool) -> bool:
+    """§62: el guard acota la ventana y RESCATA lo que expulsa — la otra mitad del board.
+
+    LAS DOS COMPACTACIONES QUE YA HABIA **DEGRADAN**: `compact_history` a un stub y solo
+    para lo que el modelo anoto (1 nota en 28 filas), `manage_history` a un gist
+    incondicional (61 llamadas sobre `w4`, 0 mensajes degradados). Ninguna **produce**
+    contenido nuevo. Y sin produccion el board sostiene solo lo que el modelo se acuerde
+    de postear: 1 de cada 125 llamadas.
+
+    EL TEST PRUEBA EL MECANISMO Y LO QUE NO SE PUEDE TOCAR: que dispare por CRECIMIENTO y
+    no por tamano absoluto —un umbral absoluto castiga al que lee mucho de entrada y no
+    toca al que crece despacio hasta el mismo lugar—, que expulse DE A UNO, que no se
+    coma el prompt ni el batch corriente, y que la extraccion **se cobre**.
+    """
+    from app.board import Blackboard
+    from app.context_guard import ContextGuard
+    from app.llm import Usage
+
+    print("\n--- 62. el guard acota por crecimiento y rescata el hallazgo ---")
+
+    class _Falso:
+        """Un cliente que devuelve lo que se le dice y cobra lo que se le dice."""
+
+        def __init__(self, texto, tokens=50):
+            self.texto, self.tokens, self.llamadas = texto, tokens, 0
+
+        def complete(self, messages, **kw):
+            self.llamadas += 1
+            self.visto = messages[0]["content"]
+            return SimpleNamespace(
+                text=self.texto,
+                usage=Usage(prompt_tokens=self.tokens, completion_tokens=10),
+                tool_calls=None,
+            )
+
+    from types import SimpleNamespace
+
+    g = ContextGuard(threshold=1_000)
+    ok &= check("la primera mirada sobre una ventana grande YA es crecimiento",
+                g.needs_eviction([{"content": "x" * 5_000}]))
+    ok &= check("y sin crecimiento no dispara aunque la ventana siga siendo grande",
+                not g.needs_eviction([{"content": "x" * 5_100}]))
+
+    def conversacion():
+        return [
+            {"role": "system", "content": "sos un agente"},
+            {"role": "user", "content": "quien firmo el memo"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "1"}]},
+            {"role": "tool", "content": "A" * 8_000},
+            {"role": "tool", "content": "B" * 8_000},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "2"}]},
+            {"role": "tool", "content": "C" * 8_000},
+        ]
+
+    msgs, board, usage = conversacion(), Blackboard(), Usage()
+    cli = _Falso("Lo firmo M. Cavallero el 3 de marzo.")
+    g = ContextGuard(threshold=1_000)
+    ok &= check("expulsa y deja el hallazgo EN EL BOARD",
+                g.evict(msgs, board, cli, "quien firmo el memo", usage)
+                and len(board.findings) == 1
+                and "Cavallero" in board.findings[0])
+    ok &= check("y la extraccion SE COBRA: un ahorro que no cuenta lo que gasta no se "
+                "puede evaluar", usage.prompt_tokens == 50)
+    ok &= check("expulso UNO, no la ventana: vaciarla de golpe le saca al modelo el "
+                "batch sobre el que todavia no razono",
+                sum(1 for m in msgs if len(str(m.get("content") or "")) > 1_000) == 2)
+    ok &= check("no toca el prompt ni la pregunta",
+                msgs[0]["content"] == "sos un agente"
+                and msgs[1]["content"] == "quien firmo el memo")
+    ok &= check("ni el batch corriente — el que sigue al ultimo assistant con tool calls",
+                msgs[-1]["content"] == "C" * 8_000)
+    ok &= check("la extraccion ve la PREGUNTA: sin ella el resumen seria generico, que "
+                "es lo que la expulsion no se puede permitir",
+                "quien firmo el memo" in cli.visto)
+
+    # NO HABER ENCONTRADO NADA ES UN DATO SOBRE LA RECUPERACION, no un no-evento.
+    msgs2, board2, usage2 = conversacion(), Blackboard(), Usage()
+    g2 = ContextGuard(threshold=1_000)
+    g2.evict(msgs2, board2, _Falso("NOTHING"), "otra pregunta", usage2)
+    ok &= check("un texto que no aporta se marca y NO ensucia el board",
+                not board2.findings and g2.nothing == 1 and g2.extracted == 0)
+    ok &= check("los numeros salen separados: expulsiones, rescates y vacios",
+                g2.as_dict() == {"evictions": 1, "extracted": 0,
+                                 "evicted_nothing": 1, "extraction_failed": 0})
+
+    # UNA EXTRACCION QUE FALLA NO ES UN TEXTO IRRELEVANTE, y el probe sobre el corpus las
+    # encontro en el mismo contador. Son opuestas: «no aporta» habla del RETRIEVER, «no
+    # devolvio nada» habla del extractor. Y una falla NO puede borrar evidencia.
+    msgs3, board3, usage3 = conversacion(), Blackboard(), Usage()
+    g3 = ContextGuard(threshold=1_000)
+    g3.evict(msgs3, board3, _Falso(""), "otra pregunta", usage3)
+    ok &= check("una extraccion vacia se cuenta aparte de un texto irrelevante",
+                g3.as_dict()["extraction_failed"] == 1
+                and g3.as_dict()["evicted_nothing"] == 0)
+    ok &= check("y NO borra el texto: perder evidencia por una falla del extractor es "
+                "el dano exacto que este mecanismo existe para evitar",
+                msgs3[3]["content"] == "A" * 8_000)
+
+    # EL FACTOR LLEGA, por los mismos caminos donde el board se habia perdido.
+    from app.tools import ToolSurface
+    ok &= check("`context_guard` y `question` son campos de la superficie",
+                "context_guard" in ToolSurface.__dataclass_fields__
+                and "question" in ToolSurface.__dataclass_fields__)
+    bucle = Path("app/paradigms/__init__.py").read_text(encoding="utf-8")
+    ok &= check("corre en el bucle compartido, ANTES de inyectar el board: al reves el "
+                "modelo veria un board una vuelta atrasado respecto de la ventana",
+                bucle.index("guard.evict(") < bucle.index("board_state.inject("))
+    fuente = Path("app/tools.py").read_text(encoding="utf-8")
+    ok &= check("el sub-agente hereda guard y pregunta",
+                "sub.context_guard = self.context_guard" in fuente
+                and "sub.question = self.question" in fuente)
+    ok &= check("y sus numeros llegan a la FILA: un mecanismo cuyo efecto no llega al "
+                "registro se evalua adivinando",
+                'f"guard_{k}"' in fuente and '"board_pending"' in fuente)
+    runner = Path("app/runner.py").read_text(encoding="utf-8")
+    ok &= check("el runner lo propaga con la pregunta de la tarea, y lo declara en el "
+                "nombre del archivo",
+                'question=task["question"]' in runner and "_guard" in runner)
+    return ok
+
+
+def check_board_carries_what_is_left(ok: bool) -> bool:
+    """§61: un board puede llevar lo ACUMULADO o lo que FALTA, y son dos mecanismos.
+
+    DE DONDE SALE. El board del banco era un log de hallazgos: `findings`,
+    `visited_units`, y un `tool_calls` que el docstring prometia como «ledger para evitar
+    trabajo duplicado» y **que no escribia nadie ni renderizaba nada**. La capa de
+    ejecucion anterior —congelada, la unica que corrio contra un indice real— llevaba lo
+    otro: cola de pendientes, cobertura `N/M`, lista de consultas ya emitidas, y una
+    directiva DERIVADA del numero.
+
+    Y ESA MITAD ES LA QUE LA MEDICION RESPALDA: el 3,05× de las senales de contabilidad
+    salio de decir «no viene nada nuevo», que es una afirmacion sobre el trabajo
+    RESTANTE. Un board que solo acumula no puede decir cobertura porque no tiene
+    denominador, y sin cobertura no puede emitir una directiva.
+
+    EL TEST PRUEBA EL MECANISMO Y LAS DOS TRAMPAS QUE LO RODEAN: que apagado el render
+    sea IDENTICO al de antes (o el registro medido deja de ser comparable), y que el
+    factor LLEGUE —`offer_board` se corrio entero midiendo cero porque no llegaba a la
+    declaracion de tools, y un campo que no llega al render falla igual de callado—.
+    """
+    from app.board import Blackboard
+    from app.tools import ToolSurface
+
+    print("\n--- 61. el board lleva lo que falta, no solo lo que paso ---")
+
+    b = Blackboard()
+    ok &= check("apagado, un board vacio dice lo de siempre",
+                b.render() == "(blackboard empty — you are the first agent)")
+    b.add_finding("a", "encontre X")
+    ok &= check("apagado, el render es el de antes — byte por byte, o el registro "
+                "medido deja de ser comparable",
+                b.render() == "FINDINGS SO FAR (from parallel agents):\n  [a] encontre X")
+    b.seed(["u1", "u2"])
+    ok &= check("y sembrar la cola con el modo apagado no cambia una coma",
+                b.render() == "FINDINGS SO FAR (from parallel agents):\n  [a] encontre X")
+
+    q = Blackboard(queue_mode=True)
+    q.seed(["u1", "u2", "u3"])
+    q.seed(["u1"])
+    ok &= check("sembrar dos veces no duplica: el denominador tiene que ser estable",
+                len(q.pending) == 3)
+    ok &= check("cobertura con denominador", "0/3 items checked" in q.render())
+    ok &= check("y la directiva sale DERIVADA del numero, no suelta",
+                q.render().endswith("3 items remaining. Try DIFFERENT queries."))
+
+    ok &= check("una llamada nueva se asienta", q.record_tool_call("search", "quien"))
+    ok &= check("y la repetida se detecta — el campo estaba declarado y muerto",
+                not q.record_tool_call("search", "quien"))
+    ok &= check("y ahora SI se renderiza, que es la mitad que faltaba",
+                "do NOT repeat" in q.render() and "search(quien)" in q.render())
+
+    ok &= check("cerrar un pendiente lo cierra", q.close("u1", "lo encontre"))
+    ok &= check("cerrar dos veces el mismo NO vuelve a contar", not q.close("u1"))
+    q.close("u2"); q.close("u3")
+    ok &= check("y con todo cerrado la directiva cambia de sentido",
+                q.render().endswith("All items checked. Write your final answer."))
+
+    # CERRAR NO ABRE, que es la trampa que la capa anterior pago: anotar un hallazgo y
+    # abrir una pista eran una sola llamada, asi que registrar algo YA SABIDO bajaba la
+    # cobertura y disparaba mas insistencia.
+    antes = q.pending_count
+    q.add_finding("a", "otra cosa que ya sabia")
+    ok &= check("anotar un hallazgo NO abre un pendiente: una senal de contabilidad "
+                "tiene que ser monotona, o castiga al agente por reportar lo que sabe",
+                q.pending_count == antes)
+
+    # EL FACTOR LLEGA. Dos caminos, y los dos fallaron antes en este repo por separado.
+    ok &= check("`board_queue` es un campo de la superficie",
+                "board_queue" in ToolSurface.__dataclass_fields__)
+    fuente = Path("app/tools.py").read_text(encoding="utf-8")
+    ok &= check("el sub-agente lo hereda: un factor que muere en el reparto mide su "
+                "propia ausencia", "sub.board_queue = self.board_queue" in fuente)
+    ok &= check("el dispatch asienta la llamada, y ANTES de la comprobacion de "
+                "disponibilidad", "self.board_state.record_tool_call(" in fuente)
+    ok &= check("y la cola se cierra en los TRES caminos de lectura, no en uno",
+                fuente.count("self._close_queue(") == 3)
+    # LA COLA ES GENERAL, NO DE `dag`. Un agente solo tiene el mismo problema que un
+    # grupo: no sabe que le falta, no sabe que ya pidio, y su transcripcion se compacta.
+    # Que el estado sea COMPARTIDO entre varios o PROPIO de uno es otra dimension.
+    b = Blackboard(queue_mode=True)
+    b.seed(["u1", "u2"])
+    msgs = [{"role": "system", "content": "sos un agente"},
+            {"role": "user", "content": "la pregunta"}]
+    ok &= check("el board se inyecta en la conversacion de cualquier agente",
+                b.inject(msgs) and len(msgs) == 3
+                and "Coverage: 0/2" in msgs[-1]["content"])
+    b.close("u1")
+    b.inject(msgs)
+    ok &= check("y REEMPLAZA en vez de apilar: N copias desactualizadas, la mas vieja "
+                "arriba, y el costo crece con el cuadrado de las vueltas",
+                len(msgs) == 3 and "Coverage: 1/2" in msgs[-1]["content"])
+    ok &= check("un board vacio no inyecta nada", not Blackboard(queue_mode=True).inject([]))
+
+    bucle = Path("app/paradigms/__init__.py").read_text(encoding="utf-8")
+    ok &= check("y se inyecta en el BUCLE COMPARTIDO, que es el unico del repo que manda "
+                "la declaracion de tools — inyectar ahi alcanza a todo paradigma "
+                "iterativo, no solo a `dag_strategy`",
+                "surface.board_state.inject(messages)" in bucle)
+    dag = Path("app/paradigms/dag.py").read_text(encoding="utf-8")
+    ok &= check("la cola NO depende de la plantilla de `dag`: ese camino sigue existiendo "
+                "para su board estructural, y no es por donde la cola llega",
+                "blackboard=board.render()" in dag)
+
+    runner = Path("app/runner.py").read_text(encoding="utf-8")
+    ok &= check("el runner lo propaga y siembra la cola desde el CODIGO",
+                "board_queue=self.board_queue" in runner
+                and "surface.board_state.seed(" in runner)
+    ok &= check("y el archivo de resultados lo declara en su nombre: dos regimenes en "
+                "un mismo `.jsonl` es la mezcla que ninguna guarda ve",
+                '"_boardqueue"' in runner or "_boardqueue" in runner)
+    return ok
+
+
+def check_learning_discriminates_non_measurements(ok: bool) -> bool:
+    """§60: lo que no es una medicion no entra al aprendizaje, y hay UN solo porton.
+
+    HABIA TRES CONSTRUCTORES DE EPISODIOS CON TRES FILTROS. Los dos scripts de analisis
+    descartaban infactibles y de infraestructura; `Runner.episodes()` —el camino del
+    PRODUCTO— descartaba solo las de infraestructura. La guarda vivia en el banco y le
+    faltaba al producto, que es la inversion exacta de la regla del repo.
+
+    Y LO QUE COLABA NO ERA MARGINAL, medido sobre la campana del 2026-08-29: 39 de 180
+    episodios (21,7%) venian de celdas que nunca ejecutaron. El sesgo no es aleatorio —cae
+    sobre los brazos caros, que son los que la poda alcanza— y lo grave es el CONTEO: los
+    episodios son lo que cruza el piso de confianza, asi que un par podia ganar confianza
+    con celdas donde el brazo nunca corrio.
+
+    EL TEST PRUEBA EL MECANISMO, NO EL DEFECTO DEL DIA: que cada clase se descarte por su
+    propio motivo, que se CUENTE en vez de desaparecer, y —lo que evita el error opuesto—
+    que un fracaso ejecutado SI entre.
+    """
+    from app.policy import Discarded, learnable_rows
+
+    print("\n--- 60. el aprendizaje discrimina lo que no es una medicion ---")
+
+    base = {"task_id": "t", "paradigm": "p", "region": "R", "utility": 1.0,
+            "answer": "42", "cost_tokens": 10}
+    filas = [
+        base,
+        dict(base, task_id="u", infra_error=True),
+        dict(base, task_id="v", infeasible=True, utility=0.0, answer=""),
+        dict(base, task_id="w", region=""),
+    ]
+    aptas, d = learnable_rows(filas)
+    ok &= check("las tres clases se descartan, cada una por su motivo",
+                len(aptas) == 1 and d.infra == 1 and d.infactible == 1
+                and d.sin_region == 1 and d.total == 3)
+    ok &= check("y se CUENTAN: un filtro silencioso es la version peor del problema",
+                "descartadas" in str(d) and "3" in str(d) and d.filas == 1)
+    ok &= check("sin nada que descartar lo dice, no calla",
+                learnable_rows([base])[1].total == 0)
+
+    # EL ERROR OPUESTO, y es el que un filtro entusiasta comete: entrenar solo con exitos.
+    fracasos = [dict(base, task_id="x", utility=0.0, answer=""),          # ejecuto y fallo
+                dict(base, task_id="y", utility=0.0, answer="Unknown"),   # el modelo no supo
+                dict(base, task_id="z", utility=0.0, answer="7")]         # respondio mal
+    aptas2, d2 = learnable_rows(fracasos)
+    ok &= check("un fracaso EJECUTADO es una medicion y entra: una politica entrenada "
+                "solo con exitos aprende que todo funciona",
+                len(aptas2) == 3 and d2.total == 0)
+
+    # UN SOLO PORTON: ningun constructor de episodios puede tener su propio filtro.
+    # LOS CUATRO QUE APRENDEN. El de asociaciones se colaba por otra puerta: se apoyaba
+    # en que una fila infactible no trae `sequence`. Es cierto y es ACCIDENTAL — la guarda
+    # dependia de un campo vacio en vez de decir que la fila no ejecuto, y una guarda
+    # accidental deja de valer en cuanto el campo cambia de forma.
+    fuentes = [Path("app/runner.py"), Path("bench/_consolidar_vivo.py"),
+               Path("bench/analysis/_analyze_tau.py"),
+               Path("bench/analysis/_analyze_associations.py")]
+    huella = 'get("infeasible") or f.get("infra_error")'
+    propios = [f.name for f in fuentes if huella in f.read_text(encoding="utf-8")]
+    ok &= check("ningun constructor de episodios filtra por su cuenta "
+                f"(sospechosos: {propios or 'ninguno'})", not propios)
+    for f in fuentes:
+        ok &= check(f"{f.name} pasa por `learnable_rows`",
+                    "learnable_rows" in f.read_text(encoding="utf-8"))
+    return ok
+
+
 def check_load_rows_guards_the_analyst(ok: bool) -> bool:
     """§42: las guardas de mezcla protegen a QUIEN ANALIZA, no solo a quien corre.
 
@@ -4087,6 +4571,12 @@ def main() -> int:
     ok = check_every_paradigm_runs_offline(ok)
     ok = check_no_factor_is_unreachable(ok)
     ok = check_mixed_model_execution_is_measurable(ok)
+    ok = check_learning_discriminates_non_measurements(ok)
+    ok = check_board_carries_what_is_left(ok)
+    ok = check_guard_bounds_and_rescues(ok)
+    ok = check_retriever_exhaustion_is_of_the_task(ok)
+    ok = check_surface_version_guards_the_sensitive_arms(ok)
+    ok = check_every_module_and_class_declares_itself(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

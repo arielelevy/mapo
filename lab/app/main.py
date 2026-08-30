@@ -33,6 +33,17 @@ POLICY_DIR = settings.results_dir / "policies"
 
 
 class RunRequest(BaseModel):
+    """Pedido de `/run`: correr el producto cruzado sobre un corpus. Es del BANCO.
+
+    `resume=True` por defecto, y no es una comodidad: una corrida cortada se retoma sin
+    re-pagar las celdas hechas, porque el resume va por `(tarea, paradigma, trial)`.
+    Ponerlo en `False` re-ejecuta todo — sobre el caché sale gratis, contra el proveedor
+    no, y esa diferencia no la dice el flag sino `calls - cached_calls`.
+
+    `paradigms=None` significa el plantel de campaña, no «todos»: correr un brazo retirado
+    exige nombrarlo, y la razón queda en el log.
+    """
+
     corpus: str
     paradigms: list[str] | None = None
     limit: int | None = Field(default=None, ge=1)
@@ -40,6 +51,23 @@ class RunRequest(BaseModel):
 
 
 class DecideRequest(BaseModel):
+    """Pedido de `/decide`: la capa de decisión sobre UNA tarea, sin ejecutarla.
+
+    Es el endpoint que muestra el producto y no el banco: factibilidad → creencias con
+    procedencia → dial de garantía → ruteo o abstención → `EXPLAIN`. No llama al modelo
+    para resolver la tarea; decide qué haría y por qué.
+
+    `assurance` es lo que el llamador PIDE, y el nivel efectivo es
+    `max(pedido, piso de creencias, piso aprendido)`: puede subir, nunca bajar. El piso
+    sale de propiedades del request mismo —`irreversible` eleva a A3, `shared_writes` a
+    A2— así que un llamador que pudiera bajarlo podría declarar una acción irreversible y
+    después pedir tratarla como exploratoria, que es la combinación exacta que el piso
+    existe para impedir.
+
+    La sonda está APAGADA por defecto: cuesta una llamada barata, y así `/decide` sigue
+    siendo gratis de llamar y quien la paga es quien la pidió.
+    """
+
     corpus: str
     task_id: str
     assurance: Assurance = Assurance.STANDARD
@@ -49,6 +77,23 @@ class DecideRequest(BaseModel):
 
 
 class PromoteRequest(BaseModel):
+    """Pedido de `/promote`: intentar instalar un θ candidato como política viva.
+
+    ES EL ÚNICO CAMINO A PRODUCCIÓN. `report()` ajusta candidatos y los persiste en
+    `fitted/`, **fuera** del glob que trata a un bundle como vivo: una lectura no puede
+    instalar. Acá se corre la guarda anti-regresión sobre episodios held-out, y el
+    candidato entra sólo si no empeora.
+
+    `holdout_fraction` parte por TAREA y no por fila: una partición por fila dejaría
+    réplicas de la misma tarea a los dos lados, y entonces el holdout estaría puntuando
+    una regla con datos que la propusieron.
+
+    `tau` es el umbral de abstención — cuánto margen exige θ para opinar en vez de
+    diferir al fallback. Vale `0,3` en el bundle **desde siempre y sin haberse ajustado
+    nunca**: es un parámetro que gobierna la curva riesgo-cobertura que el paper reporta,
+    fijado a mano, y eso está anotado como deuda.
+    """
+
     corpus: str
     tau: float = Field(default=0.3, ge=0.0, le=1.0)
     holdout_fraction: float = Field(default=0.3, gt=0.0, lt=1.0)

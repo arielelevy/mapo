@@ -645,7 +645,9 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   **NO SE IMPLEMENTA EN MITAD DE LA CAMPAÑA, y el motivo es la regla de siempre.** Cambiar
   la factibilidad ahora dejaría a `graph_traverse` con 20 celdas medidas y el resto podadas
   **bajo la misma huella** — la factibilidad no está en la huella, así que ninguna de las
-  cuatro guardas de mezcla lo vería. Sería exactamente la contaminación silenciosa que este
+  **cinco** guardas de mezcla lo vería. Y la quinta tampoco ayuda acá: `SURFACE_VERSION`
+  sella la superficie de herramientas, y la factibilidad vive en `feasibility.py`, del
+  otro lado. Si esto se hace, hace falta su propio sello. Sería exactamente la contaminación silenciosa que este
   repo existe para no tener. Va después, y con `graph_traverse` recorrido entero de nuevo.
 
   **Y toca una decisión previa que hay que revisar con esto a la vista.** `K-5` puso a
@@ -878,6 +880,205 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   promedio inválido publica el promedio**, que es exactamente la lección por la que existe
   `_sanity.py`. `test_science.py` §49.
 
+- [x] **X-11** · **arreglar `X-8` volvió incomparables las filas viejas de dos brazos, y
+  ninguna guarda lo veía** (2026-08-29, encontrado al preguntarse qué había que corregir).
+
+  Un sub-agente ahora **ve** el agotamiento del retriever; antes arrancaba creyendo que
+  nadie había buscado nada.
+
+  **Y hasta dónde llega eso hay que decirlo con precisión, porque lo escribí exagerado
+  primero.** Verificado contra el registro: las 814 filas corrieron en `basic` con
+  `stop_on_barren=0`, el aviso de estancamiento está gateado a las variantes con
+  contabilidad, y `stall_warnings` da **0 en todo el registro**. Así que en el régimen
+  medido el cambio es **sólo de contabilidad**: las utilidades y los costos viejos **no
+  están comprometidos**, y lo único mal contado son los `barren_*` de `handoff` y
+  `supervisor`.
+
+  **Pero cambia comportamiento** en cuanto la variante sea `accounting`/`cognitive` —ahí
+  el aviso entra al prompt— o `stop_on_barren > 0`, donde decide cuándo el brazo deja de
+  buscar. La guarda existe para ese caso, que es el que viene.
+
+  **Y las cuatro guardas de mezcla no lo ven**: miran decodificación, brazo de
+  recuperación, analizador léxico y vocabulario de región. Un cambio de código en la
+  superficie no entra en ninguna, y la huella tampoco lo lleva —es modelo, api, esfuerzo,
+  seed y max—. Un `.jsonl` habría mezclado dos regímenes en silencio, que es exactamente
+  lo que la guarda del analizador existe para impedir en su propio eje.
+
+  `SURFACE_VERSION = "v2-agotamiento-compartido"`, estampado en la fila, con la **quinta
+  guarda** en `load_rows`. Sigue el precedente de `ANALYZER_VERSION`.
+
+  **Y es POR BRAZO, no por archivo — esa es la decisión.** `scoped()` lo llaman `handoff`
+  y `supervisor` y nadie más; `dag_strategy` arma el alcance de otra forma, así que su
+  62,5% de esterilidad ya era correcto. Levantar sobre el archivo entero convertiría un
+  registro válido de 983 filas en inservible por un cambio que a diez de los doce brazos
+  no los toca — y una guarda así se termina desactivando, que es peor que no tenerla.
+
+  **Estado del registro**: las 983 filas de `luna` son todas del régimen viejo y leen sin
+  quejarse (la ausencia del campo no levanta sola). `test_science.py` §64.
+
+  **Y la corrección se hace RELLENANDO, no re-corriendo.** Iba a proponer re-correr los
+  dos brazos —143 filas, 46 celdas, **7,45M tokens**— y no hace falta: como el modelo
+  nunca vio la diferencia, los prompts son idénticos, así que `bench/runs/_backfill.py`
+  reconstruye las filas **desde el caché, con cero llamadas al proveedor**, recomputando
+  los contadores en proceso. Es exactamente para lo que existe esa herramienta, y su
+  guarda —`calls - cached_calls == 0`— prueba que no se gastó nada.
+
+  > **La corrida del cruce que está en vuelo NO se contaminó**: el proceso tiene el código
+  > viejo en memoria desde que arrancó, así que sus cuatro celdas salen todas del mismo
+  > régimen. Lo que no puede pasar es reanudar ESE archivo después, con el código nuevo, y
+  > eso ahora levanta en vez de mezclarse callado.
+
+- [x] **X-8** · **el agotamiento del retriever era invisible adentro de un sub-agente, y
+  eso toca el resultado más fuerte del banco** (2026-08-29, salió de analizar los logs).
+
+  El registro lo delató con un cero que no era chico sino **estructural**:
+
+  | brazo | búsquedas | estériles | tasa |
+  |---|---:|---:|---:|
+  | `dag_strategy` | 661 | 413 | **62,5%** |
+  | `react` | 460 | 214 | 46,5% |
+  | `supervisor` | 370 | **0** | **0,0%** |
+  | `handoff` | 158 | **0** | **0,0%** |
+
+  `scoped()` reata por referencia todo lo que es de la tarea y **no reataba `surfaced`**
+  —lo que alguna búsqueda ya trajo— ni los contadores de racha. Cada sub-agente arrancaba
+  con el conjunto vacío, así que **toda búsqueda suya parecía traer algo nuevo** aunque el
+  padre ya la hubiera hecho. Los `int` además no se pueden reatar: `replace` los copia por
+  valor, así que ahora viven en un objeto `Barren` compartido.
+
+  **Y no es sólo contabilidad perdida.** El aviso *«las últimas N búsquedas no trajeron
+  nada nuevo»* —la señal que midió **3,05× de reducción de costo**, el resultado más fuerte
+  del banco— **no podía dispararse adentro de un sub-agente**. Ese resultado está medido
+  sólo sobre los brazos que NO descomponen, y los que descomponen son justamente los que
+  más buscan. Lo mismo vale para el factor `stop_on_barren`.
+
+  Es la forma que el docstring de `scoped()` ya advertía —*«olvidar un campo acá es
+  invisible»*— cometida en los campos que ese mismo docstring no enumeraba.
+  `test_science.py` §63.
+
+- [ ] **X-9** · **dos de cada tres búsquedas en `w16` no traen nada nuevo, y la tasa
+  ESCALA con el ancho** (2026-08-29, medido; el arreglo de `X-8` lo empeora, no lo mejora).
+
+  | estrato | búsquedas | estériles | tasa | racha máxima |
+  |---|---:|---:|---:|---:|
+  | `sin-w` | 850 | 255 | 30,0% | 7 |
+  | `w4` | 782 | 282 | 36,1% | 12 |
+  | **`w16`** | 584 | 371 | **63,5%** | **21** |
+
+  Y esos números están **subestimados**: se midieron con el defecto de `X-8` vivo, o sea
+  con `supervisor` y `handoff` reportando cero. La tasa real es más alta.
+
+  **Veintiuna búsquedas seguidas sin nada nuevo** en una sola celda. Cada una es una vuelta
+  más, y cada vuelta reenvía la conversación entera — que es exactamente el `N²` que
+  `P30` va a medir por el otro lado.
+
+  Lo que falta decidir: si `stop_on_barren` deja de ser un factor y pasa a ser el
+  comportamiento por defecto en el régimen fuera de ventana. Hoy está apagado por defecto
+  **y con razón** —encenderlo invalidaría el replay sellado del registro ya pagado— pero
+  con 63,5% de esterilidad en `w16` la pregunta ya no es si conviene, es a partir de qué
+  ancho.
+
+- [ ] **X-10** · **el 15,2% del material servido en `w16` es texto que el agente YA
+  tenía** (2026-08-29, medido).
+
+  | estrato | servidos | releídos | |
+  |---|---:|---:|---:|
+  | `sin-w` | 80.759.998 | 4.029.061 | 5,0% |
+  | `w4` | 52.229.746 | 3.704.134 | 7,1% |
+  | **`w16`** | 37.300.220 | 5.669.959 | **15,2%** |
+
+  Se triplica del estrato angosto al ancho. Y la retención cae en el mismo sentido —0,990,
+  0,994, **0,943**— o sea que en `w16` el agente **relee más y retiene menos**: paga dos
+  veces por texto que además pierde antes de responder.
+
+  Es el mismo mecanismo que `X-9` por otra cara, y las dos apuntan a `read_all`: leer todo
+  una vez en una llamada no puede releerse a sí mismo.
+
+- [ ] **B-1** · **la coordinación que hay que elegir no se elige, y el experimento que lo
+  aísla nunca se corrió** (2026-08-29). El mismo blackboard, alcanzado de dos maneras, da
+  resultados opuestos:
+
+  | cómo se accede | quién lo escribe | resultado medido |
+  |---|---|---|
+  | **inyectado** en el prompt de cada sub-agente | el **código**, en cada ola | `dag_strategy` es el **mejor paradigma fijo** en `gold_transfer` — el brazo al que θ perdió en P15 |
+  | **ofrecido** como tool (`post` / `board`) | el **modelo**, si elige | **1 de 125** llamadas; `board` no se leyó nunca |
+
+  Y `offer_board` no es una tool cualquiera: `post` y `board` son **las dos únicas
+  herramientas de todo el registro que no son recuperación**. Coordinan. Y no se usaron.
+
+  **Lo que falta correr es barato y ya está implementado**: el factor `shared_state` apaga
+  el board **inyectado** adentro de `dag_strategy` dejando las mismas olas y el mismo
+  verify. Nunca se ejecutó —no hay un solo archivo `*_dagboard*` ni `*_nodagboard*` en
+  `results/`— así que **«el efecto dag_strategy» sigue siendo la conjunción de la topología
+  de olas y el estado compartido**, que es exactamente lo que mover el board a
+  `app/board.py` había querido separar. Un brazo que gana como conjunción no dice cuál de
+  sus dos mitades gana.
+
+  Diseño de la corrida: `{shared_state ON, OFF} × {dag_strategy, supervisor}` sobre las
+  celdas donde la descomposición importa, `repeat ≥ 3`. Si el board inyectado explica el
+  resultado de `dag_strategy`, la conclusión no es «usá dag»: es **la coordinación va en la
+  topología, no en la superficie de herramientas** — y eso reescribe qué hay que ofrecerle a
+  un agente con muchas herramientas.
+
+  **Y hay una lección de diseño de la señal, que vale aparte** (viene de la capa congelada,
+  no del banco): anotar un hallazgo y abrir una pista eran una sola llamada, así que
+  registrar algo **ya sabido abría un item pendiente**, bajaba el porcentaje de cobertura y
+  disparaba más insistencia. *Una señal de contabilidad tiene que ser monótona en la
+  dirección que premia, o castiga al agente por reportar lo que sabe.* Aplica a `coverage`,
+  que hoy está en el banco.
+
+- [ ] **B-2** · **la expulsión no produce hallazgos, y sin eso el board no tiene qué
+  sostener** (2026-08-29, revisión de la capa congelada). El banco tiene **dos**
+  compactaciones y **ninguna extrae** nada:
+
+  | | qué hace | qué se midió |
+  |---|---|---|
+  | `compact_history` (cognitive) | stub **sólo** para las unidades que el modelo anotó | el modelo escribió **1 nota en 28 filas** |
+  | `manage_history` (managed) | degrada incondicionalmente a stub con el id | **61 llamadas sobre `w4`, 0 mensajes degradados** |
+  | *el guard de la capa anterior* | expulsa por **crecimiento** (20k caracteres en una iteración) y **crea** un hallazgo enfocado en la pregunta, que va al board | **no existe en el banco** |
+
+  Las dos del banco **degradan**; la que falta **produce contenido nuevo**. Y esa
+  diferencia es justo lo que le da al board algo que sostener: sin ella, los hallazgos del
+  board son lo que el modelo se acuerde de postear —y postea 1 de cada 125 llamadas—.
+
+  **El guard y el board son un solo mecanismo**: el guard acota la ventana y genera el
+  hallazgo, el board lo conserva y con eso dirige lo que sigue. Hoy las dos mitades están
+  rotas por separado, y ninguna auditoría lo veía: `_audit_declarado` busca nombres que
+  nadie lee —y `render()` sí se leía— y `_audit_inerte` busca guardas que ningún corpus
+  dispara —y el board no es una guarda—. La falla vive en el **camino hasta el prompt**,
+  que es una tercera clase.
+
+  **Y decide el orden de gasto**: medir `board_queue` sola mide media máquina. Va
+  extracción en la expulsión primero, o los dos ejes cruzados en la misma corrida.
+
+- [x] **X-7** · **lo que no es una medición ya no entra al aprendizaje, y hay un solo
+  portón** (2026-08-29, lección 8.11). Había **tres constructores de episodios con tres
+  filtros**: los dos scripts de análisis descartaban infactibles y de infraestructura, y
+  `Runner.episodes()` —el camino del **producto**— no descartaba las infactibles. La guarda
+  vivía en el banco y le faltaba al producto.
+
+  **Medido antes de arreglarlo: 39 de 180 episodios (21,7%) venían de celdas que nunca
+  ejecutaron.** El sesgo no es aleatorio —cae sobre los brazos caros, que son los que la
+  poda alcanza—: dos pares reportaban `u = 0,667` midiendo **1,000 donde ejecutaron**, y
+  quince pares llevaban `u = 0,000` con `n = 2–3` **sin una sola ejecución detrás**. Y lo
+  grave es el conteo, no el promedio: los episodios son lo que cruza
+  `MIN_EPISODES_FOR_CONFIDENCE`, así que un par podía **ganar confianza con celdas donde el
+  brazo nunca corrió**. Ninguno había cruzado —la campaña es joven— pero quince estaban en
+  camino, y nada lo impedía.
+
+  `policy.learnable_rows` es ahora el único portón, y devuelve **el conteo tipado de lo
+  descartado** además de las filas: un filtro silencioso deja la estadística limpia y a
+  nadie en condiciones de decir sobre cuántas filas se computó. Los **cuatro** aprendices
+  pasan por ahí —`runner`, el vigía, el barrido de `tau` y las asociaciones de orden, que
+  se colaba apoyándose en que una fila infactible no trae `sequence`, cierto y accidental—.
+  El vigía lo muestra en vivo: `552 filas (+552, 118 no medidas)`.
+
+  **Y lo que NO se descarta está probado igual**: una respuesta equivocada, una vacía de un
+  brazo que sí corrió y un `Unknown` literal del modelo son mediciones —el brazo ejecutó y
+  falló— y entrenar sólo con éxitos es la forma más rápida de aprender que todo funciona.
+  `test_science.py` §60 prueba las dos direcciones y que ningún constructor filtre por su
+  cuenta.
+
 - [x] **X-5h** · **CERRADO el 2026-08-29. `seal_replay` era una garantía declarada que NO imponía nadie** (encontrado
   el 2026-08-29 cruzando `README.md` contra `assurance.py`). El perfil de `A3_CERTIFIED`
   lleva `seal_replay=True` y **ningún camino del repo lo lee**: `grep` da cero fuera de
@@ -991,7 +1192,7 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
 - [x] **F2** · **routers rivales: E2 corrido.** El brazo que falta es **E1, y es `M-1`** —implementado, sin correr, ~26 llamadas—. Una fase abierta cuyo único resto ya tiene número propio es un duplicado
 - [x] **F3** · **retención y mediación: el recall está medido y es la variable dominante** —brecha +0,533, y predice fuera de muestra al 60% desde el paradigma contra 3,8% desde la región—. El segundo eslabón —si la evidencia leída **sobrevive** hasta la llamada que responde— es **`M-2`**, con número propio
 - [x] F4 · estadística que resista al tribunal
-- → **F5** se mudó a `PAPER.es.md` (2026-08-29). No está cerrado: va en otro momento.
+- → **F5** se mudó a `PAPER.es.md` y **se cerró ahí** el 2026-08-29: los tres teoremas estructurales entraron como §5.3–§5.5.
 - → **F6** se mudó a `PAPER.es.md` (2026-08-29). No está cerrado: va en otro momento.
 - → **F7** se mudó a `PAPER.es.md` (2026-08-29). No está cerrado: va en otro momento.
 
@@ -1589,7 +1790,7 @@ lo que producción ejecuta.
 | F2 | Los tres routers rivales | **parcial** — brazos prosa implementados, E2 (ridge) corrido; falta correr E1 |
 | F3 | Retención de contexto y mediación | **parcial** — el recall medido y predictivo fuera de muestra; falta instrumentar retención propiamente dicha (M-2) |
 | F4 | Estadística que resista al tribunal | **hecho** — bootstrap pareado, Benjamini-Hochberg, AURC. Falta escribir el alcance: la reproducibilidad de EXPLAIN es *aguas abajo del sensor* |
-| F5 | Teoría nativa | **pizarra** — T-1 a T-5 |
+| F5 | Teoría nativa | **hecho** — T-3, T-4 y T-5 entraron al paper como §5.3–§5.5 (2026-08-29); queda T-1, que bloquea a F6 |
 | F6 | Contratos contra los baselines directos | **no empezado** — bloqueado por T-1 |
 | F7 | Validez externa de verdad | **no empezado** — M-3 y M-4 |
 

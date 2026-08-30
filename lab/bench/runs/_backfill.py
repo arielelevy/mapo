@@ -38,6 +38,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from app.config import Settings
 from app.runner import Runner, load_rows
+from bench.runs._run_homogenea import MODELOS
 
 
 def main() -> None:
@@ -45,22 +46,44 @@ def main() -> None:
     ap.add_argument("--corpus", required=True)
     ap.add_argument("--model-dir", required=True,
                     help="subcarpeta de results/ (nano, terra, ...)")
-    ap.add_argument("--deployment", required=True)
-    ap.add_argument("--temperature-zero-OBSOLETO", action="store_true",
-                    help="la corrida original fijo temperature=0 (nano). Sin esto se "
-                         "omite, como en los 5.6. La huella depende de esto, y con la "
-                         "huella equivocada NINGUNA clave de cache acierta.")
+    # EL MODELO SALE DE LA TABLA, NO DE ARGUMENTOS SUELTOS (2026-08-29). Estaba clavado
+    # a `MAPO_NANO_ENDPOINT` y a `reasoning_effort=None`, o sea que rellenar un registro
+    # de `luna` o `terra` habria armado la huella EQUIVOCADA — y con la huella equivocada
+    # ninguna clave de cache acierta, asi que el «rellenado» pagaria el registro entero
+    # de nuevo. La guarda de gasto lo habria atajado despues de gastar.
+    ap.add_argument("--modelo", choices=sorted(MODELOS),
+                    help="toma endpoint, key, deployment y esfuerzo de la tabla de "
+                         "modelos. Es la forma correcta; `--deployment` queda para "
+                         "registros viejos que no esten en la tabla.")
+    ap.add_argument("--deployment", help="solo si no se pasa `--modelo`")
     args = ap.parse_args()
 
+    if not args.modelo and not args.deployment:
+        raise SystemExit("hace falta `--modelo` (preferido) o `--deployment`.")
+
     base = Settings.from_env()
-    s = replace(
-        base,
-        endpoint=os.environ["MAPO_NANO_ENDPOINT"].rstrip("/"),
-        api_key=os.environ["MAPO_NANO_KEY"],
-        chat_deployment=args.deployment,
-        reasoning_effort=None,
-        results_dir=base.results_dir / args.model_dir,
-    )
+    if args.modelo:
+        m = MODELOS[args.modelo]
+        s = replace(
+            base,
+            endpoint=os.environ[m["endpoint"]].rstrip("/"),
+            api_key=os.environ[m["key"]],
+            chat_deployment=m["deployment"],
+            reasoning_effort=m["esfuerzo"],
+            results_dir=base.results_dir / args.model_dir,
+        )
+    else:
+        s = replace(
+            base,
+            endpoint=os.environ["MAPO_NANO_ENDPOINT"].rstrip("/"),
+            api_key=os.environ["MAPO_NANO_KEY"],
+            chat_deployment=args.deployment,
+            reasoning_effort=None,
+            results_dir=base.results_dir / args.model_dir,
+        )
+    print(f"huella del rellenado: {s.fingerprint()}")
+    print("Si no coincide con la del registro, NINGUNA clave acierta y esto deja de ser "
+          "un rellenado.")
     runner = Runner(s, args.corpus, retriever_arm="hybrid", surface_variant="basic")
     destino = runner._results_path  # noqa: SLF001
     if not destino.exists():

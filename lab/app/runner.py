@@ -15,6 +15,7 @@ quality stay exact.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -42,9 +43,9 @@ from .embeddings import EmbeddingClient
 from .retrieval import (
     ANALYZER_VERSION, MODEL_CALLING_ARMS, CorpusView, Retriever, build_arm, build_arms,
 )
-from .tools import VARIANTS, ToolSurface
+from .tools import VARIANTS, ToolSurface, SURFACE_VERSION, SURFACE_SENSITIVE_ARMS
 from .assurance import Assurance
-from .policy import Episode, Plasticity, PolicyBundle, promote
+from .policy import Episode, Plasticity, PolicyBundle, promote, learnable_rows
 from .store import LearningStore, state_dir_for
 
 
@@ -110,6 +111,59 @@ def _is_infrastructure(exc: BaseException) -> bool:
 
 @dataclass
 class Row:
+    """UNA CELDA MEDIDA: un `(tarea, paradigma, trial)` y todo lo que se sabe de él.
+
+    ES LA UNIDAD DEL REGISTRO, y por eso es tan ancha: 40 campos. La regla que la gobierna
+    es que **una fila tiene que poder leerse sola dentro de un año**. Todo lo que haga
+    falta para interpretarla va adentro —bajo qué decodificación, qué analizador léxico,
+    qué vocabulario de región, qué versión de superficie— porque un registro que depende de
+    recordar cómo se produjo no es un registro.
+
+    LOS CINCO SELLOS, que son lo que hace que dos filas se puedan comparar o no:
+
+      `fingerprint`        modelo, api, esfuerzo de razonamiento, seed y max. Es la clave
+                           del caché, así que dos decodificaciones distintas no pueden
+                           compartir entrada ni por accidente
+      `analyzer`           el tokenizador léxico. Decide QUÉ encuentra BM25, así que dos
+                           analizadores producen recuperaciones distintas con la misma
+                           huella. Es el único de los cinco que ningún otro campo detecta
+      `region_vocabulary`  una región significa lo que su vocabulario dice que significa;
+                           promediar dos vocabularios compara etiquetas que no nombran lo
+                           mismo
+      `retriever`          el brazo de recuperación
+      `surface_version`    la superficie de herramientas. Se agregó cuando arreglar el
+                           agotamiento del retriever en los sub-agentes cambió lo que dos
+                           brazos podían ver, y ninguno de los otros cuatro lo detectaba
+
+    `load_rows` levanta si un archivo mezcla cualquiera de ellos. El de superficie es el
+    único que guarda **por brazo** y no por archivo, porque su cambio toca a dos de doce.
+
+    TRES ESTADOS QUE NO SE CONFUNDEN, y confundirlos fue un error caro:
+
+      medida            ejecutó y produjo una respuesta. Es la única que entra a la
+                        estadística
+      `infeasible`      **no ejecutó**: la aritmética la podó antes de gastar un token. Su
+                        `utility = 0,0` es un RELLENO, no una lectura, y por eso no puede
+                        entrar al aprendizaje — `policy.learnable_rows` la descarta y lo
+                        cuenta. La infactibilidad ES un resultado, y su consumidor es el
+                        portón de factibilidad, no θ
+      `infra_error`     un 429 agotado. No es una medición: se registra y se excluye de
+                        toda estadística. `load_rows` la saca por defecto
+
+    EL COSTO SE GUARDA DESGLOSADO Y NO COMO UN TOTAL. `prompt_tokens` y
+    `completion_tokens` se cobran distinto —entre 4 y 8 veces— y los paradigmas se
+    diferencian justo en esa proporción, así que un total los volvería incomparables.
+    `provider_cached_tokens` y `cached_calls` separan lo que se **pagó** de lo que se
+    **replayó**: un acierto de caché reporta el uso de la llamada ORIGINAL, que es lo
+    correcto para medir el paradigma y lo equivocado para saber si una corrida gastó — lo
+    que decide eso es `calls - cached_calls`.
+
+    LOS `phi_*` SON LA REGIÓN, CONGELADA. La región es una función determinista de los
+    features, pero guardar los features que la produjeron permite recomputarla con un
+    vocabulario nuevo sin volver a correr. `phi_horizon_unknown` está en `True` en las 78
+    tareas: es el eje que le faltaba al vocabulario y que costó la refutación de `P15`.
+    """
+
     task_id: str
     cell: str
     paradigm: str
@@ -132,6 +186,8 @@ class Row:
     # An infrastructure failure is not a measurement. A 429 from the embedding
     # endpoint says nothing about the topology, so these rows are recorded and
     # then excluded from every statistic rather than scored as a wrong answer.
+    # La version de la superficie bajo la que corrio. Ver `tools.SURFACE_VERSION`.
+    surface_version: str = ""
     infra_error: bool = False
     # CON QUE DECODIFICACION SE PRODUJO ESTA FILA. `config.py` dice desde siempre que la
     # huella «goes into every cache key and every result row», y en la fila NO ESTABA: el
@@ -362,6 +418,51 @@ def load_rows(
             f"guardas que ningun otro campo puede detectar."
         )
 
+    # LA QUINTA GUARDA: LA VERSION DE LA SUPERFICIE, y es POR BRAZO (2026-08-29).
+    #
+    # `X-8` hizo que un sub-agente VEA el agotamiento del retriever; antes arrancaba
+    # creyendo que nadie habia buscado nada. Y hay que decir con precision hasta donde
+    # llega, porque la primera version de este comentario lo exageraba:
+    #
+    #   EN EL REGIMEN MEDIDO —`basic`, `stop_on_barren=0`, las 814 filas— el cambio es
+    #   SOLO DE CONTABILIDAD. El aviso de estancamiento esta gateado a las variantes con
+    #   contabilidad (`accounting`, `cognitive`) y nunca se emitio: `stall_warnings` da 0
+    #   en todo el registro. Asi que las utilidades y los costos viejos NO estan
+    #   comprometidos — lo unico mal contado son los `barren_*` de `handoff` y
+    #   `supervisor`, y eso se arregla rellenando desde el cache, no re-corriendo.
+    #
+    #   PERO CAMBIA COMPORTAMIENTO en cuanto la variante sea `accounting`/`cognitive` —
+    #   ahi el aviso entra al prompt— o `stop_on_barren > 0`, donde decide cuando el
+    #   brazo deja de buscar. La guarda existe para ESE caso, que es el que viene.
+    #
+    # Y ninguna de las cuatro guardas anteriores lo detecta: miran decodificacion, brazo
+    # de recuperacion, analizador y vocabulario. Un cambio de codigo en la superficie no
+    # entra en ninguna, y la huella tampoco lo lleva.
+    #
+    # POR BRAZO Y NO POR ARCHIVO, y esa es la decision que la vuelve usable. `scoped()` lo
+    # llaman `handoff` y `supervisor` y nadie mas, asi que a diez de los doce brazos el
+    # cambio no los toca. Levantar sobre el archivo entero convertiria un registro valido
+    # de 900 filas en inservible por un cambio que no afecta a la mayoria — y esa guarda
+    # se termina desactivando, que es peor que no tenerla.
+    #
+    # Una fila SIN el campo es del regimen anterior a que existiera. No levanta sola:
+    # MEZCLARLA con una que si lo declara, del mismo brazo sensible, es lo que levanta.
+    sensibles = {}
+    for r in rows:
+        if r.get("paradigm") in SURFACE_SENSITIVE_ARMS and not r.get("infeasible"):
+            sensibles.setdefault(r["paradigm"], set()).add(
+                r.get("surface_version") or "(sin declarar)"
+            )
+    mezclados = {b: sorted(v) for b, v in sensibles.items() if len(v) > 1}
+    if mezclados:
+        raise ValueError(
+            f"{path.name} mezcla versiones de superficie en brazos que dependen de ella: "
+            f"{mezclados}. `handoff` y `supervisor` reparten alcance a sub-agentes, y "
+            f"hasta `v2-agotamiento-compartido` un sub-agente no veia lo que el resto de "
+            f"la tarea ya habia buscado — reportaban 0% de busquedas esteriles sobre 528 "
+            f"busquedas. Antes y despues no son comparables."
+        )
+
     # Y LO MISMO PARA EL VOCABULARIO DE REGION, por la misma razon. Una region es una
     # etiqueta cuyo significado lo fija el vocabulario que la produjo; dos filas de
     # vocabularios distintos llevan la misma etiqueta queriendo decir cosas distintas.
@@ -389,6 +490,45 @@ def load_rows(
 
 
 class Runner:
+    """EL BANCO: corre el producto cruzado y escribe el registro. No es el producto.
+
+    QUÉ HACE, en orden, y cada paso es una decisión que se puede auditar:
+
+      1. arma la **vista del corpus** de la tarea —qué unidades existen para el agente— y
+         la **superficie de herramientas**, que es la misma que recibiría en producción
+      2. extrae los **features** y la **región**, sin llamar al modelo: es aritmética
+      3. pregunta **factibilidad** por brazo. Lo que no entra en el presupuesto se poda
+         ANTES de gastar, y se registra como `infeasible` — la infactibilidad es un
+         resultado, no un salteo
+      4. corre cada `(tarea, paradigma, trial)` que quede, con un `SeededClient` por trial
+         para que todos los paradigmas se comparen bajo las mismas condiciones de sampleo
+      5. **califica sin juez**: exact match contra el gold, que se verificó independiente
+         del generador
+      6. escribe la fila, sellada, por un único punto de escritura
+
+    LA REGLA QUE LO ORDENA TODO: **el banco importa al producto; el producto no sabe que
+    el banco existe.** Nada de acá se importa desde `app/` fuera de este módulo, y por eso
+    los paradigmas son funciones async planas — el banco mide exactamente lo que
+    producción ejecuta, sin runtime en el medio.
+
+    RESUMIBLE POR `(tarea, paradigma, trial)`. Una celda ya presente se saltea, así que
+    una corrida cortada se retoma sin re-pagar. Y las filas de `infra_error` **no** cuentan
+    como hechas: un 429 tiene que poder reintentarse o la celda se pierde para siempre.
+
+    UN SOLO PUNTO DE ESCRITURA, y de ahí sale que ninguna fila pueda salir sin sus sellos.
+    Estampar la huella y el vocabulario en el sink en vez de en cada camino de creación es
+    lo que hace imposible una fila sin decodificación declarada.
+
+    LO QUE **NO** HACE: no promueve nada. `report()` ajusta un θ candidato sobre los
+    episodios y lo persiste en `fitted/`, **fuera** del glob que `latest_theta_path()`
+    trata como la política viva. Una lectura no puede instalar producción; eso pasa por
+    `promote()` y su guarda anti-regresión, que es otro portón.
+
+    LA TRAZA POR LLAMADA es opcional (`MAPO_TRACE=1`) y escribe a `results/<modelo>/traces/`
+    con el mismo sufijo de factores que el archivo de filas. No toca la fila, ni la huella,
+    ni la clave de caché: un instrumento que altera lo que mide deja de ser un instrumento.
+    """
+
     # Una vez por proceso. Un aviso que se repite por cada lectura se vuelve ruido y deja
     # de leerse, que es la forma en que un aviso deja de ser un aviso.
 
@@ -406,6 +546,8 @@ class Runner:
         demand_obligations: bool = False,
         shared_state: bool | None = None,
         offer_board: bool = False,
+        board_queue: bool = False,
+        context_guard: bool = False,
         stable_prefix_first: bool = False,
     ) -> None:
         # Hybrid is the default because it is what a real deployment has. The degraded
@@ -464,6 +606,8 @@ class Runner:
         # todos los patrones por igual. Es el unico que se puede cruzar `{con, sin} x
         # {patrones}` de verdad, porque el board estructural solo existe en `dag`.
         self.offer_board = offer_board
+        self.board_queue = board_queue
+        self.context_guard = context_guard
         # SEPTIMO FACTOR: el orden del prompt. Condicion NECESARIA para que el cache del
         # proveedor pueda pegar entre tareas, y no suficiente — el prefijo estable mide
         # ~567 tokens contra un umbral de 1.024. Se mide aparte para separar el efecto del
@@ -479,6 +623,16 @@ class Runner:
         self._arms = arms
         self._settings = settings
         self._client = LLMClient(settings, sealed=sealed)
+        # LA TRAZA ES OPCIONAL Y NO CAMBIA NADA MEDIDO. Se enciende con
+        # `MAPO_TRACE=1`: escribe un `.jsonl` aparte, en `traces/`, y NO toca la fila ni
+        # la huella ni la clave de cache. Un instrumento que altera lo que mide deja de
+        # ser un instrumento — por eso vive en otro archivo y en otro arbol, igual que
+        # `results/` y `state/` no se mezclan.
+        self._trace_dir = (
+            settings.results_dir / "traces" if os.environ.get("MAPO_TRACE") else None
+        )
+        if self._trace_dir is not None:
+            self._trace_dir.mkdir(parents=True, exist_ok=True)
         self._extractor = FeatureExtractor(self._client)
 
         root = settings.corpus_dir / corpus_name
@@ -511,10 +665,17 @@ class Runner:
             suffix += "_dagboard" if shared_state else "_nodagboard"
         if offer_board:
             suffix += "_boardtool"
+        if board_queue:
+            suffix += "_boardqueue"
+        if context_guard:
+            suffix += "_guard"
         if stable_prefix_first:
             suffix += "_stableprefix"
         self._results_path = (
             settings.results_dir / f"{corpus_name}{suffix}_rows.jsonl"
+        )
+        self._trace_path = (
+            settings.results_dir / "traces" / f"{corpus_name}{suffix}_calls.jsonl"
         )
         # EL DIRECTORIO SE CREA ACA. Sin esto, el primer intento de tomar el lock del
         # archivo falla con `FileNotFoundError` sobre un `.lock` que nadie menciono en
@@ -599,7 +760,7 @@ class Runner:
                 )
             retriever = build_arm(self.retriever_arm, self._embedder, client)
 
-        return ToolSurface(
+        surface = ToolSurface(
             view=view,
             hybrid=retriever,
             semantic=self._arms["semantic"],
@@ -614,7 +775,17 @@ class Runner:
             shared_state=self.shared_state,
             offer_board=self.offer_board,
             stable_prefix_first=self.stable_prefix_first,
+            board_queue=self.board_queue,
+            context_guard=self.context_guard,
+            question=task["question"],
         )
+        # LA COLA LA SIEMBRA EL CODIGO, no el modelo. El denominador de la cobertura sale
+        # de las unidades en alcance; una cobertura cuyo denominador propone el propio
+        # agente no es cobertura, es una opinion sobre cuanto queda.
+        if self.board_queue:
+            surface.board_state.queue_mode = True
+            surface.board_state.seed(list(view.unit_ids))
+        return surface
 
     def features_for(self, task: dict[str, Any], allow_derived: bool) -> Features:
         features, _ = self._extractor.extract(
@@ -810,6 +981,21 @@ class Runner:
                     # One seed per trial, shared by every paradigm in that trial, so
                     # paradigms are compared under the same sampling conditions.
                     client = SeededClient(self._client, self._settings.seed + trial)
+                    # LA TRAZA POR LLAMADA, con el contexto de ESTA celda. Se arma aca
+                    # porque es el unico sitio que conoce las tres claves juntas —tarea,
+                    # paradigma, trial— y la traza sin ellas no se puede cruzar con la
+                    # fila, que es lo unico para lo que sirve.
+                    #
+                    # `_n` arranca en 0 por celda: el turno es DE LA CELDA, no del
+                    # proceso. Un contador global haria que la vuelta 1 de la celda 200
+                    # se llamara «turno 1.437», y el numero que importa —cuanto crece la
+                    # ventana entre la vuelta 1 y la 8— dejaria de leerse.
+                    if self._trace_dir is not None:
+                        self._client.trace_to(
+                            self._trace_path,
+                            task_id=task["task_id"], paradigm=name, trial=trial,
+                            _n=0,
+                        )
                     return self._run_one(
                         task, name, features, make_surface(client), trial, client
                     )
@@ -977,6 +1163,7 @@ class Runner:
                 infeasible=False,
                 retriever=self.retriever_arm,
                 analyzer=ANALYZER_VERSION,
+                surface_version=SURFACE_VERSION,
                 tokens_by_model=dict(spent.by_model),
                 # Declared, never inferred from `bool(oracle)`: a task whose correct
                 # answer is the empty set still HAS a cheap oracle, and inferring it
@@ -1010,6 +1197,7 @@ class Runner:
                 infeasible=True,
                 retriever=self.retriever_arm,
                 analyzer=ANALYZER_VERSION,
+                surface_version=SURFACE_VERSION,
                 tokens_by_model=dict(spent.by_model),
                 has_oracle=bool(task.get("has_oracle", True)),
                 answer="",
@@ -1058,6 +1246,7 @@ class Runner:
                 infeasible=False,
                 retriever=self.retriever_arm,
                 analyzer=ANALYZER_VERSION,
+                surface_version=SURFACE_VERSION,
                 tokens_by_model=dict(spent.by_model),
                 has_oracle=bool(task.get("has_oracle", True)),
                 answer="",
@@ -1154,9 +1343,16 @@ class Runner:
         earned. Aggregating first makes the unit of learning the unit of evidence,
         and `was_best` answer the question the router actually needs estimated:
         'was this the right paradigm here, on average'.
+
+        Y LAS FILAS PASAN POR `learnable_rows` PRIMERO. Este metodo descartaba las de
+        `infra_error` —via `load_rows`— y **no** las infactibles, mientras los dos
+        scripts de analisis descartaban las dos. La guarda vivia en el banco y le
+        faltaba al producto. El motivo y la medida estan en `policy.learnable_rows`.
         """
+        filas, descartadas = learnable_rows(self.load_rows())
+        self._last_learning_discards = descartadas
         cells: dict[tuple[str, str], list[dict[str, Any]]] = {}
-        for r in self.load_rows():
+        for r in filas:
             cells.setdefault((r["task_id"], r["paradigm"]), []).append(r)
 
         mean_utility = {

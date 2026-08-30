@@ -8,7 +8,10 @@
 > sigue es la formulación, el inventario exacto de qué se ajusta, y —lo que hace que valga
 > publicarla— **el estado medido, que incluye una refutación.**
 >
-> Propuesta. No entró todavía a `paper-en.md` ni a `paper-es.md`.
+> **APLICADO el 2026-08-29** como **§6.5** en los dos archivos. Este queda como el
+> razonamiento y el inventario largo; el número en vivo del paper se refrescó al insertarlo
+> (516 filas · 141 episodios · 57 pares con evidencia · 27 con `n ≥ 3`). `W-6` cerrada en
+> `lab/PAPER.es.md`.
 
 ---
 

@@ -676,6 +676,205 @@ disponibilidad de detector por tarea** sobre bases independientes de la clave de
 
 ---
 
+## 5.3 Soundness del ensamblador
+
+Los tres resultados que siguen son **estructurales**: ninguno depende de un corpus, de un
+modelo ni de una corrida. Están acá porque la maquinaria que describe §6 existe para hacer
+posibles enunciados de esta forma, y sin ellos la procedencia es contabilidad — se registra,
+se muestra, y no compra nada que alguien pueda nombrar.
+
+Sea `T` una plantilla con ranuras `S = {s₁ … sₙ}`, `B` una asignación de ranuras a
+proposiciones, `Γ` una base de creencias y `φ` un piso de procedencia.
+
+**Teorema 2 (soundness del ensamblador).** Si `fill(T, B, Γ, φ)` emite una cadena `R`,
+entonces para toda ranura `sᵢ ∈ S` existe `βᵢ ∈ Γ` tal que
+
+1. `βᵢ` es la creencia **vigente** sobre la proposición que `B` asigna a `sᵢ`;
+2. `rank(procedencia(βᵢ)) ≥ rank(φ)`;
+3. la subcadena de `R` en la posición de `sᵢ` es exactamente `str(valor(βᵢ))`.
+
+Y `R` no contiene ninguna subcadena que provenga de otro lado que no sea `T` o esos valores.
+
+En una línea: **si el ensamblador emite, todo número que emitió está implicado por la base de
+creencias al piso pedido.** No «probablemente». No «salvo alucinación».
+
+*Demostración.* Por construcción, y depende de una línea. `fill` recorre `slots_of(T)` —las
+ranuras que la plantilla realmente usa, extraídas de ella y no declaradas aparte— y para cada
+una hace exactamente tres cosas: resuelve la proposición asignada, pide la creencia vigente y
+compara el rango de procedencia contra el piso. Cualquier fallo anota el motivo y sigue, sin
+emitir. La sustitución ocurre **después** de comprobar que la lista de rechazos está vacía,
+así que `values` tiene una entrada por cada ranura de `T`, todas provenientes de una creencia
+vigente que pasó el piso; y la sustitución reemplaza ocurrencias del patrón de ranura dejando
+intacto el resto de la plantilla, que es texto fijo escrito por el código. Las tres
+condiciones se corresponden una a una con las tres guardas, y no hay un cuarto camino por el
+que un valor llegue a la salida. ∎
+
+**Falla cerrada y falla ENTERA, que es una decisión y no una consecuencia.** Si una sola
+ranura no llega al piso, no se emite una versión parcial. Emitir *«el saldo de la cuenta es
+___»* no es más honesto que emitir un número inventado: es el mismo acto con mejor caligrafía,
+e invita al lector a completar lo que el contrato rechazó.
+
+**Cuatro límites, dichos adentro del teorema y no en una nota al pie.**
+
+| límite | qué significa |
+|---|---|
+| **el alcance es la ranura, no la oración** | *«el saldo NO supera {x}»* con `x` correcto es **sound y falso**. No es un defecto de la implementación: es la frontera de la familia entera, y un red-team la mide en vez de suponerla |
+| **la procedencia es del registro, no del mundo** | `COMPUTED` significa que alguien la computó y la asentó. El teorema **traslada** confianza desde el piso hacia la salida; no la crea. Un sensor que miente se emite con procedencia impecable |
+| **vigente, no histórica** | la garantía es sobre el estado de creencias **al ensamblar**, no sobre todo lo que alguna vez se creyó |
+| **`str()` es parte del teorema** | la condición 3 dice `str(valor)`, no «el valor». El ensamblador no formatea, porque formatear sería empezar a decidir algo sobre el número |
+
+Verificado exhaustivamente y no por casos elegidos: sobre el producto cartesiano de las
+cuatro procedencias por las condiciones de rechazo — un espacio chico, y por eso uno que se
+puede recorrer entero.
+
+## 5.4 La cota nativa del ratchet
+
+El piso de garantía aprendido sólo sube. Un borrador anterior lo acotaba importando un
+teorema sobre **varianza bajo oscilación**; eso no era una cita floja sino un **error de
+categoría** — una secuencia monótona y acotada tiene varianza que tiende a cero por
+construcción, así que la cota se cumplía vacuamente y no decía nada. Lo que un ratchet
+necesita que se le acote no es cuánto **oscila** sino cuánto **daño acumulado** puede hacer
+antes de detenerse, y eso es un conteo.
+
+Los niveles son `EXPLORATORY < STANDARD < ACCOUNTABLE < CERTIFIED`, y el techo aprendido es
+el tercero: `CERTIFIED` queda fuera de alcance a propósito, porque ese nivel restringe qué
+patrones son admisibles y una estadística sobre calidad de evidencia no es evidencia sobre
+certificabilidad.
+
+**Proposición 4 (daño total acotado).** Sobre `R` regiones, el número total de eventos de
+endurecimiento en **toda la vida del sistema** es `≤ 2R`, sea cual sea la cantidad de ciclos
+de consolidación.
+
+*Demostración.* Monotonía: el piso de cada región es una secuencia no decreciente en un
+conjunto finito y totalmente ordenado, así que cambia a lo sumo tantas veces como niveles
+haya por encima de su base. No hace falta nada probabilístico. ∎
+
+**Proposición 5 (la guarda de replicación es fuerte lejos del umbral y débil cerca).** Con
+`q` la tasa verdadera de rechazo de la región y dos splits de tareas **disjuntos**:
+
+| `q` | un split | **ambos** | ≈ |
+|---:|---:|---:|---:|
+| 0,10 | 0,0050 | **0,000025** | 1 en 39.613 |
+| 0,25 | 0,1138 | 0,01295 | 1 en 77 |
+| 0,40 | 0,4059 | 0,16477 | **1 en 6** |
+| 0,45 | 0,5230 | 0,27358 | **1 en 4** |
+
+Eso se dice y no se esconde, e importa menos de lo que parece por dos razones
+estructurales. Cerca del umbral un falso positivo es casi indistinguible de un verdadero —una
+región cuyo `q` real es 0,45 **efectivamente** rechaza casi la mitad de las veces—. Y la
+Proposición 4 acota el daño acumulado pase lo que pase.
+
+> **La monotonía que vuelve inaplicable el teorema de varianza prestado es exactamente lo que
+> acota el daño de su propia tasa de falsos positivos.** La propiedad que rompe la cota
+> prestada es la que la hace innecesaria.
+
+**Y lo que cuesta está medido, lo cual corrige cómo se lee la Proposición 4.**
+
+| nivel | brazos admisibles | cobertura | `u`(mejor fijo) |
+|---|---:|---:|---:|
+| A0 · A1 · A2 | 5 | 100% | 0,6101 |
+| **A3** | **2** | **40%** | **0,4221** |
+
+El ratchet es **gratis hasta A2 y cuesta todo de una vez en A3**: la única transición con
+precio se lleva **60% del catálogo y 31% de la utilidad**. «A lo sumo dos subidas» invita a
+imaginar un daño que se acumula despacio; lo medido es lo contrario — **una sola transición
+tiene precio, y ahí es abrupto**. Las otras dos son gratis porque no hacen nada. Y el
+promedio esconde a quien paga: una región pierde **−0,5000** mientras la media del corpus es
+0,0000.
+
+## 5.5 Quién fija el dial
+
+La pregunta parece de gobernanza y es de diseño. Si el nivel de garantía lo elige el
+llamador, un llamador apurado lo baja; si lo elige el sistema, el llamador no puede pedir más
+rigor del que el sistema cree necesario. **Ninguna de las dos.**
+
+```
+nivel efectivo = max( pedido , piso de creencias , piso aprendido )
+```
+
+| fuente | quién la produce | qué puede hacer |
+|---|---|---|
+| **pedido** | el llamador, en el request | **subir**, nunca bajar |
+| **piso de creencias** | `required_floor(Γ)` sobre las creencias `COMPUTED` del request | **subir**, y no se puede desactivar |
+| **piso aprendido** | `θ.floors[región]`, dentro del bundle firmado | **subir**, y sólo si está promovido |
+
+**Proposición 6.** `max` es la **única** composición bajo la cual cada fuente sólo puede
+endurecer. Con `min` o con un promedio, agregar una fuente podría ablandar el resultado — y
+entonces una fuente nueva sería un **riesgo** en vez de una garantía.
+
+**Por qué el llamador sube y no baja.** Conoce cosas que el sistema no: que este request va a
+un informe regulatorio, que el resultado se publica, que hay un auditor mirando. Nada de eso
+está en el material. Lo que no puede es pedir **menos**, porque el piso sale de propiedades
+**del request mismo** — `irreversible` eleva a A3, `shared_writes` a A2, y las dos entran
+como creencias `COMPUTED` **declaradas por el caller, nunca inferidas del texto**. Un llamador
+que pudiera bajar el piso podría declarar una acción irreversible y después pedir tratarla
+como exploratoria, que es exactamente la combinación que el piso existe para impedir.
+
+**Una cuarta fuente, que no es un nivel sino una degradación.** A2 admite creencias
+`ELICITED`, pero sólo una vez que la calibración se ganó; admitirlas antes anula el propósito
+del nivel. Así que la resolución no baja el nivel: **endurece el piso de procedencia dentro
+del nivel**. La misma idea del `max`, aplicada al otro eje.
+
+**Y se evalúa marginalizando sobre sus posiciones, no fijando una** — reportar métricas a un
+dial fijo reporta una política, no un sistema. Marginalizar produjo un hallazgo sobre el
+propio dial:
+
+> **Tres de las cuatro posiciones son indistinguibles.** A0, A1 y A2 declaran
+> `admissible_patterns = None`, así que **el dial no restringe el catálogo hasta A3**. Dos de
+> sus tres transiciones no hacen nada en esa dimensión, y toda la diferencia se paga en un
+> solo escalón.
+
+Lo que sí distingue A1 de A2 vive en otros ejes —θ firmada, log de creencias, profundidad de
+composición, y el piso de procedencia—, así que el dial no es inerte ahí: es inerte **en la
+dimensión que esa tabla mide**. Decir cuál es cuál es el punto de marginalizar.
+
+## 5.6 Lo que la teoría no supone, y por qué eso es la afirmación
+
+Todo lo de §5.1–§5.5 está enunciado sobre un catálogo de brazos, una utilidad, una base de
+creencias y un retículo de procedencia. **Ninguno de los cinco resultados menciona
+recuperación, documentos ni respuesta a preguntas.** No es un accidente de redacción ni una
+salvedad: es la afirmación. Lo que se describe es una capa de decisión sobre *acciones que
+el sistema puede tomar*, y el ruteo de paradigmas sobre un corpus documental es la instancia
+que pudimos medir sin juez.
+
+La distinción sobre la que la capa realmente gira no es *qué clase de tarea* sino **qué se
+sabe y cuándo**. Una regla sólo puede gobernar si se la puede evaluar al momento de decidir;
+un valor sólo se puede emitir si una creencia vigente lo lleva a la procedencia exigida; un
+nivel sólo se puede subir. Las tres son propiedades de la decisión, no del dominio.
+
+**La misma maquinaria, enunciada sobre cuatro superficies.** Los teoremas de arriba son la
+forma general; las columnas son lo que instanciarlos exige.
+
+| superficie | el sensor emite | la regla decide | el registro guarda |
+|---|---|---|---|
+| **contenido** | números con procedencia | emitir o negarse, por ranura (§5.3) | qué creencia llenó qué ranura |
+| **datos** | una consulta propuesta, su grano, su resolución temporal | admitir la consulta o exigir elicitación | la consulta, y contra qué se la chequeó |
+| **acciones** | una llamada a herramienta y sus precondiciones | el piso de procedencia sobre lo irreversible (§5.5) | un ledger de idempotencia |
+| **gobierno** | una edición candidata de la política | la guarda de promoción sobre episodios held-out | el diff entre dos bundles firmados |
+
+La selección entre topologías de control es la **primera** columna instanciada sobre un
+catálogo de recuperación. Es el caso que medimos, no el alcance de lo que se afirma.
+
+**Y la rama no probada de la teoría y la superficie no medida son el mismo lugar.** §5.2
+parte el problema sobre `v`, la disponibilidad de un detector barato, y §1.3 registra que
+todos los corpus de acá caen del lado `v = 1` **por construcción**, porque el gold es lo que
+vuelve la calificación libre de juez y el gold *es* un detector. Así que la rama `v = 0` —la
+que necesita un router— no la puede alcanzar ningún benchmark que califique por exact-match.
+
+¿Dónde está `v = 0`, entonces? Predominantemente en la superficie de acciones. Chequear *si
+un archivo se escribió* es barato; chequear *si éste era el reembolso correcto* no lo es, y
+no hay clave de respuestas que lo abarate. El dominio que este registro no mide es el
+dominio donde la partición central de la teoría por fin tiene dos lados.
+
+> **Así que la ambición se enuncia en vez de matizarse.** La teoría es general por
+> construcción y está verificada como tal —sobre distribuciones sintéticas con respuesta
+> conocida, no sobre corpus—. Las mediciones son sólo de recuperación, y §9 dice exactamente
+> qué herramientas existieron y cuáles nunca. Un lector debería tomar §5 como afirmado para
+> agentes en general y §7–§8 como afirmado para extracción de respuesta exacta, y exigirnos
+> la brecha entre las dos en vez de una promesa más angosta que no hicimos.
+
+---
+
 # 6. Diseño
 
 ## 6.1 Medir sin juez
@@ -804,6 +1003,120 @@ por hash de contenido, así que después de una primera pasada la fusión es ari
 híbrido 0,50, léxico 0,25. RRF promedia rangos, así que un componente que anda mal arrastra a uno
 que anda bien. "Híbrido siempre es mejor" no se sostiene cuando un componente está muy por debajo
 del otro.
+
+## 6.5 El banco es un procedimiento de ajuste, no sólo un instrumento
+
+El modelo está **congelado y no se entera**. Lo que se ajusta es la capa de decisión, y se
+ajusta **sobre el registro del producto cruzado**: cero llamadas nuevas, replay
+contrafáctico sobre filas ya pagadas.
+
+```
+corpus de un dominio  ──►  producto cruzado (tarea × paradigma × réplica)
+                                      │
+                                      ▼
+                           consolidación offline
+                                      │
+                      ┌───────────────┴───────────────┐
+                      ▼                               ▼
+              capa de decisión ajustada        el modelo, INTACTO
+```
+
+Eso le da al banco una segunda lectura que el resto de este paper no usa: no es sólo el
+instrumento que mide los paradigmas, es **el procedimiento de ajuste de la capa que los
+elige**. El mismo producto cruzado que produce el número produce la política.
+
+**Un experimento de aprendizaje automático donde el aprendiz no es el modelo.** No hay
+gradiente; hay estadísticas por región sobre episodios registrados, con guarda de promoción.
+Y por eso el artefacto ajustado es **legible y diffeable** — dos versiones de la política se
+comparan como código, no como pesos.
+
+**Qué se ajusta, exactamente** — el inventario sale del bundle firmado y del ciclo de
+consolidación, no de una intención, y dos filas son el punto:
+
+| se ajusta | qué es | estado |
+|---|---|---|
+| `stats` | por `(región, paradigma)`: tasa de victorias y peso Hebbiano | **ejecutado**; el peso **no lo lee el router** — está probado que no puede mejorar un argmax |
+| `floors` | el piso de garantía por región, aprendido de estadísticas de **rechazo tipado** | **ejecutado**, con guarda de replicación y techo en `ACCOUNTABLE` (§5.4) |
+| `model_stats` | ídem por `(región, modelo)`: la segunda política | **ejecutado** |
+| `trusts_elicited` | calibración de la credencia elicitada, computada desde el log de creencias | **ejecutado**, y viaja **firmado adentro del bundle**, no como parámetro |
+| `clauses` | cláusulas de adquisición certificadas | **ejecutado**; hoy **ninguna se promueve** — el beneficio neto no supera el piso de ruido al λ de decisión |
+| asociaciones de orden | pares ordenados de herramientas, reforzados **por resultado** | **medido** (`p = 0,0078`) y **ningún consumidor lo lee** |
+| el reparto del handoff | qué unidades ve cada sub-agente | **NO se ajusta**: es un paso por índice, fijo |
+
+Las dos últimas filas son donde el aprendizaje existe como medición y todavía no como
+mecanismo. Decirlo vale más que insinuar que ya funcionan.
+
+**Cuatro disciplinas lo vuelven un ajuste y no una ilusión.** Un episodio es una *celda*, no
+una réplica — contarlas por separado es pseudorreplicación, y computar «fue el mejor» sobre
+trials crudos deja que una réplica con suerte cobre el refuerzo que la media de su paradigma
+nunca ganó. El registro se parte en tres *por tarea* (§6.3), y el mundo final es de un solo
+uso, gastado *antes* de responder. Y los ejes de partición están **tipados por cuándo se
+conocen**: una regla sólo puede gobernar si se la puede evaluar al momento de decidir, así
+que partir sobre `truth_coupling` —el oráculo del extractor— o sobre `iterations`
+—posterior a la ejecución— descubre una regla que no se puede aplicar. El tipo lo dice; no
+se descubre al cablearla.
+
+**Y la cuarta es lo que *no* entra.** Una fila que no es una medición no puede volverse un
+episodio, y las clases son distintas: un 429 agotado es infraestructura; una celda podada
+por aritmética **no ejecutó**, así que el `0,0` que lleva es un relleno y no una lectura;
+una fila sin región no tiene bin donde ser aprendida. Medido sobre la campaña actual, **39
+de 180 episodios —21,7%— venían de celdas que nunca corrieron**, y el sesgo no es aleatorio:
+cae sobre los brazos caros, que son justo los que la poda alcanza. Dos pares reportaban
+`u = 0,667` midiendo **1,000 donde efectivamente ejecutaron**, y quince pares llevaban
+`u = 0,000` con `n = 2–3` **sin una sola ejecución detrás del número**.
+
+Y el conteo es peor que el promedio. Los episodios son lo que cruza el piso de confianza,
+así que un par podía **ganar confianza con celdas donde su brazo nunca corrió**. Ninguno
+había cruzado todavía —la campaña es joven— pero quince estaban en camino, con ceros que
+ninguna ejecución respalda. La infactibilidad no se pierde: la consume su consumidor, que es
+el portón de factibilidad, y lo hace *antes* de seleccionar; meterla además en la política
+cuenta un mismo hecho dos veces, en un canal que no lo sabe representar.
+
+**Y el error simétrico importa igual.** Una respuesta equivocada, una respuesta vacía de un
+brazo que *sí* corrió, y un `Unknown` literal del modelo son todas **mediciones** — el brazo
+ejecutó y falló, que es exactamente lo que la política tiene que aprender. Un filtro que
+descartara también los fracasos dejaría una política entrenada sólo con éxitos, que es la
+forma más rápida de aprender que todo funciona.
+
+### La afirmación de transferencia, y su refutación medida
+
+La lectura se completa con un condicional: *si el corpus es representativo del dominio, la
+capa ajustada debería transferir*. Eso es falsable, y este registro ya lo falsó una vez.
+
+> **P15.** Sobre un mundo que la política nunca había visto —seed 47, 390 celdas, cero
+> errores de infraestructura— el ruteo por request perdió contra el mejor paradigma fijo por
+> **−0,087**, más allá del piso de ruido, **mientras reproducía cada decisión 26/26** desde
+> su base de creencias registrada.
+
+**El mecanismo es el hallazgo, no el número.** El vocabulario de región **no tiene eje de
+horizonte**, así que las tareas que castigan una elección fija eran indistinguibles de las
+que la premian. La política ruteó contra su propio veredicto registrado porque **ninguna
+etiqueta le dijo nunca en qué caso estaba**. Chequeo de sensibilidad: reparar la validez del
+aprendizaje —agregación por episodio, holdout limpio— deja el número idéntico, así que la
+refutación no es un artefacto del procedimiento.
+
+Eso afila la condición hasta volverla chequeable:
+
+> **La representatividad hay que enunciarla sobre los ejes que el vocabulario de región
+> distingue.** «Representativo del dominio» no alcanza. Un corpus que varía en una dimensión
+> que el mapa de features no mira produce episodios que la política no puede separar — y
+> entonces aprende un promedio sobre dos poblaciones. La condición se puede chequear sobre
+> un corpus *antes* de correrlo, porque la región es una función determinista de los
+> features.
+
+### Una consecuencia que se puede afirmar hoy
+
+**Más inferencia no compra más ajuste.** La consolidación es replay sobre el registro, así
+que el costo de aprender es **cero llamadas**: lo que la cuota compra son *episodios*, y el
+ajuste es gratis sobre los que haya. Eso separa dos decisiones que se suelen tomar juntas —
+cuánto medir lo gobierna la potencia estadística, cuánto entrenar no lo gobierna nada.
+
+Y es observable mientras una campaña corre. Sobre la campaña actual, **516 filas dan 141
+episodios sobre 6 regiones, 57 pares `(región, paradigma)` con evidencia y 27 con
+`n ≥ 3`** — leído del registro entre dos tandas, sin costo adicional. La potencia estadística
+la fija el **corpus**, no la cuota: un par junta un episodio *por tarea* de su región, así
+que cruzar el piso de evidencia exige esa cantidad de tareas. Gastar más agrega tareas, y
+sólo cuentan si caen en la región justa.
 
 ---
 
@@ -1022,6 +1335,70 @@ registrado gratis. El paradigma queda medido y no promovido. Lo reportamos con e
 largo que el éxito a propósito: la disciplina de predicciones registradas sólo vale la
 pena si una falsificación cuesta un párrafo y no una retractación.
 
+## 7.7 Estado compartido, ofrecido y no tomado
+
+**El estado compartido se le ofreció a todos los paradigmas, y prácticamente no se usó.** Un
+blackboard es la afordancia obvia de coordinación para topologías multi-agente, y es la
+única capacidad de este registro que **no** es recuperación: `post` escribe un hallazgo
+autocontenido que **sobrevive la compactación de contexto**, `board` lee lo que todos los
+agentes de la tarea posteron. Es un factor cruzado y no una propiedad de un brazo — soldarlo
+adentro de `dag_strategy` había vuelto «el efecto dag_strategy» una conjunción de topología
+de olas *y* estado compartido que nada en el registro podía separar.
+
+Ofrecido sobre doce paradigmas y 46 celdas ejecutadas, de las **125 llamadas a herramientas
+que el modelo hizo, `post` se llamó una vez y `board` no se leyó nunca** — 0,8%. Ni
+rechazada ni indisponible: declarada, descrita como sobreviviente de la compactación, y no
+adoptada.
+
+Es un nulo sobre la *adopción*, y la adopción es lo único acá que no está limitado por
+ruido: es un conteo, no un promedio. El delta de costo que la acompaña (+39,3% agregado)
+**no** es separable del ruido con `n = 1` por celda, dada la dispersión de costo entre
+réplicas de hasta 3,93× medida sobre estos mismos paradigmas, y no lo afirmamos.
+
+**Y el nulo es sobre la afordancia, no sobre el estado compartido — el mismo objeto,
+alcanzado de dos maneras, da resultados opuestos.** `dag_strategy` escribe hallazgos en ese
+mismo blackboard **desde el código** y lo renderiza dentro del prompt de cada sub-agente, así
+que leerlo no le cuesta al modelo ninguna decisión. Es el mejor paradigma fijo sobre el mundo
+held-out, y el brazo al que el ruteo por request no le pudo ganar. Ofrecida en cambio como
+una herramienta que el modelo puede elegir llamar, la misma estructura se llamó una vez en
+125.
+
+Una capa de ejecución anterior, hoy congelada y conservada sólo como referencia, es la única
+implementación de esto que corrió contra un índice real, y tampoco ofrecía el board como
+herramienta. Lo **inyectaba** renderizado antes de cada llamada al modelo; lo escribía el
+harness —no el modelo— en el prefetch, en cada resultado de herramienta y en la expulsión de
+contexto, así que el board era lo que *sobrevivía* la compactación y no lo que al modelo se
+lo invitaba a guardar. Y lo que renderizaba no era estado crudo sino tres señales de control:
+cobertura (`N/M chequeados`, con *«NO chequeados — decilo si la respuesta depende de
+ellos»*), una lista de consultas ya emitidas para no repetirlas, y una directiva (*«quedan N
+fragmentos, probá consultas DISTINTAS»* / *«todo chequeado, escribí tu respuesta final»*).
+Ésas son las señales de contabilidad de §7.3, y el 3,05× medido ahí es un miembro de esa
+familia.
+
+Esa capa además dejó registrado un fracaso que vale más que el mecanismo: anotar un hallazgo
+y abrir una pista eran originalmente una sola llamada, así que registrar algo que ya se sabía
+**abría un item pendiente**, bajaba el porcentaje de cobertura y disparaba más insistencia.
+Una señal de contabilidad tiene que ser monótona en la dirección que premia, o castiga al
+agente por reportar lo que sabe.
+
+Lo reportamos como contraste de diseño y no como evidencia — esa capa no está en este
+registro y nada de eso se midió acá. Lo que cambia es la lectura del nulo: no dice que el
+estado compartido no ayude. Dice que **la coordinación que hay que elegir no se elige**, y el
+experimento que lo aislaría es barato y no se corrió — el factor `shared_state` apaga el
+board inyectado adentro de `dag_strategy` dejando intactas las olas y el paso de verify, y
+nunca se ejecutó.
+
+**El mecanismo vale más que el número.** Una herramienta de coordinación no tiene premio
+inmediato para el agente que la llama: postear paga un costo ahora para que *otra* llamada
+—posiblemente de otro agente— salga más barata después. Nada en un objetivo de un solo turno
+representa esa transferencia, y no hay gradiente por el cual un modelo congelado pudiera
+descubrirla. Donde el blackboard lo escribe el **código** en vez del modelo, la misma
+estructura se usa en cada ola. Así que **el estado compartido se usa cuando lo escribe la
+estructura de control, y no cuando al modelo simplemente se le permite**. Eso es una
+afirmación sobre dónde va la coordinación —en la topología, no en la superficie de
+herramientas— y es la evidencia más filosa que este registro tiene sobre una capacidad que
+no es recuperación.
+
 ---
 
 # 8. Mecanismos de falla
@@ -1112,9 +1489,15 @@ flips por celda, nunca como media pelada. El piso de ruido formal por celda y la
 de oráculo neta (`Study.noise_floor`, decisiones contra la brecha neta) se computan en el
 análisis final sobre la grilla completa — pendiente de las celdas en re-corrida.
 
-**Un modelo, y no se lo puede fijar.** `gpt-5-chat` rechaza una temperatura explícita, así que el
-sampleo queda en el default del modelo. Hay un deployment de razonamiento que acepta temperatura 0
-como escape, pero cambia qué se está midiendo.
+**Modelos: tres, y la perilla del sampleo resultó ser la preocupación equivocada.** La primera
+grilla corrió sobre `gpt-5-chat`, que rechaza una temperatura explícita, así que el sampleo quedó
+en el default del modelo — reportado en su momento como la amenaza principal. Medido desde
+entonces sobre `gpt-5.4-nano`, `gpt-5.6-luna` y `gpt-5.6-terra`: los deployments de razonamiento
+rechazan `temperature` de plano, y `terra` en su propio default es el **más** reproducible de los
+tres. La restricción viva es otra y es estructural: en la familia `5.6`, `tools` y un
+`reasoning_effort` distinto de `none` no se pueden combinar en Chat Completions, y la diferencia
+que eso hace es total — 0,000 contra 1,000 sobre la misma tarea. Así que toda fila de campaña
+corre con `reasoning_effort = none`, que es un régimen declarado y no un default.
 
 **Corpus sintético.** El ground truth es exacto y se re-deriva de forma independiente, y los
 parámetros estructurales son diales y no esperanzas — pero la distribución de tareas reales sobre
@@ -1124,6 +1507,34 @@ todavía.
 **La latencia no es comparable.** El DAG acá corre secuencial donde correría en oleadas
 concurrentes; y una vez que los workers compiten, el wall-clock por fila deja de medir latencia.
 La calidad y los conteos de tokens siguen siendo exactos.
+
+**La superficie de acciones es arquitectura declarada y no está ejercitada — dicho con el
+inventario, porque si no lo dice un lector lo encuentra.** §5.5 gatea las acciones
+irreversibles con un piso de procedencia y §5.6 afirma la maquinaria sobre cuatro
+superficies. Una de esas cuatro nunca corrió. El inventario completo de herramientas, sobre
+todos los corpus y los quince paradigmas registrados, son doce:
+
+| qué hacen | cuáles |
+|---|---|
+| leen el mundo | `search` `keyword_search` `semantic_search` `read` `read_all` |
+| escriben el estado del propio agente | `note` `notes` `plan` `advance` `post` `board` |
+| leen su propia contabilidad | `coverage` |
+
+**Ninguna de las doce cambia nada fuera del proceso.** No se escribe un archivo, no se manda
+un mensaje, no se actualiza una fila. Seis tareas de setenta y ocho llevan
+`irreversible = True` y tres llevan `shared_writes = True`, y esas banderas sí levantan el
+dial de garantía — pero la tarea que etiquetan es *«decidí si esta relación debe escalarse
+para congelamiento; contestá 'escalate' o 'no escalation'»*, calificada por exact-match
+contra una clave. Es una clasificación sobre documentos con la etiqueta de una acción
+encima. No existe una herramienta que congele una cuenta, así que el piso que existe para
+gatear lo irreversible nunca tuvo un acto irreversible que gatear.
+
+Lo enunciamos como amenaza en vez de resolverlo porque resolverlo es otro experimento, y
+porque la forma honesta de una afirmación ambiciosa es el balance que la acompaña: **§5 se
+afirma para agentes en general y está verificado como tal; §7–§8 se afirman para extracción
+de respuesta exacta sobre documentos y se midieron ahí; la superficie de acciones está
+diseñada, tipada, probada en unidad y sin medir.** Lo más parecido a evidencia sobre una
+capacidad que no es recuperación es el resultado del blackboard en §7.7, y es un nulo.
 
 **Las afirmaciones de novedad están verificadas como conjunciones, no como partes.** Los dos
 trabajos ancla se leyeron completos el 2026-08-26: todos los números citados de Select-then-Solve
@@ -1171,11 +1582,12 @@ gane al fallback — que sería un resultado, y se declara publicable **antes** 
 
 | artefacto | contenido |
 |---|---|
+| el control nulo | el andamiaje por prompt se conserva en el registro y **no se ejecuta nunca**: dominado por `direct` en toda celda medida, a igual utilidad y jamás más barato. Es la evidencia de que andamiar por fraseo no compra nada, no un brazo |
 | `PATTERNS.md` | catálogo de patrones: 10 estructurales, 4 de control, 15 anti-patrones, con aplicabilidad enunciada sobre el vector de features |
 | `ANALYSIS.md` | el análisis de fallas de §8 completo, por paradigma y por celda |
 | `GATE.md` | ocho criterios binarios de publicación y su veredicto actual |
 | `PLAN.md` | historia de revisiones de la tesis, incluidos dos encuadres superados y por qué |
-| `D:\Apps\MAPO\lab` | el harness: 7 paradigmas, 5 brazos de recuperación, 3 superficies de herramientas, 4 niveles de garantía, generador de corpus con verificador independiente, 63 aserciones chequeadas por máquina |
+| `D:\Apps\MAPO\lab` | el harness: **15 paradigmas registrados**, de los cuales 12 corren la campaña, 5 brazos de recuperación, 4 superficies de herramientas, 4 niveles de garantía, 12 herramientas, generador de corpus con verificador independiente, **573 aserciones chequeadas por máquina** (521 + 52 en dos suites) |
 
 Siete de los quince anti-patrones del catálogo son errores cometidos y medidos en el curso de este
 trabajo, incluidos dos que contradijeron nuestras propias predicciones publicadas.

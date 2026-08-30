@@ -140,7 +140,27 @@ class DiscoveredProposition:
 
 
 class LearningStore:
-    """Owns every piece of persisted learning state for one corpus."""
+    """EL LEDGER EPISTÉMICO: qué se creyó, cuándo, con qué procedencia, y encadenado.
+
+    NO ES UN LOG. Un log se puede reescribir y nadie se entera; esto lleva una **cadena de
+    hashes** (`verify_chain`), así que una entrada modificada rompe todo lo que vino
+    después. Es lo que hace que «misma base de creencias ⟹ misma decisión» sea una
+    afirmación verificable y no una promesa.
+
+    QUÉ GUARDA, y son cosas distintas que no se mezclan: las creencias asentadas con su
+    procedencia y su origen, la calibración por proposición, los bundles de política con su
+    versión y su firma, y las actas de consolidación. Cada una responde una pregunta
+    distinta sobre por qué el sistema hizo lo que hizo.
+
+    VIVE EN `state/` Y NO EN `results/`, y esa separación se pagó: un `rglob("*.jsonl")`
+    sobre resultados levantaba el ledger como si fueran filas medidas y lo **promediaba**,
+    callado. Son dos árboles y no se mezclan. Están fuera de git por tamaño, no por
+    importancia: a esto lo protege su cadena de hashes, no el control de versiones.
+
+    COPY-ON-WRITE PARA LA POLÍTICA: un θ candidato se persiste sin instalarse. Instalar
+    pasa por `promote()` y su guarda anti-regresión, que es otro portón — una lectura no
+    puede volver producción a un bundle que nadie validó.
+    """
 
     def __init__(self, state_dir: Path, corpus: str) -> None:
         # RECIBE SU DIRECTORIO, no lo adivina. La primera version derivaba la ruta del

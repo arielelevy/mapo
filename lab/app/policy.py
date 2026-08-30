@@ -19,6 +19,17 @@ Three ideas live here, and they are the contribution of the lab.
    episodes. This is Oracle's SQL Plan Management discipline, and it is what keeps
    "self-improving" from meaning "silently different tomorrow".
 
+   Y DE ACA SALE LA GARANTIA DEL PRODUCTO, que es lo que este modulo sostiene y no
+   decia en ningun lado: «misma base de creencias ⟹ misma decision». Es verdadera
+   SOLO porque theta esta congelada durante el request. Si el bundle se actualizara
+   adentro —aunque fuera una estadistica— dos pedidos con la misma base de creencias
+   podrian decidir distinto, y la promesa dejaria de ser verificable en el acto: habria
+   que conocer ademas el orden en que llegaron los pedidos.
+
+   `OnlineLearningRefused` es lo que lo hace cumplir, y por eso es una EXCEPCION y no
+   una advertencia: aprender adentro de un request no es una mala practica que degrada
+   la calidad, es lo que rompe el enunciado que este sistema promete.
+
 3. ASSURANCE IS NOT HERE ANY MORE. This module used to define a system-wide
    determinism ladder (D0-D3). That was the wrong shape: it made every request pay for
    the strictest one. Assurance is now a property OF THE REQUEST and lives in
@@ -138,6 +149,96 @@ class Stat:
 
 
 @dataclass
+class Discarded:
+    """Lo que NO entro al aprendizaje, contado por motivo.
+
+    SE DEVUELVE, NO SE CALLA. Un filtro silencioso es la version peor del problema que
+    arregla: la estadistica sale limpia y nadie puede decir sobre cuantas filas se
+    computo. Quien construye episodios recibe el conteo y decide si lo imprime; lo que
+    no puede es no enterarse.
+    """
+
+    infra: int = 0          # 429 agotado: no es una medicion, es la infraestructura
+    infactible: int = 0     # podada por aritmetica: no ejecuto, no hay utilidad que medir
+    sin_region: int = 0     # sin etiqueta no hay donde aprenderlo
+    filas: int = 0          # cuantas quedaron
+
+    @property
+    def total(self) -> int:
+        return self.infra + self.infactible + self.sin_region
+
+    def __str__(self) -> str:
+        if not self.total:
+            return f"{self.filas} filas, ninguna descartada"
+        partes = [f"{n} {k}" for k, n in (
+            ("por infraestructura", self.infra),
+            ("infactibles", self.infactible),
+            ("sin region", self.sin_region),
+        ) if n]
+        return (f"{self.filas} filas para aprender · "
+                f"{self.total} descartadas ({', '.join(partes)})")
+
+
+def learnable_rows(
+    rows: Iterable[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], "Discarded"]:
+    """Las filas de las que SE PUEDE aprender, y el conteo de las que no.
+
+    ES EL UNICO PORTON, y esa es la correccion (2026-08-29). Habia TRES constructores de
+    episodios con TRES filtros distintos: los dos scripts de analisis descartaban
+    infactibles y de infraestructura, y `Runner.episodes()` —el camino del PRODUCTO— no
+    descartaba las infactibles. La guarda vivia en el banco y le faltaba al producto, que
+    es la inversion exacta que este repo no admite.
+
+    QUE SE DESCARTA, Y POR QUE CADA UNA ES UNA CLASE DISTINTA:
+
+    `infra_error` — un 429 agotado no es una medicion. Ya estaba dicho como regla y
+    `load_rows` ya lo hacia; se repite aca porque un episodio se puede construir desde
+    filas que no pasaron por ahi.
+
+    `infeasible` — y esta es la que faltaba. Una celda podada por aritmetica **no
+    ejecuto**: no hay respuesta, no hay utilidad, y el `0,0` que lleva la fila es un
+    relleno, no una medicion. Medido sobre la campana del 2026-08-29: **39 de 180
+    episodios (21,7%) venian de celdas que nunca corrieron**, y el sesgo NO es aleatorio
+    —cae sobre los brazos caros, que son justo los que la poda alcanza—. Dos pares
+    reportaban `u = 0,667` midiendo **1,000 donde ejecutaron**, y quince pares llevaban
+    `u = 0,000` con n = 2-3 **sin una sola ejecucion detras**.
+
+    Y lo peor no es el promedio sino el CONTEO: los episodios son lo que cruza
+    `MIN_EPISODES_FOR_CONFIDENCE`, asi que un par podia **ganar confianza con celdas
+    donde el brazo nunca corrio**. Al 2026-08-29 ninguno habia cruzado todavia —la
+    campana es joven— pero quince estaban en camino, con ceros que ninguna ejecucion
+    respalda.
+
+    La infactibilidad NO se pierde: la consume su consumidor, que es el porton de
+    factibilidad, y lo hace ANTES de seleccionar. Meterla ademas en theta cuenta el mismo
+    hecho dos veces, en un canal que no lo sabe representar.
+
+    `region` vacia — una etiqueta ausente no es una region; aprender ahi seria fabricar
+    un bin que ningun request va a volver a pedir.
+
+    QUE **NO** SE DESCARTA, y decirlo importa tanto como lo otro: una respuesta
+    equivocada, una vacia de un brazo que SI ejecuto, y un `Unknown` literal del modelo
+    son MEDICIONES. El brazo corrio y fallo, y eso es exactamente lo que theta tiene que
+    aprender. Descartar los fracasos dejaria una politica entrenada solo con exitos, que
+    es la forma mas rapida de aprender que todo funciona.
+    """
+    quedan: list[dict[str, Any]] = []
+    d = Discarded()
+    for r in rows:
+        if r.get("infra_error"):
+            d.infra += 1
+        elif r.get("infeasible"):
+            d.infactible += 1
+        elif not r.get("region"):
+            d.sin_region += 1
+        else:
+            quedan.append(r)
+    d.filas = len(quedan)
+    return quedan, d
+
+
+@dataclass
 class Episode:
     """One observed execution. The unit of learning and of audit."""
 
@@ -169,10 +270,34 @@ class Episode:
 
 @dataclass
 class PolicyBundle:
-    """theta: an immutable, versioned, signed, human-readable policy.
+    """θ: LA POLÍTICA APRENDIDA, firmada, versionada y legible.
 
-    Immutability is enforced by convention plus the signature: any in-place edit
-    invalidates `signature`, and `verify()` will say so.
+    ES UN ARTEFACTO, NO UN MODELO, y ésa es la decisión de diseño que ordena todo lo demás:
+    dos versiones de θ se comparan **como código**, con un diff, no como pesos. Un cambio
+    de política que nadie puede leer no se puede defender ni revertir.
+
+    QUÉ LLEVA ADENTRO, y todo viaja FIRMADO en la misma unidad:
+
+      `stats`             por `(región, paradigma)`: tasa de victorias, episodios, y el
+                          peso Hebbiano —que **el router no lee**, y está probado que no
+                          puede mejorar un argmax sobre la media—
+      `model_stats`       lo mismo por `(región, modelo)`: la segunda política
+      `floors`            el piso de garantía por región, aprendido de estadísticas de
+                          rechazo tipado. Sólo sube, con techo en `ACCOUNTABLE`
+      `clauses`           cláusulas de adquisición certificadas
+      `trusts_elicited`   la calibración de la credencia elicitada. Va adentro y no como
+                          parámetro: separada, alguien podría desplegar el bundle sin ella
+      `tau`              el umbral de abstención
+
+    EL PISO DE EVIDENCIA NO ES UNA PREFERENCIA. Un par por debajo de
+    `MIN_EPISODES_FOR_CONFIDENCE` no es «menos confiable»: es **invisible**, y no puede
+    gobernar una decisión. Y un episodio es una CELDA —la media de sus réplicas— no un
+    trial, porque contar trials es pseudorreplicación.
+
+    LA VERSIÓN Y LA FIRMA NO SON METADATOS. La fila que se produjo bajo un θ tiene que
+    poder decir bajo cuál, o el registro no es replayable. Y un bundle instalado sin pasar
+    por `promote()` —con su guarda anti-regresión sobre episodios held-out, partidos por
+    TAREA— es exactamente lo que la disciplina de este sistema existe para impedir.
     """
 
     version: int
@@ -426,7 +551,31 @@ class PolicyBundle:
 
 
 class Plasticity:
-    """Applies the Hebbian update and builds promoted bundles."""
+    """CÓMO APRENDE θ: la regla Hebbiana sobre pares `(región, paradigma)`.
+
+        W <- (1 - lambda) * W + eta * delta
+
+    Es la Definición 11.2 del whitepaper v1, aplicada a pares `(región, paradigma)` en vez
+    de a aristas `(agente, agente)`. Los pesos quedan **acotados e interpretables**, y ésa
+    es exactamente la razón de haber elegido este sustrato sobre un embedding: un número en
+    `[0,1]` colgado de una región con nombre se puede leer, auditar, discutir y editar a
+    mano. Un embedding no.
+
+    NADA DE ESTO PASA ADENTRO DE UN REQUEST. `candidate()` arma un bundle nuevo sobre
+    episodios ya registrados y lo devuelve; no toca al vigente. El aprendizaje es **offline
+    y copy-on-write**, y por eso «se auto-mejora» no significa «mañana es distinto y nadie
+    sabe por qué».
+
+    UN EPISODIO ES UNA CELDA, NO UNA RÉPLICA. Las réplicas son mediciones repetidas de lo
+    mismo; contarlas por separado es pseudorreplicación, y computar «fue el mejor» sobre
+    trials crudos deja que una réplica con suerte cobre el refuerzo que la media de su
+    paradigma nunca ganó.
+
+    Y EL PESO HEBBIANO NO LO LEE EL ROUTER — está medido y probado: no puede mejorar un
+    argmax sobre la media. Se actualiza y se guarda porque una asociación entre pares tiene
+    contenido propio que una estadística marginal no captura, pero decir que gobierna la
+    decisión sería falso.
+    """
 
     @staticmethod
     def delta(episode: Episode) -> float:
@@ -559,6 +708,25 @@ class Plasticity:
 
 @dataclass
 class PromotionVerdict:
+    """Si un θ candidato REEMPLAZA al vigente, y con qué evidencia.
+
+    Es el portón entre aprender y desplegar. La disciplina es la de SQL Plan Management de
+    Oracle: un plan nuevo no entra por ser nuevo, entra si **no regresiona** contra el
+    vigente sobre episodios held-out. Es lo que separa «se auto-mejora» de «mañana es
+    distinto y nadie sabe por qué».
+
+    EL INTERVALO ES DE LA DIFERENCIA, no de cada valor por separado. Lo que decide es si el
+    candidato mejora, y eso es una cantidad **pareada**: dos intervalos por brazo se
+    solaparían casi siempre y no dirían nada sobre la diferencia entre ellos.
+
+    `gain_low = None` significa que no se estimó —bootstrap desactivado— y se distingue de
+    un intervalo que dio cero. Ausente no es cero, otra vez.
+
+    `reason` va siempre, incluso cuando acepta: un cambio de política sin motivo escrito no
+    se puede revisar seis meses después, y el artefacto está pensado para diffearse como
+    código y no para creerse.
+    """
+
     accepted: bool
     incumbent_value: float
     candidate_value: float

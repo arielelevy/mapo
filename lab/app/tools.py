@@ -443,9 +443,92 @@ def _highlight(text: str, terms: list[str]) -> str:
     return " … ".join(f"<<{text[a:b].strip()}>>" for a, b in merged[:3])
 
 
+# LA SUPERFICIE ES PARTE DEL CONTRATO, igual que el analizador lexico (`ANALYZER_VERSION`).
+#
+# DE DONDE SALE (2026-08-29). `X-8` cambio COMPORTAMIENTO MEDIDO: `scoped()` no reataba
+# `surfaced` ni los contadores de racha, asi que cada sub-agente arrancaba creyendo que
+# nadie habia buscado nada. Arreglarlo hace que un sub-agente vea el agotamiento del
+# retriever —y que el aviso de estancamiento pueda dispararse ahi, cosa que antes era
+# imposible—, o sea que las filas de antes y las de despues NO son comparables.
+#
+# Y NINGUNA DE LAS CUATRO GUARDAS DE MEZCLA LO VE: miran decodificacion, brazo de
+# recuperacion, analizador y vocabulario de region. Un cambio de codigo en la superficie
+# no entra en ninguna, y la huella tampoco lo lleva —es modelo, api, esfuerzo, seed y
+# max—. Sin esto, un `.jsonl` mezclaria dos regimenes en silencio.
+SURFACE_VERSION = "v2-agotamiento-compartido"
+
+# Y SOLO ESTOS DOS BRAZOS CAMBIARON, que es por que la guarda es por brazo y no por
+# archivo. `scoped()` lo llaman `handoff` y `supervisor` y nadie mas: `dag_strategy` tiene
+# sub-agentes pero les arma el alcance de otra forma, asi que su 62,5% de esterilidad ya
+# era correcto. Levantar sobre el archivo entero convertiria un registro valido en
+# inservible por un cambio que a diez de los doce brazos no los toca.
+SURFACE_SENSITIVE_ARMS = ("handoff", "supervisor")
+
+
+@dataclass
+class Barren:
+    """El agotamiento del retriever, compartido por referencia con los sub-agentes.
+
+    `streak` es un MEDIDOR —se reinicia en cuanto una busqueda trae algo nuevo, porque
+    lo que interesa para avisar es la RACHA— y `peak`/`total` son acumuladores, que son
+    los que sobreviven al registro.
+    """
+
+    streak: int = 0
+    peak: int = 0
+    total: int = 0
+
+
 @dataclass
 class ToolSurface:
-    """The four retrieval tools over one task's units, plus usage accounting."""
+    """LO QUE EL AGENTE PUEDE HACER, y la contabilidad de lo que hizo.
+
+    ES LA FRONTERA ENTRE EL AGENTE Y EL MUNDO. Todo lo que un paradigma puede tocar pasa
+    por acá: buscar, leer, anotar, postear al board, consultar su cobertura. Y por eso es
+    también el único lugar donde se puede contar honestamente qué usó — un paradigma no
+    puede reportar su propio consumo, porque entonces cada uno lo reportaría distinto.
+
+    EL ALCANCE ES UNA PROPIEDAD DE LA VISTA, NO UNA INSTRUCCIÓN. `scoped()` le da a un
+    sub-agente una `CorpusView` recortada: no puede leer afuera porque **las unidades no
+    están**, no porque se le haya pedido que no lo haga. Un límite que se pide se puede
+    desobedecer.
+
+    Y `scoped()` REATA POR REFERENCIA lo que es de la TAREA y no del sub-agente: las
+    llamadas, la secuencia, las unidades leídas, el board, y —desde el 2026-08-29— el
+    conjunto `surfaced` y los contadores de agotamiento. Olvidar uno acá **es invisible**:
+    ya pasó cuatro veces, y la última dejó a `handoff` y `supervisor` reportando 0%
+    de búsquedas estériles sobre 528 búsquedas, contra 62,5% de `dag_strategy`.
+
+    LOS FACTORES SON CAMPOS DE ACÁ, y esa es la razón de que la clase sea ancha. Cada uno
+    es una dimensión que se cruza contra los patrones en vez de plegarse adentro de uno:
+
+      `variant`             qué herramientas existen (`basic`, `accounting`, `cognitive`,
+                            `managed`). **Todos los estudios medidos corrieron en `basic`**
+      `offer_read_all`      ofrecer leer todo en UNA llamada. Apagado por defecto, así que
+                            el modelo nunca pudo pedir el material entero aunque entrara
+      `terse_tools`         descripciones cortas. Cambia lo que el modelo lee para decidir
+                            QUÉ herramienta usar, así que puede cambiar la elección
+      `compact_material`    resumir antes de servir
+      `stop_on_barren`      dejar de buscar tras N búsquedas estériles. Es la señal que
+                            midió 3,05× de reducción de costo
+      `shared_state`        el board estructural que escribe el código
+      `offer_board`         el board como HERRAMIENTA, ofrecida a todos por igual
+      `board_queue`         que el board lleve lo que FALTA —cobertura, pendientes,
+                            directiva— y no sólo lo que pasó
+      `context_guard`       acotar la ventana por crecimiento y rescatar el hallazgo
+
+    UN FACTOR QUE NO LLEGA AL MODELO NO EXISTE: no falla, **corre y mide su ausencia**, y
+    el resultado se lee igual que un efecto nulo medido. Por eso hay un solo sitio en todo
+    el repo que manda la declaración de herramientas, y `test_science.py` §59 prueba que
+    cada factor booleano viaje hasta ahí.
+
+    LA CONTABILIDAD SEPARA COSAS QUE SE VEN IGUALES desde el archivo: `units_read` es lo
+    que el MODELO eligió leer y `units_read_structural` lo que le sirvió el código;
+    `served_chars` contra `reread_chars` dice cuánto se pagó dos veces; `surfaced` y
+    `Barren` dicen si el retriever se agotó; `hallucinated` cuenta ids que no existen.
+    Juntar cualquiera de esos pares haría que un promedio no signifique nada, y nada lo
+    denunciaría.
+    """
 
     view: CorpusView
     hybrid: Retriever
@@ -555,6 +638,27 @@ class ToolSurface:
     # escribe el mismo objeto: si fueran dos, un sub-agente que postea no veria los
     # hallazgos que el codigo asento, y habria dos «estados compartidos» a la vez.
     board_state: Blackboard = field(default_factory=Blackboard)
+    # EL BOARD COMO COLA, y es un factor aparte de los otros dos. `shared_state` y
+    # `offer_board` deciden QUIEN escribe el board; esto decide QUE renderiza — lo
+    # acumulado, o lo que falta con su cobertura y su directiva. Son ortogonales: se
+    # puede tener un board inyectado que solo lista hallazgos, y uno ofrecido como tool
+    # que ademas lleva cola. La medicion que importa cruza los dos ejes.
+    #
+    # Apagado por defecto: con `False` el render es byte por byte el de antes, asi que
+    # el registro medido hasta hoy sigue siendo comparable.
+    board_queue: bool = False
+    # EL GUARD DE CONTEXTO, y entra JUNTO con la cola y no despues. El guard acota la
+    # ventana y **produce** el hallazgo; el board lo conserva y con eso dirige lo que
+    # sigue. Las dos compactaciones que ya existen DEGRADAN —una a stub si el modelo
+    # anoto, la otra a gist incondicional— y ninguna produce contenido nuevo, asi que sin
+    # esto el board sostiene solo lo que el modelo se acuerde de postear: 1 de cada 125
+    # llamadas.
+    context_guard: bool = False
+    # La pregunta de la tarea, que la extraccion necesita para saber que es relevante. La
+    # pone el runner: un guard que resumiera SIN la pregunta produciria un resumen
+    # generico, que es justo lo que la expulsion no puede permitirse.
+    question: str = ""
+    guard_stats: dict[str, int] = field(default_factory=dict)
     hallucinated: int = 0
     batched_reads: int = 0
     # Units any search has ever surfaced, and how many consecutive searches surfaced
@@ -577,9 +681,29 @@ class ToolSurface:
     # Medido (D-1, 2026-08-28): en 292 pares de replicas con la misma utilidad y distinto
     # gasto, `barren_searches` da 0,00 en las dos mitades. No es que no pase: es que no se
     # guarda. Por eso se acumulan ademas el PICO y el TOTAL, que si sobreviven.
-    barren_searches: int = 0
-    barren_peak: int = 0
-    barren_total: int = 0
+    # LOS TRES VIVEN EN UN OBJETO Y NO COMO `int` (2026-08-29), y el motivo no es de
+    # estilo: `_sub_surface` reata por REFERENCIA todo lo que es de la tarea y no del
+    # sub-agente. Un `int` no se puede reatar —`replace` lo copia por valor— asi que los
+    # contadores de racha arrancaban en cero en cada sub-agente y nunca volvian al padre.
+    # Medido: `supervisor` 370 busquedas y `handoff` 158, las dos con **0 esteriles**,
+    # contra 62,5% de `dag_strategy`. Ese cero no era chico: era estructural.
+    barren: "Barren" = field(default_factory=lambda: Barren())
+
+    @property
+    def barren_searches(self) -> int:
+        return self.barren.streak
+
+    @barren_searches.setter
+    def barren_searches(self, v: int) -> None:
+        self.barren.streak = v
+
+    @property
+    def barren_peak(self) -> int:
+        return self.barren.peak
+
+    @property
+    def barren_total(self) -> int:
+        return self.barren.total
     # OJO: `stall_warnings` solo incrementa en las variantes de superficie con contabilidad,
     # y TODO estudio medido corrio en `basic`. Su cero en el registro no dice que el sistema
     # no se estanque — dice que en `basic` el aviso no existe. Son cosas distintas.
@@ -705,9 +829,34 @@ class ToolSurface:
         sub.calls = self.calls
         sub.sequence = self.sequence
         sub.units_read = self.units_read
+        sub.board_queue = self.board_queue
+        sub.context_guard = self.context_guard
+        sub.question = self.question
         sub.units_read_structural = self.units_read_structural
         sub.board_state = self.board_state
         sub.state = self.state
+        # EL AGOTAMIENTO DEL RETRIEVER ES DE LA TAREA, NO DEL SUB-AGENTE (2026-08-29).
+        #
+        # `surfaced` —lo que alguna búsqueda ya trajo— y los tres contadores de racha
+        # NO se reataban, así que `replace` le daba a cada sub-agente un conjunto vacío:
+        # **toda búsqueda suya parecía traer algo nuevo**, aunque el padre ya la hubiera
+        # hecho. El registro lo delata con un cero que no es chico, es estructural:
+        #
+        #   supervisor   370 búsquedas, 0 estériles   (0,0%)
+        #   handoff      158 búsquedas, 0 estériles   (0,0%)
+        #   dag_strategy 661 búsquedas, 413 estériles (62,5%)
+        #
+        # Y no es sólo contabilidad perdida. El aviso «las últimas N búsquedas no
+        # trajeron nada nuevo» —la señal que midió una reducción de costo de 3,05×, el
+        # resultado más fuerte del banco— **no puede dispararse adentro de un
+        # sub-agente**, porque su contador arranca en cero en cada uno. Así que ese
+        # resultado está medido sólo sobre los brazos que NO descomponen, y los que
+        # descomponen son justamente los que más buscan.
+        #
+        # Es la misma forma que este docstring ya advertía —olvidar un campo acá es
+        # invisible— cometida en los campos que el docstring no enumeraba.
+        sub.surfaced = self.surfaced
+        sub.barren = self.barren
         return sub
 
     def unit_ids(self) -> list[str]:
@@ -743,9 +892,9 @@ class ToolSurface:
         if fresh:
             self.barren_searches = 0
             return ""
-        self.barren_searches += 1
-        self.barren_total += 1
-        self.barren_peak = max(self.barren_peak, self.barren_searches)
+        self.barren.streak += 1
+        self.barren.total += 1
+        self.barren.peak = max(self.barren.peak, self.barren.streak)
         if self.barren_searches < 3 or self.variant not in ACCOUNTING_VARIANTS:
             return ""
         self.stall_warnings += 1
@@ -777,6 +926,10 @@ class ToolSurface:
 
         if est_tokens <= allowance:
             self.units_read.update(self.view.unit_ids)
+            # La cobertura se cierra ACA porque leer es el unico evento que significa
+            # «esto ya lo mire». Una busqueda que DEVUELVE la unidad no es haberla
+            # leido, y cerrarla ahi bajaria el pendiente sin que nadie mire nada.
+            self._close_queue(self.view.unit_ids)
             self.batched_reads += 1
             return {
                 "granularity": "full_text",
@@ -893,8 +1046,23 @@ class ToolSurface:
             "unread_count": len(unread),
         })
 
+    def _close_queue(self, units) -> None:
+        """Cerrar en la cola las unidades que se acaban de leer. Sin cola, no hace nada."""
+        if not self.board_state.queue_mode:
+            return
+        for u in units:
+            self.board_state.close(u)
+
     def dispatch(self, name: str, args: dict[str, Any]) -> str:
         self.calls[name] = self.calls.get(name, 0) + 1
+        # EL LEDGER DE REPETIDAS. Se asienta ACA —antes de despachar y antes de la
+        # comprobacion de disponibilidad— por la misma razon que `sequence`: una llamada
+        # repetida que ademas falla sigue siendo una repeticion, y contar solo las que
+        # salieron bien subestima justo el desperdicio que el board existe para mostrar.
+        if self.board_state.queue_mode:
+            self.board_state.record_tool_call(
+                name, ",".join(f"{k}={v}" for k, v in sorted(args.items()))[:120]
+            )
         # Se registra ANTES de despachar, a proposito: una llamada que falla igual fue
         # una decision del modelo, y una secuencia que solo guarda los aciertos describe
         # una politica que nadie ejecuto.
@@ -1015,6 +1183,10 @@ class ToolSurface:
                     self.reread_chars += len(self.view.documents[u])
                 self.served_chars += len(self.view.documents[u])
             self.units_read.update(ranked)
+            # La cobertura se cierra ACA porque leer es el unico evento que significa
+            # «esto ya lo mire». Una busqueda que DEVUELVE la unidad no es haberla
+            # leido, y cerrarla ahi bajaria el pendiente sin que nadie mire nada.
+            self._close_queue(ranked)
             return json.dumps([
                 {"unit_id": u, "text": self.view.documents[u]} for u in ranked
             ])
@@ -1042,6 +1214,10 @@ class ToolSurface:
                     self.reread_units += 1
                     self.reread_chars += len(self.view.documents[unit_id])
                 self.units_read.add(unit_id)
+                # La cobertura se cierra ACA porque leer es el unico evento que significa
+                # «esto ya lo mire». Una busqueda que DEVUELVE la unidad no es haberla
+                # leido, y cerrarla ahi bajaria el pendiente sin que nadie mire nada.
+                self._close_queue([unit_id])
                 self.served_chars += len(self.view.documents[unit_id])
                 out.append({"unit_id": unit_id, "text": self.view.documents[unit_id]})
             if missing:
@@ -1091,6 +1267,15 @@ class ToolSurface:
             ),
             "board_posts": self.board_posts,
             "board_reads": self.board_reads,
+            # EL GUARD SE MIDE O NO EXISTE. Tres numeros y no uno, porque son tres cosas
+            # distintas: cuantas veces expulso, cuantas de esas RESCATO un hallazgo, y
+            # cuantas el texto expulsado no aportaba nada a la pregunta. La tercera es
+            # informacion sobre la RECUPERACION —trajo 8k que no servian— y colapsarla
+            # con las otras dos la perderia.
+            **{f"guard_{k}": v for k, v in self.guard_stats.items()},
+            "board_findings": len(self.board_state.findings),
+            "board_pending": self.board_state.pending_count,
+            "board_covered": self.board_state.done_count,
             "batched_reads": self.batched_reads,
             "hallucinated_units": self.hallucinated,
             "relevant_units_read": len(self.units_read & self.view.relevant),

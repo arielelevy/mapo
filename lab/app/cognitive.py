@@ -124,6 +124,19 @@ COGNITIVE_TOOL_SPECS = [
 
 @dataclass
 class Note:
+    """Un apunte que el MODELO decidió tomar. La unidad de la variante `cognitive`.
+
+    Lleva los `unit_ids` de donde salió, y eso no es adorno: es lo que permite que
+    `compact_history` reemplace el texto crudo por un stub **y el agente pueda volver a
+    leerlo** si decide que el apunte no alcanzaba. Sin la procedencia, compactar sería
+    borrar.
+
+    QUÉ MIDIÓ ESTA CLASE, y es un resultado y no una anécdota: expuesta como herramienta
+    opcional, el modelo escribió **1 apunte en 28 filas**. La autogestión voluntaria no
+    ocurre — de ahí sale `manage_history`, que mueve la contabilidad al entorno: al modelo
+    no se le pide disciplina, se la impone el harness.
+    """
+
     topic: str
     finding: str
     unit_ids: list[str] = field(default_factory=list)
@@ -135,7 +148,22 @@ class Note:
 
 @dataclass
 class WorkingState:
-    """Notes and an ordered plan, shared across every agent on one task."""
+    """LA MEMORIA DE TRABAJO del agente en la variante `cognitive`: apuntes y plan.
+
+    Es lo que la variante le OFRECE al modelo para que se autogestione: anotar hallazgos,
+    escribir un plan, marcar avance. Y su resultado principal es un **nulo medido**: con
+    todo eso disponible, el modelo escribió **1 apunte, compactó una vez y no planificó
+    nunca en 28 filas**.
+
+    ESE NULO ES EL ARGUMENTO DE LA VARIANTE `managed`. Si la autogestión voluntaria no
+    ocurre, la contabilidad se mueve al entorno: al modelo no se le pide disciplina, se la
+    impone el harness. Las dos variantes miden la misma pregunta desde los dos lados, y por
+    eso ninguna reemplaza a la otra.
+
+    LOS APUNTES LLEVAN PROCEDENCIA (`unit_ids`), y eso es lo que permite que compactar no
+    sea borrar: el texto crudo se reemplaza por un stub y el agente puede volver a leerlo
+    si decide que el apunte no alcanzaba.
+    """
 
     notes: list[Note] = field(default_factory=list)
     plan_steps: list[str] = field(default_factory=list)

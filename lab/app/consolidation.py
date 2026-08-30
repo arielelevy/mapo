@@ -256,6 +256,18 @@ def discover_partitions(
 
 @dataclass
 class Homeostasis:
+    """Lo que el ciclo de consolidación PODÓ y reescaló. El olvido, contabilizado.
+
+    Un θ que sólo acumula estadísticas crece sin techo y arrastra pares que nadie volvió a
+    ver. Homeostasis los saca y baja el peso de los demás, que es lo que hace que el
+    aprendizaje sea acotado en vez de monótono.
+
+    Y NUNCA PODA POR PESO SOLO: la condición es `peso <= piso AND episodios == 0`. Un peso
+    bajo con episodios es **evidencia** —dice que ese brazo anduvo mal ahí— y tirarla sería
+    olvidar justo lo que se aprendió. `pruned` guarda los nombres para que el olvido sea
+    auditable: algo que desaparece sin dejar constancia no se puede revisar.
+    """
+
     pruned: list[str] = field(default_factory=list)
     rescaled: int = 0
     note: str = ""
@@ -315,6 +327,21 @@ def homeostasis(
 
 @dataclass
 class PropositionAudit:
+    """La calibración de UNA proposición: ¿la credencia elicitada vale lo que dice valer?
+
+    `ece` es el error de calibración esperado —cuánto se aparta la confianza declarada de
+    la frecuencia real de acierto— y `trustworthy` es el veredicto que habilita a `A2` a
+    admitir creencias `ELICITED`. Antes de ganarse eso, admitirlas anula el propósito del
+    nivel.
+
+    `contradictions` va aparte de `ece` a propósito: son dos fallas distintas. Una
+    proposición puede estar bien calibrada **y** contradecirse consigo misma en momentos
+    distintos, y promediarlas escondería la segunda detrás de la primera.
+
+    `ece = None` significa que no se pudo estimar —hacen falta observaciones— y se
+    distingue de un `0.0`, que sería calibración perfecta. Ausente no es cero.
+    """
+
     proposition: str
     observations: int
     ece: float | None
@@ -363,6 +390,28 @@ def audit_propositions(
 
 @dataclass
 class DreamReport:
+    """El acta de un ciclo de consolidación. Qué se replayó, qué se descubrió, qué entró.
+
+    El aprendizaje de este sistema es **offline y copy-on-write**, y esto es lo que lo
+    vuelve auditable: no hay un modelo que cambió, hay un artefacto firmado con un número
+    de versión y una firma, y este reporte dice cómo se llegó de la versión anterior a
+    ésta.
+
+    LOS CAMPOS SON LOS CINCO PASOS, en orden: `replayed` (episodios reordenados por
+    SORPRESA y no por cronología, que es lo que le saca el sesgo de recencia a la
+    actualización online), `discovered` (particiones de features que separan paradigmas
+    mejor que el binning actual), `homeostasis` (lo podado), `audit` (la calibración por
+    proposición) y `promotion` (el veredicto de la guarda anti-regresión).
+
+    `floors` son los pisos de garantía aprendidos que ESTE ciclo instaló. Van en el acta y
+    no sueltos porque un piso que sube sin quedar registrado es un endurecimiento que nadie
+    puede fechar ni revisar.
+
+    UNA PARTICIÓN DESCUBIERTA ENTRA CON CERO EPISODIOS, debajo del piso de confianza, y no
+    puede gobernar una decisión hasta ganarse evidencia: **un sueño es una hipótesis, no un
+    hecho.**
+    """
+
     cycle: int
     replayed: int
     candidate_version: int

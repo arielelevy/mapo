@@ -109,6 +109,20 @@ Reply with JSON only: {{"strategy": "<name>", "reasoning": "<one sentence>"}}"""
 
 @dataclass
 class RoutingDecision:
+    """Lo que un router RIVAL eligió para una tarea, y si eligió algo que existe.
+
+    Es el registro de los baselines contra los que se compara θ: routers de prosa que le
+    piden al modelo que nombre un paradigma. `raw` guarda lo que dijo textual, antes de
+    normalizar, porque un router que contesta «yo usaría react o quizá rewoo» no eligió y
+    hay que poder verlo.
+
+    `fell_back` es el campo que decide: el modelo nombró algo que **no está en el
+    catálogo**. No es un error del harness — es el resultado. Un router que inventa brazos
+    no se puede evaluar por su utilidad, porque la mitad de sus decisiones no son
+    ejecutables, y colapsarlo con «eligió mal» borraría la diferencia entre elegir peor y
+    no elegir.
+    """
+
     task_id: str
     paradigm: str
     raw: str

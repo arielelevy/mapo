@@ -98,7 +98,39 @@ class Plan:
 
 
 class Router:
-    """Wires the belief layer, the assurance dial and the rule set into a plan."""
+    """LA DECISIÓN: qué paradigma corre este request, o si no corre ninguno.
+
+    ES EL PRODUCTO. Todo lo demás de este repo existe para que esta clase pueda decidir con
+    evidencia en vez de con una corazonada, y para que la decisión se pueda defender
+    después.
+
+    EL ORDEN NO ES ARBITRARIO — cada paso es más barato que el siguiente:
+
+      1. **factibilidad**, que es aritmética y gratis: qué brazos ni siquiera pueden correr
+         bajo el presupuesto declarado. Se poda antes de que exista un token
+      2. **el dial de garantía**, `max(pedido, piso de creencias, piso aprendido)`: qué
+         brazos son admisibles a este nivel de rigor. Sólo puede subir
+      3. **θ**, la política aprendida: entre los que quedan, cuál gana en esta región —
+         y **sólo si tiene evidencia suficiente**, que es un piso de episodios, no una
+         preferencia
+      4. **abstención**: si el margen entre el mejor y el segundo no supera `tau`, no se
+         elige. Diferir al fallback es una decisión, no una falla
+
+    ABSTENERSE ES LA MITAD DEL PUNTO. Un router obligado a elegir siempre no controla ni
+    cuántas veces se equivoca ni cuánto cuesta cada error, y paga por cada desvío. El
+    Teorema 1 dice cuándo la selección conviene, y su corolario que la cobertura óptima
+    está por debajo de 1 en cuanto alguna pérdida se rutee.
+
+    EL LLM NO DECIDE ACÁ, y es un invariante del producto: emite proposiciones, y esta
+    clase las lee como sensor. Jamás maneja flujo de control ni decide un gate. Un router
+    que le preguntara al modelo qué hacer sería el zero-shot self-routing que la literatura
+    midió en **valor negativo**.
+
+    Y DEVUELVE UN `EXPLAIN`, no sólo un nombre: qué se podó y por qué, qué nivel se exigió y
+    cuál de las tres fuentes lo fijó, con qué evidencia se eligió, y si se abstuvo. La
+    garantía tiene UNA forma —«misma base de creencias ⟹ misma decisión»— y sin el registro
+    de esa base no se puede sostener.
+    """
 
     def __init__(
         self,

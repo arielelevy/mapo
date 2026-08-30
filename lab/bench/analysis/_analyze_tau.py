@@ -37,7 +37,8 @@ from collections import defaultdict
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from app.config import Settings
-from app.policy import MIN_EPISODES_FOR_CONFIDENCE, Episode, Plasticity, PolicyBundle
+from app.policy import (MIN_EPISODES_FOR_CONFIDENCE, Episode, Plasticity, PolicyBundle,
+                        learnable_rows)
 from app.runner import load_rows
 
 CORPUS = "gold_h1"
@@ -48,9 +49,9 @@ TAUS = (0.0, 0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5)
 def episodios(filas: list[dict]) -> list[Episode]:
     """Filas -> episodios. UN EPISODIO ES UNA CELDA: la media de sus replicas."""
     celdas: dict[tuple[str, str], list[dict]] = defaultdict(list)
-    for f in filas:
-        if f.get("infeasible") or f.get("infra_error"):
-            continue
+    aptas, descartadas = learnable_rows(filas)
+    print(f"  {descartadas}")
+    for f in aptas:
         celdas[(f["task_id"], f["paradigm"])].append(f)
     medias: dict[str, dict[str, float]] = defaultdict(dict)
     for (tarea, par), fs in celdas.items():

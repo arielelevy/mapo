@@ -648,6 +648,205 @@ on 2.
 
 ---
 
+## 5.3 Soundness of the assembler
+
+The three results that follow are **structural**: none depends on a corpus, a model, or a
+run. They are stated here because the machinery §6 describes exists to make statements of
+this shape possible, and without them provenance is bookkeeping — recorded, displayed, and
+buying nothing anyone can name.
+
+Let `T` be a template with slots `S = {s₁ … sₙ}`, `B` an assignment of slots to
+propositions, `Γ` a belief base and `φ` a provenance floor.
+
+**Theorem 2 (soundness of the assembler).** If `fill(T, B, Γ, φ)` emits a string `R`, then
+for every slot `sᵢ ∈ S` there exists `βᵢ ∈ Γ` such that
+
+1. `βᵢ` is the **current** belief on the proposition `B` assigns to `sᵢ`;
+2. `rank(provenance(βᵢ)) ≥ rank(φ)`;
+3. the substring of `R` at `sᵢ`'s position is exactly `str(value(βᵢ))`.
+
+And `R` contains no substring originating anywhere but `T` or those values.
+
+In one line: **if the assembler emits, every number it emitted is entailed by the belief
+base at the floor demanded.** Not "probably". Not "barring hallucination".
+
+*Proof.* By construction, and it turns on one line. `fill` walks `slots_of(T)` — the slots
+the template actually uses, extracted from the template rather than declared alongside it —
+and for each performs exactly three checks: it resolves the assigned proposition, requests
+the current belief, and compares provenance rank against the floor. Any failure records a
+reason and continues without emitting. The substitution then happens **after** the refusal
+list is confirmed empty, so `values` holds one entry per slot of `T`, each from a current
+belief that passed the floor; and the substitution replaces slot patterns while leaving the
+rest of the template — fixed text written by the code — untouched. The three conditions
+correspond one-to-one with the three guards, and there is no fourth path by which a value
+reaches the output. ∎
+
+**It fails closed and it fails WHOLE, which is a decision rather than a consequence.** If a
+single slot misses the floor, no partial version is emitted. Emitting *"the account balance
+is ___"* is not more honest than emitting an invented number: it is the same act in better
+handwriting, and it invites the reader to complete what the contract refused.
+
+**Four limits, stated inside the theorem rather than in a footnote.**
+
+| limit | what it means |
+|---|---|
+| **the scope is the slot, not the sentence** | *"the balance does NOT exceed {x}"* with a correct `x` is **sound and false**. This is not an implementation defect: it is the boundary of the entire family, and a red-team measures it rather than assuming it |
+| **provenance is of the record, not of the world** | `COMPUTED` means someone computed it and entered it. The theorem **transports** confidence from the floor to the output; it does not create it. A lying sensor is emitted with impeccable provenance |
+| **current, not historical** | the guarantee is about the belief state **at assembly time**, not about everything ever believed |
+| **`str()` is part of the theorem** | condition 3 says `str(value)`, not "the value". The assembler does not format, because formatting would begin to decide something about the number |
+
+Verified exhaustively rather than by chosen cases: over the cartesian product of the four
+provenance levels by the refusal conditions — a small space, and therefore one that can be
+walked in full.
+
+## 5.4 The ratchet's native bound
+
+The learned assurance floor only rises. An earlier draft bounded it by importing a theorem
+about **variance under oscillation**; that was not a loose citation but a **category
+error** — a monotone bounded sequence has variance tending to zero by construction, so the
+bound held vacuously and said nothing. What a ratchet needs bounded is not how much it
+oscillates but how much **accumulated damage** it can do before it stops, and that is a
+count.
+
+Levels are `EXPLORATORY < STANDARD < ACCOUNTABLE < CERTIFIED`, and the learned ceiling is
+the third: `CERTIFIED` is out of reach deliberately, because that level restricts which
+patterns are admissible and a statistic about evidence quality is not evidence about
+certifiability.
+
+**Proposition 4 (bounded total damage).** Over `R` regions, the total number of hardening
+events **in the system's entire lifetime** is `≤ 2R`, whatever the number of consolidation
+cycles.
+
+*Proof.* Monotonicity: each region's floor is a non-decreasing sequence in a finite totally
+ordered set, so it changes at most as many times as there are levels above its base.
+Nothing probabilistic is required. ∎
+
+**Proposition 5 (the replication guard is strong far from the threshold and weak near it).**
+With `q` the region's true refusal rate and two **disjoint** task splits:
+
+| `q` | one split | **both** | ≈ |
+|---:|---:|---:|---:|
+| 0.10 | 0.0050 | **0.000025** | 1 in 39,613 |
+| 0.25 | 0.1138 | 0.01295 | 1 in 77 |
+| 0.40 | 0.4059 | 0.16477 | **1 in 6** |
+| 0.45 | 0.5230 | 0.27358 | **1 in 4** |
+
+That is said rather than hidden, and it matters less than it appears for two structural
+reasons. Near the threshold a false positive is nearly indistinguishable from a true one —
+a region whose true `q` is 0.45 **does** refuse almost half the time. And Proposition 4
+bounds the accumulated damage regardless.
+
+> **The monotonicity that makes the borrowed variance theorem inapplicable is exactly what
+> bounds the damage of its own false-positive rate.** The property that breaks the borrowed
+> bound is the property that makes it unnecessary.
+
+**And what it costs is measured, which corrects how Proposition 4 reads.**
+
+| level | admissible arms | coverage | `u`(best fixed) |
+|---|---:|---:|---:|
+| A0 · A1 · A2 | 5 | 100% | 0.6101 |
+| **A3** | **2** | **40%** | **0.4221** |
+
+The ratchet is **free up to A2 and costs everything in one step at A3**: the only priced
+transition removes **60% of the catalogue and 31% of the utility**. "At most two rises"
+invites imagining damage that accumulates slowly; what is measured is the opposite — **a
+single transition is priced, and there it is abrupt**. The other two are free because they
+do nothing. And the mean hides who pays: one region loses **−0.5000** while the corpus mean
+is 0.0000.
+
+## 5.5 Who sets the dial
+
+The question looks like governance and is design. If the caller picks the assurance level,
+a caller in a hurry lowers it; if the system picks, the caller cannot ask for more rigour
+than the system believes necessary. **Neither.**
+
+```
+effective level = max( requested , belief floor , learned floor )
+```
+
+| source | produced by | may |
+|---|---|---|
+| **requested** | the caller, in the request | **raise**, never lower |
+| **belief floor** | `required_floor(Γ)` over the request's `COMPUTED` beliefs | **raise**, and cannot be disabled |
+| **learned floor** | `θ.floors[region]`, inside the signed bundle | **raise**, and only once promoted |
+
+**Proposition 6.** `max` is the **only** composition under which every source can only
+harden. Under `min` or an average, adding a source could soften the result — and then a new
+source would be a **risk** rather than a guarantee.
+
+**Why the caller may raise but not lower.** A caller knows things the system does not: that
+this request feeds a regulatory filing, that the result is published, that an auditor is
+watching. None of that is in the material. What it may not do is ask for **less**, because
+the floor derives from properties of the request itself — `irreversible` raises to A3,
+`shared_writes` to A2, and both enter as `COMPUTED` beliefs **declared by the caller, never
+inferred from text**. A caller able to lower the floor could declare an irreversible action
+and then ask for it to be treated as exploratory, which is exactly the combination the floor
+exists to prevent.
+
+**A fourth source, which is not a level but a degradation.** A2 admits `ELICITED` beliefs,
+but only once calibration has been earned; admitting them before nullifies the level's
+purpose. So resolution does not lower the level: it **hardens the provenance floor within
+the level**. Same idea as the `max`, applied to the other axis.
+
+**And it is evaluated by marginalising over its positions, not by fixing one** — reporting
+metrics at a fixed dial reports a policy, not a system. Marginalising produced a finding
+about the dial itself:
+
+> **Three of the four positions are indistinguishable.** A0, A1 and A2 all declare
+> `admissible_patterns = None`, so **the dial does not restrict the catalogue until A3**.
+> Two of its three transitions do nothing in that dimension, and the entire difference is
+> paid at one step.
+
+What distinguishes A1 from A2 lives on other axes — signed θ, belief logging, composition
+depth, and the provenance floor — so the dial is not inert there; it is inert **in the
+dimension that table measures**. Saying which is which is the point of marginalising.
+
+## 5.6 What the theory does not assume, and why that is the claim
+
+Everything in §5.1–§5.5 is stated over a catalogue of arms, a utility, a belief base and a
+provenance lattice. **Not one of the five results mentions retrieval, documents, or
+question answering.** That is not an accident of drafting and it is not a caveat: it is the
+claim. What is being described is a decision layer over *actions the system can take*, and
+paradigm routing over a document corpus is the instance we could measure without a judge.
+
+The distinction the layer actually turns on is not *what kind of task* but **what is known
+when**. A rule may govern only if it can be evaluated at decision time; a value may be
+emitted only if a current belief carries it at the demanded provenance; a level may only be
+raised. Those three are properties of the decision, not of the domain.
+
+**The same machinery, stated over four surfaces.** The theorems above are the general form;
+the columns are what instantiating them requires.
+
+| surface | the sensor emits | the rule decides | the record keeps |
+|---|---|---|---|
+| **content** | numbers with provenance | emit or refuse, per slot (§5.3) | which belief filled which slot |
+| **data** | a proposed query, its grain, its temporal resolution | admit the query or demand elicitation | the query, and what it was checked against |
+| **actions** | a proposed tool call and its preconditions | the provenance floor on irreversibility (§5.5) | an idempotency ledger |
+| **governance** | a candidate policy edit | the promotion guard on held-out episodes (§6.3) | the diff between two signed bundles |
+
+Selection among control-flow topologies is the **first** column instantiated over a
+retrieval catalogue. It is the case we measured, not the extent of what is claimed.
+
+**And the untested branch of the theory and the untested surface are the same place.** §5.2
+partitions the problem on `v`, the availability of a cheap detector, and §1.3 records that
+every corpus here sits on `v = 1` **by construction**, because gold is what makes grading
+judge-free and gold *is* a detector. So the `v = 0` branch — the branch that needs a router
+at all — cannot be reached by any benchmark that grades by exact match.
+
+Where is `v = 0`, then? Predominantly on the action surface. Checking *whether a file was
+written* is cheap; checking *whether this was the right refund to issue* is not, and no
+answer key exists to make it cheap. The domain this record does not measure is the domain
+where the theory's central partition finally has two sides.
+
+> **So the ambition is stated rather than hedged.** The theory is domain-general by
+> construction and is machine-checked as such — over synthetic distributions with known
+> answers, not over corpora. The measurements are retrieval-only, and §9 states exactly
+> which tools existed and which never did. A reader should take §5 as claimed for agents in
+> general and §7–§8 as claimed for exact-answer extraction, and should hold us to the gap
+> between them rather than to a narrower promise we did not make.
+
+---
+
 # 6. Design
 
 ## 6.1 Measurement without a judge
@@ -773,6 +972,118 @@ after a first pass fusion is local arithmetic.
 0.75, hybrid 0.50, lexical 0.25. RRF averages ranks, so a badly performing component drags a
 good one down. "Hybrid is always better" does not hold when one component is far below the
 other.
+
+## 6.5 The harness is a fitting procedure, not only an instrument
+
+The model is **frozen and never learns**. What is fitted is the decision layer, and it is
+fitted **on the record of the cross product**: zero new calls, counterfactual replay over
+rows already paid for.
+
+```
+domain corpus  ──►  cross product (task × paradigm × replica)
+                              │
+                              ▼
+                    offline consolidation
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                               ▼
+      fitted decision layer            the model, UNTOUCHED
+```
+
+That gives the harness a second reading the rest of this paper does not use: it is not only
+the instrument that measures the paradigms, it is **the fitting procedure for the layer that
+chooses them**. The same cross product that produces the number produces the policy.
+
+**A machine-learning experiment in which the learner is not the model.** There is no
+gradient; there are per-region statistics over recorded episodes, with a promotion guard.
+And so the fitted artefact is **legible and diffable** — two versions of the policy are
+compared as code, not as weights.
+
+**What is fitted, exactly** — the inventory is read off the signed bundle and the
+consolidation cycle rather than off an intention, and two rows are the point:
+
+| fitted | what it is | state |
+|---|---|---|
+| `stats` | per `(region, paradigm)`: win rate and Hebbian weight | **executed**; the weight is **not read by the router** — proven unable to improve an argmax |
+| `floors` | the per-region assurance floor, learned from **typed refusal** statistics | **executed**, with replication guard and ceiling at `ACCOUNTABLE` (§5.4) |
+| `model_stats` | the same per `(region, model)`: the second policy | **executed** |
+| `trusts_elicited` | calibration of elicited credence, computed from the belief log | **executed**, and travelling **signed inside the bundle** rather than as a parameter |
+| `clauses` | certified acquisition clauses | **executed**; **none currently promotes** — net benefit does not clear the noise floor at the decision λ |
+| ordering associations | ordered tool pairs, reinforced **by outcome** | **measured** (`p = 0.0078`) and **read by no consumer** |
+| the handoff split | which units each sub-agent sees | **not fitted**: a fixed stride by index |
+
+The last two rows are where learning exists as a measurement and not yet as a mechanism.
+Saying so is worth more than implying they already work.
+
+**Four disciplines make it a fit rather than an illusion.** An episode is a *cell*, not a
+replica — counting replicas separately is pseudo-replication, and computing "was best" over
+raw trials lets a lucky replica collect reinforcement its paradigm's mean never earned. The
+record is split three ways *by task* (§6.3), and the final split is single-use, spent
+*before* answering. And the partition axes are **typed by when they are known**: a rule may
+govern only if it can be evaluated at decision time, so partitioning on `truth_coupling`
+(the extractor's oracle) or on `iterations` (post-execution) discovers a rule that cannot be
+applied. The type says so; it is not discovered when wiring it.
+
+**And the fourth is what does *not* enter.** A row that is not a measurement must not
+become an episode, and the classes are distinct: an exhausted 429 is infrastructure; a cell
+pruned arithmetically **never executed**, so the `0.0` it carries is a filler rather than a
+reading; a row without a region has no bin to be learned in. Measured on the current
+campaign, **39 of 180 episodes — 21.7% — came from cells that never ran**, and the bias is
+not random: it lands on the expensive arms, which are exactly the ones pruning reaches. Two
+pairs reported `u = 0.667` while measuring **1.000 where they actually executed**, and
+fifteen pairs carried `u = 0.000` at `n = 2–3` **with no execution behind the number**.
+
+The count is worse than the mean. Episodes are what crosses the confidence floor, so a pair
+could **earn confidence from cells where its arm never ran**. Nothing had crossed yet — the
+campaign is young — but fifteen pairs were on that path, carrying zeros no execution
+supports. Infeasibility is not lost: its consumer is the feasibility gate, which prunes
+*before* selection; feeding it into the policy as well counts one fact twice, in a channel
+that cannot represent it.
+
+**And the symmetric error matters as much.** A wrong answer, an empty answer from an arm
+that *did* run, and a literal `Unknown` from the model are all **measurements** — the arm
+executed and failed, which is precisely what the policy must learn. A filter that also
+discarded failures would leave a policy trained only on successes, which is the fastest way
+to learn that everything works.
+
+### The transfer claim, and its measured refutation
+
+The reading completes with a conditional — *if the corpus is representative of the domain,
+the fitted layer should transfer*. That is falsifiable, and this record has already falsified
+it once.
+
+> **P15.** On a world the policy had never seen — seed 47, 390 cells, zero infrastructure
+> errors — per-request routing lost to the best fixed paradigm by **−0.087**, beyond the
+> noise floor, while reproducing every decision 26/26 from its recorded belief base.
+
+**The mechanism is the finding, not the number.** The region vocabulary **has no horizon
+axis**, so tasks that punish a fixed choice were indistinguishable from tasks that reward
+it. The policy routed against its own recorded verdict because **no label ever told it which
+case it was in**. Sensitivity check: repairing the learning's validity — per-episode
+aggregation, clean holdout — leaves the number identical, so the refutation is not an
+artefact of the procedure.
+
+That sharpens the condition into something checkable:
+
+> **Representativeness must be stated on the axes the region vocabulary distinguishes.**
+> "Representative of the domain" is not enough. A corpus that varies along a dimension the
+> feature map does not look at produces episodes the policy cannot separate — and the policy
+> then learns an average over two populations. The condition is checkable on a corpus
+> *before* running it, because the region is a deterministic function of the features.
+
+### One consequence that can be asserted today
+
+**More inference does not buy more fit.** Consolidation is replay over the record, so the
+cost of learning is **zero calls**: what quota buys is *episodes*, and fitting is free over
+whatever episodes exist. That separates two decisions usually taken together — how much to
+measure is governed by statistical power, how much to train by nothing at all.
+
+And it is observable while a campaign runs. On the current campaign, **516 rows yield 141
+episodes over 6 regions, 57 `(region, paradigm)` pairs with evidence and 27 at `n ≥ 3`** —
+read off the record between two batches, at no additional cost. Statistical power is fixed
+by the **corpus**, not by quota: a pair collects one episode *per task* in its region, so
+crossing the evidence floor takes that many tasks. Spending more adds tasks, and they count
+only if they land in the right region.
 
 ---
 
@@ -986,6 +1297,66 @@ unpromoted. We report it at the same length as the success on purpose: the regis
 prediction discipline is only worth having if a falsification costs a paragraph rather
 than a retraction.
 
+## 7.7 Shared state, offered and not taken
+
+**Shared state was offered to every paradigm, and essentially not used.** A blackboard is
+the obvious coordination affordance for multi-agent topologies, and it is the only non-
+retrieval capability in this record: `post` writes a self-contained finding that **survives
+context compaction**, `board` reads what every agent on the task has posted. It is a
+crossed factor rather than a property of one arm — soldering it inside `dag_strategy` had
+made "the dag_strategy effect" a conjunction of wave topology *and* shared state that
+nothing in the record could separate.
+
+Offered across twelve paradigms and 46 executed cells, out of **125 tool calls the model
+made, `post` was called once and `board` was never read** — 0.8%. Not refused, not
+unavailable: declared, described as surviving compaction, and not taken up.
+
+That is a null on *adoption*, and adoption is the one thing here that is not noise-limited:
+it is a count, not a mean. The cost delta that accompanies it (+39.3% in aggregate) is
+**not** separable from noise at `n = 1` per cell, given the replicate cost spread of up to
+3.93× measured on these same paradigms, and we do not claim it.
+
+**And the null is about the affordance, not about shared state — the same object, reached
+two ways, gives opposite results.** `dag_strategy` writes findings to that same blackboard
+**from the code** and renders it into every sub-agent prompt, so reading it costs the model
+no decision. It is the best fixed paradigm on the held-out world, and the arm per-request
+routing failed to beat. Offered instead as a tool the model may choose to call, the same
+structure was called once in 125.
+
+An earlier execution layer, now frozen and retained only as reference, is the one
+implementation of this that ran against a real index, and it never offered the board as a
+tool either. It **injected** the rendered board before every model call; the harness — not
+the model — wrote it, on prefetch, on every tool result, and on eviction, so the board is
+what *survived* compaction rather than what the model was invited to save. And what it
+rendered was not raw state but three control signals: coverage (`N/M checked`, with *"NOT
+checked — say so if the answer depends on them"*), a do-not-repeat list of queries already
+issued, and a directive (*"N fragments remaining, try DIFFERENT queries"* / *"all checked,
+write your final answer"*). Those are the accounting signals of §7.3, and the 3.05× measured
+there is one member of that family.
+
+That layer also recorded a failure worth more than the mechanism: noting a finding and
+opening a lead were originally one call, so recording something already known **opened a
+pending item**, drove the coverage percentage *down*, and triggered more nudging. An
+accounting signal has to be monotone in the direction it rewards, or it punishes the agent
+for reporting what it knows.
+
+We report this as design contrast rather than evidence — that layer is not in this record
+and none of it is measured here. What it changes is the reading of the null: it does not say
+shared state fails to help. It says **coordination that must be elected is not elected**,
+and the isolating experiment is cheap and unrun — the `shared_state` factor turns the
+injected board off inside `dag_strategy` while leaving the waves and the verify step intact,
+and it has never been executed.
+
+**The mechanism is worth more than the number.** A coordination tool has no immediate reward
+for the agent that calls it: posting pays a cost now so that a *different* call — possibly
+another agent's — is cheaper later. Nothing in a single-turn objective represents that
+transfer, and there is no gradient by which a frozen model could discover it. Where the code
+writes the blackboard instead of the model, the same structure is used on every wave. So
+**shared state gets used when the control structure writes it, and not when the model is
+merely allowed to.** That is a claim about where coordination belongs — in the topology
+rather than in the tool surface — and it is the sharpest available evidence in this record
+about a capability that is not retrieval.
+
 ---
 
 # 8. Failure mechanisms
@@ -1072,9 +1443,15 @@ reported with their per-cell flip counts, never as bare means. The formal per-ce
 floor and the net oracle gap (`Study.noise_floor`, decisions against the net gap) are
 computed at the final analysis over the completed grid — pending the re-run cells.
 
-**One model, and it cannot be pinned.** `gpt-5-chat` rejects an explicit temperature, so
-sampling is at the model default. A reasoning deployment that accepts temperature 0 is
-available as an escape but changes what is measured.
+**Models: three, and the sampling knob turned out to be the wrong worry.** The first grid ran on
+`gpt-5-chat`, which rejects an explicit temperature, so sampling was at the model default —
+reported at the time as the principal threat. Measured since across `gpt-5.4-nano`,
+`gpt-5.6-luna` and `gpt-5.6-terra`: the reasoning deployments reject `temperature` outright, and
+`terra` at its own default is the **most** reproducible of the three. The live constraint is a
+different one and it is structural: on the `5.6` family, `tools` and a non-`none`
+`reasoning_effort` cannot be combined in Chat Completions, and the difference that makes is
+total — 0.000 against 1.000 on the same task. Every campaign row therefore runs at
+`reasoning_effort = none`, which is a declared regime rather than a default.
 
 **Synthetic corpus.** Ground truth is exact and independently re-derived, and structural
 parameters are dials rather than hopes — but the distribution of real tasks over those dials
@@ -1083,6 +1460,33 @@ is unknown. Public benchmarks are required for external validity and are not yet
 **Latency is not comparable.** The DAG runs sequentially here where it would run concurrent
 waves; and once workers contend, per-row wall-clock stops measuring latency. Quality and
 token counts remain exact.
+
+**The action surface is declared architecture and is not exercised — stated with the
+inventory, because a reader will otherwise find it.** §5.5 gates irreversible actions on a
+provenance floor and §5.6 claims the machinery over four surfaces. One of those four has
+never run. The complete tool inventory across every corpus and all fifteen registered
+paradigms is twelve tools:
+
+| what they do | which |
+|---|---|
+| read the world | `search` `keyword_search` `semantic_search` `read` `read_all` |
+| write the agent's own state | `note` `notes` `plan` `advance` `post` `board` |
+| read its own accounting | `coverage` |
+
+**Not one of the twelve changes anything outside the process.** No file is written, no
+message sent, no row updated. Six tasks of seventy-eight carry `irreversible = True` and
+three carry `shared_writes = True`, and those flags do raise the assurance dial — but the
+task they label is *"decide whether this engagement should be escalated for freezing; answer
+'escalate' or 'no escalation'"*, graded by exact match against a key. It is a classification
+over documents wearing the label of an action. There is no tool that freezes an account, so
+the floor that exists to gate irreversibility has never had an irreversible act to gate.
+
+We state this as a threat rather than resolving it because resolving it is a different
+experiment, and because the honest form of an ambitious claim is the ledger that goes with
+it: **§5 is claimed for agents in general and machine-checked as such; §7–§8 are claimed for
+exact-answer extraction over documents and measured there; the action surface is designed,
+typed, tested in unit form, and unmeasured.** The nearest thing to evidence about a non-
+retrieval capability is the blackboard result in §7.7, and it is a null.
 
 **Novelty claims are verified as conjunctions, not as parts.** The two anchor works were
 read in full on 2026-08-26: every number cited from Select-then-Solve checks out against
@@ -1127,11 +1531,12 @@ is in.
 
 | artefact | contents |
 |---|---|
+| the null control | prompt-only scaffolding is retained in the registry and **never executed**: dominated by `direct` in every measured cell, at equal utility and never cheaper. It is evidence that scaffolding by phrasing buys nothing, not an arm |
 | `PATTERNS.md` | pattern catalogue: 10 structural patterns, 4 control patterns, 15 anti-patterns, with applicability stated over the feature vector |
 | `ANALYSIS.md` | the failure analysis of §8 in full, per paradigm and per cell |
 | `GATE.md` | eight binary publication criteria and their current verdict |
 | `PLAN.md` | revision history of the thesis, including two superseded framings and why |
-| `D:\Apps\MAPO\lab` | the harness: 7 paradigms, 5 retrieval arms, 3 tool surfaces, 4 assurance levels, corpus generator with independent verifier, 63 machine-checked assertions |
+| `D:\Apps\MAPO\lab` | the harness: **15 registered paradigms**, of which 12 run the campaign, 5 retrieval arms, 4 tool surfaces, 4 assurance levels, 12 tools, corpus generator with independent verifier, **573 machine-checked assertions** (521 + 52 across two suites) |
 
 Seven of the fifteen anti-patterns in the catalogue are errors made and measured in the
 course of this work, including two that contradicted our own published predictions.

@@ -26,6 +26,39 @@
 
 ## Lo que hay que construir
 
+- [ ] **O-1** · **observabilidad del producto: Langfuse con su propio SDK** (decisión del
+  autor, 2026-08-29; diseño en `ARQUITECTURA.es.md` §6bis). **Sin OpenTelemetry como capa
+  intermedia** — el SDK de Python ya configura OTel solo al inicializarse, y ponerlo a mano
+  agrega un plano que nadie pidió.
+
+  **Lo que hay que trazar es la DECISIÓN, no las llamadas al modelo.** Las llamadas las
+  muestra cualquier tracer y no son lo que distingue a este producto. El SDK traza funciones
+  Python arbitrarias, así que los spans son: **factibilidad** (qué se podó por aritmética,
+  con la cota y el número que la cruzó, *antes del primer token*), **creencias** (proposición
+  + procedencia + origen), **dial** (`max` de las tres fuentes y cuál ganó), **ruteo**
+  (región, admisibles, margen, y si se abstuvo), **contratos** (veredicto por ranura),
+  **guard y board** (expulsiones, rescates, cobertura vista).
+
+  **Dos cosas NO se delegan.** Los precios siguen saliendo de `config/tariffs.json` con
+  procedencia estampada — la tabla de costos de Langfuse sería un segundo lugar donde vive
+  el mismo hecho. Y **la evaluación no es de Langfuse**: su historia de evals es
+  LLM-as-judge, y acá se califica por exact match contra gold verificado independiente del
+  generador. Entra como **observabilidad, no como evaluador**.
+
+  **Costo declarado**: seis piezas self-hosted —Postgres, **ClickHouse**, Redis/Valkey, blob
+  store S3-compatible, web y worker—, todas en UTC. `docker-compose` es lo más simple y su
+  propia doc lo desaconseja para producción por *«falta de alta disponibilidad, escalado y
+  backup»*. Single-tenant on-prem hace que los dos primeros no importen —si Langfuse se cae
+  el producto responde igual, la traza no es camino crítico— pero **el backup hay que
+  resolverlo a mano**.
+
+  **Entra CON el producto, no antes**: hoy no hay servicio que trazar. Primer span, el de
+  factibilidad.
+
+  **El banco no se toca**: `lab/` sigue con su `.jsonl` por fila y su traza por llamada en
+  `results/<modelo>/traces/`, sin dependencia. Un SDK adentro del instrumento que mide
+  cambia lo que mide.
+
 - [ ] **A-1** · arrancar el producto — *el motor nuevo no existe*
 
 - [ ] **A-3** · separar producto de banco ANTES de portar

@@ -2352,3 +2352,53 @@ Se escribe acá para que no se lo confunda con lo de arriba.
   donde nada sobrevivió.
 - **Que el detector honesto arregla el ruteo.** Arregla que la pregunta **se pueda hacer**.
   La respuesta es P17.
+
+
+### 8.11 La guarda vivía en el banco y le faltaba al producto · `MEDIDO`
+
+Había **tres constructores de episodios con tres filtros distintos**. Los dos scripts de
+análisis descartaban las filas infactibles y las de infraestructura; `Runner.episodes()`
+—el camino del **producto**— descartaba sólo las de infraestructura, porque las heredaba de
+`load_rows`. La regla del repo dice que el banco importa al producto, y acá la disciplina
+había ido en el sentido contrario: el análisis era más estricto que lo que ejecuta.
+
+**Lo que colaba, contado sobre la campaña del 2026-08-29:**
+
+| | con las infactibles | sin ellas |
+|---|---:|---:|
+| episodios | 180 | **141** |
+| filas que nunca ejecutaron | **39 (21,7%)** | 0 |
+
+Y el sesgo **no es aleatorio**, que es lo que lo vuelve peligroso: la poda por factibilidad
+alcanza a los brazos caros en las celdas anchas, así que los ceros caen todos del mismo
+lado. Dos pares reportaban `u = 0,667` cuando miden **1,000 donde efectivamente
+ejecutaron**, y quince pares llevaban `u = 0,000` con `n = 2–3` **sin una sola ejecución
+detrás del número**.
+
+> **Y el conteo es peor que el promedio.** Los episodios son lo que cruza
+> `MIN_EPISODES_FOR_CONFIDENCE`, así que un par podía **ganar confianza con celdas donde el
+> brazo nunca corrió**. Ninguno había cruzado todavía —la campaña es joven— pero quince
+> estaban en camino. No es que la política hubiera aprendido mal: es que **nada lo impedía**,
+> y la única razón de que no hubiera pasado era la fecha.
+
+**Un `0,0` de una celda podada no es una medición, es un relleno.** La infactibilidad ya
+tiene consumidor —el portón de factibilidad, que poda *antes* de seleccionar— así que
+meterla además en θ cuenta el mismo hecho dos veces, en un canal que no lo sabe representar.
+
+**El cuarto aprendiz se colaba por otra puerta.** `_analyze_associations.py` no filtraba
+nada: se apoyaba en que una fila infactible no trae `sequence`. Es cierto, y es
+**accidental** — la guarda dependía de un campo vacío en vez de decir que la fila no
+ejecutó, y una guarda accidental deja de valer en cuanto el campo cambia de forma.
+
+**El error simétrico, que es el que comete un filtro entusiasta.** Una respuesta equivocada,
+una vacía de un brazo que **sí** corrió, y un `Unknown` literal del modelo son
+**mediciones**: el brazo ejecutó y falló, y eso es exactamente lo que θ tiene que aprender.
+Descartar también los fracasos dejaría una política entrenada sólo con éxitos, que es la
+forma más rápida de aprender que todo funciona. El test prueba las dos direcciones.
+
+**La forma general, y es la tercera vez que aparece con otra cara** (7.17): *un filtro
+correcto escrito en tres lugares es tres filtros, y el que se olvida es el que importa.*
+Ahora hay **un solo portón** —`policy.learnable_rows`— que devuelve las filas y el
+**conteo tipado de lo descartado**, porque un filtro silencioso es la versión peor del
+problema que arregla: la estadística sale limpia y nadie puede decir sobre cuántas filas se
+computó. La línea del vigía lo dice en vivo: `552 filas (+552, 118 no medidas)`.
