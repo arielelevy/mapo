@@ -21,6 +21,22 @@
 
 ---
 
+> **YA NO ES DEL TODO PIZARRA (2026-08-30).** Dos de estos ejes se midieron contra el
+> registro completo, sin gastar nada, y **separan los brazos mejor que el vocabulario de
+> región estructural**: `contradicción` da `S/R = 1,82` **con una sola partición binaria**,
+> contra `1,84` de los ocho segmentos estructurales. Por segmento, la ontología extrae **40%
+> más separación**.
+>
+> Y `X-15` llegó al mismo lugar por el camino empírico: `C5_unknown_horizon` y `C8_currency`
+> son **idénticas en los seis campos computables**, caen en la misma región, y tienen efecto
+> opuesto. La diferencia entre ellas es exactamente el eje **B4**, que esta tabla ya
+> nombraba como *«sí, y está sin explotar»*.
+>
+> Lo que sigue sin medirse es lo que importa para el producto: **si un clasificador puede
+> recuperar el eje de un request real.** Que agrupar por celda funcione dice que hay
+> estructura ontológica en el corpus, no que se la pueda detectar afuera. Detalle y números
+> en `PENDIENTES.es.md` `ONT-1`.
+
 ## Cómo leer cada eje
 
 | columna | qué dice |

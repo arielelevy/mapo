@@ -956,6 +956,72 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   invisible»*— cometida en los campos que ese mismo docstring no enumeraba.
   `test_science.py` §63.
 
+- [ ] **ONT-1** · **la ontología separa MÁS con MENOS segmentos, y eso decide qué debería
+  ser la región** (2026-08-30, medido sobre el registro completo; cero llamadas al modelo).
+
+  La pregunta del autor: *«la segmentación tiene que ser por ontología, y tiene que impactar
+  como variable que afecta»*. Se puede contestar con el registro que ya está pago.
+
+  **La cuenta**: dentro de cada segmento, varianza entre brazos contra ruido entre réplicas.
+  Si un segmento agrupa tareas donde gana el mismo brazo, la señal sube y el ruido no — que
+  es exactamente lo que un router necesita.
+
+  | segmentación | S/R | segmentos |
+  |---|---:|---:|
+  | ninguna (todo junto) | 1,00 | 1 |
+  | región actual, **sólo el primer segmento** | 1,04 | 3 |
+  | **ontología por EJE** | **1,74** | **5** |
+  | región actual **completa** | 1,84 | 8 |
+  | ontología por celda | 1,92 | 11 |
+
+  **Y hay que controlar por cantidad de segmentos, porque más segmentos inflan la señal
+  solos.** Controlado, la conclusión se da vuelta a favor de la ontología:
+
+  | | ganancia sobre 1,00 | por segmento |
+  |---|---:|---:|
+  | región estructural (3 segmentos) | +0,04 | **0,013** |
+  | región estructural (8 segmentos) | +0,84 | 0,105 |
+  | **ontología por eje (5 segmentos)** | **+0,74** | **0,148** |
+
+  > **La ontología extrae 40% más separación por segmento que el vocabulario estructural.**
+  > Y eso no es una elegancia: **los segmentos cuestan datos.** Con 46 tareas y un piso de
+  > evidencia de 8 tareas por región, cada segmento de más es una región que no cruza. Hoy
+  > **2 de 8 regiones** juntan evidencia; con una segmentación que separe igual usando menos
+  > bins, cruzarían más.
+
+  **Y un solo eje binario casi iguala al vocabulario entero:**
+
+  | eje (grupo contra el resto) | S/R |
+  |---|---:|
+  | **`contradicción` (B4)** | **1,82** |
+  | `cobertura` (B2 ausencia) | 1,59 |
+  | `vigencia` (B4) | 1,01 |
+  | `encadenamiento` (B1) | 1,00 |
+  | `puntual` | 0,95 |
+
+  **Una sola partición binaria por «¿la respuesta exige detectar una contradicción entre
+  unidades?» da 1,82, contra 1,84 de los ocho segmentos estructurales.**
+
+  **Lo que esto confirma y lo que corrige.** `ONTOLOGIA_PREGUNTAS.es.md` ya nombraba estos
+  ejes —`B2` ausencia, `B4` temporalidad y vigencia— y los marcaba como *«sí, y está sin
+  explotar»*. El documento tenía razón **antes de que hubiera con qué medirlo**, y `X-15`
+  llegó al mismo lugar por el camino empírico: dos celdas idénticas en todo campo computable
+  con comportamiento opuesto, y la diferencia era exactamente `B4`.
+
+  **Lo que NO confirma, y hay que decirlo:** `vigencia` sola da **1,01** — o sea, el eje que
+  `X-15` señaló como causa **no separa los brazos por sí mismo**. Separa el *efecto de la
+  cobertura*, que es otra cosa. Los que separan brazos son `contradicción` y `cobertura`.
+  **Dos hallazgos verdaderos sobre ejes distintos, y confundirlos sería fácil.**
+
+  **Qué hay que hacer, y es una decisión de contrato y no de aprendizaje:** agregar al
+  request un eje ontológico declarado —empezando por el que más separa— y volver a correr
+  esta misma cuenta. Es chequeable antes de gastar: si el eje nuevo no sube `S/R`, no entra.
+
+  **La amenaza declarada antes de creerse el número:** la celda del corpus es un *proxy* de
+  la ontología, no la ontología. Que agrupar por celda funcione dice que **hay estructura
+  ontológica en el corpus**, no que un clasificador la pueda recuperar de un request real.
+  Eso es lo que falta medir, y no se puede con este registro.
+
 - [x] **X-16** · **la varianza que un router puede pelear ES EXACTAMENTE el ruido contra el
   que se mide** (2026-08-29, análisis exploratorio sobre 1.284 filas medidas).
 

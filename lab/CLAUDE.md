@@ -201,7 +201,7 @@ era saber **cuál abrir**:
 | `SOUNDNESS.es.md` | el teorema, y qué NO afirma |
 | `COTA_RATCHET.es.md` | la cota que reemplazó el préstamo de v1 |
 | `MODELO_Y_CONSTANTES.es.md` | qué se rompe si cambia el modelo (mecanismos vs magnitudes) |
-| `ONTOLOGIA_PREGUNTAS.es.md` | **PIZARRA**: nada implementado ni medido |
+| `ONTOLOGIA_PREGUNTAS.es.md` | los ejes de la pregunta. **Ya no es del todo pizarra** (2026-08-30): dos de sus ejes se midieron contra el registro y separan los brazos **mejor por segmento** que el vocabulario de región — `contradicción` da `S/R = 1,82` con **una sola partición binaria**, contra 1,84 de los ocho segmentos estructurales. Lo que sigue sin medir es si un clasificador puede recuperar el eje de un request real |
 | `CONTRATOS.es.md` | contratos de completitud, numéricos y de cita — **dos de las tres clases están en `app/contracts.py`**, no es pizarra |
 | `LECCIONES.es.md` | los errores propios, con el número que los delató |
 
