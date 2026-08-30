@@ -1414,9 +1414,25 @@ lo que ya leyó**. Con traza por llamada sobre `react` en las 21 tareas del estr
 | 8 | 1 | 364.334 | 67.233 | **110,8×** |
 
 **El primer turno consume 38.238 tokens de 5.503.757 — el uno por ciento.** Todo lo demás
-es material ya pagado, viajando otra vez. El costo crece con el cuadrado de las vueltas
-mientras la cobertura crece linealmente, y esa proporción es una propiedad del transporte,
-no del modelo.
+es material ya pagado, viajando otra vez. El costo **en tokens** crece con el cuadrado de
+las vueltas mientras la cobertura crece linealmente, y esa proporción es una propiedad del
+transporte, no del modelo.
+
+**Y el caché del proveedor aplana la curva de plata sin aplanar la de tokens, que es una
+distinción que conviene no perder.** La mitad del prefijo reenviado la sirve el proveedor
+de su propio caché —el 51% de los tokens de entrada en el brazo base— a una décima parte
+del precio. Así que la misma medición se lee distinto según la unidad:
+
+| | tokens | dólares |
+|---|---:|---:|
+| el ahorro | **1,57×** | **1,36×** |
+
+Ninguno de los dos es «el verdadero»: contestan preguntas distintas. Los tokens son de lo
+que está hecha la ventana, así que la curva `N²` es la que decide **si una tarea entra**, y
+dónde se cruza el acantilado de contexto largo. Los dólares son lo que paga un despliegue,
+y ahí el caché del proveedor absorbe buena parte de la repetición. **Un resultado de costo
+sin su unidad no es reportable**, y acá los dos difieren un 15% — suficiente para cambiar
+qué brazo parece mejor en una comparación ajustada.
 
 **Y ofrecer una salida cambia el comportamiento aunque la salida no se tome.** Exponerle al
 mismo brazo, sobre las mismas tareas, una herramienta que lee todo en una llamada lo volvió

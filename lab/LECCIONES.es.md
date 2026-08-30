@@ -2402,3 +2402,45 @@ Ahora hay **un solo portón** —`policy.learnable_rows`— que devuelve las fil
 **conteo tipado de lo descartado**, porque un filtro silencioso es la versión peor del
 problema que arregla: la estadística sale limpia y nadie puede decir sobre cuántas filas se
 computó. La línea del vigía lo dice en vivo: `552 filas (+552, 118 no medidas)`.
+
+
+### 8.12 Un resultado de costo sin su unidad no es reportable · `CORRECCIÓN`
+
+Escribí en el paper que `read_all` sale **1,57× más barato**, y lo verifiqué contra el
+registro antes de escribirlo. El número está bien. **La afirmación estaba incompleta**, y la
+encontré yo mismo un rato después preguntándome de dónde salía un campo que no había mirado:
+
+    provider_cached_tokens    base 4.412.471    readall 2.305.090
+
+El proveedor estaba sirviendo **el 51% de la entrada** del brazo base desde su propio caché,
+y el token cacheado sale **una décima parte** (`0,02` contra `0,20` por millón). O sea que el
+reenvío de la conversación —el 99% del gasto de entrada— **se cobra barato en más de la
+mitad de los casos.**
+
+| | tokens | dólares |
+|---|---:|---:|
+| el ahorro de `read_all` | **1,57×** | **1,36×** |
+
+**Ninguno de los dos es «el verdadero», y ese es el punto.** Contestan preguntas distintas:
+
+- **los tokens** son de lo que está hecha la ventana, así que la curva `N²` decide **si una
+  tarea entra** y dónde se cruza el acantilado de contexto largo (272k, y es un acantilado
+  que se cobra por el request entero, no marginalmente)
+- **los dólares** son lo que paga un despliegue, y ahí el caché del proveedor absorbe buena
+  parte de la repetición
+
+**Los dos difieren un 15%**, que alcanza para dar vuelta cuál brazo parece mejor en una
+comparación ajustada. Reportar «1,57× más barato» sin decir en qué unidad no es un redondeo:
+es una afirmación que el lector va a interpretar en la unidad que le importe a él, que
+probablemente no sea la mía.
+
+**La forma general, y es la misma que ya aparece tres veces en este archivo con otra cara**
+(5.6, 8.9, 8.10): *un número medido correctamente puede sostener una afirmación equivocada
+si le falta la dimensión en la que vive.* Acá la dimensión era la unidad; en 8.10 era «un
+acierto de caché reporta el uso de la llamada original»; en 5.6 eran los `COST_PRIORS` que
+erraban 2-7× y nadie preguntaba quién los consumía.
+
+**Y lo que lo destapó fue mirar un campo que no entraba en la conclusión.**
+`provider_cached_tokens` no era parte de la hipótesis ni del análisis pareado — se agregó al
+registro meses antes justamente porque el caché del endpoint está encendido por defecto y no
+había con qué mirarlo. Estaba ahí, contado, esperando que alguien preguntara.

@@ -1372,8 +1372,25 @@ tasks — 273 traced calls, `repeat = 3` — the growth is not a tendency but a 
 | 8 | 1 | 364,334 | 67,233 | **110.8×** |
 
 **The first turn consumes 38,238 tokens of 5,503,757 — one percent.** Everything else is
-material already paid for, travelling again. Cost grows with the square of the turns while
-coverage grows linearly, and that ratio is a property of the transport, not of the model.
+material already paid for, travelling again. Token cost grows with the square of the turns
+while coverage grows linearly, and that ratio is a property of the transport rather than of
+the model.
+
+**And the provider's cache flattens the money curve without flattening the token curve,
+which is a distinction worth keeping.** Half the resent prefix is served from the
+provider's own cache — 51% of input tokens in the base arm — at one tenth the price. So the
+same measurement reads differently depending on the unit:
+
+| | tokens | dollars |
+|---|---:|---:|
+| the saving | **1.57×** | **1.36×** |
+
+Neither number is the true one; they answer different questions. Tokens are what the
+context window is made of, so the `N²` curve is what decides **whether a task fits at all**
+and where the long-context cliff is crossed. Dollars are what a deployment pays, and there
+the provider's cache absorbs a large part of the repetition. **A cost result reported
+without its unit is not reportable**, and the two diverge by 15% here, which is enough to
+change which arm looks better in a close comparison.
 
 **And offering a way out changes behaviour even when the way out is not taken.** Exposing a
 read-everything-in-one-call tool to the same arm on the same tasks made it **1.57× cheaper

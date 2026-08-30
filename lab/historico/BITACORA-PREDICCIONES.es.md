@@ -1530,7 +1530,12 @@ que aísla, y por eso van los dos.
 | `base` | 137.211 | 4,3 | 10,0 | 0,540 |
 | `readall` | **87.495** | 4,0 | 8,5 | 0,540 |
 
-**1,57× más barato con la utilidad exactamente igual** — `+0,000`, no «dentro del ruido».
+**1,57× más barato en TOKENS con la utilidad exactamente igual** — `+0,000`, no «dentro
+del ruido». **En plata es 1,36×**, y la diferencia importa: el proveedor sirve el **51%**
+de la entrada del brazo base desde su propio caché, a **una décima parte del precio**.
+Los tokens deciden si una tarea entra en la ventana y dónde se cruza el acantilado de
+contexto largo; los dólares son lo que paga un despliegue. **Un resultado de costo sin
+su unidad no es reportable**, y acá los dos difieren un 15%.
 
 | # | predicción | veredicto |
 |---|---|---|
