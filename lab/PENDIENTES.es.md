@@ -956,6 +956,67 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   invisible»*— cometida en los campos que ese mismo docstring no enumeraba.
   `test_science.py` §63.
 
+- [ ] **X-18** · **el premio de este corpus es de COSTO, no de calidad — y el router es
+  estructuralmente ciego a él** (2026-08-30, del experimento del oráculo a mano; cero
+  llamadas al modelo).
+
+  El experimento del autor —derivar a mano el camino ideal, «mayor éxito al menor costo»—
+  obligó a definir bien el oráculo, y ahí apareció esto. **Taxonomía de las 46 tareas:**
+
+  | tipo de decisión | tareas | Δ calidad | ratio de costo |
+  |---|---:|---:|---:|
+  | **(a)** los brazos difieren en calidad | 16 (35%) | 0,568 | **11,2×** |
+  | **(b)** la mayoría empata: costo con poca calidad | 21 (46%) | 0,181 | **57,0×** |
+  | **(c)** nadie la resuelve: sólo se elige cuánto gastar en fallar | 9 (20%) | **0,000** | **51,3×** |
+
+  > **En el 66% de las tareas no hay nada que elegir en calidad, y el abanico de costo entre
+  > brazos que dan exactamente el mismo resultado es de 50× a 57×.** El premio de calidad
+  > llega a 0,568 en el mejor caso; el de costo es de un orden de magnitud, siempre.
+
+  **Y el router no lo puede ver.** `Router` elige con `max(peers, key=mean_utility)`,
+  `best_model` ordena por `-mean_utility`, y `was_best` se define sólo sobre utilidad. El
+  costo **está medido y guardado** —`Stat.cost_sum` existe— y **nadie lo lee para elegir**.
+
+  Eso encadena con todo lo demás de la sesión y lo explica:
+
+  - **`X-16`**: la varianza de paradigma en *utilidad* iguala al ruido (0,0311 vs 0,0311).
+    Claro — la utilidad no es donde está la varianza.
+  - **`X-14`**: θ se abstiene con márgenes de 0,04. Está optimizando el eje equivocado.
+  - **El oráculo «mejor al menor costo» lo gana `rewoo` en 23 de 46 tareas**, y `rewoo` es
+    **7º en utilidad y el más barato por lejos** (1.050 tokens contra 137.211 de `react`).
+
+  **La reparación obvia es un cambio de objetivo — y la probé antes de proponerla, y NO
+  funciona.** Ordenar por `u − λ·costo` en vez de por `u`:
+
+  | `λ` | sin segmentar | región | celda |
+  |---:|---:|---:|---:|
+  | 0,00 (lo de hoy) | 1,00 | 1,84 | 1,92 |
+  | 0,05 | 0,95 | 1,81 | 1,87 |
+  | 0,20 | 0,82 | 1,73 | 1,77 |
+  | 0,50 | 0,65 | 1,68 | 1,73 |
+  | 1,00 | 0,64 | **1,88** | **2,06** |
+
+  **Un peso de costo moderado empeora la separación.** Y el motivo es medible: **el costo es
+  más ruidoso entre réplicas que la calidad.** Varía más de 2× entre réplicas de la misma
+  celda en **99 de 428 celdas**, con dispersión media de **3,88×** y máxima de **287×**,
+  contra 0,141 de dispersión media en utilidad. Agregar costo inyecta ruido de réplica más
+  rápido de lo que agrega separación, hasta que `λ = 1` — y ahí ya no se rutea por calidad.
+
+  > **El premio de costo es real y NO es directamente ruteable.** La misma varianza entre
+  > réplicas que hace que el costo valga la pena optimizar es la que lo hace difícil de
+  > aprender. Lo que el registro sostiene es **el diagnóstico, no la reparación**.
+
+  **Lo que queda abierto, y ahora está mejor planteado**: capturar un abanico de 57× no se
+  hace metiendo el costo en el objetivo de calidad. Se haría estabilizando el costo —que es
+  atacable, porque su varianza tiene causas medidas: el reenvío de la conversación (§7.8) y
+  las rachas de búsqueda estéril— o eligiendo sobre el costo **esperado** en vez del medido.
+
+  **Alcance declarado, para no leerlo de más:** esto es una propiedad **de este corpus**.
+  Un corpus donde los brazos difieran más en calidad tendría el premio del otro lado. Lo que
+  **sí** es general es el defecto: **un router que sólo mira calidad no puede capturar un
+  premio de costo aunque lo tenga adelante**, y este registro muestra que ese caso existe y
+  no es marginal.
+
 - [ ] **ONT-1** · **la ontología separa MÁS con MENOS segmentos, y eso decide qué debería
   ser la región** (2026-08-30, medido sobre el registro completo; cero llamadas al modelo).
 

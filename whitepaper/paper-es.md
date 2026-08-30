@@ -1622,6 +1622,68 @@ este corpus**, el margen no supera al ruido. Las dos cosas que lo moverían son 
 distinga lo que §7.9 mostró que importa —si la tarea premia exhaustividad o discriminación—
 y más tareas por región. Ninguna es un ajuste de `τ`.
 
+## 7.11 El premio de este corpus es de costo, y el router no lo puede ver
+
+Al pedirnos derivar el camino ideal a mano —*mayor éxito al menor costo*— hubo que definir
+bien el oráculo, y definirlo bien cambió cuál es el problema.
+
+Clasificando las 46 tareas por **qué clase de decisión presentan en realidad**:
+
+| clase de decisión | tareas | brecha de calidad | ratio de costo |
+|---|---:|---:|---:|
+| **(a)** los brazos difieren en calidad | 16 (35%) | 0,568 | **11,2×** |
+| **(b)** la mayoría empata: costo con poca calidad | 21 (46%) | 0,181 | **57,0×** |
+| **(c)** nadie la resuelve: sólo cuánto gastar en fallar | 9 (20%) | **0,000** | **51,3×** |
+
+**En el 66% de las tareas no hay nada que elegir en calidad, y el abanico de costo entre
+brazos que producen exactamente la misma respuesta es de 50× a 57×.** El premio de calidad
+llega a 0,568 en el mejor caso; el de costo es de un orden de magnitud, siempre.
+
+**Y el selector es estructuralmente ciego a él.** El router elige con
+`max(peers, key=mean_utility)`; la segunda política ordena por `-mean_utility`; la señal de
+aprendizaje `was_best` se define sólo sobre utilidad. El costo **está medido y guardado**
+—la estadística lleva `cost_sum`— y **nadie lo lee al elegir**.
+
+Eso se compone con el resto de §7 y lo explica. La varianza entre brazos en *utilidad*
+iguala al ruido entre réplicas a la cuarta decimal (§7.10) — claro que sí: la utilidad no es
+donde vive la varianza. La política ajustada se abstiene con márgenes de 0,04 — está
+optimizando el eje equivocado. Y el oráculo «el mejor al menor costo» lo gana 23 veces de 46
+el brazo que sale **séptimo de doce en utilidad** y cuesta 1.050 tokens contra 137.211 del
+mejor fijo.
+
+**La reparación obvia es un cambio de objetivo — y la probamos antes de proponerla, y no
+funciona como debería.** El banco ya lleva una brecha neta con un peso de costo, así que
+ordenar por `u − λ·costo` en vez de por `u` no cuesta nada evaluarlo. Recomputando la señal
+entre brazos contra el ruido entre réplicas:
+
+| `λ` | sin segmentar | región | celda |
+|---:|---:|---:|---:|
+| 0,00 (lo que el router hace hoy) | 1,00 | 1,84 | 1,92 |
+| 0,05 | 0,95 | 1,81 | 1,87 |
+| 0,20 | 0,82 | 1,73 | 1,77 |
+| 0,50 | 0,65 | 1,68 | 1,73 |
+| 1,00 | 0,64 | **1,88** | **2,06** |
+
+**Un peso de costo moderado vuelve la selección más difícil, no más fácil.** El motivo es
+medible: **el costo es más ruidoso entre réplicas que la calidad.** El costo varía más de 2×
+entre réplicas de la misma celda en 99 de 428 celdas, con una dispersión media de 3,88× y
+una máxima de 287×, mientras la dispersión media de la utilidad es 0,141. Agregar costo al
+objetivo inyecta ruido de réplica más rápido de lo que agrega separación entre brazos, hasta
+que `λ` es tan grande que el orden de costo entre brazos domina — y en ese punto ya no se
+está ruteando por calidad en absoluto.
+
+> **Así que el premio de costo es real y no es directamente ruteable.** Un abanico de 57×
+> entre brazos que devuelven la misma respuesta vale la pena capturarlo, pero no se captura
+> plegando el costo dentro del objetivo de calidad con un peso moderado: **la misma varianza
+> entre réplicas que hace que el costo valga la pena optimizar es la que lo hace difícil de
+> aprender.** Lo que el registro sostiene es el diagnóstico, no la reparación — y enunciar
+> la reparación sin probarla habría sido el error fácil.
+
+**Alcance, enunciado para que no se lea de más.** Es una propiedad de *este* corpus; uno
+donde los brazos difieran más en calidad tendría el premio del otro lado. Lo que generaliza
+es el defecto: **un router que sólo mira calidad no puede capturar un premio de costo aunque
+lo tenga adelante**, y este registro muestra que ese caso existe y no es marginal.
+
 ---
 
 # 8. Mecanismos de falla

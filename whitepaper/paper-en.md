@@ -1577,6 +1577,68 @@ this corpus**, the margin does not clear the noise. The two things that would mo
 axis distinguishing what §7.9 showed to matter — whether a task rewards exhaustiveness or
 discrimination — and more tasks per region. Neither is a tuning of `τ`.
 
+## 7.11 The prize in this corpus is cost, and the router cannot see it
+
+Asked to derive the ideal path by hand — *highest success at least cost* — we had to define
+the oracle properly, and defining it properly changed what the problem is.
+
+Classifying all 46 tasks by **what kind of decision they actually present**:
+
+| kind of decision | tasks | quality gap | cost ratio |
+|---|---:|---:|---:|
+| **(a)** arms differ in quality | 16 (35%) | 0.568 | **11.2×** |
+| **(b)** most arms tie: cost with little quality | 21 (46%) | 0.181 | **57.0×** |
+| **(c)** nobody solves it: only how much to spend failing | 9 (20%) | **0.000** | **51.3×** |
+
+**In 66% of tasks there is nothing to choose on quality, and the cost spread between arms
+that produce exactly the same answer is 50× to 57×.** The quality prize reaches 0.568 at
+best; the cost prize is an order of magnitude, always.
+
+**And the selector is structurally blind to it.** The router picks with
+`max(peers, key=mean_utility)`; the second policy sorts by `-mean_utility`; the learning
+signal `was_best` is defined on utility alone. Cost **is measured and stored** — the
+statistic carries `cost_sum` — and **nothing reads it when choosing.**
+
+That composes with the rest of §7 and explains it. The between-arm variance in *utility*
+equals the replicate noise to four decimals (§7.10) — of course it does; utility is not
+where the variance lives. The fitted policy abstains at margins of 0.04 — it is optimising
+the wrong axis. And the cheapest-among-best oracle is won 23 times out of 46 by the arm
+that ranks **seventh of twelve in utility** and costs 1,050 tokens against 137,211 for the
+best-fixed arm.
+
+**The obvious repair is a change of objective — and we tested it before proposing it, and
+it does not work the way it should.** The harness already carries a net gap with a cost
+weight, so ranking by `u − λ·cost` instead of `u` costs nothing to evaluate. Recomputing
+the between-arm signal against replicate noise:
+
+| `λ` | no segmentation | region | cell |
+|---:|---:|---:|---:|
+| 0.00 (what the router does today) | 1.00 | 1.84 | 1.92 |
+| 0.05 | 0.95 | 1.81 | 1.87 |
+| 0.20 | 0.82 | 1.73 | 1.77 |
+| 0.50 | 0.65 | 1.68 | 1.73 |
+| 1.00 | 0.64 | **1.88** | **2.06** |
+
+**A moderate cost weight makes selection harder, not easier.** The reason is measurable:
+**cost is noisier between replicates than quality is.** Cost varies more than 2× between
+replicates of the same cell in 99 of 428 cells, with a mean spread of 3.88× and a maximum
+of 287×, while utility's mean replicate spread is 0.141. Adding cost to the objective
+injects replicate noise faster than it adds between-arm separation, until `λ` is large
+enough that the arms' cost ordering dominates — and at that point one is no longer routing
+on quality at all.
+
+> **So the cost prize is real and it is not straightforwardly routable.** A 57× spread
+> between arms that return the same answer is worth capturing, but it cannot be captured by
+> folding cost into the quality objective at a moderate weight: the same replicate variance
+> that makes cost worth optimising is what makes it hard to learn. What the record supports
+> is the diagnosis, not the repair — and stating the repair without testing it would have
+> been the easy mistake.
+
+**Scope, stated so it is not read for more.** This is a property of *this* corpus; one where
+arms differ more in quality would carry the prize on the other side. What generalises is the
+defect: **a router that only looks at quality cannot capture a cost prize even when the
+prize is in front of it**, and this record shows that case exists and is not marginal.
+
 ---
 
 # 8. Failure mechanisms
