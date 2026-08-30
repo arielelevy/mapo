@@ -26,6 +26,26 @@ LA PREDICCION SE HACE DESDE EL TEXTO DE LA PREGUNTA y los campos que un request 
 NO desde `relevant_units`, que es gold y no existe al decidir. El razonamiento de cada una
 esta escrito abajo para que se pueda discutir por separado del acierto.
 
+LA PRIMERA VERSION IGNORO LA FACTIBILIDAD, Y ESO LA INVALIDABA (corregido por el autor,
+2026-08-30). Predije `direct` en 27 de 41 tareas. **`direct` no es candidato en 42 de 46**:
+el porton aritmetico lo poda antes de que exista un token, por presupuesto. El 66% de mis
+predicciones nombraban un brazo que no puede correr.
+
+    LA REGLA, Y VA PRIMERO: el conjunto de candidatos es lo que PUEDE correr, no el
+    catalogo. La factibilidad es aritmetica, es gratis, y se resuelve antes que cualquier
+    otra cosa. Un camino ideal que empieza ignorandola no es un camino: es un deseo.
+
+Medido sobre `gold_h1`: el porton deja **9,3 candidatos de 12** en promedio, podando 124
+celdas. `direct` cae en 42 tareas, `extract_compute` y `streaming_scan` en 38 cada uno.
+
+Y HAY UNA SEGUNDA REGLA QUE LA PRIMERA VERSION TAMPOCO RESPETO: el objetivo es **maxima
+utilidad y, entre las que empatan, minimo costo**. Sin eso «el mejor brazo» no esta
+definido — en las 46 tareas empatan **6,6 brazos** en el maximo, asi que nombrar uno de los
+seis y llamarlo acierto no mide nada.
+
+Con las dos reglas puestas, la prediccion pasa a ser: **de los brazos FACTIBLES, cual da la
+maxima utilidad al menor costo**. Es mas dificil y es la que el router tiene que hacer.
+
 Corre DESDE `lab/`:  py bench/oneoff/_oraculo_a_mano.py
 """
 

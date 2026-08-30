@@ -2532,3 +2532,37 @@ mirándolo por celda apareció el resultado de verdad —que el signo **se da vu
 Y una segunda, sobre el orden de trabajo: **la hipótesis equivocada llevó al hallazgo
 bueno.** Sin buscar por qué `handoff` ganaba en `b2` no habría mirado la correlación por
 celda. El error no fue investigar — fue estar a punto de publicarlo sin control.
+
+
+### 8.15 Un camino ideal que ignora la factibilidad no es un camino, es un deseo · `CORRECCIÓN`
+
+El autor propuso un experimento: leer cada pregunta del corpus, razonar a mano cuál es el
+mejor patrón, y después comparar contra lo medido. Lo hice, y el resultado fue **26,8% de
+aciertos y 65,9% de predicciones sobre brazos que no pueden correr.**
+
+Predije `direct` en 27 de 41 tareas — porque leído el enunciado, `direct` *es* lo correcto:
+si todo el material entra en un contexto, leerlo todo y contestar es la respuesta.
+**`direct` no es candidato en 42 de 46 tareas**: el portón aritmético lo poda por
+presupuesto, antes de que exista un token.
+
+> **La factibilidad va primero y es gratis, y yo la salteé.** Es la primera decisión de la
+> capa que este repo construyó, está escrita en el README, en el paper como §4, y en el
+> nombre del archivo `feasibility.py`. La salteé igual, porque razoné sobre lo que *debería*
+> funcionar en vez de sobre lo que *puede correr*.
+
+Medido: el portón deja **9,3 candidatos de 12** en promedio. `direct` cae en 42 tareas,
+`extract_compute` y `streaming_scan` en 38 cada uno.
+
+**Y había una segunda regla rota debajo de la primera.** «El mejor brazo» no estaba
+definido: en las 46 tareas **empatan 6,6 brazos** en el máximo, así que nombrar uno de los
+seis y llamarlo acierto no mide nada. El objetivo correcto —el que el autor había dicho
+desde el principio— es **máxima utilidad y, entre las que empatan, mínimo costo**.
+
+Con las dos reglas puestas el experimento cambia de pregunta, y de ahí salió `X-18`: el
+oráculo bien definido lo gana `rewoo` 23 de 46 veces, y **el premio de este corpus resultó
+ser de costo y no de calidad**.
+
+> **La forma general: un experimento mal especificado no da un resultado malo, da un
+> resultado que parece bueno.** El 26,8% de aciertos era interpretable —«el analista predice
+> mal»— cuando lo que pasaba era que la pregunta estaba mal hecha. Lo que lo destapó no fue
+> mirar el número sino que el autor señalara la regla violada.

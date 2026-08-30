@@ -64,6 +64,11 @@ from app.runner import load_rows
 # es un piso de sentido común, y lo que lo justifica es que 1,0 demostradamente no sirve.
 RAZON_MINIMA = 2.0
 
+# Y HACE FALTA UN MINIMO DE TAREAS PARA QUE LA RAZON SIGNIFIQUE ALGO. Submuestreando
+# `gold_h1` —S/R verdadero 1,00— el estimador da >= 2,0 en el 46% de los sorteos con 3
+# tareas, 34% con 8, 13% con 20 y 2% con 30. Debajo de 30 la guarda aprueba ruido.
+TAREAS_MINIMAS = 30
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -112,7 +117,60 @@ def main() -> None:
           f"{100*ruido/total:>3.0f}%   ruido por construcción")
 
     razon = v_para / ruido if ruido else float("inf")
-    print(f"\n  SEÑAL / RUIDO = {razon:.3f}   (hace falta >= {RAZON_MINIMA:.1f})")
+
+    # EL INTERVALO, Y SIN ÉL ESTE NÚMERO MIENTE SOBRE UN CORPUS CHICO (2026-08-30).
+    #
+    # La primera versión reportaba la razón pelada. Medido después: submuestreando
+    # `gold_h1` —cuyo S/R verdadero es **1,00**— a 8 tareas, **el 34% de los sorteos da
+    # 2,0 o más**, con mediana 1,59 y máximo 24,94. O sea que sobre un corpus de 8 tareas
+    # esta guarda habría aprobado un corpus que no separa nada, un tercio de las veces.
+    #
+    # Y el sesgo tiene dirección: la mediana baja 1,80 → 1,59 → 1,28 → 1,07 → 1,00 a
+    # medida que crecen las tareas. **Con pocas tareas el estimador exagera**, así que un
+    # corpus chico con S/R alto es la lectura más fácil de creer y la menos confiable.
+    #
+    # Bootstrap sobre TAREAS —no sobre filas— porque la tarea es la unidad que se
+    # remuestrea: dos réplicas de la misma tarea no son dos observaciones independientes
+    # de la separación entre brazos.
+    import random
+    tareas = sorted({t for t, _ in med})
+    rng = random.Random(7)
+    muestras = []
+    for _ in range(400):
+        sub = [rng.choice(tareas) for _ in tareas]
+        cuenta = collections.Counter(sub)
+        pp = collections.defaultdict(list)
+        rr = []
+        for (t, p_), m in med.items():
+            for _ in range(cuenta.get(t, 0)):
+                pp[p_].append(m)
+        for (t, p_), v in celdas.items():
+            if len(v) > 1:
+                rr += [statistics.pvariance(v)] * cuenta.get(t, 0)
+        if len(pp) < 2 or not rr:
+            continue
+        r_ = statistics.mean(rr)
+        if r_:
+            muestras.append(
+                statistics.pvariance([statistics.mean(v) for v in pp.values()]) / r_)
+    muestras.sort()
+    lo = muestras[int(0.05 * (len(muestras) - 1))] if muestras else float("nan")
+    hi = muestras[int(0.95 * (len(muestras) - 1))] if muestras else float("nan")
+
+    print(f"\n  SEÑAL / RUIDO = {razon:.3f}   [{lo:.2f} – {hi:.2f}]   "
+          f"(hace falta >= {RAZON_MINIMA:.1f})")
+    if len(portarea) < TAREAS_MINIMAS:
+        print(f"\n  NO ALCANZA PARA CONCLUIR: {len(portarea)} tareas, hacen falta "
+              f"{TAREAS_MINIMAS}.")
+        print(f"  Medido: sobre 8 tareas, un corpus cuyo S/R real es 1,00 da >= 2,0 el")
+        print(f"  34% de las veces. Con menos tareas el estimador EXAGERA, así que un")
+        print(f"  numerito alto acá es la lectura más fácil de creer y la menos confiable.")
+        raise SystemExit(2)
+    if lo < RAZON_MINIMA <= hi:
+        print(f"\n  EL INTERVALO CRUZA EL UMBRAL: no se puede concluir en ninguna")
+        print(f"  dirección. Hacen falta más TAREAS — no más réplicas, que achican el")
+        print(f"  error de la media y no la varianza entre brazos.")
+        raise SystemExit(2)
     print()
     if razon < RAZON_MINIMA:
         print("  ESTE CORPUS NO PUEDE DEMOSTRAR RUTEO.")
