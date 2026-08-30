@@ -15,7 +15,7 @@ Todo lo de abajo se corrió, no se recuerda:
 
 | | |
 |---|---|
-| `test_science.py` | **521 asserts, ALL CHECKS PASSED** |
+| `test_science.py` | **52 chequeos, 524 asserts, ALL CHECKS PASSED** |
 | `test_consolidation.py` | **52 asserts, ALL CHECKS PASSED** |
 | `_audit_documentos.py` | ningún documento vivo contradice al catálogo, ningún enlace roto |
 | `_audit_inerte.py` | todas las guardas disparan en algún corpus |
@@ -53,9 +53,9 @@ reforzar el paper
 
 ## 2. Lo que entró al paper
 
-Cinco secciones nuevas, **en los dos archivos y en la misma posición** (`paper-en.md` es
+**Siete** secciones nuevas, en los dos archivos y en la misma posición (`paper-en.md` es
 canónico, `paper-es.md` su espejo; `_audit_documentos.py` compara la secuencia de
-encabezados y da 49 = 49).
+encabezados y da **50 = 50**).
 
 | sección | qué afirma | por qué entró |
 |---|---|---|
@@ -65,6 +65,7 @@ encabezados y da 49 = 49).
 | **§5.6** lo que la teoría no supone | ninguno de los cinco resultados menciona recuperación: eso **es** la afirmación, no una salvedad | decisión del autor: *no angostar el paper*. Con las cuatro superficies y el argumento de que la rama `v=0` vive en acciones |
 | **§6.5** el banco como procedimiento de ajuste | el mismo producto cruzado que mide los paradigmas ajusta la capa que los elige, a costo marginal cero | tesis del autor, encaja con el ejecutable, y el paper no lo decía |
 | **§7.7** estado compartido ofrecido y no tomado | **1 de 125** llamadas | evidencia nueva, medida esta sesión |
+| **§7.8** el 99% del gasto de entrada es la conversación mandada otra vez | trazado por llamada: turno 0 = 607 tokens, turno 8 = 67.233 (**110,8×**) | el primer resultado que una FILA no podía producir |
 
 **Y el balance honesto, en §9**: las 12 herramientas de todo el registro —5 leen el mundo,
 6 escriben el estado del propio agente, 1 lee contabilidad— y **ninguna cambia nada fuera
@@ -74,7 +75,7 @@ cuenta, así que el piso que existe para gatear lo irreversible **nunca tuvo un 
 gatear**.
 
 **Conteos viejos corregidos**: el apéndice decía «7 paradigmas, 63 aserciones» y son **15
-registrados y 573 aserciones**; §9 decía «un modelo, `gpt-5-chat`, rechaza temperatura» y
+registrados y 573 aserciones** (hoy 524, tras cerrar §65); §9 decía «un modelo, `gpt-5-chat`, rechaza temperatura» y
 ahora dice lo medido — tres modelos, `terra` el más reproducible, y la restricción viva
 que es estructural (`tools` + `reasoning_effort≠none` = HTTP 400 en la familia `5.6`).
 
@@ -263,6 +264,58 @@ celda. Un sexto del material servido es texto que el agente ya tenía. Y la rete
 **Y estos números están subestimados**: se midieron con `X-8` vivo, o sea con `supervisor` y
 `handoff` reportando cero.
 
+### 5.4 `P30` corrió, y refutó su propia hipótesis de la manera útil
+
+Se lanzó **un solo brazo** —`readall`, el que aísla— porque el 2×2 completo daba 17,3M
+tokens y `accounting` cambia dos cosas a la vez. Costó **5,5M**, por debajo del techo de
+8,6M estimado contra el baseline pago.
+
+| | tok/celda | llamadas | unidades | `u` |
+|---|---:|---:|---:|---:|
+| `base` | 137.211 | 4,3 | 10,0 | 0,540 |
+| `readall` | **87.495** | 4,0 | 8,5 | 0,540 |
+
+**1,57× más barato en tokens con la utilidad idéntica** — `+0,000` sobre 63 celdas
+pareadas, no «dentro del ruido».
+
+**Pero `read_all` se llamó en 3 de 63 celdas**, y las unidades leídas *bajaron*. Así que el
+ahorro **no viene de leer todo en una llamada**, que era la hipótesis. El registro nombró la
+causa real:
+
+| | `base` | `readall` | |
+|---|---:|---:|---:|
+| caracteres releídos | 2.836.465 | **322.094** | **8,8× menos** |
+| fracción del servido que se relee | **12,6%** | **1,9%** | |
+
+La mezcla de herramientas casi no se movió —399 llamadas contra 365—. Lo que se derrumbó
+fue la **repetición**. **El efecto está en la oferta, no en el uso**, y es la segunda vez que
+este registro produce uno así: el board ofrecido como tool dio 1 de 125 (nulo), `read_all`
+3 de 63 y movió el costo (positivo).
+
+**Y la traza por llamada dio el número que la fila nunca pudo dar.** 273 llamadas trazadas,
+primera corrida con `MAPO_TRACE=1`: el turno 0 cuesta 607 tokens de prompt, el 2 cuesta
+33.548 (**55,3×**), el 8 cuesta 67.233 (**110,8×**). **El 99% del gasto de entrada es
+re-envío de la conversación** — el primer turno consume 38.238 de 5.503.757. El `N²` era una
+inferencia sacada de comparar poblaciones; ahora es una medición directa sobre las mismas
+tareas.
+
+### 5.5 Y una corrección que me hice a mí mismo, después de escribirlo
+
+Miré `provider_cached_tokens` —un campo que no entraba en la conclusión— y daba **4.412.471
+de 8.631.304** en el brazo base: **el proveedor sirve el 51% de la entrada de su propio
+caché, a una décima parte del precio**.
+
+| | tokens | dólares |
+|---|---:|---:|
+| el ahorro | **1,57×** | **1,36×** |
+
+**Ninguno de los dos es «el verdadero»**: los tokens deciden si una tarea entra en la ventana
+y dónde se cruza el acantilado de contexto largo; los dólares son lo que paga un despliegue.
+Difieren **15%**, suficiente para dar vuelta qué brazo parece mejor en una comparación
+ajustada. *Un resultado de costo sin su unidad no es reportable.* Lección `8.12`, y es la
+cuarta vez que aparece la misma forma: **un número medido correctamente puede sostener una
+afirmación equivocada si le falta la dimensión en la que vive.**
+
 ---
 
 ## 6. Decisiones del autor tomadas en la sesión
@@ -283,8 +336,10 @@ celda. Un sexto del material servido es texto que el agente ya tenía. Y la rete
    interrumpió a mitad y el registro se restauró intacto; hay que volver a lanzarlo con la
    campaña detenida.
 2. **`P29`** — el cruce `{cola, sin} × {guard, sin}`: falta `cola` (9 de ~63 filas),
-   `guard` y `ambos`. La celda `base` está completa.
-3. **`P30`** — `bench/runs/_run_cobertura.py`, sin lanzar. `base` sale gratis del cruce.
+   `guard` y `ambos`. La celda `base` está completa: 126 filas de `w16`, 42 celdas,
+   `repeat 3`.
+3. **`P30c`** — el brazo `accounting`, que diría si `coverage` cambia la decisión de pedir
+   todo. `readall` ya corrió y cerró `P30a`, `P30b` y `P30d`.
 4. **`X-9`** — decidir a partir de qué ancho `stop_on_barren` deja de ser factor y pasa a
    ser el comportamiento por defecto. Con 63,5% de esterilidad en `w16` la pregunta ya no
    es si conviene.
@@ -295,10 +350,15 @@ celda. Un sexto del material servido es texto que el agente ya tenía. Y la rete
 
 ## 8. Lo que NO se hizo, dicho para que no se busque
 
-- **No se corrió `_run_cobertura.py`.** Está escrito y en ensayo, nada más.
-- **No se completó el cruce.** Sólo `base` y 9 filas de `cola`.
+- **No se corrió el brazo `accounting`** de `_run_cobertura.py`: quedó afuera por precio, y
+  porque `readall` es el que aísla el mecanismo.
+- **No se completó el cruce del board.** Sólo `base` y 9 filas de `cola`.
 - **No se instrumentó nada con Langfuse.** La decisión está tomada y escrita; el código no
   existe porque el producto tampoco.
 - **No se tocó `legacy/`.** Se leyó entero para comparar, y sigue congelado.
-- **No se hizo push.** El repo tiene 2.480 líneas agregadas sin commitear, y el autor no lo
-  autorizó.
+- **El push se hizo**, autorizado por el autor al cerrar. Cuatro commits, y el primero tuvo
+  que **mergear** un snapshot que el autor había pusheado a las 17:01 desde otra máquina:
+  dos ramas paralelas desde la misma base. El único conflicto real fue `_backfill.py`, y se
+  resolvió a favor de `--modelo` —que toma la huella de la tabla— porque la versión del
+  remoto estaba clavada a `nano` y **con la huella equivocada ninguna clave de caché
+  acierta**: el «rellenado» habría pagado el registro entero de nuevo.
