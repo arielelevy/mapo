@@ -1463,6 +1463,55 @@ qué. La afirmación del `N²` era antes una inferencia sacada de comparar pobla
 tareas con pocas y muchas llamadas. Trazada por llamada, es una medición directa sobre las
 mismas tareas.
 
+## 7.9 Por qué la selección tiene premio: el signo de la cobertura se da vuelta entre celdas
+
+El premio de la selección de paradigma se suele reportar como una brecha y se deja sin
+explicar. Sobre el registro completo —1.656 filas, 428 celdas medidas, 43 tareas con los
+nueve brazos generales— se puede decir de dónde sale.
+
+**Correlación entre la fracción del material leída y la utilidad, por celda:**
+
+| celda | `r` | n |
+|---|---:|---:|
+| `C1_single_verifiable` | **+0,905** | 63 |
+| `B2_absence` | +0,400 | 108 |
+| `C5_unknown_horizon` | +0,331 | 153 |
+| `C4_aggregate_full_coverage` | +0,196 | 147 |
+| `C2_bulk_independent` | +0,180 | 147 |
+| `C7_irreversible` | +0,062 | 162 |
+| `C3_coupled_chain` | −0,015 | 54 |
+| `W1_shared_writes` | **−0,206** | 54 |
+| `C8_currency` | **−0,373** | 153 |
+| **todo el corpus** | **+0,109** | 1.284 |
+
+**Los signos son opuestos y el agregado los borra.** Leer más ayuda donde la respuesta exige
+exhaustividad —un hecho único que hay que encontrar, una ausencia que hay que probar— y
+**daña** donde exige discriminar entre alternativas que compiten (`C8_currency` es elegir la
+moneda correcta entre varias). La cifra de todo el corpus da `+0,109`, casi cero, porque
+promedia dos poblaciones de signo contrario.
+
+> **Ése es el premio, dicho como mecanismo y no como esperanza.** Si existiera una política
+> de lectura universalmente buena, un paradigma fijo la implementaría y no habría nada que
+> rutear. La brecha de oráculo existe **porque el signo se da vuelta entre celdas**, y eso es
+> exactamente lo que una capa de decisión puede explotar y un default fijo no.
+
+**Y el premio está concentrado, lo que acota cuánto puede ganar un router.** De las 43
+tareas con los nueve brazos, **35 no tienen brecha alguna** —el mejor brazo fijo ya *es* el
+oráculo— y sólo **5 tienen un único mejor brazo**. Tres de esas cinco son tareas de ausencia
+que gana `handoff`, un brazo que promedia **0,440 en el corpus** y **0,391 fuera de esa
+celda**, pero **0,917 adentro**.
+
+**La selección no se gana eligiendo el brazo que suele ser bueno. Se gana sabiendo cuándo el
+brazo que suele ser malo es el correcto** — en cinco tareas de cuarenta y tres. El margen de
+error de un router es por lo tanto minúsculo: equivocarse en las otras treinta y ocho cuesta
+más de lo que acertar en las cinco puede pagar. Es la misma conclusión a la que llega el
+Teorema 1 por el otro lado, y es por qué el punto de operación óptimo implica abstenerse en
+la mayoría de los pedidos.
+
+**Una salvedad que le debemos al lector**, y es sobre esta tabla y no sobre el ruteo: las
+correlaciones por celda descansan en entre 54 y 162 filas cada una, un corpus y un modelo.
+El patrón de **signos** es la afirmación; las magnitudes no.
+
 ---
 
 # 8. Mecanismos de falla

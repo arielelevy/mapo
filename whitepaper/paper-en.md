@@ -1419,6 +1419,54 @@ row reports `calls = 4.3` and `cost_tokens = 137,211`; it cannot say *which* cal
 what. The `N²` claim was previously an inference from comparing populations of tasks with
 few and many calls. Traced per call, it is a direct measurement on the same tasks.
 
+## 7.9 Why selection has a prize at all: the sign of coverage flips between cells
+
+The prize in paradigm selection is usually reported as a gap and left unexplained. On the
+completed record — 1,656 rows, 428 measured cells, 43 tasks carrying all nine general arms —
+we can say where it comes from.
+
+**Correlation between fraction of material read and utility, per cell:**
+
+| cell | `r` | n |
+|---|---:|---:|
+| `C1_single_verifiable` | **+0.905** | 63 |
+| `B2_absence` | +0.400 | 108 |
+| `C5_unknown_horizon` | +0.331 | 153 |
+| `C4_aggregate_full_coverage` | +0.196 | 147 |
+| `C2_bulk_independent` | +0.180 | 147 |
+| `C7_irreversible` | +0.062 | 162 |
+| `C3_coupled_chain` | −0.015 | 54 |
+| `W1_shared_writes` | **−0.206** | 54 |
+| `C8_currency` | **−0.373** | 153 |
+| **whole corpus** | **+0.109** | 1,284 |
+
+**The signs are opposite and the aggregate erases them.** Reading more helps where the
+answer demands exhaustiveness — one fact that must be found, an absence that must be
+proven — and *hurts* where the answer demands discrimination among competing candidates
+(`C8_currency` is choosing the right currency among several). The corpus-wide figure is
+`+0.109`, near zero, because it averages two populations of opposite sign.
+
+> **That is the prize, stated as a mechanism rather than a hope.** If there were a
+> universally good reading policy, a fixed paradigm would implement it and there would be
+> nothing to route. The oracle gap exists **because the sign flips between cells**, and that
+> is precisely what a decision layer can exploit and a fixed default cannot.
+
+**And the prize is concentrated, which bounds how much a router can earn.** Of the 43 tasks
+carrying all nine arms, **35 have no gap at all** — the best fixed arm already *is* the
+oracle — and only **5 have a unique best arm**. Three of those five are absence tasks won by
+`handoff`, an arm that averages **0.440 over the corpus** and **0.391 outside that cell**,
+but **0.917 inside it**.
+
+**Selection is not won by picking the generally good arm. It is won by knowing when the
+generally bad arm is right** — on five tasks out of forty-three. A router's error budget is
+therefore tiny: being wrong on the other thirty-eight costs more than being right on the
+five can pay. That is the same conclusion Theorem 1 reaches from the other direction, and
+it is why the optimal operating point involves abstaining on most requests.
+
+**A caution we owe the reader**, and it is about this table rather than about routing: the
+per-cell correlations rest on 54 to 162 rows each, one corpus and one model. The **sign**
+pattern is the claim; the magnitudes are not.
+
 ---
 
 # 8. Failure mechanisms

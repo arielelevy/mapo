@@ -956,6 +956,64 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   invisible»*— cometida en los campos que ese mismo docstring no enumeraba.
   `test_science.py` §63.
 
+- [x] **X-12** · **por qué el ruteo tiene premio: no existe una cantidad de lectura que
+  sirva siempre** (2026-08-29, sobre el registro completo de 1.656 filas).
+
+  Correlación entre **fracción del material leída** y utilidad, **por celda**:
+
+  | celda | `r` | n |
+  |---|---:|---:|
+  | `C1_single_verifiable` | **+0,905** | 63 |
+  | `B2_absence` | +0,400 | 108 |
+  | `C5_unknown_horizon` | +0,331 | 153 |
+  | `C4_aggregate_full_coverage` | +0,196 | 147 |
+  | `C2_bulk_independent` | +0,180 | 147 |
+  | `C7_irreversible` | +0,062 | 162 |
+  | `C3_coupled_chain` | −0,015 | 54 |
+  | `W1_shared_writes` | **−0,206** | 54 |
+  | `C8_currency` | **−0,373** | 153 |
+  | **todo el corpus** | **+0,109** | 1.284 |
+
+  **Los signos son opuestos y el agregado los borra.** Leer más ayuda donde la respuesta
+  exige exhaustividad —un hecho único que hay que encontrar, una ausencia que hay que
+  probar— y **daña** donde exige discriminar entre alternativas que compiten (`C8_currency`
+  es elegir la moneda correcta entre varias). El promedio del corpus da `+0,109`, casi cero,
+  porque es la media de dos poblaciones con signo contrario.
+
+  > **Y ahí está el premio del ruteo, dicho como mecanismo y no como esperanza.** Si
+  > existiera una política de lectura universalmente buena, un paradigma fijo la
+  > implementaría y no habría nada que rutear. La brecha de oráculo existe **porque el signo
+  > se da vuelta entre celdas**, y eso es exactamente lo que una capa de decisión puede
+  > explotar y un default fijo no.
+
+  Es la misma regla que este repo ya tenía escrita —*«un número derivado se verifica en la
+  granularidad donde vive, no en el agregado»*— apareciendo del lado en que **el agregado
+  esconde un efecto** en vez de esconder una contradicción.
+
+- [x] **X-13** · **la brecha de oráculo replicó sobre el doble de datos, con las mismas
+  proporciones** (2026-08-29).
+
+  | | registro parcial | registro completo |
+  |---|---:|---:|
+  | tareas con los 9 brazos | 21 | **43** |
+  | brecha de oráculo | +9,5 pp | **+10,9 pp** |
+  | tareas con brecha sobre SU ruido | **0 de 21** | **0 de 43** |
+  | el mejor fijo YA es el oráculo | 17 (81%) | **35 (81%)** |
+  | un único mejor brazo | 3 (14%) | **5 (12%)** |
+
+  El resultado no era un artefacto del corpus parcial: **se sostiene con 2× de datos y las
+  fracciones no se mueven**. El mejor fijo sigue siendo `react` (0,6512) contra un oráculo
+  de 0,7597.
+
+  **Y el premio está CONCENTRADO, que es lo nuevo.** De las 5 tareas con un único mejor
+  brazo, **3 son `B2_absence` y las gana `handoff`** — un brazo que promedia **0,440 en todo
+  el corpus** y **0,391 fuera de esa celda**, pero **0,917 adentro**.
+
+  > **El ruteo no se gana eligiendo el brazo que suele ser bueno: se gana sabiendo cuándo el
+  > brazo que suele ser malo es el correcto.** Y son 5 tareas de 43, o sea que el margen de
+  > error de un router es chiquito: equivocarse en las 38 restantes cuesta más de lo que
+  > acertar en las 5 puede pagar.
+
 - [x] **X-9** · **la esterilidad estaba SUBESTIMADA, y el peor brazo era el que reportaba
   cero** (2026-08-29, cerrado sobre el registro completo de 1.656 filas).
 

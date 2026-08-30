@@ -2494,3 +2494,41 @@ como excusa.** Las 989 filas viejas están intactas —la copia además quedó�
 son celdas válidas, cero errores de infraestructura, que completan `sin-w`, `w4` y `w16`
 para los doce brazos con `repeat 3`. Es la campaña que igual se iba a correr. **Pero se
 gastó por accidente y no por decisión, y esa diferencia es la que importa.**
+
+
+### 8.14 Mi hipótesis tenía mecanismo, número y sentido — y su propio control la volteó · `CORRECCIÓN`
+
+Sobre `B2_absence` —donde la respuesta correcta es «nadie» y no hay unidades relevantes—
+`handoff` saca **0,917** contra 0,250 de `dag_strategy`, y los dos leen el **100%** del
+material. La cobertura no explicaba la diferencia, así que busqué otra cosa y la encontré:
+
+    handoff      2,1 búsquedas por celda    u = 0,917
+    dag_strategy 5,1                        u = 0,250
+    supervisor   8,0                        u = 0,000
+
+Monótono, con mecanismo plausible y hasta elegante: *en una tarea de ausencia, buscar ES el
+modo de falla — el que insiste termina produciendo un falso positivo, y el que se detiene
+gana.* Ya lo tenía escrito.
+
+**Y después corrí el control.**
+
+    correlación búsquedas-utilidad DENTRO de b2   r = −0,129   (n = 108)
+    correlación búsquedas-utilidad FUERA de b2    r = −0,124   (n = 1.176)
+
+**Idénticas.** Buscar-daña no es un fenómeno de la ausencia: es una regularidad débil de
+**todo el corpus**, y yo la estaba presentando como el mecanismo de una celda porque **sólo
+la había mirado ahí**.
+
+**Lo que quedaba en pie era otra cosa, y mejor.** La correlación cobertura-utilidad sí es
+alta en `b2` (`+0,400`)… pero tampoco es específica: `C1_single_verifiable` da **+0,905**. Y
+mirándolo por celda apareció el resultado de verdad —que el signo **se da vuelta**, hasta
+`−0,373` en `C8_currency`— que es `X-12`, y es mucho más fuerte que lo que yo iba a afirmar.
+
+> **La forma general: un patrón medido dentro de un subgrupo no es un efecto del subgrupo
+> hasta que se lo mide afuera.** Tres números monótonos y una historia que cierra bastan
+> para convencer a cualquiera, incluido el que los computó. El control cuesta una línea y es
+> lo único que separa un mecanismo de una coincidencia bien contada.
+
+Y una segunda, sobre el orden de trabajo: **la hipótesis equivocada llevó al hallazgo
+bueno.** Sin buscar por qué `handoff` ganaba en `b2` no habría mirado la correlación por
+celda. El error no fue investigar — fue estar a punto de publicarlo sin control.
