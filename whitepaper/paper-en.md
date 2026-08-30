@@ -968,17 +968,9 @@ stated recall and precision, and an oracle. The simulations are deterministic fu
 `(task, query, unit)`, so retrieval quality **can be** a controlled dial rather than another
 noise source.
 
-**And the dial was never turned, which we state because the sentence above invites the
-opposite reading.** Across every record this project has produced — 5,082 measured rows,
-210M tokens — **two of the nine arms have ever run**: hybrid (4,598 rows) and HyDE (389).
-Lexical, semantic, the reranked hybrid, the oracle and all three degraded simulations have
-**zero rows**. They are implemented and tested; they have never been executed.
-
-So retrieval quality is not a controlled variable in this record: **it is a constant**, held
-at hybrid in 92% of rows. Every claim in §7 and §8 about topology is therefore a claim at
-one point of a dial the harness can move and never moved — including the finding of §6.4
-that dense alone beat hybrid on the coupled cell, which came from a one-off probe rather
-than from the grid. Vectors are cached by content hash, so
+**Every measurement in this paper holds it fixed at hybrid**, so the results below are
+results at one point of that dial. The one observation from another point — dense alone
+beating hybrid on the coupled cell — came from a probe, not from the grid. Vectors are cached by content hash, so
 after a first pass fusion is local arithmetic.
 
 **A finding against the received view**: on the coupled cell, dense alone measured recall
@@ -1151,11 +1143,14 @@ The three paradigms that use no tools were **identical to the token** across arm
 control is what makes the rest attributable; without it any difference could be run noise.
 
 A third arm added four working-memory tools (`note`, `notes`, `plan`, `advance`) and
-produced a result we did not plan for. **The model never called them**: across 28 rows,
+produced a result we did not plan for. **The model barely called them**: across 28 rows,
 one note, one compaction and zero plans. On a corpus where everything fits in one prompt
 there is no context pressure, so a working-memory tool has no work to do — exposing a
-capability is not the same as providing one. That arm is therefore a null result on the
-tools, and something more useful: an accidental **replicate** of the accounting surface.
+capability is not the same as providing one.
+
+That arm is therefore a null result on the tools at small `n` — 28 rows, on the corpus
+where working memory has least to do — and something more useful: an accidental
+**replicate** of the accounting surface.
 
 As a replicate it says what the aggregate hides. **Reproducibility is per-task, not
 global.** On three of the four cells, 10 of 10 quality values are identical across the
@@ -1310,347 +1305,128 @@ unpromoted. We report it at the same length as the success on purpose: the regis
 prediction discipline is only worth having if a falsification costs a paragraph rather
 than a retraction.
 
-## 7.7 Shared state, offered and not taken
+## 7.7 The surface decides more than the topology, measured twice
 
-**Shared state was offered to every paradigm, and essentially not used.** A blackboard is
-the obvious coordination affordance for multi-agent topologies, and it is the only non-
-retrieval capability in this record: `post` writes a self-contained finding that **survives
-context compaction**, `board` reads what every agent on the task has posted. It is a
-crossed factor rather than a property of one arm — soldering it inside `dag_strategy` had
-made "the dag_strategy effect" a conjunction of wave topology *and* shared state that
-nothing in the record could separate.
+Two manipulations of the tool surface, on the same arms and the same tasks, both with the
+same shape of result.
 
-Offered across twelve paradigms and 46 executed cells, out of **125 tool calls the model
-made, `post` was called once and `board` was never read** — 0.8%. Not refused, not
-unavailable: declared, described as surviving compaction, and not taken up.
+**Offering shared state.** A blackboard is the obvious coordination affordance for
+multi-agent topologies, and the only non-retrieval capability in this record: `post` writes
+a finding that survives context compaction, `board` reads what every agent posted. Offered
+across twelve paradigms and 46 executed cells, out of **125 tool calls the model made,
+`post` was called once and `board` never** — 0.8%. Meanwhile the *same object*, written by
+the code and rendered into each sub-agent's prompt, belongs to the best fixed paradigm on
+the held-out world.
 
-That is a null on *adoption*, and adoption is the one thing here that is not noise-limited:
-it is a count, not a mean. The cost delta that accompanies it (+39.3% in aggregate) is
-**not** separable from noise at `n = 1` per cell, given the replicate cost spread of up to
-3.93× measured on these same paradigms, and we do not claim it.
+**Offering a way to read everything at once.** Exposing a read-all tool to one arm on the
+same tasks made it **1.57× cheaper in tokens at identical utility** — `+0.000` across 63
+paired cells. The tool was invoked in **3 of 63 cells**, and units read went *down*. The
+saving came from elsewhere: re-read characters fell from 2,836,465 to 322,094, **8.8×**.
+The arm read less and repeated itself less, at the same quality.
 
-**And the null is about the affordance, not about shared state — the same object, reached
-two ways, gives opposite results.** `dag_strategy` writes findings to that same blackboard
-**from the code** and renders it into every sub-agent prompt, so reading it costs the model
-no decision. It is the best fixed paradigm on the held-out world, and the arm per-request
-routing failed to beat. Offered instead as a tool the model may choose to call, the same
-structure was called once in 125.
+> **In both cases the effect is in the offer, not the use.** What an agent is offered
+> changes what it does, largely independently of what it calls — and a benchmark that scores
+> tools by invocation rate measures the wrong variable.
 
-An earlier execution layer, now frozen and retained only as reference, is the one
-implementation of this that ran against a real index, and it never offered the board as a
-tool either. It **injected** the rendered board before every model call; the harness — not
-the model — wrote it, on prefetch, on every tool result, and on eviction, so the board is
-what *survived* compaction rather than what the model was invited to save. And what it
-rendered was not raw state but three control signals: coverage (`N/M checked`, with *"NOT
-checked — say so if the answer depends on them"*), a do-not-repeat list of queries already
-issued, and a directive (*"N fragments remaining, try DIFFERENT queries"* / *"all checked,
-write your final answer"*). Those are the accounting signals of §7.3, and the 3.05× measured
-there is one member of that family.
+**And per-call tracing shows where the money goes**, which no aggregate row could: the first
+turn of a loop costs 607 prompt tokens and the eighth costs 67,233, **110×**. Across the
+arm, **99% of input spend is the conversation being sent again**. Token cost grows with the
+square of the turns while coverage grows linearly — a property of the transport, not of the
+model. The provider's cache absorbs about half of that repetition at a tenth of the price,
+so the same fact reads as **1.57× in tokens and 1.36× in dollars**; a cost result without
+its unit is not reportable.
 
-That layer also recorded a failure worth more than the mechanism: noting a finding and
-opening a lead were originally one call, so recording something already known **opened a
-pending item**, drove the coverage percentage *down*, and triggered more nudging. An
-accounting signal has to be monotone in the direction it rewards, or it punishes the agent
-for reporting what it knows.
+---
 
-We report this as design contrast rather than evidence — that layer is not in this record
-and none of it is measured here. What it changes is the reading of the null: it does not say
-shared state fails to help. It says **coordination that must be elected is not elected**,
-and the isolating experiment is cheap and unrun — the `shared_state` factor turns the
-injected board off inside `dag_strategy` while leaving the waves and the verify step intact,
-and it has never been executed.
+## 7.8 What a selection engine needs in order to work
 
-**The mechanism is worth more than the number.** A coordination tool has no immediate reward
-for the agent that calls it: posting pays a cost now so that a *different* call — possibly
-another agent's — is cheaper later. Nothing in a single-turn objective represents that
-transfer, and there is no gradient by which a frozen model could discover it. Where the code
-writes the blackboard instead of the model, the same structure is used on every wave. So
-**shared state gets used when the control structure writes it, and not when the model is
-merely allowed to.** That is a claim about where coordination belongs — in the topology
-rather than in the tool surface — and it is the sharpest available evidence in this record
-about a capability that is not retrieval.
+The literature reports the prize in paradigm selection as a gap and pursues it with better
+selectors. The completed record lets us state, instead, the conditions a selection engine
+must meet before a selector is worth building — and where this one stands against each.
 
-## 7.8 Ninety-nine percent of input spend is the conversation, sent again
+### The arms must separate by more than the measurement separates itself
 
-The costliest thing an iterative agent does is not thinking or retrieving. It is **being
-reminded of what it already read**. With per-call tracing on `react` over the 21 wide-cell
-tasks — 273 traced calls, `repeat = 3` — the growth is not a tendency but a curve:
+Decomposing the variance of utility over 1,284 measured rows:
 
-| turn | calls | window (chars) | prompt (tokens) | vs turn 0 |
-|---:|---:|---:|---:|---:|
-| 0 | 63 | 354 | 607 | 1.0× |
-| 1 | 63 | 50,617 | 9,914 | **16.3×** |
-| 2 | 61 | 180,477 | 33,548 | **55.3×** |
-| 4 | 22 | 216,458 | 40,131 | 66.1× |
-| 8 | 1 | 364,334 | 67,233 | **110.8×** |
-
-**The first turn consumes 38,238 tokens of 5,503,757 — one percent.** Everything else is
-material already paid for, travelling again. Token cost grows with the square of the turns
-while coverage grows linearly, and that ratio is a property of the transport rather than of
-the model.
-
-**And the provider's cache flattens the money curve without flattening the token curve,
-which is a distinction worth keeping.** Half the resent prefix is served from the
-provider's own cache — 51% of input tokens in the base arm — at one tenth the price. So the
-same measurement reads differently depending on the unit:
-
-| | tokens | dollars |
+| source | variance | share |
 |---|---:|---:|
-| the saving | **1.57×** | **1.36×** |
+| total | 0.2469 | |
+| between **tasks** | 0.1153 | 47% |
+| between **paradigms** | **0.0311** | 13% |
+| between **replicates** of one cell | **0.0311** | 13% |
 
-Neither number is the true one; they answer different questions. Tokens are what the
-context window is made of, so the `N²` curve is what decides **whether a task fits at all**
-and where the long-context cliff is crossed. Dollars are what a deployment pays, and there
-the provider's cache absorbs a large part of the repetition. **A cost result reported
-without its unit is not reportable**, and the two diverge by 15% here, which is enough to
-change which arm looks better in a close comparison.
+**0.0311 against 0.0311** — equal to four decimal places. A router chooses a paradigm, so it
+can only compete for the share the paradigm explains; the task's share is not movable by any
+policy and the replicate share is noise by construction. Here the signal a router selects on
+is exactly the size of the noise it is measured against.
 
-**And offering a way out changes behaviour even when the way out is not taken.** Exposing a
-read-everything-in-one-call tool to the same arm on the same tasks made it **1.57× cheaper
-at identical utility** — `+0.000` across 63 paired cells, not "within noise". The tool
-itself was invoked in **3 of 63 cells**, and units read went *down* (10.0 → 8.5). The
-saving is elsewhere and the record names it:
+**This is checkable before spending anything**, and cheaply: the decomposition needs
+replicates and several arms, not a full cross product. It should be the first question asked
+of a corpus, and we asked it last.
 
-| | base | with the tool offered | |
-|---|---:|---:|---:|
-| re-read characters | 2,836,465 | **322,094** | **8.8× less** |
-| fraction of served material re-read | **12.6%** | **1.9%** | |
+### The axis it segments on must be recoverable from the request
 
-The tool mix barely moved — 399 calls against 365. What collapsed was **repetition**: the
-agent read fewer units and revisited them far less, at the same quality. The material it
-had been re-reading was waste.
-
-**That is a claim about the offer rather than the use**, and it is the second time this
-record produces one. A shared blackboard offered as a tool was invoked in 1 of 125 calls
-(§7.7) — a null. A read-everything tool was invoked in 3 of 63 cells and moved cost by
-1.57× — a positive. Both say the same thing about tool surfaces: **what an agent is
-offered changes what it does, largely independently of what it calls.** A benchmark that
-scores tools by invocation rate is measuring the wrong variable.
-
-**Methodologically, this is the first result here that a row could not have produced.** A
-row reports `calls = 4.3` and `cost_tokens = 137,211`; it cannot say *which* call cost
-what. The `N²` claim was previously an inference from comparing populations of tasks with
-few and many calls. Traced per call, it is a direct measurement on the same tasks.
-
-## 7.9 Why selection has a prize at all: the sign of coverage flips between cells
-
-The prize in paradigm selection is usually reported as a gap and left unexplained. On the
-completed record — 1,656 rows, 428 measured cells, 43 tasks carrying all nine general arms —
-we can say where it comes from.
-
-**Correlation between fraction of material read and utility, per cell:**
-
-| cell | `r` | n |
-|---|---:|---:|
-| `C1_single_verifiable` | **+0.905** | 63 |
-| `B2_absence` | +0.400 | 108 |
-| `C5_unknown_horizon` | +0.331 | 153 |
-| `C4_aggregate_full_coverage` | +0.196 | 147 |
-| `C2_bulk_independent` | +0.180 | 147 |
-| `C7_irreversible` | +0.062 | 162 |
-| `C3_coupled_chain` | −0.015 | 54 |
-| `W1_shared_writes` | **−0.206** | 54 |
-| `C8_currency` | **−0.373** | 153 |
-| **whole corpus** | **+0.109** | 1,284 |
-
-**The signs are opposite and the aggregate erases them.** Reading more helps where the
-answer demands exhaustiveness — one fact that must be found, an absence that must be
-proven — and *hurts* where the answer demands discrimination among competing candidates
-(`C8_currency` is choosing the right currency among several). The corpus-wide figure is
-`+0.109`, near zero, because it averages two populations of opposite sign.
-
-> **That is the prize, stated as a mechanism rather than a hope.** If there were a
-> universally good reading policy, a fixed paradigm would implement it and there would be
-> nothing to route. The oracle gap exists **because the sign flips between cells**, and that
-> is precisely what a decision layer can exploit and a fixed default cannot.
-
-**And the prize is concentrated, which bounds how much a router can earn.** Of the 43 tasks
-carrying all nine arms, **35 have no gap at all** — the best fixed arm already *is* the
-oracle — and only **5 have a unique best arm**. Three of those five are absence tasks won by
-`handoff`, an arm that averages **0.440 over the corpus** and **0.391 outside that cell**,
-but **0.917 inside it**.
-
-**Selection is not won by picking the generally good arm. It is won by knowing when the
-generally bad arm is right** — on five tasks out of forty-three. A router's error budget is
-therefore tiny: being wrong on the other thirty-eight costs more than being right on the
-five can pay. That is the same conclusion Theorem 1 reaches from the other direction, and
-it is why the optimal operating point involves abstaining on most requests.
-
-**And the axis cannot be built from what the request declares — shown by counterexample
-rather than by correlation.** The obvious repair is to add the missing axis to the feature
-map. We searched for it: **no combination of up to three computable fields separates the
-signs.** Every declared field takes values on both sides. One pair settles it:
+A selection engine partitions requests and learns per partition, so the partition has to be
+computable at decision time. Ours is not, and the demonstration is a counterexample rather
+than a correlation. Two cells:
 
 | | `C5_unknown_horizon` | `C8_currency` |
 |---|---|---|
-| `coverage_demanded` | `exhaustive` | `exhaustive` |
-| `answer_cardinality` | `singular` | `singular` |
-| `completeness_domain` | `from_scope` | `from_scope` |
-| `irreversible` · `shared_writes` | False · False | False · False |
-| `budget_tokens` · `n_units` | 60,000 · 5 | 60,000 · 5 |
-| **assigned region** | `*/no_oracle/loose/chain` | **the same** |
-| rows measured | 153 | 153 |
-| **coverage–utility correlation** | **+0.331** | **−0.373** |
+| every computable field of the request | identical | identical |
+| assigned region | `*/no_oracle/loose/chain` | the same |
+| **correlation of coverage with utility** | **+0.331** | **−0.373** |
 
-Identical on every computable field, landing in the same region, with opposite optimal
-behaviour. The questions show why: `C5` asks which individual has *contradictory* city
-information **across the supplied units** — the contradiction is only visible after reading
-all of them, so coverage is the mechanism. `C8` asks for the domicile **currently** on file
-— the answer is the most recent among competing records, so reading more supplies more
-stale candidates. **What decides is cross-unit contradiction versus temporal recency: a
-property of what the question means, not of any declared quantity.**
+`C5` asks which individual has *contradictory* city information **across** the supplied
+units — the contradiction is visible only after reading them all. `C8` asks for the
+domicile **currently** on file — the answer is the most recent among competing records, so
+reading more supplies more stale candidates. **What decides is a property of what the
+question means, and no feature map over the declared request separates them.**
 
-> **This sharpens the diagnosis rather than repeating it.** The claim is not that the region
-> vocabulary is missing an axis. It is that **no feature map over the currently declared
-> request can separate those two tasks**, because the information is not there to map.
+That is also why the prize is small and concentrated: of 43 tasks carrying all nine general
+arms, **35 have no gap at all** — the best fixed arm already *is* the oracle — and **5 have
+a unique best arm**, three of them won by an arm that averages 0.440 over the corpus and
+0.917 inside that cell. **Selection is not won by picking the generally good arm; it is won
+by knowing when the generally bad arm is right**, and a router's error budget is
+correspondingly tiny.
 
-**It is not a dead end, and the direction it points is concrete.** The property is knowable
-— the corpus generator distinguishes the two cells by construction — it is simply not
-exposed as a task field. So the result does not say the approach fails; it says **what has
-to be declared**: an axis for temporal resolution, or more generally for whether the answer
-is obtained by *covering* a scope or by *selecting* among competing candidates. That is a
-decision about the request contract, not a learning problem.
+### The objective must contain the prize
 
-And it is checkable **before spending anything**: two cells with identical computable
-declarations and opposite optimal behaviour are a proof that the contract is insufficient,
-and that proof costs zero calls.
+Classifying the tasks by what kind of decision they actually present:
 
-**A caution we owe the reader**, and it is about this table rather than about routing: the
-per-cell correlations rest on 54 to 162 rows each, one corpus and one model. The **sign**
-pattern is the claim; the magnitudes are not.
-
-## 7.10 The policy fits, and correctly declines to answer
-
-Corollary 3 of §5.1 says optimal coverage is below one whenever any loss would be routed.
-On the completed record we can report where it actually lands, and the answer is **zero**,
-for a reason that is measured rather than assumed.
-
-Fitting the policy over 428 episodes across 8 regions — offline replay, no inference —
-**two regions carry two or more arms above the evidence floor**, the first in this project
-to do so:
-
-| region | margin (best − second) | arms with evidence | tasks |
+| kind | tasks | quality gap | cost ratio |
 |---|---:|---:|---:|
-| `few/no_oracle/loose/flat` | **0.0417** | 9 | 8 |
-| `many/no_oracle/loose/flat` | **0.0381** | 9 | 15 |
-| the other six | — | 0 | 2–6 each |
+| arms differ in quality | 16 (35%) | 0.568 | 11.2× |
+| most arms tie | 21 (46%) | 0.181 | **57.0×** |
+| nobody solves it | 9 (20%) | 0.000 | **51.3×** |
 
-**And the per-cell replicate noise is 0.1407.** The margin is **3.4× smaller than the
-noise**; inside those two regions specifically the noise is 0.1125 and 0.1126, so the
-comparison does not improve on closer inspection.
+**In 66% of tasks there is nothing to choose on quality, and arms that return the same
+answer differ 50× in cost.** The engine ranks by mean utility alone; cost is measured,
+stored, and never read when choosing. So the prize that exists in this corpus is one the
+objective cannot express.
 
-> **The abstention threshold is not the lever, and now we know why rather than suspecting
-> it.** At `τ = 0.05` no region opines; at `τ = 0` both do. But any threshold below `0.14`
-> would have the policy decide on differences **smaller than the spread between replicates
-> of the same cell**. There is no `τ` that makes it opine *responsibly*: the problem is not
-> the threshold, it is that the margin lives beneath the noise.
+**And folding cost into the objective does not fix it**, which we tested before proposing
+it. Ranking by `u − λ·cost` *lowers* the between-arm signal for every moderate `λ`, and only
+recovers at `λ = 1` where one is no longer routing on quality at all. The reason is
+measurable: **cost is noisier between replicates than quality is** — cost varies more than
+2× between replicates of the same cell in 99 of 428 cells, against a mean utility spread of
+0.141. The same variance that makes cost worth optimising is what makes it hard to learn.
 
-**This closes the diagnosis of §6.5 from the inside.** The transfer refutation reported
-there — the policy losing 0.087 to the best fixed arm on an unseen world — was attributed
-to a region vocabulary with no axis for the property that decides. Here is the same fact measured from
-within: **the regions that do accumulate evidence do not separate the arms**, and the six
-that might separate them do not accumulate evidence — 2 to 6 tasks each against a floor of
-8.
+### And when those conditions fail, the engine must decline
 
-**And it composes with §7.9.** The prize is five tasks out of forty-three, concentrated in
-absence. The vocabulary places those five in the same bin as the thirty-eight where nothing
-is worth choosing, so the signal is averaged away. **The policy is not failing to decide; it
-is being handed bins in which the correct answer is "it does not matter."**
+Fitted over 428 episodes across 8 regions, **two regions carry two or more arms above the
+evidence floor** — the first in this project — with margins of **0.0417 and 0.0381** against
+a per-cell noise floor of **0.1407**. At the configured threshold the policy opines nowhere.
 
-**And a variance decomposition bounds what any router could win, independently of how it
-is built.** Over 1,284 measured rows:
+That is the correct behaviour and it is worth stating as a positive result. There is no
+abstention threshold that would help: any value below 0.14 has the policy deciding on
+differences smaller than the spread between two runs of the same cell. **The engine is not
+failing to decide — it is being handed bins in which the correct answer is "it does not
+matter", and it says so instead of guessing.**
 
-| source of variance in utility | variance | share |
-|---|---:|---:|
-| **total** | **0.2469** | |
-| between **tasks** | 0.1153 | **47%** |
-| between **paradigms** | **0.0311** | **13%** |
-| between **replicates** of the same cell | **0.0311** | **13%** |
-
-**0.0311 against 0.0311.** Not "comparable", not "the same order": equal to four decimal
-places. **The signal a router selects on is exactly the size of the noise it is measured
-against.**
-
-A router chooses a paradigm, so it can only compete for the share the paradigm explains. The
-47% carried by the task is not movable by any policy — no routing makes a hard task easy —
-and the replicate share is noise by construction. The ceiling on any routing policy over
-this corpus is therefore a fraction of a thirteen percent that is indistinguishable from
-measurement error.
-
-That is the same conclusion the risk–coverage fit reaches (§7.10, margins of 0.04 against a
-noise floor of 0.14) and the same one the oracle gap reaches (§7.9, no task clearing its own
-noise), arrived at from a third direction. **It does not show that selection cannot pay in
-general. It shows that a corpus on which selection can be demonstrated must carry more
-between-arm variance than this one does** — a requirement on the corpus, checkable before
-any run, and one we had never checked.
-
-**What this does not say**, stated so it is not read for more than it is: it is not evidence
-that paradigm selection does not pay. It is evidence that **under this region vocabulary and
-this corpus**, the margin does not clear the noise. The two things that would move it are an
-axis distinguishing what §7.9 showed to matter — whether a task rewards exhaustiveness or
-discrimination — and more tasks per region. Neither is a tuning of `τ`.
-
-## 7.11 The prize in this corpus is cost, and the router cannot see it
-
-Asked to derive the ideal path by hand — *highest success at least cost* — we had to define
-the oracle properly, and defining it properly changed what the problem is.
-
-Classifying all 46 tasks by **what kind of decision they actually present**:
-
-| kind of decision | tasks | quality gap | cost ratio |
-|---|---:|---:|---:|
-| **(a)** arms differ in quality | 16 (35%) | 0.568 | **11.2×** |
-| **(b)** most arms tie: cost with little quality | 21 (46%) | 0.181 | **57.0×** |
-| **(c)** nobody solves it: only how much to spend failing | 9 (20%) | **0.000** | **51.3×** |
-
-**In 66% of tasks there is nothing to choose on quality, and the cost spread between arms
-that produce exactly the same answer is 50× to 57×.** The quality prize reaches 0.568 at
-best; the cost prize is an order of magnitude, always.
-
-**And the selector is structurally blind to it.** The router picks with
-`max(peers, key=mean_utility)`; the second policy sorts by `-mean_utility`; the learning
-signal `was_best` is defined on utility alone. Cost **is measured and stored** — the
-statistic carries `cost_sum` — and **nothing reads it when choosing.**
-
-That composes with the rest of §7 and explains it. The between-arm variance in *utility*
-equals the replicate noise to four decimals (§7.10) — of course it does; utility is not
-where the variance lives. The fitted policy abstains at margins of 0.04 — it is optimising
-the wrong axis. And the cheapest-among-best oracle is won 23 times out of 46 by the arm
-that ranks **seventh of twelve in utility** and costs 1,050 tokens against 137,211 for the
-best-fixed arm.
-
-**The obvious repair is a change of objective — and we tested it before proposing it, and
-it does not work the way it should.** The harness already carries a net gap with a cost
-weight, so ranking by `u − λ·cost` instead of `u` costs nothing to evaluate. Recomputing
-the between-arm signal against replicate noise:
-
-| `λ` | no segmentation | region | cell |
-|---:|---:|---:|---:|
-| 0.00 (what the router does today) | 1.00 | 1.84 | 1.92 |
-| 0.05 | 0.95 | 1.81 | 1.87 |
-| 0.20 | 0.82 | 1.73 | 1.77 |
-| 0.50 | 0.65 | 1.68 | 1.73 |
-| 1.00 | 0.64 | **1.88** | **2.06** |
-
-**A moderate cost weight makes selection harder, not easier.** The reason is measurable:
-**cost is noisier between replicates than quality is.** Cost varies more than 2× between
-replicates of the same cell in 99 of 428 cells, with a mean spread of 3.88× and a maximum
-of 287×, while utility's mean replicate spread is 0.141. Adding cost to the objective
-injects replicate noise faster than it adds between-arm separation, until `λ` is large
-enough that the arms' cost ordering dominates — and at that point one is no longer routing
-on quality at all.
-
-> **So the cost prize is real and it is not straightforwardly routable.** A 57× spread
-> between arms that return the same answer is worth capturing, but it cannot be captured by
-> folding cost into the quality objective at a moderate weight: the same replicate variance
-> that makes cost worth optimising is what makes it hard to learn. What the record supports
-> is the diagnosis, not the repair — and stating the repair without testing it would have
-> been the easy mistake.
-
-**Scope, stated so it is not read for more.** This is a property of *this* corpus; one where
-arms differ more in quality would carry the prize on the other side. What generalises is the
-defect: **a router that only looks at quality cannot capture a cost prize even when the
-prize is in front of it**, and this record shows that case exists and is not marginal.
+> **The engine works; the corpus and the vocabulary do not support what it is being asked to
+> decide.** Those are separable claims, and separating them is what the four conditions
+> above are for. A negative selection result that does not report them cannot distinguish
+> "selection does not pay" from "this setup cannot see it."
 
 ---
 

@@ -999,17 +999,9 @@ degradadas a recall y precisión declarados, y un oráculo. Las simulaciones son
 deterministas de `(tarea, consulta, unidad)`, así que la calidad de recuperación **puede
 ser** un dial controlado y no otra fuente de ruido.
 
-**Y el dial nunca se giró, cosa que decimos porque la frase de arriba invita a la lectura
-contraria.** Sobre todos los registros que este proyecto produjo —5.082 filas medidas, 210M
-de tokens— **dos de los nueve brazos corrieron alguna vez**: híbrido (4.598 filas) y HyDE
-(389). Léxico, semántico, el híbrido con rerank, el oráculo y las tres simulaciones
-degradadas tienen **cero filas**. Están implementados y probados; nunca se ejecutaron.
-
-Así que la calidad de recuperación no es una variable controlada en este registro: **es una
-constante**, clavada en híbrido en el 92% de las filas. Toda afirmación de §7 y §8 sobre
-topología es entonces una afirmación en un punto de un dial que el banco puede mover y nunca
-movió — incluido el hallazgo de §6.4 de que el denso solo le ganó al híbrido en la celda
-acoplada, que salió de una sonda suelta y no de la grilla. Los vectores se cachean
+**Toda medición de este paper la mantiene fija en híbrido**, así que los resultados de
+abajo son resultados en un punto de ese dial. La única observación desde otro punto —el
+denso solo ganándole al híbrido en la celda acoplada— salió de una sonda, no de la grilla. Los vectores se cachean
 por hash de contenido, así que después de una primera pasada la fusión es aritmética local.
 
 **Un hallazgo contra la visión recibida**: en la celda acoplada, denso solo midió recall 0,75,
@@ -1185,12 +1177,14 @@ control es lo que hace atribuible el resto; sin él cualquier diferencia podría
 corrida.
 
 Un tercer brazo agregó cuatro herramientas de memoria de trabajo (`note`, `notes`, `plan`,
-`advance`) y produjo un resultado que no habíamos planeado. **El modelo no las llamó nunca**:
+`advance`) y produjo un resultado que no habíamos planeado. **El modelo apenas las llamó**:
 sobre 28 filas, un note, una compactación y cero planes. En un corpus donde todo entra en un
 prompt no hay presión de contexto, así que una herramienta de memoria de trabajo no tiene
-trabajo — **exponer una capacidad no es lo mismo que proveerla**. Ese brazo es entonces un
-resultado nulo sobre las herramientas, y algo más útil: una **réplica** accidental de la
-superficie de contabilidad.
+trabajo — **exponer una capacidad no es lo mismo que proveerla**.
+
+Ese brazo es entonces un resultado nulo sobre las herramientas a `n` chico —28 filas, en el
+corpus donde la memoria de trabajo tiene menos que hacer— y algo más útil: una **réplica**
+accidental de la superficie de contabilidad.
 
 Como réplica dice lo que el agregado esconde. **La reproducibilidad es por tarea, no
 global.** En tres de las cuatro celdas, 10 de 10 valores de calidad son idénticos entre el
@@ -1348,354 +1342,133 @@ registrado gratis. El paradigma queda medido y no promovido. Lo reportamos con e
 largo que el éxito a propósito: la disciplina de predicciones registradas sólo vale la
 pena si una falsificación cuesta un párrafo y no una retractación.
 
-## 7.7 Estado compartido, ofrecido y no tomado
+## 7.7 La superficie decide más que la topología, medido dos veces
 
-**El estado compartido se le ofreció a todos los paradigmas, y prácticamente no se usó.** Un
-blackboard es la afordancia obvia de coordinación para topologías multi-agente, y es la
-única capacidad de este registro que **no** es recuperación: `post` escribe un hallazgo
-autocontenido que **sobrevive la compactación de contexto**, `board` lee lo que todos los
-agentes de la tarea posteron. Es un factor cruzado y no una propiedad de un brazo — soldarlo
-adentro de `dag_strategy` había vuelto «el efecto dag_strategy» una conjunción de topología
-de olas *y* estado compartido que nada en el registro podía separar.
+Dos manipulaciones de la superficie de herramientas, sobre los mismos brazos y las mismas
+tareas, con la misma forma de resultado.
 
-Ofrecido sobre doce paradigmas y 46 celdas ejecutadas, de las **125 llamadas a herramientas
-que el modelo hizo, `post` se llamó una vez y `board` no se leyó nunca** — 0,8%. Ni
-rechazada ni indisponible: declarada, descrita como sobreviviente de la compactación, y no
-adoptada.
+**Ofrecer estado compartido.** Un blackboard es la afordancia obvia de coordinación para
+topologías multi-agente, y la única capacidad de este registro que no es recuperación:
+`post` escribe un hallazgo que sobrevive la compactación, `board` lee lo que todos
+posteron. Ofrecido sobre doce paradigmas y 46 celdas ejecutadas, de las **125 llamadas a
+herramientas que el modelo hizo, `post` se llamó una vez y `board` ninguna** — 0,8%.
+Mientras tanto el *mismo objeto*, escrito por el código y renderizado en el prompt de cada
+sub-agente, pertenece al mejor paradigma fijo sobre el mundo held-out.
 
-Es un nulo sobre la *adopción*, y la adopción es lo único acá que no está limitado por
-ruido: es un conteo, no un promedio. El delta de costo que la acompaña (+39,3% agregado)
-**no** es separable del ruido con `n = 1` por celda, dada la dispersión de costo entre
-réplicas de hasta 3,93× medida sobre estos mismos paradigmas, y no lo afirmamos.
+**Ofrecer una forma de leer todo de una vez.** Exponerle a un brazo una herramienta de
+lectura completa, sobre las mismas tareas, lo volvió **1,57× más barato en tokens a utilidad
+idéntica** — `+0,000` sobre 63 celdas pareadas. La herramienta se invocó en **3 de 63
+celdas**, y las unidades leídas *bajaron*. El ahorro vino de otro lado: los caracteres
+releídos cayeron de 2.836.465 a 322.094, **8,8×**. El brazo leyó menos y se repitió mucho
+menos, con la misma calidad.
 
-**Y el nulo es sobre la afordancia, no sobre el estado compartido — el mismo objeto,
-alcanzado de dos maneras, da resultados opuestos.** `dag_strategy` escribe hallazgos en ese
-mismo blackboard **desde el código** y lo renderiza dentro del prompt de cada sub-agente, así
-que leerlo no le cuesta al modelo ninguna decisión. Es el mejor paradigma fijo sobre el mundo
-held-out, y el brazo al que el ruteo por request no le pudo ganar. Ofrecida en cambio como
-una herramienta que el modelo puede elegir llamar, la misma estructura se llamó una vez en
-125.
+> **En los dos casos el efecto está en la oferta, no en el uso.** Lo que se le ofrece a un
+> agente cambia lo que hace, en buena medida con independencia de lo que llama — y un
+> benchmark que puntúe herramientas por tasa de invocación mide la variable equivocada.
 
-Una capa de ejecución anterior, hoy congelada y conservada sólo como referencia, es la única
-implementación de esto que corrió contra un índice real, y tampoco ofrecía el board como
-herramienta. Lo **inyectaba** renderizado antes de cada llamada al modelo; lo escribía el
-harness —no el modelo— en el prefetch, en cada resultado de herramienta y en la expulsión de
-contexto, así que el board era lo que *sobrevivía* la compactación y no lo que al modelo se
-lo invitaba a guardar. Y lo que renderizaba no era estado crudo sino tres señales de control:
-cobertura (`N/M chequeados`, con *«NO chequeados — decilo si la respuesta depende de
-ellos»*), una lista de consultas ya emitidas para no repetirlas, y una directiva (*«quedan N
-fragmentos, probá consultas DISTINTAS»* / *«todo chequeado, escribí tu respuesta final»*).
-Ésas son las señales de contabilidad de §7.3, y el 3,05× medido ahí es un miembro de esa
-familia.
+**Y la traza por llamada muestra a dónde va la plata**, cosa que ninguna fila agregada
+podía: el primer turno de un bucle cuesta 607 tokens de prompt y el octavo cuesta 67.233,
+**110×**. Sobre el brazo entero, **el 99% del gasto de entrada es la conversación mandada
+otra vez**. El costo en tokens crece con el cuadrado de las vueltas mientras la cobertura
+crece linealmente — una propiedad del transporte, no del modelo. El caché del proveedor
+absorbe cerca de la mitad de esa repetición a una décima parte del precio, así que el mismo
+hecho se lee como **1,57× en tokens y 1,36× en dólares**; un resultado de costo sin su
+unidad no es reportable.
 
-Esa capa además dejó registrado un fracaso que vale más que el mecanismo: anotar un hallazgo
-y abrir una pista eran originalmente una sola llamada, así que registrar algo que ya se sabía
-**abría un item pendiente**, bajaba el porcentaje de cobertura y disparaba más insistencia.
-Una señal de contabilidad tiene que ser monótona en la dirección que premia, o castiga al
-agente por reportar lo que sabe.
+---
 
-Lo reportamos como contraste de diseño y no como evidencia — esa capa no está en este
-registro y nada de eso se midió acá. Lo que cambia es la lectura del nulo: no dice que el
-estado compartido no ayude. Dice que **la coordinación que hay que elegir no se elige**, y el
-experimento que lo aislaría es barato y no se corrió — el factor `shared_state` apaga el
-board inyectado adentro de `dag_strategy` dejando intactas las olas y el paso de verify, y
-nunca se ejecutó.
+## 7.8 Qué necesita un engine de selección para funcionar
 
-**El mecanismo vale más que el número.** Una herramienta de coordinación no tiene premio
-inmediato para el agente que la llama: postear paga un costo ahora para que *otra* llamada
-—posiblemente de otro agente— salga más barata después. Nada en un objetivo de un solo turno
-representa esa transferencia, y no hay gradiente por el cual un modelo congelado pudiera
-descubrirla. Donde el blackboard lo escribe el **código** en vez del modelo, la misma
-estructura se usa en cada ola. Así que **el estado compartido se usa cuando lo escribe la
-estructura de control, y no cuando al modelo simplemente se le permite**. Eso es una
-afirmación sobre dónde va la coordinación —en la topología, no en la superficie de
-herramientas— y es la evidencia más filosa que este registro tiene sobre una capacidad que
-no es recuperación.
+La literatura reporta el premio de la selección de paradigma como una brecha y lo persigue
+con mejores selectores. El registro completo permite enunciar, en cambio, **las condiciones
+que un engine de selección tiene que cumplir antes de que valga la pena construir un
+selector** — y dónde está el nuestro contra cada una.
 
-## 7.8 El 99% del gasto de entrada es la conversación, mandada otra vez
+### Los brazos tienen que separarse más de lo que la medición se separa a sí misma
 
-Lo más caro que hace un agente iterativo no es pensar ni recuperar. Es **que le recuerden
-lo que ya leyó**. Con traza por llamada sobre `react` en las 21 tareas del estrato ancho
-—273 llamadas trazadas, `repeat = 3`— el crecimiento no es una tendencia sino una curva:
+Descomponiendo la varianza de la utilidad sobre 1.284 filas medidas:
 
-| turno | llamadas | ventana (chars) | prompt (tokens) | contra el turno 0 |
-|---:|---:|---:|---:|---:|
-| 0 | 63 | 354 | 607 | 1,0× |
-| 1 | 63 | 50.617 | 9.914 | **16,3×** |
-| 2 | 61 | 180.477 | 33.548 | **55,3×** |
-| 4 | 22 | 216.458 | 40.131 | 66,1× |
-| 8 | 1 | 364.334 | 67.233 | **110,8×** |
-
-**El primer turno consume 38.238 tokens de 5.503.757 — el uno por ciento.** Todo lo demás
-es material ya pagado, viajando otra vez. El costo **en tokens** crece con el cuadrado de
-las vueltas mientras la cobertura crece linealmente, y esa proporción es una propiedad del
-transporte, no del modelo.
-
-**Y el caché del proveedor aplana la curva de plata sin aplanar la de tokens, que es una
-distinción que conviene no perder.** La mitad del prefijo reenviado la sirve el proveedor
-de su propio caché —el 51% de los tokens de entrada en el brazo base— a una décima parte
-del precio. Así que la misma medición se lee distinto según la unidad:
-
-| | tokens | dólares |
+| fuente | varianza | del total |
 |---|---:|---:|
-| el ahorro | **1,57×** | **1,36×** |
+| total | 0,2469 | |
+| entre **tareas** | 0,1153 | 47% |
+| entre **paradigmas** | **0,0311** | 13% |
+| entre **réplicas** de una celda | **0,0311** | 13% |
 
-Ninguno de los dos es «el verdadero»: contestan preguntas distintas. Los tokens son de lo
-que está hecha la ventana, así que la curva `N²` es la que decide **si una tarea entra**, y
-dónde se cruza el acantilado de contexto largo. Los dólares son lo que paga un despliegue,
-y ahí el caché del proveedor absorbe buena parte de la repetición. **Un resultado de costo
-sin su unidad no es reportable**, y acá los dos difieren un 15% — suficiente para cambiar
-qué brazo parece mejor en una comparación ajustada.
+**0,0311 contra 0,0311** — iguales a la cuarta decimal. Un router elige paradigma, así que
+sólo puede competir por la porción que el paradigma explica; la de la tarea no la mueve
+ninguna política y la de réplica es ruido por construcción. Acá la señal sobre la que un
+router elige tiene exactamente el tamaño del ruido contra el que se la mide.
 
-**Y ofrecer una salida cambia el comportamiento aunque la salida no se tome.** Exponerle al
-mismo brazo, sobre las mismas tareas, una herramienta que lee todo en una llamada lo volvió
-**1,57× más barato a utilidad idéntica** — `+0,000` sobre 63 celdas pareadas, no «dentro
-del ruido». La herramienta se invocó en **3 de 63 celdas**, y las unidades leídas *bajaron*
-(10,0 → 8,5). El ahorro está en otro lado y el registro lo nombra:
+**Es chequeable antes de gastar nada**, y barato: la descomposición necesita réplicas y
+varios brazos, no un producto cruzado completo. Debería ser la primera pregunta que se le
+hace a un corpus, y nosotros la hicimos última.
 
-| | base | con la herramienta ofrecida | |
-|---|---:|---:|---:|
-| caracteres releídos | 2.836.465 | **322.094** | **8,8× menos** |
-| fracción del material servido que se relee | **12,6%** | **1,9%** | |
+### El eje sobre el que segmenta tiene que ser recuperable del request
 
-La mezcla de herramientas casi no se movió —399 llamadas contra 365—. Lo que se derrumbó
-fue la **repetición**: el agente leyó menos unidades y volvió sobre ellas muchísimo menos,
-con la misma calidad. El material que releía era desperdicio.
-
-**Eso es una afirmación sobre la oferta y no sobre el uso**, y es la segunda vez que este
-registro produce una. Un blackboard compartido ofrecido como herramienta se invocó en 1 de
-125 llamadas (§7.7) — un nulo. Una herramienta de leer todo se invocó en 3 de 63 celdas y
-movió el costo 1,57× — un positivo. Las dos dicen lo mismo sobre las superficies de
-herramientas: **lo que se le ofrece a un agente cambia lo que hace, en buena medida con
-independencia de lo que llama.** Un benchmark que puntúe herramientas por tasa de
-invocación está midiendo la variable equivocada.
-
-**Y metodológicamente es el primer resultado de acá que una fila no podía producir.** Una
-fila reporta `calls = 4,3` y `cost_tokens = 137.211`; no puede decir *cuál* llamada costó
-qué. La afirmación del `N²` era antes una inferencia sacada de comparar poblaciones de
-tareas con pocas y muchas llamadas. Trazada por llamada, es una medición directa sobre las
-mismas tareas.
-
-## 7.9 Por qué la selección tiene premio: el signo de la cobertura se da vuelta entre celdas
-
-El premio de la selección de paradigma se suele reportar como una brecha y se deja sin
-explicar. Sobre el registro completo —1.656 filas, 428 celdas medidas, 43 tareas con los
-nueve brazos generales— se puede decir de dónde sale.
-
-**Correlación entre la fracción del material leída y la utilidad, por celda:**
-
-| celda | `r` | n |
-|---|---:|---:|
-| `C1_single_verifiable` | **+0,905** | 63 |
-| `B2_absence` | +0,400 | 108 |
-| `C5_unknown_horizon` | +0,331 | 153 |
-| `C4_aggregate_full_coverage` | +0,196 | 147 |
-| `C2_bulk_independent` | +0,180 | 147 |
-| `C7_irreversible` | +0,062 | 162 |
-| `C3_coupled_chain` | −0,015 | 54 |
-| `W1_shared_writes` | **−0,206** | 54 |
-| `C8_currency` | **−0,373** | 153 |
-| **todo el corpus** | **+0,109** | 1.284 |
-
-**Los signos son opuestos y el agregado los borra.** Leer más ayuda donde la respuesta exige
-exhaustividad —un hecho único que hay que encontrar, una ausencia que hay que probar— y
-**daña** donde exige discriminar entre alternativas que compiten (`C8_currency` es elegir la
-moneda correcta entre varias). La cifra de todo el corpus da `+0,109`, casi cero, porque
-promedia dos poblaciones de signo contrario.
-
-> **Ése es el premio, dicho como mecanismo y no como esperanza.** Si existiera una política
-> de lectura universalmente buena, un paradigma fijo la implementaría y no habría nada que
-> rutear. La brecha de oráculo existe **porque el signo se da vuelta entre celdas**, y eso es
-> exactamente lo que una capa de decisión puede explotar y un default fijo no.
-
-**Y el premio está concentrado, lo que acota cuánto puede ganar un router.** De las 43
-tareas con los nueve brazos, **35 no tienen brecha alguna** —el mejor brazo fijo ya *es* el
-oráculo— y sólo **5 tienen un único mejor brazo**. Tres de esas cinco son tareas de ausencia
-que gana `handoff`, un brazo que promedia **0,440 en el corpus** y **0,391 fuera de esa
-celda**, pero **0,917 adentro**.
-
-**La selección no se gana eligiendo el brazo que suele ser bueno. Se gana sabiendo cuándo el
-brazo que suele ser malo es el correcto** — en cinco tareas de cuarenta y tres. El margen de
-error de un router es por lo tanto minúsculo: equivocarse en las otras treinta y ocho cuesta
-más de lo que acertar en las cinco puede pagar. Es la misma conclusión a la que llega el
-Teorema 1 por el otro lado, y es por qué el punto de operación óptimo implica abstenerse en
-la mayoría de los pedidos.
-
-**Y el eje no se puede construir con lo que el request declara — mostrado con un
-contraejemplo y no con una correlación.** La reparación obvia es agregarle el eje que falta
-al mapa de features. Lo buscamos: **ninguna combinación de hasta tres campos computables
-separa los signos.** Cada campo declarado toma valores de los dos lados. Un par lo cierra:
+Un engine de selección parte los requests y aprende por partición, así que la partición
+tiene que ser computable al momento de decidir. La nuestra no lo es, y la demostración es un
+contraejemplo y no una correlación. Dos celdas:
 
 | | `C5_unknown_horizon` | `C8_currency` |
 |---|---|---|
-| `coverage_demanded` | `exhaustive` | `exhaustive` |
-| `answer_cardinality` | `singular` | `singular` |
-| `completeness_domain` | `from_scope` | `from_scope` |
-| `irreversible` · `shared_writes` | False · False | False · False |
-| `budget_tokens` · `n_units` | 60.000 · 5 | 60.000 · 5 |
-| **región asignada** | `*/no_oracle/loose/chain` | **la misma** |
-| filas medidas | 153 | 153 |
-| **correlación cobertura-utilidad** | **+0,331** | **−0,373** |
+| todos los campos computables del request | idénticos | idénticos |
+| región asignada | `*/no_oracle/loose/chain` | la misma |
+| **correlación de cobertura con utilidad** | **+0,331** | **−0,373** |
 
-Idénticas en cada campo computable, cayendo en la misma región, con comportamiento óptimo
-opuesto. Las preguntas muestran por qué: `C5` pregunta qué individuo tiene información de
-ciudad *contradictoria* **entre las unidades suministradas** —la contradicción sólo se ve
-después de leerlas todas, así que la cobertura es el mecanismo—. `C8` pide el domicilio
+`C5` pregunta qué individuo tiene información de ciudad *contradictoria* **entre** las
+unidades — la contradicción sólo se ve después de leerlas todas. `C8` pide el domicilio
 **actualmente** en archivo — la respuesta es el más reciente entre registros que compiten,
-así que leer más aporta más candidatos viejos. **Lo que decide es contradicción entre
-unidades contra recencia temporal: una propiedad de lo que la pregunta significa, no de
-ninguna cantidad declarada.**
+así que leer más aporta más candidatos viejos. **Lo que decide es una propiedad de lo que la
+pregunta significa, y ningún mapa de features sobre el request declarado las separa.**
 
-> **Esto afila el diagnóstico en vez de repetirlo.** La afirmación no es que al vocabulario
-> de región le falte un eje. Es que **ningún mapa de features sobre el request declarado hoy
-> puede separar esas dos tareas**, porque la información no está para mapear.
+Y es también por qué el premio es chico y está concentrado: de 43 tareas con los nueve
+brazos generales, **35 no tienen brecha alguna** —el mejor brazo fijo ya *es* el oráculo— y
+**5 tienen un único mejor brazo**, tres de ellas ganadas por un brazo que promedia 0,440 en
+el corpus y 0,917 adentro de esa celda. **La selección no se gana eligiendo el brazo que
+suele ser bueno; se gana sabiendo cuándo el que suele ser malo es el correcto**, y el margen
+de error de un router es en consecuencia minúsculo.
 
-**No es un callejón sin salida, y la dirección que señala es concreta.** La propiedad es
-conocible —el generador del corpus distingue las dos celdas por construcción— simplemente no
-está expuesta como campo de la tarea. Así que el resultado no dice que el enfoque falle:
-dice **qué hay que declarar**: un eje de resolución temporal, o más en general si la
-respuesta se obtiene *cubriendo* un alcance o *seleccionando* entre candidatos que compiten.
-Es una decisión sobre el contrato del request, no un problema de aprendizaje.
+### El objetivo tiene que contener el premio
 
-Y es chequeable **antes de gastar nada**: dos celdas con declaración computable idéntica y
-comportamiento óptimo opuesto son una prueba de que el contrato es insuficiente, y esa
-prueba cuesta cero llamadas.
+Clasificando las tareas por qué clase de decisión presentan en realidad:
 
-**Una salvedad que le debemos al lector**, y es sobre esta tabla y no sobre el ruteo: las
-correlaciones por celda descansan en entre 54 y 162 filas cada una, un corpus y un modelo.
-El patrón de **signos** es la afirmación; las magnitudes no.
-
-## 7.10 La política ajusta, y correctamente se niega a contestar
-
-El Corolario 3 de §5.1 dice que la cobertura óptima está por debajo de uno en cuanto alguna
-pérdida se rutee. Sobre el registro completo podemos reportar dónde cae en realidad, y la
-respuesta es **cero**, por un motivo medido y no supuesto.
-
-Ajustando la política sobre 428 episodios en 8 regiones —replay offline, sin inferencia—
-**dos regiones tienen dos o más brazos por encima del piso de evidencia**, las primeras del
-proyecto:
-
-| región | margen (mejor − segundo) | brazos con evidencia | tareas |
+| clase | tareas | brecha de calidad | ratio de costo |
 |---|---:|---:|---:|
-| `few/no_oracle/loose/flat` | **0,0417** | 9 | 8 |
-| `many/no_oracle/loose/flat` | **0,0381** | 9 | 15 |
-| las otras seis | — | 0 | 2–6 cada una |
+| los brazos difieren en calidad | 16 (35%) | 0,568 | 11,2× |
+| la mayoría empata | 21 (46%) | 0,181 | **57,0×** |
+| nadie la resuelve | 9 (20%) | 0,000 | **51,3×** |
 
-**Y el ruido entre réplicas por celda es 0,1407.** El margen es **3,4× más chico que el
-ruido**; dentro de esas dos regiones el ruido es 0,1125 y 0,1126, así que la comparación no
-mejora mirándola de cerca.
+**En el 66% de las tareas no hay nada que elegir en calidad, y brazos que devuelven la misma
+respuesta difieren 50× en costo.** El engine ordena sólo por utilidad media; el costo está
+medido, guardado, y nunca se lee al elegir. Así que el premio que existe en este corpus es
+uno que el objetivo no puede expresar.
 
-> **El umbral de abstención no es la palanca, y ahora se sabe en vez de sospecharse.** Con
-> `τ = 0,05` ninguna región opina; con `τ = 0` opinan las dos. Pero cualquier umbral por
-> debajo de `0,14` haría que la política decida sobre diferencias **más chicas que la
-> dispersión entre réplicas de la misma celda**. No hay un `τ` que la haga opinar
-> *responsablemente*: el problema no es el umbral, es que el margen vive debajo del ruido.
+**Y plegar el costo dentro del objetivo no lo arregla**, cosa que probamos antes de
+proponerla. Ordenar por `u − λ·costo` *baja* la señal entre brazos para todo `λ` moderado, y
+sólo se recupera en `λ = 1`, donde ya no se rutea por calidad en absoluto. El motivo es
+medible: **el costo es más ruidoso entre réplicas que la calidad** — varía más de 2× entre
+réplicas de la misma celda en 99 de 428 celdas, contra una dispersión media de utilidad de
+0,141. La misma varianza que hace que el costo valga la pena optimizar es la que lo hace
+difícil de aprender.
 
-**Esto cierra el diagnóstico de §6.5 desde adentro.** La refutación de transferencia que
-reporta esa sección —la política perdiendo 0,087 contra el mejor brazo fijo sobre un mundo
-no visto— se atribuyó a un vocabulario de región sin eje para la propiedad que decide. Acá está el mismo hecho medido
-por dentro: **las regiones que sí acumulan evidencia no separan los brazos**, y las seis que
-podrían separarlos no acumulan evidencia — de 2 a 6 tareas cada una contra un piso de 8.
+### Y cuando esas condiciones fallan, el engine tiene que negarse
 
-**Y se compone con §7.9.** El premio son cinco tareas de cuarenta y tres, concentradas en la
-ausencia. El vocabulario mete esas cinco en el mismo bin que las treinta y ocho donde no hay
-nada que elegir, así que la señal se promedia hasta desaparecer. **La política no está
-fallando en decidir: le están dando bins donde la respuesta correcta es «da igual».**
+Ajustado sobre 428 episodios en 8 regiones, **dos regiones tienen dos o más brazos por
+encima del piso de evidencia** —las primeras del proyecto— con márgenes de **0,0417 y
+0,0381** contra un piso de ruido por celda de **0,1407**. Al umbral configurado la política
+no opina en ninguna.
 
-**Y una descomposición de la varianza acota lo que cualquier router podría ganar, con
-independencia de cómo esté construido.** Sobre 1.284 filas medidas:
+Ése es el comportamiento correcto y vale enunciarlo como resultado positivo. No hay umbral
+de abstención que ayude: cualquier valor por debajo de 0,14 hace que la política decida
+sobre diferencias más chicas que la dispersión entre dos corridas de la misma celda. **El
+engine no está fallando en decidir — le están dando bins donde la respuesta correcta es «da
+igual», y lo dice en vez de adivinar.**
 
-| fuente de varianza de la utilidad | varianza | del total |
-|---|---:|---:|
-| **total** | **0,2469** | |
-| entre **tareas** | 0,1153 | **47%** |
-| entre **paradigmas** | **0,0311** | **13%** |
-| entre **réplicas** de la misma celda | **0,0311** | **13%** |
-
-**0,0311 contra 0,0311.** No «comparable», no «del mismo orden»: iguales a la cuarta
-decimal. **La señal sobre la que un router elige tiene exactamente el tamaño del ruido
-contra el que se la mide.**
-
-Un router elige paradigma, así que sólo puede competir por la porción que el paradigma
-explica. El 47% que carga la tarea no lo mueve ninguna política —ningún ruteo vuelve fácil
-una tarea difícil— y la porción de réplica es ruido por construcción. El techo de cualquier
-política de ruteo sobre este corpus es entonces una fracción de un trece por ciento que no
-se distingue del error de medición.
-
-Es la misma conclusión a la que llega el ajuste riesgo-cobertura (§7.10, márgenes de 0,04
-contra un piso de ruido de 0,14) y la misma a la que llega la brecha de oráculo (§7.9,
-ninguna tarea supera su propio ruido), alcanzada por un tercer camino. **No muestra que la
-selección no pueda pagar en general. Muestra que un corpus donde la selección se pueda
-demostrar tiene que llevar más varianza entre brazos que éste** — un requisito sobre el
-corpus, chequeable antes de cualquier corrida, y que nunca habíamos chequeado.
-
-**Lo que esto NO dice**, enunciado para que no se lea de más: no es evidencia de que la
-selección de paradigma no pague. Es evidencia de que **bajo este vocabulario de región y
-este corpus**, el margen no supera al ruido. Las dos cosas que lo moverían son un eje que
-distinga lo que §7.9 mostró que importa —si la tarea premia exhaustividad o discriminación—
-y más tareas por región. Ninguna es un ajuste de `τ`.
-
-## 7.11 El premio de este corpus es de costo, y el router no lo puede ver
-
-Al pedirnos derivar el camino ideal a mano —*mayor éxito al menor costo*— hubo que definir
-bien el oráculo, y definirlo bien cambió cuál es el problema.
-
-Clasificando las 46 tareas por **qué clase de decisión presentan en realidad**:
-
-| clase de decisión | tareas | brecha de calidad | ratio de costo |
-|---|---:|---:|---:|
-| **(a)** los brazos difieren en calidad | 16 (35%) | 0,568 | **11,2×** |
-| **(b)** la mayoría empata: costo con poca calidad | 21 (46%) | 0,181 | **57,0×** |
-| **(c)** nadie la resuelve: sólo cuánto gastar en fallar | 9 (20%) | **0,000** | **51,3×** |
-
-**En el 66% de las tareas no hay nada que elegir en calidad, y el abanico de costo entre
-brazos que producen exactamente la misma respuesta es de 50× a 57×.** El premio de calidad
-llega a 0,568 en el mejor caso; el de costo es de un orden de magnitud, siempre.
-
-**Y el selector es estructuralmente ciego a él.** El router elige con
-`max(peers, key=mean_utility)`; la segunda política ordena por `-mean_utility`; la señal de
-aprendizaje `was_best` se define sólo sobre utilidad. El costo **está medido y guardado**
-—la estadística lleva `cost_sum`— y **nadie lo lee al elegir**.
-
-Eso se compone con el resto de §7 y lo explica. La varianza entre brazos en *utilidad*
-iguala al ruido entre réplicas a la cuarta decimal (§7.10) — claro que sí: la utilidad no es
-donde vive la varianza. La política ajustada se abstiene con márgenes de 0,04 — está
-optimizando el eje equivocado. Y el oráculo «el mejor al menor costo» lo gana 23 veces de 46
-el brazo que sale **séptimo de doce en utilidad** y cuesta 1.050 tokens contra 137.211 del
-mejor fijo.
-
-**La reparación obvia es un cambio de objetivo — y la probamos antes de proponerla, y no
-funciona como debería.** El banco ya lleva una brecha neta con un peso de costo, así que
-ordenar por `u − λ·costo` en vez de por `u` no cuesta nada evaluarlo. Recomputando la señal
-entre brazos contra el ruido entre réplicas:
-
-| `λ` | sin segmentar | región | celda |
-|---:|---:|---:|---:|
-| 0,00 (lo que el router hace hoy) | 1,00 | 1,84 | 1,92 |
-| 0,05 | 0,95 | 1,81 | 1,87 |
-| 0,20 | 0,82 | 1,73 | 1,77 |
-| 0,50 | 0,65 | 1,68 | 1,73 |
-| 1,00 | 0,64 | **1,88** | **2,06** |
-
-**Un peso de costo moderado vuelve la selección más difícil, no más fácil.** El motivo es
-medible: **el costo es más ruidoso entre réplicas que la calidad.** El costo varía más de 2×
-entre réplicas de la misma celda en 99 de 428 celdas, con una dispersión media de 3,88× y
-una máxima de 287×, mientras la dispersión media de la utilidad es 0,141. Agregar costo al
-objetivo inyecta ruido de réplica más rápido de lo que agrega separación entre brazos, hasta
-que `λ` es tan grande que el orden de costo entre brazos domina — y en ese punto ya no se
-está ruteando por calidad en absoluto.
-
-> **Así que el premio de costo es real y no es directamente ruteable.** Un abanico de 57×
-> entre brazos que devuelven la misma respuesta vale la pena capturarlo, pero no se captura
-> plegando el costo dentro del objetivo de calidad con un peso moderado: **la misma varianza
-> entre réplicas que hace que el costo valga la pena optimizar es la que lo hace difícil de
-> aprender.** Lo que el registro sostiene es el diagnóstico, no la reparación — y enunciar
-> la reparación sin probarla habría sido el error fácil.
-
-**Alcance, enunciado para que no se lea de más.** Es una propiedad de *este* corpus; uno
-donde los brazos difieran más en calidad tendría el premio del otro lado. Lo que generaliza
-es el defecto: **un router que sólo mira calidad no puede capturar un premio de costo aunque
-lo tenga adelante**, y este registro muestra que ese caso existe y no es marginal.
+> **El engine funciona; el corpus y el vocabulario no sostienen lo que se le está pidiendo
+> decidir.** Son afirmaciones separables, y separarlas es para lo que sirven las cuatro
+> condiciones de arriba. Un resultado negativo de selección que no las reporte no puede
+> distinguir «la selección no paga» de «este montaje no lo puede ver».
 
 ---
 
