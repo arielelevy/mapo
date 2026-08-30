@@ -50,12 +50,21 @@ def main() -> None:
     # a `MAPO_NANO_ENDPOINT` y a `reasoning_effort=None`, o sea que rellenar un registro
     # de `luna` o `terra` habria armado la huella EQUIVOCADA — y con la huella equivocada
     # ninguna clave de cache acierta, asi que el «rellenado» pagaria el registro entero
-    # de nuevo. La guarda de gasto lo habria atajado despues de gastar.
+    # de nuevo. La guarda de gasto lo habria atajado DESPUES de gastar.
     ap.add_argument("--modelo", choices=sorted(MODELOS),
                     help="toma endpoint, key, deployment y esfuerzo de la tabla de "
                          "modelos. Es la forma correcta; `--deployment` queda para "
                          "registros viejos que no esten en la tabla.")
     ap.add_argument("--deployment", help="solo si no se pasa `--modelo`")
+    # `--temperature-zero-OBSOLETO` SE SACO EN EL MERGE, y no por limpieza: `temperature`
+    # ya no esta en la huella —salio del payload Y de la huella en el mismo movimiento
+    # cuando se midio que los modelos de razonamiento la rechazan de plano— asi que el
+    # flag no podia cambiar ninguna clave de cache. Un flag que promete afectar la huella
+    # y no la afecta es peor que su ausencia: se pasa creyendo que arregla algo.
+    #
+    # Lo que ese flag queria decir sigue vivo y ahora lo dice el comentario de arriba mas
+    # la linea que imprime la huella: si no coincide con la del registro, ninguna clave
+    # acierta y esto deja de ser un rellenado.
     args = ap.parse_args()
 
     if not args.modelo and not args.deployment:
