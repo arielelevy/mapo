@@ -257,6 +257,12 @@ y **no está ofrecido en `basic`** — la variante de todos los estudios medidos
 | `w4` | 36,1% | 12 | 7,1% |
 | **`w16`** | **63,5%** | **21** | **15,2%** |
 
+> **CORREGIDO al cerrar la sesión** (§5.6). Estos números se midieron con el defecto de
+> `X-8` vivo y con `w16` a medio correr. Sobre el registro completo de 1.656 filas dan
+> **48,7% / 51,7% / 57,2%** de esterilidad y **5,3% / 7,3% / 4,9%** de releído: la
+> esterilidad **no escala con el ancho**, y el releído tampoco. Lo que escala es la
+> **racha** — 20, 12, **46**.
+
 Dos de cada tres búsquedas en `w16` no traen nada nuevo, y **21 seguidas** en una sola
 celda. Un sexto del material servido es texto que el agente ya tenía. Y la retención cae
 (0,990 → 0,994 → **0,943**): **relee más y retiene menos**.
@@ -340,9 +346,10 @@ afirmación equivocada si le falta la dimensión en la que vive.**
    `repeat 3`.
 3. **`P30c`** — el brazo `accounting`, que diría si `coverage` cambia la decisión de pedir
    todo. `readall` ya corrió y cerró `P30a`, `P30b` y `P30d`.
-4. **`X-9`** — decidir a partir de qué ancho `stop_on_barren` deja de ser factor y pasa a
-   ser el comportamiento por defecto. Con 63,5% de esterilidad en `w16` la pregunta ya no
-   es si conviene.
+4. **`X-9` y `X-10b` se cerraron al final de la sesión** (§5.6). Lo que queda es la
+   decisión que habilitan: `stop_on_barren` corta por **racha**, y la racha es lo único que
+   separa los estratos (20 / 12 / 46). Hay que decidir si el umbral es constante o función
+   del ancho, y eso va con la corrida que lo mida.
 5. **`X-10`** — el releído, que `read_all` ataca por el mismo lado que `X-9`.
 6. **`O-1`** — Langfuse, **con el producto y no antes**: hoy no hay servicio que trazar.
 

@@ -109,6 +109,41 @@ def main() -> None:
     # y arranco a pagar 24 tareas que nunca se habian corrido. La copia salvo el registro.
     tareas = sorted({r["task_id"] for r in antes})
     brazos = sorted({r["paradigm"] for r in antes})
+
+    # LEER EL ALCANCE DEL REGISTRO NO ALCANZA SI DESPUES SE LO RE-CRUZA (2026-08-29).
+    #
+    # La version anterior de esta guarda ya habia arreglado el caso obvio —tomar los
+    # paradigmas por argumento y el corpus entero— leyendo tareas y brazos del archivo.
+    # Pero los lee POR SEPARADO y `run_cross_product` los vuelve a cruzar, asi que el
+    # alcance real es el PRODUCTO CARTESIANO de sus coordenadas, no el conjunto de celdas
+    # que estaban.
+    #
+    # Sobre un registro COMPLETO los dos coinciden y no se nota. Sobre uno PARCIAL —una
+    # campana cortada, que es el caso normal— el producto es un superconjunto, y las
+    # celdas que nunca corrieron no tienen entrada de cache: se pagan de verdad.
+    #
+    # Medido el 2026-08-29, y por eso esto esta escrito: el archivo tenia 989 celdas y el
+    # producto daba 46 x 12 x 3 = 1656. Se pagaron **667 celdas nuevas, 27,4M tokens**.
+    # La guarda de gasto lo detecto y se nego a llamarlo rellenado — pero DESPUES de
+    # gastar, que es lo que este chequeo adelanta.
+    esperadas = len(tareas) * len(brazos) * max(
+        len([r for r in antes
+             if r["task_id"] == tareas[0] and r["paradigm"] == brazos[0]]), 1
+    )
+    celdas = {(r["task_id"], r["paradigm"], r.get("trial", 0)) for r in antes}
+    if esperadas != len(celdas):
+        raise SystemExit(
+            f"EL REGISTRO ES PARCIAL y este script re-cruza sus coordenadas.\n\n"
+            f"  celdas en el archivo : {len(celdas)}\n"
+            f"  producto cartesiano  : {esperadas}  "
+            f"({len(tareas)} tareas x {len(brazos)} brazos x replicas)\n"
+            f"  se pagarian de verdad: {esperadas - len(celdas)} celdas sin cache\n\n"
+            f"Un rellenado tiene que reproducir EXACTAMENTE la corrida original. Sobre un "
+            f"registro parcial esto seria una corrida nueva escrita encima de una vieja, y "
+            f"la guarda de gasto lo diria DESPUES de gastar.\n\n"
+            f"Si lo que se quiere es COMPLETAR la campana, se corre la campana — no se "
+            f"disfraza de rellenado."
+        )
     if not tareas or not brazos:
         print("El registro no declara tareas ni brazos: no hay alcance que reproducir.")
         return

@@ -88,10 +88,12 @@ tareas tienen un único mejor brazo.
 
 **Tres mecanismos medidos que apuntan al mismo lado.** El costo crece como `N²` y la
 cobertura como `N` —≤2 llamadas dan 9.779 tokens, ≥8 dan 136.432, por +0,122 de utilidad—
-porque la conversación se reenvía entera en cada vuelta. En el estrato ancho **dos de cada
-tres búsquedas no traen nada nuevo** (63,5%, con una racha de 21 seguidas) y **un sexto del
-material servido es texto que el agente ya tenía** (15,2%), mientras la retención cae. Las
-tres se atacan con lo mismo: máxima cobertura en mínimas llamadas.
+porque la conversación se reenvía entera en cada vuelta — y **el 99% del gasto de entrada
+es re-envío**, trazado por llamada: el turno 0 cuesta 607 tokens de prompt y el turno 8
+cuesta 67.233. **Alrededor de la mitad de todas las búsquedas no traen nada nuevo** —48,7%,
+51,7% y 57,2% por estrato— y lo que escala con el ancho no es la tasa sino la **racha**:
+20, 12, **46** búsquedas seguidas sin nada nuevo. El ancho no hace que se busque en vano más
+seguido; hace que se **insista mucho más antes de rendirse**.
 
 **La dirección REC tiene veredicto, y es negativo.** Reparación Epistémica Contrafactual
 está implementada y corrida —diagnóstico contrafáctico con esquema cerrado y firmado, tres

@@ -2444,3 +2444,53 @@ erraban 2-7× y nadie preguntaba quién los consumía.
 `provider_cached_tokens` no era parte de la hipótesis ni del análisis pareado — se agregó al
 registro meses antes justamente porque el caché del endpoint está encendido por defecto y no
 había con qué mirarlo. Estaba ahí, contado, esperando que alguien preguntara.
+
+
+### 8.13 Leer el alcance del registro no alcanza si después se lo re-cruza · `MEDIDO`
+
+Lancé `_backfill.py` para que el registro llevara `surface_version` y los contadores de
+agotamiento corregidos. Es replay desde caché: **cero tokens**, y así lo anuncié.
+
+**Gastó 27,4 millones.**
+
+La causa es exacta y el propio script ya la había advertido una vez. Su docstring dice:
+*«el alcance sale del archivo, no de argumentos. Ya pasó: la primera versión tomaba los
+paradigmas por argumento y el corpus entero, y arrancó a pagar 24 tareas que nunca se habían
+corrido.»* El arreglo de entonces fue leer tareas y brazos **del archivo**. Y ahí quedó el
+agujero:
+
+```python
+tareas = sorted({r["task_id"] for r in antes})     # 46
+brazos = sorted({r["paradigm"] for r in antes})    # 12
+run_cross_product(paradigms=brazos, task_ids=tareas, repeat=3)   # -> 1656
+```
+
+**Los lee por separado, y `run_cross_product` los vuelve a cruzar.** El alcance real es el
+**producto cartesiano de las coordenadas**, no el conjunto de celdas que estaban. Sobre un
+registro completo los dos coinciden y no se nota. Sobre uno **parcial** —una campaña
+cortada, que es el caso normal— el producto es un superconjunto:
+
+| | |
+|---|---:|
+| celdas en el archivo | **989** |
+| producto cartesiano | **1656** |
+| celdas sin caché posible, pagadas de verdad | **667** — 27.353.621 tokens |
+
+**La guarda de gasto funcionó, y por eso esto se sabe:** *«1649 de 5798 llamadas salieron al
+proveedor y sólo 0 estaban justificadas… esto no es un rellenado, es una corrida nueva
+escrita encima de una vieja.»* Pero avisa **después** de gastar, porque compara al final.
+
+**El arreglo va antes**: si el producto cartesiano no coincide con el conjunto de celdas
+presentes, no arranca, y dice cuántas se pagarían. Probado rompiéndolo sobre un registro
+recortado a 400 filas: *«se pagarían de verdad: 32 celdas sin caché»*, y no corre.
+
+> **La forma general, y es la tercera vez que aparece con otra cara** (5.6, 8.12): *un
+> arreglo que ataca el síntoma deja viva la causa.* Leer el alcance del registro parecía
+> resolver «no correr lo que no estaba», y lo resolvía **sólo para el eje que se miró**.
+> Reconstruir un conjunto desde sus proyecciones no devuelve el conjunto: devuelve su caja.
+
+**Y lo que salió no fue un desastre, que es una tercera cosa que hay que decir sin usarla
+como excusa.** Las 989 filas viejas están intactas —la copia además quedó— y las 667 nuevas
+son celdas válidas, cero errores de infraestructura, que completan `sin-w`, `w4` y `w16`
+para los doce brazos con `repeat 3`. Es la campaña que igual se iba a correr. **Pero se
+gastó por accidente y no por decisión, y esa diferencia es la que importa.**

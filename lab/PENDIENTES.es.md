@@ -956,27 +956,47 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   invisible»*— cometida en los campos que ese mismo docstring no enumeraba.
   `test_science.py` §63.
 
-- [ ] **X-9** · **dos de cada tres búsquedas en `w16` no traen nada nuevo, y la tasa
-  ESCALA con el ancho** (2026-08-29, medido; el arreglo de `X-8` lo empeora, no lo mejora).
+- [x] **X-9** · **la esterilidad estaba SUBESTIMADA, y el peor brazo era el que reportaba
+  cero** (2026-08-29, cerrado sobre el registro completo de 1.656 filas).
 
-  | estrato | búsquedas | estériles | tasa | racha máxima |
+  Con `X-8` arreglado y los doce brazos corridos sobre `sin-w` + `w4` + `w16`:
+
+  | brazo | búsquedas | estériles | tasa | racha máx |
   |---|---:|---:|---:|---:|
-  | `sin-w` | 850 | 255 | 30,0% | 7 |
-  | `w4` | 782 | 282 | 36,1% | 12 |
-  | **`w16`** | 584 | 371 | **63,5%** | **21** |
+  | **`supervisor`** | 1.114 | 780 | **70,0%** | **36** |
+  | `dag_strategy` | 826 | 529 | 64,0% | **46** |
+  | `reflection` | 630 | 313 | 49,7% | 10 |
+  | `react` | 564 | 262 | 46,5% | 14 |
+  | `rewoo` | 404 | 186 | 46,0% | 5 |
+  | `handoff` | 324 | 91 | 28,1% | 3 |
 
-  Y esos números están **subestimados**: se midieron con el defecto de `X-8` vivo, o sea
-  con `supervisor` y `handoff` reportando cero. La tasa real es más alta.
+  **`supervisor` pasó de 0,0% a 70,0%** — es el que más búsquedas estériles hace de todo el
+  plantel, y era el que reportaba cero. El defecto no estaba escondiendo un caso marginal:
+  escondía **al peor**. `handoff` pasó de 0,0% a 28,1%.
 
-  **Veintiuna búsquedas seguidas sin nada nuevo** en una sola celda. Cada una es una vuelta
-  más, y cada vuelta reenvía la conversación entera — que es exactamente el `N²` que
-  `P30` va a medir por el otro lado.
+  **Y por estrato la corrección es más chata de lo que parecía, que es un hallazgo aparte:**
 
-  Lo que falta decidir: si `stop_on_barren` deja de ser un factor y pasa a ser el
-  comportamiento por defecto en el régimen fuera de ventana. Hoy está apagado por defecto
-  **y con razón** —encenderlo invalidaría el replay sellado del registro ya pagado— pero
-  con 63,5% de esterilidad en `w16` la pregunta ya no es si conviene, es a partir de qué
-  ancho.
+  | estrato | antes (con el defecto) | ahora | racha máx |
+  |---|---:|---:|---:|
+  | `sin-w` | 30,0% | **48,7%** | 20 |
+  | `w4` | 36,1% | **51,7%** | 12 |
+  | `w16` | 63,5% | **57,2%** | **46** |
+
+  La esterilidad **no escala con el ancho** como yo había afirmado: sube fuerte en los
+  estratos angostos —donde el defecto la escondía más— y el ancho queda apenas arriba. Lo
+  que sí escala es la **racha**: 20, 12, **46**. O sea que el ancho no hace que se busque
+  estérilmente más seguido, hace que se insista **mucho más tiempo antes de rendirse**.
+
+  **La decisión que esto habilita**: `stop_on_barren` corta por racha, no por tasa. Y la
+  racha es lo que separa los estratos. Con `sin-w` en 20 y `w16` en 46, un corte fijo bajo
+  —tres, como el aviso— dispararía en todos lados; lo que hay que decidir es si el umbral
+  es constante o función del ancho. Va con la corrida que lo mida, no antes.
+
+- [x] **X-10b** · **el releído tampoco escala con el ancho** (2026-08-29). Medido sobre el
+  registro completo: `sin-w` 5,3%, `w4` 7,3%, **`w16` 4,9%**. La cifra de 15,2% que había
+  registrado salía de un `w16` a medio correr con sólo dos brazos; con los doce, `w16` es el
+  estrato que **menos** relee. Lo que sigue en pie es que **ofrecer `read_all` lo derrumba
+  8,8×** (`X-10`), y eso se midió pareado sobre el mismo brazo.
 
 - [x] **X-10** · **el releído era desperdicio, y ofrecer `read_all` lo derrumbó 8,8×**
   (2026-08-29, cerrado por `P30`). Medido pareado sobre `react` en `w16`: los caracteres
@@ -990,21 +1010,6 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   cambia en la estrategia del modelo al ver la herramienta sigue sin explicarse. Es la
   segunda vez que este registro produce un resultado de esa forma (la primera fue el
   board, con signo opuesto).
-
-- [ ] **X-10b** · **el releído en los OTROS estratos** (2026-08-29, abierto).
-
-  | estrato | servidos | releídos | |
-  |---|---:|---:|---:|
-  | `sin-w` | 80.759.998 | 4.029.061 | 5,0% |
-  | `w4` | 52.229.746 | 3.704.134 | 7,1% |
-  | **`w16`** | 37.300.220 | 5.669.959 | **15,2%** |
-
-  Se triplica del estrato angosto al ancho. Y la retención cae en el mismo sentido —0,990,
-  0,994, **0,943**— o sea que en `w16` el agente **relee más y retiene menos**: paga dos
-  veces por texto que además pierde antes de responder.
-
-  Es el mismo mecanismo que `X-9` por otra cara, y las dos apuntan a `read_all`: leer todo
-  una vez en una llamada no puede releerse a sí mismo.
 
 - [ ] **B-1** · **la coordinación que hay que elegir no se elige, y el experimento que lo
   aísla nunca se corrió** (2026-08-29). El mismo blackboard, alcanzado de dos maneras, da
