@@ -1399,6 +1399,54 @@ afirmación sobre dónde va la coordinación —en la topología, no en la super
 herramientas— y es la evidencia más filosa que este registro tiene sobre una capacidad que
 no es recuperación.
 
+## 7.8 El 99% del gasto de entrada es la conversación, mandada otra vez
+
+Lo más caro que hace un agente iterativo no es pensar ni recuperar. Es **que le recuerden
+lo que ya leyó**. Con traza por llamada sobre `react` en las 21 tareas del estrato ancho
+—273 llamadas trazadas, `repeat = 3`— el crecimiento no es una tendencia sino una curva:
+
+| turno | llamadas | ventana (chars) | prompt (tokens) | contra el turno 0 |
+|---:|---:|---:|---:|---:|
+| 0 | 63 | 354 | 607 | 1,0× |
+| 1 | 63 | 50.617 | 9.914 | **16,3×** |
+| 2 | 61 | 180.477 | 33.548 | **55,3×** |
+| 4 | 22 | 216.458 | 40.131 | 66,1× |
+| 8 | 1 | 364.334 | 67.233 | **110,8×** |
+
+**El primer turno consume 38.238 tokens de 5.503.757 — el uno por ciento.** Todo lo demás
+es material ya pagado, viajando otra vez. El costo crece con el cuadrado de las vueltas
+mientras la cobertura crece linealmente, y esa proporción es una propiedad del transporte,
+no del modelo.
+
+**Y ofrecer una salida cambia el comportamiento aunque la salida no se tome.** Exponerle al
+mismo brazo, sobre las mismas tareas, una herramienta que lee todo en una llamada lo volvió
+**1,57× más barato a utilidad idéntica** — `+0,000` sobre 63 celdas pareadas, no «dentro
+del ruido». La herramienta se invocó en **3 de 63 celdas**, y las unidades leídas *bajaron*
+(10,0 → 8,5). El ahorro está en otro lado y el registro lo nombra:
+
+| | base | con la herramienta ofrecida | |
+|---|---:|---:|---:|
+| caracteres releídos | 2.836.465 | **322.094** | **8,8× menos** |
+| fracción del material servido que se relee | **12,6%** | **1,9%** | |
+
+La mezcla de herramientas casi no se movió —399 llamadas contra 365—. Lo que se derrumbó
+fue la **repetición**: el agente leyó menos unidades y volvió sobre ellas muchísimo menos,
+con la misma calidad. El material que releía era desperdicio.
+
+**Eso es una afirmación sobre la oferta y no sobre el uso**, y es la segunda vez que este
+registro produce una. Un blackboard compartido ofrecido como herramienta se invocó en 1 de
+125 llamadas (§7.7) — un nulo. Una herramienta de leer todo se invocó en 3 de 63 celdas y
+movió el costo 1,57× — un positivo. Las dos dicen lo mismo sobre las superficies de
+herramientas: **lo que se le ofrece a un agente cambia lo que hace, en buena medida con
+independencia de lo que llama.** Un benchmark que puntúe herramientas por tasa de
+invocación está midiendo la variable equivocada.
+
+**Y metodológicamente es el primer resultado de acá que una fila no podía producir.** Una
+fila reporta `calls = 4,3` y `cost_tokens = 137.211`; no puede decir *cuál* llamada costó
+qué. La afirmación del `N²` era antes una inferencia sacada de comparar poblaciones de
+tareas con pocas y muchas llamadas. Trazada por llamada, es una medición directa sobre las
+mismas tareas.
+
 ---
 
 # 8. Mecanismos de falla

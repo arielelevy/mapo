@@ -978,8 +978,20 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   con 63,5% de esterilidad en `w16` la pregunta ya no es si conviene, es a partir de qué
   ancho.
 
-- [ ] **X-10** · **el 15,2% del material servido en `w16` es texto que el agente YA
-  tenía** (2026-08-29, medido).
+- [x] **X-10** · **el releído era desperdicio, y ofrecer `read_all` lo derrumbó 8,8×**
+  (2026-08-29, cerrado por `P30`). Medido pareado sobre `react` en `w16`: los caracteres
+  releídos pasaron de **2.836.465 a 322.094** —del **12,6% al 1,9%** del material
+  servido— con la utilidad **idéntica** (`+0,000` sobre 63 celdas). Y la traza por
+  llamada le puso el número al mecanismo: **el 99% del gasto de entrada es re-envío de
+  la conversación**; el primer turno consume 38.238 tokens de 5.503.757.
+
+  Lo que queda abierto es más chico y más raro: **el efecto está en la OFERTA, no en el
+  uso** —`read_all` se llamó en 3 de 63 celdas—, así que qué es exactamente lo que
+  cambia en la estrategia del modelo al ver la herramienta sigue sin explicarse. Es la
+  segunda vez que este registro produce un resultado de esa forma (la primera fue el
+  board, con signo opuesto).
+
+- [ ] **X-10b** · **el releído en los OTROS estratos** (2026-08-29, abierto).
 
   | estrato | servidos | releídos | |
   |---|---:|---:|---:|

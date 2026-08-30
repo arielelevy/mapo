@@ -1519,3 +1519,68 @@ el mecanismo, si existe, tiene que verse ahí primero.
 **Amenaza declarada antes**: `accounting` cambia **dos cosas** a la vez —trae `read_all`
 y `coverage`— así que su efecto no es atribuible a `coverage` sola. `readall` es el brazo
 que aísla, y por eso van los dos.
+
+### Veredicto de P30 (2026-08-29, corrida terminada)
+
+**63 celdas-trial pareadas**, `react` sobre las 21 tareas de `w16`, `repeat 3`. Gasto:
+**5,5M tokens**, por debajo del techo de 8,6M que se había estimado.
+
+| | tok/celda | llamadas | unidades | `u` |
+|---|---:|---:|---:|---:|
+| `base` | 137.211 | 4,3 | 10,0 | 0,540 |
+| `readall` | **87.495** | 4,0 | 8,5 | 0,540 |
+
+**1,57× más barato con la utilidad exactamente igual** — `+0,000`, no «dentro del ruido».
+
+| # | predicción | veredicto |
+|---|---|---|
+| **P30a** | costo ≥3× más barato, `u` dentro del ruido | **a medias.** Dio 1,57×, por debajo de lo predicho. Pero `u` no se movió una milésima, que era la otra mitad |
+| **P30b** | unidades por llamada de 1,41 a **más de 5** | **REFUTADA, y en la dirección contraria.** Bajó: 2,33 → 2,13. `read_all` se llamó en **3 de 63 celdas** |
+| **P30c** | `accounting` supera a `readall` | **sin correr.** El brazo se dejó afuera por precio; `readall` es el que aísla |
+| **P30d** | la ventana crece superlinealmente | **CONFIRMADA, y es lo más fuerte que salió** |
+
+#### La causa, y no es la que la predicción suponía
+
+`read_all` casi no se usó, así que el ahorro **no viene de leer todo en una llamada**. Viene
+de otro lado, y el registro lo señala solo:
+
+| | `base` | `readall` | |
+|---|---:|---:|---:|
+| `reread_chars` | 2.836.465 | **322.094** | **8,8× menos** |
+| `served_chars` | 22.586.496 | 16.949.268 | |
+| **fracción releída** | **12,6%** | **1,9%** | |
+
+La mezcla de herramientas casi no cambió —399 llamadas contra 365— pero **el releído se
+derrumbó**. Con `read_all` ofrecido el agente **lee menos unidades y se repite muchísimo
+menos, con la misma calidad**: el material que releía era desperdicio.
+
+> **El efecto está en la OFERTA, no en el uso.** Es la misma forma que dio el board como
+> herramienta —1 de 125 llamadas— pero acá con signo positivo: ofrecer una salida barata
+> cambió la estrategia sin que la salida se tomara.
+
+#### Y la traza por llamada dio el número que la fila nunca pudo dar
+
+Primera corrida con `MAPO_TRACE=1`. **273 llamadas trazadas**, y el crecimiento de la
+ventana por vuelta:
+
+| turno | llamadas | ventana (chars) | prompt (tokens) | contra el turno 0 |
+|---:|---:|---:|---:|---:|
+| 0 | 63 | 354 | 607 | 1,0× |
+| 1 | 63 | 50.617 | 9.914 | **16,3×** |
+| 2 | 61 | 180.477 | 33.548 | **55,3×** |
+| 4 | 22 | 216.458 | 40.131 | 66,1× |
+| 8 | 1 | 364.334 | 67.233 | **110,8×** |
+
+> **El 99% del gasto de entrada es re-envío de la conversación.** El primer turno consume
+> 38.238 tokens de 5.503.757 — el 1%. Todo lo demás es material que ya se había pagado,
+> viajando otra vez.
+
+Eso es el `N²` medido directo por primera vez, y no derivado de comparar poblaciones. La
+fila decía `calls=4,3` y `cost_tokens=137.211` y **no cuál llamada costó qué**; la traza lo
+dice, y con eso el mecanismo deja de ser una inferencia.
+
+#### Qué queda
+
+Correr `accounting` cerraría `P30c` —si `coverage` cambia la decisión de pedir todo— y
+`dag_strategy`/`reflection` dirían si esto generaliza fuera de `react`. Ninguno es urgente:
+lo que el mecanismo tenía para decir, ya lo dijo.

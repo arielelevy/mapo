@@ -1357,6 +1357,51 @@ merely allowed to.** That is a claim about where coordination belongs — in the
 rather than in the tool surface — and it is the sharpest available evidence in this record
 about a capability that is not retrieval.
 
+## 7.8 Ninety-nine percent of input spend is the conversation, sent again
+
+The costliest thing an iterative agent does is not thinking or retrieving. It is **being
+reminded of what it already read**. With per-call tracing on `react` over the 21 wide-cell
+tasks — 273 traced calls, `repeat = 3` — the growth is not a tendency but a curve:
+
+| turn | calls | window (chars) | prompt (tokens) | vs turn 0 |
+|---:|---:|---:|---:|---:|
+| 0 | 63 | 354 | 607 | 1.0× |
+| 1 | 63 | 50,617 | 9,914 | **16.3×** |
+| 2 | 61 | 180,477 | 33,548 | **55.3×** |
+| 4 | 22 | 216,458 | 40,131 | 66.1× |
+| 8 | 1 | 364,334 | 67,233 | **110.8×** |
+
+**The first turn consumes 38,238 tokens of 5,503,757 — one percent.** Everything else is
+material already paid for, travelling again. Cost grows with the square of the turns while
+coverage grows linearly, and that ratio is a property of the transport, not of the model.
+
+**And offering a way out changes behaviour even when the way out is not taken.** Exposing a
+read-everything-in-one-call tool to the same arm on the same tasks made it **1.57× cheaper
+at identical utility** — `+0.000` across 63 paired cells, not "within noise". The tool
+itself was invoked in **3 of 63 cells**, and units read went *down* (10.0 → 8.5). The
+saving is elsewhere and the record names it:
+
+| | base | with the tool offered | |
+|---|---:|---:|---:|
+| re-read characters | 2,836,465 | **322,094** | **8.8× less** |
+| fraction of served material re-read | **12.6%** | **1.9%** | |
+
+The tool mix barely moved — 399 calls against 365. What collapsed was **repetition**: the
+agent read fewer units and revisited them far less, at the same quality. The material it
+had been re-reading was waste.
+
+**That is a claim about the offer rather than the use**, and it is the second time this
+record produces one. A shared blackboard offered as a tool was invoked in 1 of 125 calls
+(§7.7) — a null. A read-everything tool was invoked in 3 of 63 cells and moved cost by
+1.57× — a positive. Both say the same thing about tool surfaces: **what an agent is
+offered changes what it does, largely independently of what it calls.** A benchmark that
+scores tools by invocation rate is measuring the wrong variable.
+
+**Methodologically, this is the first result here that a row could not have produced.** A
+row reports `calls = 4.3` and `cost_tokens = 137,211`; it cannot say *which* call cost
+what. The `N²` claim was previously an inference from comparing populations of tasks with
+few and many calls. Traced per call, it is a direct measurement on the same tasks.
+
 ---
 
 # 8. Failure mechanisms
