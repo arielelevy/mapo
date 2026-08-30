@@ -61,6 +61,50 @@ FEATURE_AVAILABILITY: dict[str, Availability] = {
     "budget_tokens": Availability.COMPUTABLE,
     "coupling": Availability.DERIVED,
     "horizon_unknown": Availability.DERIVED,
+    # FALTABA, y el docstring de arriba dice que el descubrimiento de particiones consulta
+    # este mapa para descartar los ejes `DERIVED`. Un campo que no está clasificado no es
+    # ninguna de las dos cosas: se cae del filtro en silencio. `continuation` se mide con
+    # aritmética sobre el material declarado —recurrencia literal de una forma de token
+    # cerrada— así que es COMPUTABLE, la misma clase que contar unidades.
+    "continuation": Availability.COMPUTABLE,
+    # LOS DOS PREDICTORES MEDIDOS (CP-6, 2026-08-30). `cardinality` la DECLARA el caller, no
+    # se infiere del fraseo — que es la regla que este módulo se impuso en su primera línea.
+    # `literal` se cuenta sobre el material, igual que `continuation`.
+    "cardinality": Availability.COMPUTABLE,
+    "literal": Availability.COMPUTABLE,
+}
+
+# QUIEN PUEDE ESTABLECER CADA EJE QUE PUEDE FALTAR (EP-3, 2026-08-30)
+#
+# `Availability` dice CUÁNDO se conoce un feature. Faltaba la otra mitad: **quién lo puede
+# ir a buscar si no se conoce**. Sin eso, `missing()` mezcla dos cosas que piden decisiones
+# opuestas:
+#
+#     «no lo sé, y puedo averiguarlo»   -> sondear, y decidir después
+#     «no lo sé, y nadie puede»         -> decidir con lo que hay, o abstenerse por eso
+#
+# Y MEZCLARLAS TIENE UN COSTO MEDIBLE, no es prolijidad. Un eje `DERIVED` sin establecer
+# **acota la confianza y empuja al router al fallback**. O sea que un eje que nadie puede
+# llenar hace abstenerse al motor **para siempre y sin motivo**.
+#
+# EL CASO QUE LO DESTAPÓ: `horizon_unknown`. Auditado, hay cinco razones independientes
+# para que no sea un feature:
+#
+#   1. ninguna regla lo requiere — `rules.py` lo ASIENTA y nadie lo lee
+#   2. no entra en el vocabulario de región, ni en el anterior ni en el actual
+#   3. la sonda no lo mide: `probe.py` establece `coupling` y nada más
+#   4. es CONSTANTE en el registro: `False` en las 3.884 filas que lo llevan
+#   5. y el docstring de `Row` afirma que está en `True` en las 78 tareas — o sea que la
+#      única descripción que existe de este eje dice **lo contrario** del registro
+#
+# No se saca: la plomería se conserva para poder releer las filas que lo llevan estampado y
+# porque un corpus futuro podría hacerlo variar. Lo que se saca es la MENTIRA de que sea un
+# hueco que el sistema puede cerrar.
+FEATURE_SENSOR: dict[str, str | None] = {
+    "coupling": "probe.probe_coupling",
+    # Sin sensor, y por eso no cuenta como hueco cerrable. Darle uno o sacarlo es una
+    # decisión abierta (`EP-3`); mientras tanto, que no haga abstenerse por nada.
+    "horizon_unknown": None,
 }
 
 COMPUTABLE_FEATURES = tuple(
@@ -74,7 +118,13 @@ DERIVED_FEATURES = tuple(
 # Version of the region vocabulary. Bumped when an axis is added or a bucket changes:
 # a theta fitted under one vocabulary must never consume regions from another, and the
 # EXPLAIN records which one the decision spoke.
-REGION_VOCABULARY = "regions/2-continuation"
+REGION_VOCABULARY = "regions/3-literal"
+
+# EL VOCABULARIO ANTERIOR, CONSERVADO. No es nostalgia: 5.932 filas del registro llevan
+# `region_vocabulary = "regions/2-continuation"` estampado, y `load_rows` levanta si un
+# archivo mezcla dos. Poder recomputar la región vieja es lo que permite leer ese registro
+# sin re-correrlo — borrar la función lo volvería irreproducible.
+REGION_VOCABULARY_PREVIO = "regions/2-continuation"
 
 
 def measure_continuation(
@@ -108,12 +158,128 @@ def measure_continuation(
     return any(2 <= len(units) <= ceiling for units in seen.values())
 
 
+# LA FORMA DE UN LITERAL CITADO EN LA PREGUNTA. Cerrada y tipada, igual que la de
+# `measure_continuation`: comillas simples o dobles, o un identificador de cuenta.
+_LITERAL_SHAPE = re.compile(r"'([^']{3,40})'|\"([^\"]{3,40})\"|\b([A-Z]{2,}\d{4,})\b")
+
+
+def measure_question_literal(
+    question: str,
+    documents: dict[str, str],
+    unit_ids: list[str],
+    cardinality: str | None = None,
+) -> str | None:
+    """¿El literal que la pregunta CITA aparece verbatim en el material? Aritmética pura.
+
+    QUÉ LO SEPARA DE UN DISPARADOR LÉXICO, que este módulo prohíbe en su primera línea.
+    Un disparador léxico infiere el TIPO de tarea de la forma de la pregunta —«dice
+    *how many*, entonces es un conteo»— y ésa es la falla que hizo perder a los routers en
+    prosa. Esto no infiere nada de la pregunta: extrae de ella una **cadena entrecomillada**
+    y devuelve un hecho **sobre el material**, que es en cuántas unidades aparece. El valor
+    de la feature no lo decide el fraseo; lo decide el corpus.
+
+        prohibido   «la pregunta dice X» -> «la tarea es de tipo Y»
+        esto        «la pregunta cita X» -> «X está / no está en el material»
+
+    Es la misma clase epistémica que `measure_continuation`: recurrencia literal de una
+    forma de token cerrada, verificada por contención, sin modelo en el medio.
+
+    POR QUÉ EXISTE (CP-6). Es el predictor más fuerte que se midió, y no existía. Con la
+    política de desempate por costo evaluada leave-one-out, `cardinalidad × literal` da
+    **69% de ahorro** con la utilidad dentro del ruido, contra 37% del vocabulario de
+    región anterior. La razón mecánica: cuando el término existe verbatim, **el plan
+    completo se puede escribir antes de ver un resultado**, y ahí un brazo de dos llamadas
+    domina a uno de veinte.
+
+    UNA PREGUNTA BOOLEANA CITA SUS OPCIONES, NO UN TÉRMINO DE BÚSQUEDA (2026-08-30).
+    Es un defecto que tuvo esta función desde que se escribió, y lo destapó medir la regla
+    que habilita (`EP-5`), no leerla.
+
+    `C7_irreversible` pregunta *«…Answer 'escalate' or 'no escalation'»* y `W1_shared_writes`
+    *«…Answer 'safe to write' or 'conflict'»*. Esos literales **no están en el material por
+    construcción** —son el vocabulario de la respuesta— así que la función devolvía
+    `lit_absent` en las 8 tareas booleanas del panel y decía, sobre el material, algo que en
+    realidad era sobre el FORMATO de la pregunta.
+
+        buscado    «la cadena que hay que buscar no está en el corpus»  -> sobre el MATERIAL
+        medido     «la pregunta enumera sus opciones»                   -> sobre la PREGUNTA
+
+    Medido: como detector de ausencia daba **precisión 50% y recall 50%**, y sus 8 aciertos
+    aparentes eran las booleanas, ni una de `B2_absence`.
+
+    LA GUARDA USA LO QUE EL CALLER DECLARA, no el fraseo. `answer_cardinality == "boolean"`
+    dice que la respuesta sale de un conjunto enumerado, o sea que lo entrecomillado son
+    opciones. Distinguirlas mirando cómo está redactada la pregunta sería exactamente el
+    disparador léxico que este módulo prohíbe en su primera línea; recibirlo del caller es
+    lo que ya se hace con `irreversible` y `shared_writes`.
+
+    Devuelve `None` cuando no hay material con qué medir — ausencia de medición, jamás un
+    negativo.
+    """
+    presentes = [u for u in unit_ids if u in documents]
+    if not presentes:
+        return None
+    if cardinality == "boolean":
+        # Lo entrecomillado son las opciones de respuesta. No hay término que buscar, y
+        # decir `lit_absent` sería afirmar algo sobre el material a partir del formato.
+        return "no_lit"
+    candidatos = [
+        next(g for g in m if g) for m in _LITERAL_SHAPE.findall(question or "")
+    ]
+    if not candidatos:
+        return "no_lit"
+    cuerpo = " ".join(documents[u] for u in presentes).lower()
+    hallados = sum(1 for c in candidatos if c.lower() in cuerpo)
+    if hallados == len(candidatos):
+        return "lit_present"
+    return "lit_absent" if hallados == 0 else "lit_partial"
+
+
 @dataclass(frozen=True)
 class Features:
-    """The phi vector.
+    """El vector φ: TODO lo que la capa de decisión sabe de un request antes de gastar.
 
-    A DERIVED field set to None means "not established". Consumers must treat None as
-    absence of knowledge, never as a zero.
+    ES LA FRONTERA DE LO DECIDIBLE. Una regla sólo puede gobernar sobre lo que está acá, y
+    por eso agregar un campo no es agregar un dato: es ampliar lo que el motor puede
+    decidir, y quitarlo es reducirlo. De ahí que cada campo declare **cuándo se conoce**
+    (`FEATURE_AVAILABILITY`) y no sólo qué tipo tiene.
+
+    `None` SIGNIFICA «NO ESTABLECIDO», JAMÁS UN CERO. Es la invariante que sostiene todo lo
+    demás: un consumidor que lea `None` como `False` o como `0` convierte la ausencia de
+    conocimiento en conocimiento negativo, que es la forma más silenciosa de mentir. Por eso
+    `region()` escribe `?` y no un valor benigno, y por eso `missing()` existe.
+
+    LOS TRES GRUPOS, y la diferencia entre ellos es epistémica, no de implementación:
+
+      **COMPUTABLE del payload**   `n_units`, `has_oracle`, `irreversible`,
+                                   `shared_writes`, `budget_tokens`. Funciones puras de lo
+                                   que el caller declara. Mismo request, mismo valor, para
+                                   siempre, sin modelo en el medio.
+
+      **COMPUTABLE del material**  `continuation`, `literal`. Aritmética sobre los
+                                   documentos declarados —recurrencia literal de formas de
+                                   token cerradas, verificada por contención—. Cuestan cero
+                                   y son deterministas, pero necesitan el material, y por
+                                   eso los mide el runner y no el extractor.
+
+      **DERIVED**                  `coupling`, `horizon_unknown`. Necesitan un modelo. Son
+                                   útiles y **no son replayables desde primeros
+                                   principios**, sólo desde caché. En modo determinista D2
+                                   la proyección los borra, la confianza se acota y el
+                                   router se abstiene al fallback. Determinismo y abstención
+                                   dejan de ser dos requisitos y pasan a ser un mecanismo.
+
+    LO QUE DELIBERADAMENTE NO ESTÁ: disparadores léxicos. Condicionar sobre formas de
+    superficie —«dice *how many*, entonces es un conteo»— es lo que produjo la tasa de
+    falsos positivos que hizo perder a los routers en prosa. **La cardinalidad se declara,
+    nunca se infiere del fraseo**, y `literal` no es una excepción: extrae de la pregunta una
+    cadena entrecomillada y devuelve un hecho **sobre el material** —en cuántas unidades
+    aparece—, no una interpretación de la pregunta.
+
+    Y LA REGIÓN NO ES UN CAMPO: es la CLAVE con la que se aprende, derivada de estos campos
+    por `region()`. Su vocabulario está versionado porque una política ajustada bajo uno no
+    puede consumir regiones de otro — `load_rows` levanta si un archivo los mezcla, y el
+    EXPLAIN registra cuál habló la decisión.
     """
 
     # -- computable --------------------------------------------------------
@@ -135,6 +301,18 @@ class Features:
     # nothing in φ could tell chained material from independent material.
     continuation: bool | None = None
 
+    # LOS DOS PREDICTORES DE `CP-6`, y los dos son COMPUTABLE.
+    #
+    # `cardinality` la DECLARA el caller —`singular`, `enumerative`, `boolean`,
+    # `aggregate`— y por eso no viola la regla de la primera línea del módulo: no se
+    # infiere del fraseo, se recibe. Sola no separa nada (`p = 0,372` contra su nulo);
+    # multiplicada por `literal` es el mejor vocabulario medido.
+    #
+    # `literal` sale de `measure_question_literal`: en cuántas unidades aparece el literal
+    # que la pregunta cita. Es el predictor más fuerte por sí solo.
+    cardinality: str | None = None
+    literal: str | None = None
+
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -148,19 +326,94 @@ class Features:
             budget_tokens=self.budget_tokens,
             coupling=None,
             horizon_unknown=None,
+            # SOBREVIVEN A LA PROYECCION D2, y ése es medio motivo de haberlos elegido: son
+            # COMPUTABLE, así que una regla que los use **sí puede disparar** en modo
+            # determinista. El vocabulario anterior dependía de `coupling`, que es DERIVED,
+            # y en D2 colapsaba a `unknown` — o sea que la región que gobierna en regulado
+            # no era la que se aprendió.
+            continuation=self.continuation,
+            cardinality=self.cardinality,
+            literal=self.literal,
         )
 
     def missing(self) -> tuple[str, ...]:
+        """Los ejes `DERIVED` sin establecer. **Todos**, se puedan llenar o no."""
         return tuple(
             name for name in DERIVED_FEATURES if getattr(self, name) is None
         )
 
-    def region(self) -> str:
-        """Discrete feature region, used as the key for learned statistics.
+    def fillable_gaps(self) -> tuple[str, ...]:
+        """Lo que falta **y se puede ir a buscar**. Es lo que dispara una sonda.
 
-        Learning per exact feature vector would never accumulate enough episodes to
-        estimate anything. Binning trades resolution for sample size, and it also
-        keeps the learned policy small enough to read by eye.
+        LA DISTINCIÓN QUE ESTO INTRODUCE, y no es de estilo: «no lo sé y puedo
+        averiguarlo» y «no lo sé y nadie puede» piden decisiones **opuestas**. La primera
+        dice *sondeá*; la segunda dice *decidí con lo que hay, o abstenete por eso* — pero
+        sondear no la va a cerrar nunca.
+
+        Mezclarlas cuesta: un eje `DERIVED` sin establecer acota la confianza y empuja al
+        fallback, así que un eje que **nadie** puede llenar hace abstenerse al motor para
+        siempre y sin motivo. Medido, `horizon_unknown` es exactamente eso: sin sensor, sin
+        regla que lo lea, fuera de la región, y constante en las 3.884 filas que lo llevan.
+        """
+        return tuple(n for n in self.missing() if FEATURE_SENSOR.get(n))
+
+    def permanent_gaps(self) -> tuple[str, ...]:
+        """Lo que falta y **ningún sensor puede establecer**. Informa, no dispara nada."""
+        return tuple(n for n in self.missing() if not FEATURE_SENSOR.get(n))
+
+    def region(self) -> str:
+        """La región discreta: la clave con la que se aprende. **Medida, no elegida.**
+
+        POR QUÉ CAMBIÓ (`CP-6`, 2026-08-30). El vocabulario anterior —`cardinalidad de
+        unidades / oráculo / acoplamiento / cadena`— se eligió por diseño y nunca se
+        contrastó contra alternativas. Contrastado con la política de desempate por costo
+        evaluada **leave-one-out**, sobre 41 tareas y 7 brazos:
+
+            vocabulario                      regiones  tareas/reg  utilidad    ahorro
+            actual: cardinalidad x literal          7         5,9     0,938       69%
+            anterior: card/oracle/coup/chain        7         5,9     0,928       37%
+            region x literal                        9         4,6     0,951       48%
+            literal solo                            3        13,7     0,943       57%
+
+        **A igual granularidad —7 regiones, 5,9 tareas por región— el nuevo gana en los dos
+        ejes.** No es un empate que se rompe por gusto: `+0,010` de utilidad y **casi el
+        doble de ahorro**.
+
+        Y HAY UNA RAZÓN ESTRUCTURAL ADEMÁS DE LA MEDIDA. El vocabulario anterior dependía de
+        `coupling`, que es `DERIVED`: en modo determinista D2 colapsaba a `unknown`, así que
+        **la región que gobierna en regulado no era la que se había aprendido**. Los dos ejes
+        nuevos son `COMPUTABLE` y sobreviven la proyección.
+
+        LO QUE NO CAMBIÓ: el intercambio de fondo. Aprender por vector exacto nunca junta
+        episodios suficientes; binear cambia resolución por tamaño de muestra, y mantiene la
+        política chica como para leerla a ojo.
+
+        POR QUÉ **NO** SE ELIGIÓ EL QUE MÁS AHORRA, que es la parte que importa. El mejor
+        en costo es `cardinalidad × literal` con 69%, y **deja a la SONDA sin nada que
+        resolver**: sus dos ejes son `COMPUTABLE`, así que el ciclo de decisión de dos pasos
+        —pagar una sonda barata para establecer un eje `DERIVED` y refinar la región—
+        quedaría inerte. Lo destapó `test_science.py` §21, no el análisis.
+
+            Una mejora medida que apaga un subsistema en silencio no es una mejora
+            medida: es dos cambios, y uno no se midió.
+
+        Así que se toma el que **domina al anterior sin apagar nada**: `región previa ×
+        literal`. Contra el vocabulario que reemplaza, gana en los dos ejes —`+0,023` de
+        utilidad y 48% de ahorro contra 37%— y conserva `coupling`, que es el eje que la
+        sonda existe para establecer. El 21% de ahorro que se deja sobre la mesa queda
+        registrado como decisión abierta del autor en `PENDIENTES.es.md` (`CP-8`), no
+        enterrado acá.
+
+        `?` significa **no establecido**, nunca un valor por defecto — un request sin
+        cardinalidad declarada cae en su propia región y no se disfraza de `singular`.
+        """
+        return f"{self.region_previa()}/{self.literal or '?'}"
+
+    def region_previa(self) -> str:
+        """La región del vocabulario `regions/2-continuation`, para leer el registro viejo.
+
+        5.932 filas lo llevan estampado. Recomputarla es lo que permite analizarlas sin
+        re-correrlas; borrarla volvería irreproducible un registro pago.
         """
         if self.n_units <= 1:
             card = "single"
@@ -229,6 +482,11 @@ def payload_for(task: dict[str, Any]) -> dict[str, Any]:
         "irreversible": task.get("irreversible", False),
         "shared_writes": task.get("shared_writes", False),
         "budget_tokens": task["budget_tokens"],
+        # LA CARDINALIDAD LA DECLARA EL CALLER (CP-6). No se infiere del fraseo, que es la
+        # regla que este módulo se impuso en su primera línea — se recibe, como
+        # `irreversible` o `shared_writes`. `.get` y no `[...]`: un caller que no la declara
+        # cae en la región `?`, que es información, no un default.
+        "answer_cardinality": task.get("answer_cardinality"),
     }
 
 

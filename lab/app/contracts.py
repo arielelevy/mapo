@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from collections.abc import Sequence
 from typing import Any
 
 from .beliefs import Belief, BeliefBase, Provenance
@@ -363,6 +364,120 @@ POLARITY = frozenset({"present", "absent"})
 OBLIGATIONS = frozenset({"absence", "presupposition"})
 
 
+# LA SEGUNDA PRUEBA DE AUSENCIA, Y ES GRATIS (CP-1, 2026-08-30)
+#
+# La regla de arriba dice que una ausencia necesita el DOMINIO ENTERO, y es correcta. Pero
+# tenía una sola forma de conseguirlo —leerlo— y para una ausencia **de término** hay otra
+# que cuesta cero tokens y es igual de concluyente:
+#
+#     si la cadena no aparece en NINGUNA unidad del alcance, no aparece.
+#
+# Eso es aritmética sobre el material, `COMPUTED`, y no exige haber leído una sola unidad.
+# Es exactamente lo mismo que `presupposition()` ya hace un poco más abajo —contención de
+# una cadena que el agente enunció, contra el texto— con el signo dado vuelta: allá se
+# busca que ESTÉ, acá que NO esté.
+#
+# DE DÓNDE SALIÓ: derivando a mano el camino de las 78 preguntas. Las nueve de
+# `B2_absence` tienen cero unidades relevantes, y medido sobre `b2-000-w16`,
+# `keyword_search('trustee')` devuelve **0 unidades** mientras `'director'` devuelve 5 como
+# control. La prueba estaba disponible y ningún brazo la usaba: `rewoo` (u=0,00) llamó
+# `search` 19 veces contra 12 de `keyword_search`, y `search` es el ranking **fusionado**,
+# que nunca vuelve vacío — no puede testimoniar una ausencia. El que ganaba la ausencia era
+# `handoff` (u=0,92) **leyendo 19 unidades**: la respuesta cara a una pregunta que tenía
+# una respuesta aritmética.
+#
+# Y POR ESO VA EN LA CAPA DE DECISIÓN Y NO EN UN PATRÓN. Quien elige la herramienta es el
+# modelo, y el modelo prefiere buscar antes que probar que no hay. Una regla que depende de
+# que el modelo elija bien no es una regla.
+#
+# HASTA DÓNDE LLEGA, dicho con precisión, porque es una prueba con un límite real:
+#
+#   prueba          que el TÉRMINO no está en el material
+#   NO prueba       que la COSA no esté, si el material la nombraría de otra manera
+#
+# De ahí las dos guardas. La de largo mínimo es la misma que la presuposición: una cadena
+# de tres caracteres aparece en cualquier lado y autorizaría siempre. La de **cantidad de
+# palabras** es la que hace honesto al límite — una paráfrasis larga ausente prueba que la
+# paráfrasis está ausente, que no es lo que se está afirmando. Un término es un término.
+MIN_TERM_CHARS = 4
+MAX_TERM_WORDS = 4
+
+TERM_FLOOR_PROPOSAL = Provenance.ELICITED
+TERM_FLOOR_AUTHORISATION = Provenance.COMPUTED
+
+
+@dataclass
+class TermProof:
+    """Si la ausencia de una cadena está PROBADA sobre el alcance, sin leer nada.
+
+    `proves_absence` es lo único que autoriza; los demás campos están para que el registro
+    diga por qué, que es lo que permite auditar una autorización después.
+    """
+
+    term: str
+    occurrences: int
+    units_scanned: int
+    proves_absence: bool
+    refused: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "term": self.term,
+            "occurrences": self.occurrences,
+            "units_scanned": self.units_scanned,
+            "proves_absence": self.proves_absence,
+            "refused": self.refused,
+        }
+
+
+def term_absence(
+    term: str, documents: dict[str, str], unit_ids: Sequence[str]
+) -> TermProof:
+    """¿Está esta cadena en ALGUNA unidad del alcance? Aritmética pura, cero llamadas.
+
+    LA DIRECCIÓN IMPORTA, igual que en `presupposition()`: buscar una cadena conocida
+    adentro de un texto es finito; extraer del texto qué cadenas hay es lo otro. El agente
+    propone la cadena —`ELICITED`, su lectura de qué está negando— y esto la autoriza o no
+    contra el material, que es `COMPUTED`.
+
+    FALLA CERRADA en las tres formas de no poder probar: dominio vacío, término demasiado
+    corto, término demasiado largo para ser un término. Ninguna emite con advertencia.
+    """
+    limpio = " ".join((term or "").lower().split())
+    proof = TermProof(term=limpio, occurrences=0, units_scanned=len(unit_ids),
+                      proves_absence=False)
+    if not unit_ids:
+        proof.refused = (
+            "el alcance esta vacio: sobre cero unidades no se puede probar que algo falte"
+        )
+        return proof
+    if len(limpio) < MIN_TERM_CHARS:
+        proof.refused = (
+            f"{limpio!r} tiene menos de {MIN_TERM_CHARS} caracteres. Una cadena tan corta "
+            f"aparece en cualquier lado, asi que su ausencia tampoco significaria nada"
+        )
+        return proof
+    if len(limpio.split()) > MAX_TERM_WORDS:
+        proof.refused = (
+            f"{limpio!r} tiene {len(limpio.split())} palabras y el maximo es "
+            f"{MAX_TERM_WORDS}. Esto prueba la ausencia de un TERMINO; una parafrasis "
+            f"larga ausente solo prueba que la parafrasis esta ausente, que no es lo que "
+            f"se esta afirmando"
+        )
+        return proof
+    proof.occurrences = sum(
+        1 for u in unit_ids
+        if limpio in " ".join(documents.get(u, "").lower().split())
+    )
+    proof.proves_absence = proof.occurrences == 0
+    if not proof.proves_absence:
+        proof.refused = (
+            f"{limpio!r} aparece en {proof.occurrences} de {len(unit_ids)} unidades, asi "
+            f"que el material NO sostiene que falte"
+        )
+    return proof
+
+
 @dataclass
 class AbsenceVerdict:
     """Si un enunciado de ausencia tiene con que sostenerse."""
@@ -372,6 +487,11 @@ class AbsenceVerdict:
     units_read: int
     units_available: int
     refused: str | None = None
+    # POR QUE VIA se autorizo. Dos rutas distintas a la misma conclusion no se pueden
+    # colapsar en un booleano: auditar una autorizacion exige saber si detras hay un
+    # dominio leido o una cadena que no esta.
+    via: str | None = None
+    proof: "TermProof | None" = None
 
     @property
     def exhaustive(self) -> bool:
@@ -385,10 +505,17 @@ class AbsenceVerdict:
             "units_available": self.units_available,
             "exhaustive": self.exhaustive,
             "refused": self.refused,
+            "via": self.via,
+            "proof": self.proof.as_dict() if self.proof else None,
         }
 
 
-def absence(polarity: str, units_read: int, units_available: int) -> AbsenceVerdict:
+def absence(
+    polarity: str,
+    units_read: int,
+    units_available: int,
+    proof: "TermProof | None" = None,
+) -> AbsenceVerdict:
     """La carga de prueba que le toca a esta polaridad.
 
     FALLA CERRADA, como el resto de la familia: una ausencia sin dominio completo NO se
@@ -418,15 +545,34 @@ def absence(polarity: str, units_read: int, units_available: int) -> AbsenceVerd
         # UN TESTIGO ALCANZA. No se exige cobertura: encontrada la cosa, lo que quede sin
         # leer no puede desmentirla. Exigir exhaustividad aca seria simetria falsa.
         verdict.emitted = True
+        verdict.via = "testigo"
         return verdict
-    if not verdict.exhaustive:
-        verdict.refused = (
-            f"ausencia afirmada leyendo {units_read} de {units_available} unidades. "
-            f"Cualquier unidad sin leer puede contener justo lo que se niega, asi que "
-            f"esto es una muestra presentada como un hecho sobre el dominio"
-        )
+    if verdict.exhaustive:
+        verdict.emitted = True
+        verdict.via = "dominio_leido"
         return verdict
-    verdict.emitted = True
+    # LA SEGUNDA RUTA AL MISMO DOMINIO. No se leyo todo, pero si la cadena que se niega no
+    # esta en NINGUNA unidad del alcance, el dominio quedo cubierto igual — por aritmetica
+    # y no por lectura. Es la misma carga de prueba conseguida por el camino barato, no una
+    # carga mas floja: `term_absence` recorre TODAS las unidades, no una muestra.
+    if proof is not None and proof.proves_absence:
+        verdict.emitted = True
+        verdict.via = "termino_ausente"
+        verdict.proof = proof
+        return verdict
+    # NO SE PUDO POR NINGUNA VIA. La prueba fallida se guarda igual: saber POR QUE no
+    # alcanzo —termino corto, parafrasis larga, o el termino si estaba— es lo que permite
+    # que el reintento dirigido proponga otro, en vez de repetir el mismo.
+    if proof is not None:
+        verdict.proof = proof
+    verdict.refused = (
+        f"ausencia afirmada leyendo {units_read} de {units_available} unidades"
+        + (f", y el termino propuesto no prueba nada: {proof.refused}"
+           if proof is not None and proof.refused
+           else " y sin termino propuesto que verificar")
+        + ". Cualquier unidad sin leer puede contener justo lo que se niega, asi que esto "
+          "es una muestra presentada como un hecho sobre el dominio"
+    )
     return verdict
 
 
@@ -548,13 +694,17 @@ def presupposition(
 # brazos, asi que sus filas NO son comparables con las de una corrida sin el. Va apagado
 # por defecto, cruzado `{con, sin} x {patrones}`, como `terse_tools` y `offer_read_all`.
 OBLIGATIONS_CONTRACT = (
-    "Before the ANSWER line, declare two things, each on its own line:\n"
+    "Before the ANSWER line, declare these, each on its own line:\n"
     "POLARITY: present   — if you are asserting that something IS in the material\n"
     "POLARITY: absent    — if you are asserting that something is NOT there\n"
+    "NEGATES: <term>     — with POLARITY: absent, the SHORT term you are saying is not "
+    "there (e.g. the role, the status, the field name). At most "
+    f"{MAX_TERM_WORDS} words. It is looked up literally in every unit in scope, so if it "
+    "appears nowhere your absence claim is proved without reading anything.\n"
     "PRESUPPOSES: <text> — if the question takes something for granted, quote the "
     "EXACT string from the material that establishes it; omit the line if it takes "
     "nothing for granted.\n"
-    "Both are looked up mechanically. A paraphrase in PRESUPPOSES finds nothing."
+    "All are looked up mechanically. A paraphrase finds nothing."
 )
 
 _POLARITY_LINE = re.compile(
@@ -562,6 +712,7 @@ _POLARITY_LINE = re.compile(
     flags=re.MULTILINE | re.IGNORECASE,
 )
 _PRESUPPOSES_LINE = re.compile(r"^PRESUPPOSES:\s*(.+)$", flags=re.MULTILINE)
+_NEGATES_LINE = re.compile(r"^NEGATES:\s*(.+)$", flags=re.MULTILINE)
 
 
 def declared_polarity(text: str) -> str | None:
@@ -588,6 +739,19 @@ def declared_presupposition(text: str) -> str | None:
         return None
     claim = found[-1].strip()
     return claim or None
+
+
+def declared_negated_term(text: str) -> str | None:
+    """El término que la respuesta dice que NO está, sin interpretar nada.
+
+    Misma forma que `declared_presupposition`: una cadena que el agente enuncia y que el
+    código verifica LITERAL contra el material. La dirección importa — buscar una cadena
+    conocida adentro de un texto es finito; extraer del texto qué cadenas hay es lo otro.
+    """
+    found = _NEGATES_LINE.findall(text)
+    if not found:
+        return None
+    return found[-1].strip() or None
 
 
 def verify_obligations(
@@ -634,8 +798,18 @@ def verify_obligations(
                 ),
             }
         else:
+            # LA SEGUNDA RUTA SE INTENTA SIEMPRE Y NO CAMBIA LA CARGA DE PRUEBA. Si el
+            # agente declaro que niega, se verifica esa cadena contra TODAS las unidades
+            # del alcance; si no la declaro, `None` y queda la ruta de siempre. Una
+            # ausencia sigue exigiendo el dominio entero — lo unico que cambia es que
+            # ahora hay una forma de cubrirlo que no cuesta tokens.
+            termino = declared_negated_term(answer_text) if polarity == "absent" else None
+            prueba = (
+                term_absence(termino, documents, list(task.get("unit_ids") or []))
+                if termino else None
+            )
             report["absence"] = absence(
-                polarity, units_read, len(task.get("unit_ids") or [])
+                polarity, units_read, len(task.get("unit_ids") or []), prueba
             ).as_dict()
 
     if "presupposition" in demanded:

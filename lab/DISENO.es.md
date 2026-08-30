@@ -313,7 +313,7 @@ del board.
 
 | | qué hace | qué se midió |
 |---|---|---|
-| `compact_history` (cognitive) | reemplaza por un stub **sólo las unidades que el modelo anotó** | el modelo escribió **1 nota en 28 filas**: casi nunca dispara |
+| `compact_history` (cognitive) | reemplaza por un stub **sólo las unidades que el modelo anotó** | el modelo escribió **1 nota en 28 filas**: casi nunca dispara. Y **28 filas es toda la exposición que la superficie `cognitive` tuvo jamás** —27 de 5.083 en todo el registro, 1,1%— así que el nulo vale a esa escala y no autoriza a decir que el modelo no se autogestiona (`X-21`) |
 | `manage_history` (managed) | degrada incondicionalmente a stub con el id | llamada **61 veces sobre `w4`**, degradó **0 mensajes** |
 | *guard de la capa anterior* | expulsa por crecimiento y **crea** un hallazgo enfocado | **no está en el banco** |
 

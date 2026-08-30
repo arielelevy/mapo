@@ -402,7 +402,46 @@ def available(
 
 
 class ToolFailure(Exception):
-    """A tool call the model got wrong, as opposed to a bug in the harness."""
+    """Una llamada que el modelo hizo mal, distinta de un bug del harness — y de QUE TIPO.
+
+    EL TIPO NO ES DECORACION: decide la pista (2026-08-30). El bucle compartido le pegaba
+    a **toda** falla la misma pista —«usá sólo ids devueltos por una búsqueda»— que es
+    correcta para una de las siete formas de fallar y desorienta en las otras seis. Un
+    modelo al que le sobran ids en un batch, o que omitió un argumento, recibía un consejo
+    que apunta al arreglo equivocado; y una pista equivocada es peor que ninguna, porque
+    se sigue.
+
+    Y ADEMAS SE CUENTA. Hasta hoy la superficie contaba **una** de las siete
+    (`hallucinated`) y era ciega a las otras seis: no se podía preguntarle al registro con
+    qué frecuencia el modelo erraba una llamada, ni de qué manera. Es la misma ceguera que
+    dejó vivir 138 celdas de `rewoo` llamando a `read` sin leer nada — el efecto no lo
+    miraba nadie.
+
+    Los tipos son los que piden arreglos DISTINTOS, ni uno más:
+
+      `id_inexistente`   un id que no está en el alcance -> el modelo inventó una cita
+      `argumento`        falta un obligatorio, o vino con el tipo equivocado
+      `batch`            pidió más ids de los que una llamada admite
+      `no_ofrecida`      la herramienta existe pero no en esta superficie
+      `desconocida`      el nombre no existe en ningún catálogo
+      `fuera_de_alcance` una unidad que no es de esta tarea (lectura estructural)
+    """
+
+    def __init__(self, mensaje: str, kind: str = "otra") -> None:
+        super().__init__(mensaje)
+        self.kind = kind
+
+
+# LA PISTA SALE DEL TIPO. Cada una nombra la accion que arregla ESA falla, y ninguna
+# repite lo que el mensaje ya dice.
+PISTA_POR_TIPO = {
+    "id_inexistente": "Use only unit ids returned by a search.",
+    "argumento": "Re-issue the call with every required argument, typed as declared.",
+    "batch": "Split the ids across several calls.",
+    "no_ofrecida": "Choose one of the tools listed as available.",
+    "desconocida": "Choose one of the tools listed in the catalogue.",
+    "fuera_de_alcance": "This unit belongs to another task; stay within the scope.",
+}
 
 
 def _summarise(text: str, compact: bool = False) -> str:
@@ -462,6 +501,15 @@ SURFACE_VERSION = "v2-agotamiento-compartido"
 # sub-agentes pero les arma el alcance de otra forma, asi que su 62,5% de esterilidad ya
 # era correcto. Levantar sobre el archivo entero convertiria un registro valido en
 # inservible por un cambio que a diez de los doce brazos no los toca.
+#
+# NO SE BUMPEO POR EL ARREGLO DE `rewoo` (decision del autor, 2026-08-30). Se intento
+# —`rewoo` cambio lo que HACE: RW-1 le devolvio la lectura, RW-2 le agrego la busqueda
+# semantica— y romperia el invariante que este archivo declara y que `test_science.py` §64
+# verifica: **los brazos sensibles son los que llaman a `scoped()`**, y `rewoo` no lo llama.
+# Meterlo ahi mezclaria dos motivos distintos bajo una misma guarda.
+#
+# Queda anotado en `M-6`: las 138 celdas viejas de `rewoo` no miden el mismo brazo que las
+# que se corran de ahora en mas, y **hay que separarlas por fecha a mano al analizar**.
 SURFACE_SENSITIVE_ARMS = ("handoff", "supervisor")
 
 
@@ -477,6 +525,38 @@ class Barren:
     streak: int = 0
     peak: int = 0
     total: int = 0
+
+
+@dataclass
+class Fallas:
+    """Los errores de llamada, compartidos por referencia con los sub-agentes.
+
+    ES EL MISMO DEFECTO QUE `Barren`, EN OTRO CONTADOR (2026-08-30). `hallucinated` era un
+    `int`, y un `int` no se puede reatar: `scoped()` comparte por referencia todo lo que es
+    de la TAREA, pero `replace` copia los enteros por valor, así que **lo que un sub-agente
+    erraba no volvía nunca al padre**.
+
+    El registro lo muestra con la misma firma que ya delató a `barren` — un cero que no es
+    chico, es estructural:
+
+        handoff       773 llamadas, **0** ids alucinados
+        supervisor  1.583 llamadas, **0**
+        react       3.466 llamadas,  5
+        dag_strategy 6.769 llamadas,  9
+
+    `handoff` y `supervisor` son los dos brazos que corren TODO adentro de sub-agentes vía
+    `scoped()`. `dag_strategy` también descompone, y sí cuenta — porque le pasa a su
+    sub-agente la superficie **del padre** en vez de una alcanzada. Ese contraste es la
+    prueba: el cero no describe dos brazos que no se equivocan, describe dos brazos donde
+    equivocarse no deja rastro.
+
+    Y POR ESO SON DOS CAMPOS Y NO UNO. `por_tipo` cuenta LLAMADAS que fallaron, por forma
+    de fallar; `unidades_alucinadas` cuenta IDS inexistentes, que es otra magnitud — una
+    sola llamada puede inventar cinco. Colapsarlas perdería cuál de las dos creció.
+    """
+
+    por_tipo: dict[str, int] = field(default_factory=dict)
+    unidades_alucinadas: int = 0
 
 
 @dataclass
@@ -562,6 +642,28 @@ class ToolSurface:
     # FACTOR: descripciones cortas. Cambia el payload que el modelo lee para decidir QUE
     # herramienta usar, asi que puede cambiar la eleccion — no es una limpieza.
     terse_tools: bool = False
+    # EL BALANCE DE ESFUERZO, COMO FACTOR — y hasta hoy no existía (2026-08-30).
+    #
+    # `guards.ventana_sub_agente()` y `guards.presupuesto_de_esfuerzo()` estaban escritas,
+    # documentadas y probadas por `test_science.py` §67 **y no las llamaba nadie**. El test
+    # las ejercitaba directamente, así que pasaba; el runner nunca las tocaba y este campo
+    # no existía, o sea que no había forma de encenderlas.
+    #
+    #     Es la forma exacta que este repo ya nombra como su falla recurrente: un factor
+    #     que no llega no falla, **corre y mide su ausencia**. Y estaba anotado en
+    #     `PENDIENTES.es.md` como «lo que queda es la corrida», que da por hecho que se
+    #     puede correr. No se podía: no había qué encender.
+    #
+    # Qué cambia cuando está en `True`, y son las dos cosas que `guards.py` pide:
+    #   · la ventana del sub-agente pasa a ser una FRACCIÓN del alcance en vez de un 8 fijo
+    #     —medido, con el 8 el sub-agente ve el alcance entero en 28 de 78 tareas, o sea
+    #     que el aislamiento no existe en el 36% del corpus—
+    #   · los brazos iterativos paran al gastar su porción del presupuesto DECLARADO de la
+    #     tarea, que es la misma cuenta con la que la factibilidad ya los admitió
+    #
+    # Apagado por defecto, como todo factor que cambia comportamiento: encenderlo vuelve
+    # incomparable el registro ya pagado, y sus filas van a otro archivo.
+    effort_balanced: bool = False
     # FACTOR: exigir las obligaciones tipadas (polaridad, presuposicion). Cambia el
     # contrato que todos los brazos leen, asi que sus filas van a otro archivo.
     demand_obligations: bool = False
@@ -659,7 +761,32 @@ class ToolSurface:
     # generico, que es justo lo que la expulsion no puede permitirse.
     question: str = ""
     guard_stats: dict[str, int] = field(default_factory=dict)
-    hallucinated: int = 0
+    # LAS SIETE FORMAS DE FALLAR, CONTADAS, Y EN UN OBJETO COMPARTIDO. Antes habia UN
+    # contador (`hallucinated`, un `int`) y las otras seis formas no dejaban rastro: el
+    # registro no podia decir con que frecuencia el modelo erraba una llamada ni de que
+    # manera. Es la misma ceguera que dejo vivir 138 celdas de `rewoo` llamando a `read`
+    # sin leer nada — el efecto no lo miraba nadie.
+    #
+    # VA EN UN OBJETO Y NO COMO `int` POR EL MISMO MOTIVO QUE `Barren`: `scoped()` reata
+    # por referencia lo que es de la tarea, y un `int` no se puede reatar. Medido, el cero
+    # de `handoff` y `supervisor` no era conducta, era la copia por valor.
+    #
+    # Y se cuenta en `dispatch`, no en cada `raise`: asi una forma nueva de fallar no se
+    # puede agregar sin quedar contada.
+    fallas: "Fallas" = field(default_factory=lambda: Fallas())
+
+    @property
+    def hallucinated(self) -> int:
+        return self.fallas.unidades_alucinadas
+
+    @hallucinated.setter
+    def hallucinated(self, v: int) -> None:
+        self.fallas.unidades_alucinadas = v
+
+    @property
+    def tool_failures(self) -> dict[str, int]:
+        return self.fallas.por_tipo
+
     batched_reads: int = 0
     # Units any search has ever surfaced, and how many consecutive searches surfaced
     # nothing new. A retriever that has stopped producing is the signal an iterative
@@ -857,10 +984,61 @@ class ToolSurface:
         # invisible— cometida en los campos que el docstring no enumeraba.
         sub.surfaced = self.surfaced
         sub.barren = self.barren
+        # LOS ERRORES DE LLAMADA TAMBIEN SON DE LA TAREA. Mismo defecto que el de arriba,
+        # en otro contador y descubierto un dia despues: `handoff` y `supervisor` —los dos
+        # brazos que corren todo adentro de `scoped()`— daban **0 ids alucinados en 2.356
+        # llamadas**, mientras `react` daba 5 en 3.466 y `dag_strategy` 9 en 6.769.
+        # `dag_strategy` tambien descompone y si contaba, porque le pasa al sub-agente la
+        # superficie del padre. Ese contraste es la prueba de que el cero era la copia por
+        # valor y no la conducta.
+        sub.fallas = self.fallas
         return sub
 
     def unit_ids(self) -> list[str]:
         return list(self.view.unit_ids)
+
+    def unit_chars(self, unit_id: str) -> int:
+        """El largo de una unidad, SIN leerla. Una regla no es una lectura.
+
+        POR QUE EXISTE (2026-08-30). Cinco sitios de `paradigms/modern.py` llamaban a
+        `read_one` para quedarse unicamente con `len(...)`, y `read_one` deja rastro: suma
+        a `served_chars` y mete la unidad en `units_read_structural`. Medir el largo de
+        algo contaba como haberlo leido.
+
+        LO QUE ESO ROMPIA, medido sobre las filas que tienen el contador:
+
+          · `pointer_chase` daba `units_read_structural == n_units` en **170 de 170
+            celdas** — el alcance ENTERO— porque calculaba un promedio de largo sobre
+            todas las unidades antes de dar el primer salto. Es el brazo que se define por
+            seguir un puntero desde un ancla, y la unica metrica que mostraria si lo hace
+            decia que abria el corpus completo
+          · `streaming_scan` cobraba el corpus **dos veces** en `served_chars`: una para
+            armar los trozos y otra para el prompt. Su docstring dice que cada token entra
+            al modelo **exactamente una vez** y que es el unico brazo del catalogo con esa
+            garantia — la garantia se cumplia y la contabilidad la desmentia
+          · `gist_reader` cobraba cada unidad seleccionada **tres** veces: gist, estimacion
+            y lectura
+
+        Y NINGUNO CAMBIABA LO QUE EL MODELO VE, que es lo que lo hacia invisible: la
+        topologia estaba bien y la medida estaba mal. Una metrica que dice «leyo todo»
+        sobre el brazo cuya tesis es que no lee todo no se equivoca en un numero — invierte
+        la conclusion.
+        """
+        if unit_id not in self.view.unit_ids:
+            raise ToolFailure(f"Unit {unit_id} is not part of this task.",
+                              kind="fuera_de_alcance")
+        return len(self.view.documents[unit_id])
+
+    def unit_tokens(self, unit_id: str) -> int:
+        """El costo de una unidad en tokens, sin leerla y con la MISMA aritmetica que decide.
+
+        `CHARS_PER_TOKEN` y no un `// 4` suelto: los cinco sitios que estimaban costo
+        escribian el 4 a mano, asi que la constante que la factibilidad usa para PODAR y la
+        que el paradigma usa para GASTAR eran dos cosas que coincidian por casualidad.
+        Admitir un brazo con una cuenta y dejarlo gastar con otra es el defecto que
+        `guards.py` ya nombra para el presupuesto.
+        """
+        return self.unit_chars(unit_id) // CHARS_PER_TOKEN
 
     def read_one(self, unit_id: str) -> str:
         """Lectura ESTRUCTURAL: la pide el codigo del paradigma, no el modelo.
@@ -871,7 +1049,8 @@ class ToolSurface:
         rastro: una lectura invisible se lee igual que una lectura que no ocurrio.
         """
         if unit_id not in self.view.unit_ids:
-            raise ToolFailure(f"Unit {unit_id} is not part of this task.")
+            raise ToolFailure(f"Unit {unit_id} is not part of this task.",
+                              kind="fuera_de_alcance")
         self.units_read_structural.add(unit_id)
         self.served_chars += len(self.view.documents[unit_id])
         return self.view.documents[unit_id]
@@ -994,7 +1173,7 @@ class ToolSurface:
         """
         if key not in args or args[key] is None:
             raise ToolFailure(
-                f"{tool}: falta el argumento obligatorio '{key}'."
+                f"{tool}: falta el argumento obligatorio '{key}'.", kind="argumento"
             )
         return args[key]
 
@@ -1006,7 +1185,8 @@ class ToolSurface:
             return int(raw)
         except (TypeError, ValueError):
             raise ToolFailure(
-                f"{tool}: '{key}' tiene que ser un entero, llego {raw!r}."
+                f"{tool}: '{key}' tiene que ser un entero, llego {raw!r}.",
+                kind="argumento",
             ) from None
 
     def withdrawn(self) -> tuple[str, ...]:
@@ -1054,6 +1234,26 @@ class ToolSurface:
             self.board_state.close(u)
 
     def dispatch(self, name: str, args: dict[str, Any]) -> str:
+        """Una llamada del MODELO. Envuelve al despacho real sólo para contar las fallas.
+
+        SE CUENTA ACÁ Y NO EN CADA `raise`, y esa es toda la decisión: `_dispatch` tiene
+        siete sitios que levantan y va a tener más. Contar en el cuello es lo único que
+        hace que una forma nueva de fallar no se pueda agregar sin quedar contada — un
+        contador que hay que acordarse de tocar deja de ser cierto en la primera prisa.
+
+        Y la lectura ESTRUCTURAL no pasa por acá, así que su falla no se cuenta como error
+        del modelo. Es correcto: un `read_one` sobre una unidad ajena es un bug del
+        paradigma, no una llamada que el modelo hizo mal, y mezclarlos borraría justo la
+        distinción que hace accionable al contador.
+        """
+        try:
+            return self._dispatch(name, args)
+        except ToolFailure as falla:
+            tipo = getattr(falla, "kind", "otra")
+            self.tool_failures[tipo] = self.tool_failures.get(tipo, 0) + 1
+            raise
+
+    def _dispatch(self, name: str, args: dict[str, Any]) -> str:
         self.calls[name] = self.calls.get(name, 0) + 1
         # EL LEDGER DE REPETIDAS. Se asienta ACA —antes de despachar y antes de la
         # comprobacion de disponibilidad— por la misma razon que `sequence`: una llamada
@@ -1077,7 +1277,8 @@ class ToolSurface:
             raise ToolFailure(
                 f"{name} no esta disponible en la superficie {self.variant}. "
                 f"Disponibles: {sorted(t['function']['name'] for t in specs_for(self.variant, self.offer_read_all, terse=self.terse_tools,
-                          offer_board=self.offer_board))}"
+                          offer_board=self.offer_board))}",
+                kind="no_ofrecida",
             )
 
         if name == "post":
@@ -1202,7 +1403,7 @@ class ToolSurface:
             if len(requested) > MAX_BATCH_READ:
                 raise ToolFailure(
                     f"read accepts at most {MAX_BATCH_READ} ids per call, "
-                    f"got {len(requested)}."
+                    f"got {len(requested)}.", kind="batch"
                 )
             out = []
             missing = []
@@ -1226,14 +1427,32 @@ class ToolSurface:
                     # Every id invented. Reported as a recoverable tool error rather
                     # than raised, so one bad citation does not zero the whole task.
                     raise ToolFailure(
-                        f"No such units: {missing}. Use only ids returned by a search."
+                        f"No such units: {missing}.", kind="id_inexistente"
                     )
                 out.append({"error": f"no such units: {missing}"})
             return json.dumps(out)
 
-        # An unknown tool is a bug in the paradigm, not something to paper over with a
-        # plausible-looking empty result.
-        raise ValueError(f"Unknown tool: {name}")
+        # UN NOMBRE DESCONOCIDO ES `ToolFailure`, IGUAL QUE UNO NO OFRECIDO (2026-08-30).
+        #
+        # Levantaba `ValueError`, y el bucle compartido —como el de `rewoo`— atrapa sólo
+        # `ToolFailure`. O sea que un nombre inventado MATABA la celda en unos paradigmas y
+        # degradaba en otros: exactamente el defecto que ya se había corregido para las
+        # herramientas no ofrecidas, y que quedó vivo un renglón más abajo.
+        #
+        # Y ESTE CAMINO ES ALCANZABLE DESDE EL MODELO. `rewoo` toma el nombre de
+        # `step["tool"]`, que sale de un JSON que escribió el modelo: es texto libre, no un
+        # nombre validado contra las specs. Medido, nunca pasó —cero filas con `error` y
+        # ningún nombre raro en 1.656 filas— pero la diferencia entre «no pasó» y «no puede
+        # pasar» es la que este repo cobra en otro lado.
+        #
+        # Un paradigma que despache un nombre equivocado por código no queda tapado: fallaría
+        # en TODAS sus celdas, y `_audit_plomeria.py` lo levanta como desconexión entre
+        # llamar y lograr.
+        raise ToolFailure(
+            f"{name} no existe. Herramientas del catalogo: "
+            f"{sorted(t['function']['name'] for t in (TOOL_SPECS + ACCOUNTING_TOOL_SPECS + COGNITIVE_TOOL_SPECS + BOARD_TOOL_SPECS))}",
+            kind="desconocida",
+        )
 
     def usage(self) -> dict[str, Any]:
         """What the paradigm actually did with the surface.
@@ -1278,6 +1497,13 @@ class ToolSurface:
             "board_covered": self.board_state.done_count,
             "batched_reads": self.batched_reads,
             "hallucinated_units": self.hallucinated,
+            # LAS SIETE FORMAS DE FALLAR, y no una. `hallucinated_units` es UNA de ellas y
+            # era la unica que dejaba rastro; las otras seis pasaban sin registro, asi que
+            # no habia forma de preguntarle al registro cuantas llamadas erro el modelo ni
+            # de que manera. Se guardan como diccionario y no aplanadas para que agregar un
+            # tipo no cambie el esquema de la fila.
+            "tool_failures": dict(sorted(self.tool_failures.items())),
+            "tool_failures_total": sum(self.tool_failures.values()),
             "relevant_units_read": len(self.units_read & self.view.relevant),
             # La racha final, el pico y el total. El primero es casi siempre 0 y se
             # guarda igual para que no parezca que la definicion cambio; los otros dos son

@@ -435,8 +435,11 @@ def check_rec_solver(ok: bool) -> bool:
 def check_continuation_axis(ok: bool) -> bool:
     """El eje que P15 senalo: continuidad como funcion PURA del material."""
     from app.features import (  # noqa: PLC0415
+        Availability,
+        FEATURE_AVAILABILITY,
         Features,
         REGION_VOCABULARY,
+        REGION_VOCABULARY_PREVIO,
         measure_continuation,
     )
 
@@ -466,13 +469,50 @@ def check_continuation_axis(ok: bool) -> bool:
     f = Features(n_units=20, has_oracle=True, irreversible=False,
                  shared_writes=False, budget_tokens=60_000,
                  coupling=0.2, continuation=True)
-    ok &= check("la region habla el vocabulario nuevo, con 4 segmentos",
-                f.region() == "many/oracle/loose/chain"
-                and REGION_VOCABULARY == "regions/2-continuation")
+    # EL VOCABULARIO CAMBIO (CP-6, 2026-08-30): `regions/2-continuation` ->
+    # `regions/3-literal`, que es el anterior x el eje `literal`. No fue una eleccion de
+    # diseno: con la politica de desempate por costo evaluada leave-one-out sobre 41 tareas
+    # y 7 brazos, el nuevo gana en los DOS ejes contra el que reemplaza — utilidad 0,951
+    # contra 0,928 y 48% de ahorro contra 37%.
+    ok &= check("la region habla el vocabulario nuevo, y CONSERVA los cuatro segmentos "
+                "anteriores como prefijo",
+                f.region() == "many/oracle/loose/chain/?"
+                and f.region_previa() == "many/oracle/loose/chain"
+                and REGION_VOCABULARY == "regions/3-literal")
+    ok &= check("el eje `literal` entra al final, medido sobre el material",
+                Features(n_units=20, has_oracle=True, irreversible=False,
+                         shared_writes=False, budget_tokens=60_000, coupling=0.2,
+                         continuation=True,
+                         literal="lit_present").region().endswith("/lit_present"))
     ok &= check("continuidad sin medir queda visible en la region",
-                Features(n_units=2, has_oracle=False, irreversible=False,
-                         shared_writes=False,
-                         budget_tokens=1000).region().endswith("/c?"))
+                "/c?/" in Features(n_units=2, has_oracle=False, irreversible=False,
+                                   shared_writes=False, budget_tokens=1000).region())
+
+    # EL VOCABULARIO ANTERIOR SE CONSERVA, y no por nostalgia: 5.932 filas del registro lo
+    # llevan estampado y `load_rows` levanta si un archivo mezcla dos. Poder recomputarlo
+    # es lo que permite leer ese registro sin re-correrlo.
+    ok &= check("el vocabulario anterior sigue siendo recomputable — sin eso, 5.932 filas "
+                "pagas quedan irreproducibles",
+                REGION_VOCABULARY_PREVIO == "regions/2-continuation"
+                and f.region_previa() == "many/oracle/loose/chain")
+
+    # LA SONDA SIGUE TENIENDO QUE RESOLVER. El vocabulario que MAS ahorraba —
+    # `cardinalidad x literal`, 69% contra 48% — es puramente COMPUTABLE, y por eso deja al
+    # ciclo de decision de dos pasos sin nada que establecer. Se descarto por eso, y este
+    # chequeo impide que vuelva a entrar sin que alguien lo note.
+    ok &= check("la region conserva un eje DERIVED, o la sonda no tiene que resolver",
+                any(FEATURE_AVAILABILITY.get(n) is Availability.DERIVED
+                    for n in ("coupling", "horizon_unknown"))
+                and f.region() != f.computable_only().region())
+
+    # LOS DOS PREDICTORES NUEVOS SON COMPUTABLE, y eso es medio motivo de haberlos elegido:
+    # sobreviven la proyeccion D2, asi que una regla que los use SI puede disparar en modo
+    # determinista.
+    ok &= check("`literal` y `cardinality` sobreviven la proyeccion determinista",
+                Features(n_units=1, has_oracle=True, irreversible=False,
+                         shared_writes=False, budget_tokens=8000,
+                         cardinality="singular", literal="lit_present")
+                .computable_only().region().endswith("/lit_present"))
     return ok
 
 
@@ -3698,6 +3738,1189 @@ def check_money_is_a_unit_not_a_number(ok: bool) -> bool:
     return ok
 
 
+def check_gaps_that_nobody_can_close(ok: bool) -> bool:
+    """§78: un hueco que nadie puede cerrar no es un hueco — y el literal es una creencia.
+
+    EL OBJETIVO DEL PRODUCTO es decidir con creencias y, si falta una variable, ir a
+    buscarla. Auditado contra el codigo, la superficie de «que puede faltar» tenia DOS
+    elementos y la sonda podia establecer UNO.
+
+    `horizon_unknown` NO ES UN FEATURE, y hay cinco razones independientes:
+
+      1. ninguna regla lo requiere — `rules.py` lo ASIENTA y nadie lo lee
+      2. no entra en el vocabulario de region, ni en el anterior ni en el actual
+      3. la sonda no lo mide: `probe.py` establece `coupling` y nada mas
+      4. es CONSTANTE en el registro: `False` en las **3.884** filas que lo llevan
+      5. y el docstring de `Row` afirmaba que esta en `True` en las 78 tareas — la unica
+         descripcion que existia del eje decia **lo contrario** del registro
+
+    Y NO ES DECORACION INOFENSIVA, que es lo que lo hace importar: un eje `DERIVED` sin
+    establecer **acota la confianza y empuja al router al fallback**. Un eje que nadie puede
+    llenar hace abstenerse al motor para siempre y sin motivo.
+
+        «no lo se, y puedo averiguarlo»  -> sondear, y decidir despues
+        «no lo se, y nadie puede»        -> decidir con lo que hay, o abstenerse por eso
+
+    Son decisiones OPUESTAS y `missing()` las devolvia mezcladas. `FEATURE_SENSOR` las
+    separa: declara quien puede establecer cada eje, y `None` es una respuesta valida.
+
+    Y `literal_absent` ES LA CREENCIA QUE FALTABA (EP-4). `measure_question_literal` ya
+    existia y su valor ya entraba a la region, pero **no estaba en el vocabulario de
+    proposiciones**: ninguna regla podia razonar sobre el. Tener la pieza no es tener el
+    ciclo. Es `COMPUTED` —contencion de una cadena conocida contra el material, sin modelo
+    en el medio— asi que satisface el piso mas alto que cualquier regla puede pedir.
+    """
+    from app.assurance import PROFILES, Assurance
+    from app.beliefs import Provenance
+    from app.features import (DERIVED_FEATURES, FEATURE_SENSOR, Features)
+    from app.rules import sense
+
+    print("\n--- 78. un hueco que nadie puede cerrar no es un hueco ---")
+
+    f = Features(n_units=10, has_oracle=True, irreversible=False, shared_writes=False,
+                 budget_tokens=9000)
+    ok &= check("todo eje DERIVED declara QUIEN lo puede establecer, `None` incluido",
+                set(FEATURE_SENSOR) == set(DERIVED_FEATURES))
+    ok &= check(f"lo que falta y SE PUEDE ir a buscar: {f.fillable_gaps()}",
+                f.fillable_gaps() == ("coupling",))
+    ok &= check(f"lo que falta y NADIE puede cerrar: {f.permanent_gaps()}",
+                f.permanent_gaps() == ("horizon_unknown",))
+    ok &= check("y `missing()` sigue devolviendo los dos — la distincion se agrega, no "
+                "se reemplaza: quien quiera saber que NO esta establecido lo sigue teniendo",
+                set(f.missing()) == {"coupling", "horizon_unknown"})
+    ok &= check("un eje establecido deja de ser hueco por las dos vias",
+                not Features(n_units=1, has_oracle=True, irreversible=False,
+                             shared_writes=False, budget_tokens=1, coupling=0.5,
+                             horizon_unknown=False).missing())
+
+    # `horizon_unknown` ES CONSTANTE EN EL REGISTRO. Se comprueba contra el registro real,
+    # que es de donde salio la razon para no tratarlo como variable.
+    import glob as _glob
+    import json as _json
+    vistos = set()
+    n = 0
+    for ruta in _glob.glob("results/**/*_rows.jsonl", recursive=True):
+        for linea in Path(ruta).read_text(encoding="utf-8").splitlines():
+            if not linea.strip():
+                continue
+            fila = _json.loads(linea)
+            if "phi_horizon_unknown" in fila:
+                vistos.add(fila["phi_horizon_unknown"])
+                n += 1
+    if n:
+        ok &= check(f"y en el registro es CONSTANTE ({vistos} en {n:,} filas): un eje sin "
+                    f"varianza no puede discriminar nada", len(vistos) == 1)
+
+    # ── `literal_absent`: la creencia con sensor ──
+    tarea = {"question": "x", "unit_ids": ["u1"], "budget_tokens": 9000,
+             "has_oracle": True, "oracle": ["x"]}
+    politica = PROFILES[Assurance.STANDARD]
+
+    def creencia(base, nombre):
+        for b in base.as_dict()["beliefs"]:
+            if b["proposition"] == nombre:
+                return b
+        return None
+
+    b = creencia(sense(tarea, politica, literal="lit_absent"), "literal_absent")
+    ok &= check("`literal_absent` se asienta cuando el literal no esta en el alcance",
+                b is not None and b["value"] is True)
+    ok &= check("y es COMPUTED — aritmetica sobre el material, asi que satisface el piso "
+                "mas alto que una regla puede pedir, incluido el de una accion irreversible",
+                b["provenance"] == Provenance.COMPUTED.value and b["credence"] == 1.0)
+    b2 = creencia(sense(tarea, politica, literal="lit_present"), "literal_absent")
+    ok &= check("con el literal presente, la misma creencia se asienta en False",
+                b2 is not None and b2["value"] is False)
+    ok &= check("y sin literal NO se asienta: una creencia sin evidencia no se inventa en "
+                "un valor benigno",
+                creencia(sense(tarea, politica), "literal_absent") is None)
+
+    # LLEGA HASTA `sense` O NO EXISTE. La misma guarda que §59 y §76.
+    import inspect
+    from app.router import Router
+    ok &= check("el router la propaga hasta `sense` — una creencia que el router no pasa "
+                "es una que ninguna regla puede ver",
+                "literal: str | None" in inspect.getsource(Router.plan)
+                and "literal=literal" in inspect.getsource(Router.plan))
+    return ok
+
+
+def check_report_does_not_score_placeholders(ok: bool) -> bool:
+    """§77: un plan que pide sonda es un DIFERIMIENTO, y no se puntua como decision.
+
+    EL DEFECTO, y es el mas grande que encontro esta sesion porque toca el numero que
+    refuto la tesis del producto. `Router.plan()` recibe `coupling` como argumento y el
+    `decide()` de `Runner.report` **no se lo pasaba**: quedaba en `None` con credencia 0,
+    asi que `coupling_unmeasured` era verdadero SIEMPRE, la regla
+    `probe_before_deciding_on_bulk` disparaba, y el plan volvia con `needs_probe`.
+
+    Medido por el camino exacto de `report()`: **23 de 46 tareas — la mitad justa — en los
+    cuatro diales.** Y `report()` devolvia `plan.paradigm` sin sondear; en un plan con
+    `needs_probe` ese paradigma es el PLACEHOLDER, el admisible mas barato elegido para
+    probarse DESPUES de sondear.
+
+        O sea que en la mitad del corpus `report()` no puntuaba una decision: puntuaba un
+        marcador de posicion. Y `report()` es lo que produce `selection_terms`,
+        `router_captured_fraction` y `risk_coverage` — los numeros con los que se refuto
+        P15.
+
+    ES LA CORRECCION QUE QUEDO A MEDIO APLICAR. El docstring de `decide.py` describe este
+    defecto **como cerrado**: «`Runner.report` llamaba a `router.plan` una vez y puntuaba
+    lo que viniera». Se creo `decide_for` con el ciclo de dos pasos y **este llamador nunca
+    migro**. Un modulo que declara una propiedad que su llamador no tiene es peor que uno
+    que no la declara: se lee como garantia.
+
+    Y LA CAUSA NO ERA QUE FALTARA SONDEAR. La campana YA PAGO derivar `coupling` con una
+    llamada al extractor, y el valor esta en la region de cada fila. Tirarlo y despues
+    declarar que falta es **inventarse una carencia**. Recuperarlo cuesta cero:
+
+        EXPLORATORY / STANDARD   23 diferimientos -> 0   la estimacion alcanza
+        ACCOUNTABLE / CERTIFIED  23 diferimientos -> 23  sigue haciendo falta sondear
+
+    Los primeros eran artificiales; los segundos son REALES y correctos — una estimacion
+    elicitada no sostiene una decision certificada. La diferencia entre los dos casos es
+    justamente lo que este chequeo protege.
+    """
+    import collections
+    import inspect
+    import json as _json
+
+    from app.assurance import PROFILES, Assurance
+    from app.beliefs import Provenance
+    from app.policy import PolicyBundle
+    from app.router import Router
+    from app.runner import COST_PRIORS, FALLBACK, Runner, load_rows
+
+    print("\n--- 77. un diferimiento no se puntua como decision ---")
+
+    fuente = inspect.getsource(Runner.report)
+    ok &= check("`report()` le pasa a `router.plan` la creencia que el registro ya tiene",
+                "coupling=coup" in fuente and "coupling_credence=cred" in fuente)
+    ok &= check("y la asienta como ELICITED — es la estimacion de un modelo, no una "
+                "observacion, y en CERTIFIED no puede alcanzar",
+                "coupling_provenance=Provenance.ELICITED" in fuente)
+    ok &= check("los planes que piden sonda se REGISTRAN como diferidos",
+                "needs_probe" in fuente and "diferidas.append" in fuente)
+    ok &= check("y el reporte los publica, o no se podria auditar la decision",
+                '"deferred_for_probe"' in fuente and '"deferred_fraction"' in fuente)
+
+    # CONTRA EL REGISTRO REAL, que es donde el defecto vivia.
+    ruta = Path("results/luna/gold_h1_rows.jsonl")
+    if not ruta.exists():
+        ok &= check("(sin registro para contrastar: se saltea)", True)
+        return ok
+
+    tareas = {t["task_id"]: t for t in _json.loads(
+        Path("corpus/gold_h1/tasks.json").read_text(encoding="utf-8"))}
+    rows, region = collections.defaultdict(dict), {}
+    for f in load_rows(ruta):
+        if not f.get("infeasible"):
+            rows[f["task_id"]][f["paradigm"]] = f
+            region[f["task_id"]] = f.get("region", "")
+
+    router = Router(PolicyBundle.cold_start(fallback=FALLBACK, tau=0.3),
+                    COST_PRIORS, FALLBACK)
+    COUP = {"loose": 0.15, "mixed": 0.5, "tight": 0.85}
+
+    def coup_de(tid):
+        for parte in region[tid].split("/"):
+            if parte in COUP:
+                return COUP[parte], 1.0
+        return None, 0.0
+
+    ok &= check(f"el `coupling` derivado se puede recuperar de la region en las "
+                f"{len(rows)} tareas — la campana ya lo pago",
+                all(coup_de(t)[0] is not None for t in rows))
+
+    def sondas(a, con_creencia):
+        n = 0
+        for tid in rows:
+            c, cr = coup_de(tid) if con_creencia else (None, 0.0)
+            plan = router.plan(task=tareas[tid], candidates=sorted(rows[tid]),
+                               region=region[tid], requested=a, coupling=c,
+                               coupling_provenance=Provenance.ELICITED,
+                               coupling_credence=cr)
+            n += bool(getattr(plan, "needs_probe", False))
+        return n
+
+    sin = sondas(Assurance.STANDARD, False)
+    con = sondas(Assurance.STANDARD, True)
+    ok &= check(f"sin pasar la creencia, HALF el corpus pedia sonda ({sin} de {len(rows)}) "
+                f"— y se puntuaba el placeholder", sin >= len(rows) // 2)
+    ok &= check(f"pasandola, en STANDARD no queda ninguno ({con}): el diferimiento era "
+                f"ARTIFICIAL, la evidencia estaba y se tiraba", con == 0)
+
+    # Y EL DIFERIMIENTO REAL SOBREVIVE. Si esto diera 0 tambien, el arreglo habria
+    # aflojado el gate en vez de dejar de tirar evidencia — que es el error opuesto y peor.
+    cert = sondas(Assurance.CERTIFIED, True)
+    ok &= check(f"pero en CERTIFIED sigue pidiendo sonda ({cert}): una estimacion "
+                f"ELICITED no sostiene una decision con piso OBSERVED",
+                cert > 0
+                and PROFILES[Assurance.CERTIFIED].derived_floor is Provenance.OBSERVED)
+    return ok
+
+
+def check_new_predictors_reach_the_decision(ok: bool) -> bool:
+    """§76: los dos predictores medidos LLEGAN a la región, y el literal no es un léxico.
+
+    LA GUARDA QUE ESTE REPO YA PAGÓ TRES VECES EN UN DÍA: un eje que no llega **no falla,
+    corre y mide su ausencia**, y el resultado se lee igual que un efecto nulo medido. §59
+    lo impide para las herramientas; esto lo impide para las features. Y acá el camino es
+    largo —`payload_for` → extractor → `features_for` → `region()`— con tres sitios donde
+    un campo se puede caer sin que nada se ponga rojo.
+
+    DE DÓNDE SALEN (`CP-6`). Se midieron con la política de desempate por costo evaluada
+    leave-one-out sobre 41 tareas × 7 brazos: `región × literal` da **+0,021 de utilidad y
+    47% de ahorro** contra el mejor fijo, donde el vocabulario anterior daba `−0,002` y 37%.
+
+    Y LA DISTINCIÓN QUE HAY QUE CUSTODIAR. Este módulo prohíbe los disparadores léxicos en
+    su primera línea, porque inferir el TIPO de tarea del fraseo es lo que hizo perder a los
+    routers en prosa. `literal` **no** hace eso:
+
+        prohibido   «la pregunta dice *how many*»  ->  «es un conteo»
+        esto        «la pregunta cita 'director'»  ->  «'director' está en el material»
+
+    El valor no lo decide el fraseo: lo decide el corpus. Es la misma clase epistémica que
+    `measure_continuation` — contención de una cadena conocida, sin modelo en el medio.
+    """
+    from app.features import (Availability, FEATURE_AVAILABILITY, Features,
+                              REGION_VOCABULARY, measure_question_literal, payload_for)
+
+    print("\n--- 76. los predictores nuevos llegan a la decision ---")
+
+    docs = {"u1": "Marta Arrieta is director. Account AR9263415718.",
+            "u2": "Tomas Peralta, city Rosario."}
+    ids = ["u1", "u2"]
+
+    ok &= check("un literal citado que ESTA en el material",
+                measure_question_literal("role is 'director'", docs, ids) == "lit_present")
+    ok &= check("uno que NO esta — y es el caso que decide, porque es el barato",
+                measure_question_literal("role is 'trustee'", docs, ids) == "lit_absent")
+    ok &= check("un identificador de cuenta cuenta como literal",
+                measure_question_literal("account AR9263415718?", docs, ids)
+                == "lit_present")
+    ok &= check("sin literal citado se dice `no_lit`, que no es lo mismo que ausente",
+                measure_question_literal("Name the individual.", docs, ids) == "no_lit")
+    ok &= check("y sin material, `None`: ausencia de MEDICION, nunca un negativo",
+                measure_question_literal("role is 'x'", {}, ["zz"]) is None)
+
+    # UNA PREGUNTA BOOLEANA CITA SUS OPCIONES, NO UN TERMINO DE BUSQUEDA. Es un defecto que
+    # esta funcion tuvo desde que se escribio y lo destapo MEDIR la regla que habilita
+    # (`EP-5`), no leerla: `C7` pregunta «Answer 'escalate' or 'no escalation'» y esos
+    # literales no estan en el material POR CONSTRUCCION, asi que devolvia `lit_absent` en
+    # las 8 tareas booleanas del panel — afirmando algo sobre el MATERIAL a partir del
+    # FORMATO de la pregunta. Como detector de ausencia daba precision 50% y recall 50%, y
+    # sus 8 aciertos aparentes eran booleanas, ni una de `B2_absence`.
+    #
+    # La guarda usa lo que el CALLER DECLARA (`answer_cardinality`), no el fraseo:
+    # distinguirlas mirando como esta redactada la pregunta seria el disparador lexico que
+    # este modulo prohibe en su primera linea.
+    q_bool = "Decide whether to escalate. Answer 'escalate' or 'no escalation'."
+    ok &= check("una pregunta BOOLEANA cita sus opciones: no se lee como termino ausente",
+                measure_question_literal(q_bool, docs, ids, cardinality="boolean")
+                == "no_lit")
+    ok &= check("y sin declarar la cardinalidad reaparece el defecto — la guarda depende "
+                "de que el caller declare, que es como se reciben `irreversible` y "
+                "`shared_writes`",
+                measure_question_literal(q_bool, docs, ids) == "lit_absent")
+    ok &= check("una enumerativa con un termino real sigue midiendo el MATERIAL",
+                measure_question_literal("role is 'director'", docs, ids,
+                                         cardinality="enumerative") == "lit_present")
+
+    # NO ES UN DISPARADOR LEXICO. La prueba: la MISMA pregunta da valores distintos segun
+    # el material. Un disparador lexico daria siempre lo mismo, porque solo mira el texto.
+    q = "list every individual whose role is 'trustee'"
+    ok &= check("la MISMA pregunta cambia de valor si cambia el material — un disparador "
+                "lexico no podria, porque no mira el corpus",
+                measure_question_literal(q, docs, ids) == "lit_absent"
+                and measure_question_literal(q, {"u1": "Ana is trustee"}, ["u1"])
+                == "lit_present")
+
+    # LOS DOS SON COMPUTABLE, y eso es medio motivo de haberlos elegido: sobreviven la
+    # proyeccion D2, asi que una regla que los use SI puede disparar en modo determinista.
+    for eje in ("literal", "cardinality", "continuation"):
+        ok &= check(f"`{eje}` esta clasificado y es COMPUTABLE",
+                    FEATURE_AVAILABILITY.get(eje) is Availability.COMPUTABLE)
+
+    # EL CAMINO COMPLETO, que es lo que §59 enseño a probar: del payload a la region.
+    tarea = {"question": "role is 'director'", "unit_ids": ids, "oracle": ["x"],
+             "has_oracle": True, "budget_tokens": 9000,
+             "answer_cardinality": "enumerative"}
+    ok &= check("`payload_for` lleva la cardinalidad DECLARADA por el caller",
+                payload_for(tarea)["answer_cardinality"] == "enumerative")
+
+    import inspect
+    from app.runner import Runner
+    fuente = inspect.getsource(Runner.features_for)
+    ok &= check("`features_for` mide los TRES ejes del material en un solo lugar — "
+                "olvidar uno no falla, corre y mide su ausencia",
+                all(x in fuente for x in ("measure_continuation(",
+                                          "measure_question_literal(",
+                                          "answer_cardinality")))
+
+    f = Features(n_units=2, has_oracle=True, irreversible=False, shared_writes=False,
+                 budget_tokens=9000, coupling=0.2, continuation=True,
+                 cardinality="enumerative", literal="lit_present")
+    ok &= check(f"y la region los lleva puestos ({f.region()})",
+                f.region().endswith("/lit_present")
+                and REGION_VOCABULARY == "regions/3-literal")
+    return ok
+
+
+def check_grading_scores_the_answer_not_its_wording(ok: bool) -> bool:
+    """§75: se puntua LA RESPUESTA, no su redaccion ni su formato.
+
+    DOS DEFECTOS QUE HACIAN QUE **9 DE 78** TAREAS DIERAN CERO SOBRE TODO EL PLANTEL. Salio
+    de derivar el camino a mano: que DOCE topologias fallen las mismas nueve preguntas es
+    mas consistente con un grader roto que con doce fracasos, y lo era.
+
+    1. `D1_presupposition` — LA PREMISA ES FALSA Y EL ORACULO ERA UNA REDACCION. El oraculo
+       es `'no transfer is recorded'`. Medido sobre `d1-000-w4`, los NUEVE brazos
+       contestaron correctamente y los nueve sacaron **0,00**:
+
+           "Not stated in the source documents"   "Not specified"
+           "The date cannot be determined..."     "Cannot be determined from the evidence"
+
+       Hay infinitas formas correctas de rechazar una premisa, y se estaba puntuando la
+       eleccion de palabras con igualdad de cadenas.
+
+    2. `C9_declared_roster` — LA PREGUNTA PIDE EL EMPAREJAMIENTO Y EL GRADER LO PROHIBIA.
+       Pregunta *«para cada uno de estos individuos, reporta la cuenta»*, el oraculo son las
+       cuatro cuentas sueltas, y las respuestas traian **las cuatro correctas** emparejadas
+       con su nombre. La interseccion de conjuntos no cruza `ar9263415718` con
+       `marta arrieta ar9263415718`, asi que las cinco tareas medidas daban 0,00.
+
+    POR QUE IMPORTA MAS DE LO QUE PARECE. Deprime a todos los brazos por igual, asi que el
+    RANKING comparativo sobrevive — pero saca 9 tareas del conjunto que discrimina, y sobre
+    ese conjunto se calculan la brecha de oraculo y el piso de ruido. Un cero que no es del
+    sistema medido contamina las dos.
+
+    Y LAS DOS CORRECCIONES SE AUTO-LIMITAN, que es lo que impide que esto sea aflojar:
+    el credito por rechazo se lee **del oraculo** —solo si el oraculo mismo es un rechazo—
+    asi que una tarea con oraculo de VALOR no lo puede recibir; y el emparejamiento exige
+    frontera de palabra y asignacion uno a uno.
+    """
+    from app.grading import score
+    from app.verify import is_refusal
+
+    print("\n--- 75. se puntua la respuesta, no su redaccion ---")
+
+    # ── D1: un rechazo es un VEREDICTO, no una cadena ──
+    ora = ["no transfer is recorded"]
+    for texto, esperado in (
+        ("Not stated in the source documents", 1.0),
+        ("The date cannot be determined from the provided text.", 1.0),
+        ("Not specified", 1.0),
+        ("Marta Arrieta is custodian, account AR9263415718, but no transfer date "
+         "is provided", 1.0),
+    ):
+        ok &= check(f"un rechazo correcto puntua 1,0 — {texto[:44]!r}",
+                    score(texto, ora) == esperado)
+
+    ok &= check("y entregar la fecha que la premisa falsa pedia puntua 0",
+                score("The transfer occurred on 2024-03-12", ora) == 0.0)
+    ok &= check("un rechazo que IGUAL entrega la fecha no es un rechazo: es una premisa "
+                "ratificada con un descargo adelante",
+                score("no transfer date on file, but it was March 2024", ora) == 0.0
+                and score("not recorded; see 12/03/2024", ora) == 0.0)
+    ok &= check("el silencio no es un rechazo — un brazo que se cayo no puede puntuar "
+                "igual que uno que miro y reporto",
+                score("", ora) == 0.0 and not is_refusal(""))
+
+    # LA GUARDA QUE IMPIDE QUE ESTO SEA AFLOJAR. La condicion se lee del ORACULO: si el
+    # oraculo es un valor, «no se» sigue valiendo cero. Sin esto, un permiso pasado desde
+    # afuera podria caerle a una tarea de valor y convertir la evasion en la respuesta.
+    ok &= check("con un oraculo de VALOR, una evasiva sigue puntuando 0",
+                score("not stated", ["AR9263415718"]) == 0.0
+                and score("cannot be determined", ["Rosario"]) == 0.0)
+
+    # ── C9: emparejar clave y valor no es equivocarse ──
+    ora9 = ["AR5597141797", "AR6534161716", "AR7602773472", "AR9263415718"]
+    emparejada = ("Marta Arrieta - AR9263415718; Ignacio Ybarra - AR6534161716; "
+                  "Lucia Vallejos - AR5597141797; Tomas Peralta - AR7602773472")
+    ok &= check("la respuesta que empareja nombre y cuenta puntua 1,0 — es lo que la "
+                "pregunta pide",
+                score(emparejada, ora9) == 1.0)
+    ok &= check("y la que da las cuatro sueltas tambien, o el formato decidiria",
+                score("AR9263415718; AR6534161716; AR5597141797; AR7602773472", ora9)
+                == 1.0)
+    ok &= check("faltar una baja el puntaje, no lo anula",
+                0.0 < score("Marta - AR9263415718; Ignacio - AR6534161716; "
+                            "Lucia - AR5597141797", ora9) < 1.0)
+    ok &= check("y contestar `unavailable` en las cuatro sigue siendo cero",
+                score("Marta - unavailable; Ignacio - unavailable; Lucia - unavailable; "
+                      "Tomas - unavailable", ora9) == 0.0)
+
+    # LAS DOS GUARDAS DEL EMPAREJAMIENTO.
+    ok &= check("la contencion cae en FRONTERA de palabra — `AR1234` no acierta adentro "
+                "de `AR12345`, la misma trampa que «4» contra «42»",
+                score("AR12345; AR99999", ["AR1234", "AR9999"]) == 0.0)
+    ok &= check("y es UNO A UNO: un solo item predicho no puede cosechar dos aciertos",
+                score("AR1111 AR2222", ["AR1111", "AR2222"]) < 1.0)
+
+    # NO SE AFLOJO NADA MAS. Los casos que ya andaban tienen que seguir igual.
+    ok &= check("un oraculo vacio sigue exigiendo decir que no hay",
+                score("none", []) == 1.0 and score("Marta Arrieta", []) == 0.0
+                and score("", []) == 0.0)
+    ok &= check("y un oraculo singleton de valor sigue con su credito por substring",
+                score("account AR9263415718", ["AR9263415718"]) == 1.0
+                and score("4", ["42"]) == 0.0)
+    return ok
+
+
+def check_absence_has_a_second_proof(ok: bool) -> bool:
+    """§74: una ausencia se puede probar sin leer nada, y el contrato viejo era VACIO.
+
+    EL HALLAZGO, que salio de derivar a mano el camino de las 78 preguntas. `C-ABSENCE`
+    exigia el DOMINIO ENTERO para admitir un enunciado de ausencia, y la regla es correcta:
+    cualquier unidad sin leer puede contener justo lo que se niega. Pero tenia **una sola
+    forma** de conseguirlo —leerlo— y para una ausencia de TERMINO hay otra que cuesta cero
+    tokens y es igual de concluyente: si la cadena no aparece en ninguna unidad del
+    alcance, no aparece.
+
+    Y ESO IMPORTABA MAS DE LO QUE PARECIA. Medido sobre las nueve tareas de `B2_absence`:
+
+        material   40.234 · 160.982 · 482.961 tokens   segun el ancho
+        presupuesto                        40.000      en las nueve
+
+    **En 9 de 9 la ruta exhaustiva NO ENTRA en el presupuesto de la tarea.** O sea que el
+    contrato no era estricto: era **insatisfacible**. Ninguna respuesta correcta —y la
+    correcta es siempre «ninguno», porque las nueve tienen cero unidades relevantes— podia
+    ser admitida jamas, y no por estar mal sino porque la unica prueba aceptada costaba mas
+    que la tarea.
+
+    NUNCA SE DISPARO porque `demand_obligations` esta apagado por defecto. Pero el factor
+    existe justamente para medir `C-ABSENCE`, asi que la primera corrida con el encendido
+    habria dado **cero ausencias admitidas** y se habria leido como «el modelo no puede
+    establecer ausencia» cuando era «el contrato no se puede satisfacer». Es la cuarta vez
+    que aparece la forma de la leccion 8.16 —un cero de exposicion disfrazado de conducta—
+    y la primera que se agarra ANTES de correr.
+
+    LA PRUEBA NUEVA NO AFLOJA LA CARGA. `term_absence` recorre TODAS las unidades del
+    alcance, no una muestra: es el mismo dominio entero, conseguido por aritmetica en vez
+    de por lectura. Y mantiene el limite dicho: prueba que el TERMINO no esta, no que la
+    COSA no este si el material la nombraria de otra forma — de ahi las dos guardas, largo
+    minimo y cantidad maxima de palabras.
+    """
+    from app.beliefs import BeliefBase
+    from app.contracts import (MAX_TERM_WORDS, MIN_TERM_CHARS, absence,
+                               declared_negated_term, term_absence,
+                               verify_obligations)
+
+    print("\n--- 74. la ausencia tiene una segunda prueba, y cuesta cero ---")
+
+    docs = {"u1": "Marta Arrieta is director.", "u2": "Tomas Peralta, signatory."}
+    ids = ["u1", "u2"]
+
+    pr = term_absence("trustee", docs, ids)
+    ok &= check("una cadena que no esta en NINGUNA unidad prueba su ausencia",
+                pr.proves_absence and pr.occurrences == 0 and pr.units_scanned == 2)
+    ok &= check("y una que SI esta no prueba nada — el material la desmiente",
+                not term_absence("director", docs, ids).proves_absence)
+
+    # LAS TRES FORMAS DE NO PODER PROBAR, todas cerradas.
+    ok &= check(f"un termino de menos de {MIN_TERM_CHARS} caracteres no prueba: una cadena "
+                "tan corta aparece en cualquier lado",
+                not term_absence("ab", docs, ids).proves_absence)
+    ok &= check(f"ni una parafrasis de mas de {MAX_TERM_WORDS} palabras — su ausencia "
+                "prueba que la PARAFRASIS falta, que no es lo que se afirma",
+                not term_absence("una clausula de rescision anticipada unilateral",
+                                 docs, ids).proves_absence)
+    ok &= check("ni nada sobre un alcance vacio: cero de cero no es exhaustivo",
+                not term_absence("trustee", docs, []).proves_absence)
+
+    # LAS TRES RUTAS AL MISMO VEREDICTO, y se distinguen en el registro.
+    ok &= check("presencia: un testigo alcanza",
+                absence("present", 0, 2).via == "testigo")
+    ok &= check("ausencia leyendo el dominio entero: la ruta de siempre",
+                absence("absent", 2, 2).via == "dominio_leido")
+    ok &= check("ausencia por termino ausente: el dominio cubierto sin leer una unidad",
+                absence("absent", 0, 2, term_absence("trustee", docs, ids)).via
+                == "termino_ausente")
+    ok &= check("y sin ninguna de las tres se REHUSA, como toda esta familia",
+                not absence("absent", 1, 2).emitted)
+
+    # LA VIA QUEDA EN EL REGISTRO. Dos rutas a la misma conclusion no se colapsan en un
+    # booleano: auditar una autorizacion exige saber si detras hay lectura o aritmetica.
+    v = absence("absent", 0, 2, term_absence("trustee", docs, ids)).as_dict()
+    ok &= check("el veredicto dice POR QUE VIA se autorizo, y guarda la prueba",
+                v["via"] == "termino_ausente" and v["proof"]["occurrences"] == 0)
+
+    # EL CAMINO ENTERO: el agente declara, el codigo verifica.
+    tarea = {"task_id": "t", "unit_ids": ids, "obligations": ["absence"]}
+    for etiqueta, texto, esperado in (
+        ("declara y la prueba sale", "POLARITY: absent\nNEGATES: trustee\nANSWER: none",
+         True),
+        ("declara algo que SI esta", "POLARITY: absent\nNEGATES: director\nANSWER: none",
+         False),
+        ("no declara termino", "POLARITY: absent\nANSWER: none", False),
+    ):
+        r = verify_obligations(tarea, texto, docs, 0, BeliefBase())["absence"]
+        ok &= check(f"camino completo — {etiqueta}: emitida={r['emitted']}",
+                    r["emitted"] is esperado)
+
+    ok &= check("el termino se lee de una linea TIPADA, no de la prosa",
+                declared_negated_term("POLARITY: absent\nNEGATES: trustee\nANSWER: none")
+                == "trustee"
+                and declared_negated_term("no hay ningun trustee") is None)
+
+    # Y EL CONTRATO SE LO DICE AL MODELO, o la linea no la escribe nadie. Es la misma
+    # guarda que §59 impone para las tools: un campo que no llega al prompt no existe.
+    from app.contracts import OBLIGATIONS_CONTRACT
+    ok &= check("y el contrato que ve el modelo declara la linea `NEGATES`",
+                "NEGATES:" in OBLIGATIONS_CONTRACT)
+
+    # EL CONTRATO VIEJO ERA INSATISFACIBLE EN EL CORPUS ENTERO. Se comprueba contra el
+    # corpus real, que es donde la regla se aplica.
+    import json as _json
+    ruta = Path("corpus/gold_h1/tasks.json")
+    if ruta.exists():
+        documentos = _json.loads(
+            Path("corpus/gold_h1/documents.json").read_text(encoding="utf-8"))
+        tareas = [t for t in _json.loads(ruta.read_text(encoding="utf-8"))
+                  if t["cell"] == "B2_absence"]
+        no_entra = sum(
+            1 for t in tareas
+            if sum(len(documentos[u]) for u in t["unit_ids"]) // 4 > t["budget_tokens"])
+        ok &= check(f"y en el corpus la ruta exhaustiva no entra en el presupuesto en "
+                    f"{no_entra} de {len(tareas)} tareas de ausencia — el contrato viejo "
+                    f"no era estricto, era VACIO", no_entra == len(tareas))
+    return ok
+
+
+def check_effort_balance_is_reachable(ok: bool) -> bool:
+    """§73: el balance de esfuerzo se puede ENCENDER, y apagado no cambia nada.
+
+    EL DEFECTO QUE CIERRA, y es el mas grande de los encontrados desafiando las guardas:
+    `guards.ventana_sub_agente()` y `guards.presupuesto_de_esfuerzo()` estaban escritas,
+    documentadas, y **no las llamaba nadie**. `test_science.py` §67 las ejercitaba
+    directamente —asi que pasaba— pero el runner nunca las tocaba y el factor del que
+    cuelgan, `effort_balanced`, no existia en ningun archivo del repo.
+
+    O sea: no habia forma de encenderlas. Y `PENDIENTES.es.md` lo tenia anotado como «lo
+    que queda para medir es la corrida», que da por hecho que se puede correr.
+
+        Es la forma exacta que este repo ya nombra como su falla recurrente —un factor que
+        no llega no falla, **corre y mide su ausencia**— cometida esta vez sobre la guarda
+        en vez de sobre la tool. §59 prueba que un factor llega a la DECLARACION DE TOOLS;
+        este prueba que llega al FLUJO DE CONTROL, que es el otro camino y no tenia guarda.
+
+    LAS DOS MITADES QUE EXIGE:
+
+      que ENCENDIDO cambie algo   la ventana escala con el alcance; hay tope en tokens
+      que APAGADO no cambie NADA  el registro ya pagado tiene que seguir siendo comparable,
+                                  y eso solo vale si el default es identico al de antes
+    """
+    import inspect
+
+    from app import guards as G
+    from app.retrieval import CorpusView
+    from app.runner import Runner
+    from app.tools import ToolSurface
+
+    print("\n--- 73. el balance de esfuerzo se puede encender ---")
+
+    ok &= check("el runner acepta el factor, o no hay forma de correrlo",
+                "effort_balanced" in inspect.signature(Runner.__init__).parameters)
+
+    runner_src = Path("app/runner.py").read_text(encoding="utf-8")
+    ok &= check("y lo pasa a la superficie — un factor que el runner acepta y no propaga "
+                "corre entero midiendo su ausencia",
+                "effort_balanced=self.effort_balanced" in runner_src)
+    ok &= check("y separa el archivo, como todo factor que cambia comportamiento: "
+                "promediar dos condiciones en un `.jsonl` mide dos experimentos",
+                '"_balanced"' in runner_src)
+
+    v = CorpusView(task_id="t", documents={"u0": "x"}, unit_ids=["u0"],
+                   relevant_units=[])
+
+    def superficie(balanceado: bool) -> ToolSurface:
+        return ToolSurface(view=v, hybrid=None, semantic=None, lexical=None,
+                           variant="basic", budget_tokens=40_000,
+                           effort_balanced=balanceado)
+
+    ok &= check("el sub-agente lo HEREDA — `supervisor` corre todo adentro de `scoped()`, "
+                "asi que un factor que no cruza esa frontera no existe donde importa",
+                superficie(True).scoped(["u0"]).effort_balanced)
+
+    # QUIEN LO CONSUME. Las dos funciones tienen que estar llamadas desde el codigo que
+    # corre, no solo desde este archivo: un test que las invoca directamente prueba la
+    # aritmetica y no el cableado, que es justo lo que fallaba.
+    sup = Path("app/paradigms/supervisor.py").read_text(encoding="utf-8")
+    bucle = Path("app/paradigms/__init__.py").read_text(encoding="utf-8")
+    ok &= check("`supervisor` saca su ventana de `guards`, no de la constante fija",
+                "guards.ventana_sub_agente(" in sup
+                and "rank(surface.view, sub, SUB_SCOPE_UNITS)" not in sup)
+    ok &= check("el bucle compartido consulta el tope de esfuerzo",
+                "guards.presupuesto_de_esfuerzo(" in bucle)
+    ok &= check("y corta ANTES de llamar — la ultima vuelta de un bucle largo es la mas "
+                "cara, porque arrastra la conversacion entera",
+                "usage.total_tokens >= tope_tokens" in bucle)
+
+    # APAGADO NO CAMBIA NADA. Es la mitad que protege el registro ya pagado.
+    ok &= check("apagado, la ventana es la historica",
+                G.ventana_sub_agente(60, False) == G.SUPERVISOR_SCOPE_UNITS
+                == G.ventana_sub_agente(3, False))
+    ok &= check("apagado, no hay tope y se dice con `None` — un numero grande se leeria "
+                "como una decision y es lo contrario, es la ausencia de una",
+                G.presupuesto_de_esfuerzo(40_000, False) is None)
+    ok &= check("y el default de la superficie es apagado",
+                not superficie(False).effort_balanced
+                and not ToolSurface(view=v, hybrid=None, semantic=None, lexical=None,
+                                    variant="basic",
+                                    budget_tokens=1).effort_balanced)
+
+    # ENCENDIDO CAMBIA ALGO, o seria un factor decorativo.
+    ok &= check(f"encendido, la ventana escala: 60 unidades -> "
+                f"{G.ventana_sub_agente(60, True)}, 5 -> {G.ventana_sub_agente(5, True)}",
+                G.ventana_sub_agente(60, True) > G.ventana_sub_agente(5, True))
+    ok &= check("y nunca deja de aislar sobre un alcance grande",
+                G.ventana_sub_agente(60, True) < 60)
+    return ok
+
+
+def check_measuring_is_not_reading(ok: bool) -> bool:
+    """§71: medir el largo de una unidad no es haberla leido, y una falla se cuenta por tipo.
+
+    CINCO SITIOS LLAMABAN A `read_one` PARA QUEDARSE CON `len(...)`. Y `read_one` deja
+    rastro —suma a `served_chars`, mete la unidad en `units_read_structural`— asi que
+    estimar el costo de algo lo cobraba como lectura. Ninguno cambiaba lo que el modelo ve,
+    y por eso era invisible: la topologia estaba bien y la medida estaba mal.
+
+    LO QUE ESO INVERTIA, medido sobre las filas que tienen el contador:
+
+      · `pointer_chase` daba `units_read_structural == n_units` en **170 de 170 celdas**,
+        el alcance ENTERO, porque promediaba el largo de todas las unidades antes del
+        primer salto. Es el brazo que se define por seguir UN puntero desde UN ancla, y la
+        unica metrica que mostraria si lo hace decia que abria el corpus completo. El
+        veredicto de P14a sobrevive porque se calculo sobre `units_read` —las lecturas del
+        MODELO— pero `relevant_units_read_any` decia lo contrario
+      · `streaming_scan` cobraba el corpus DOS veces. Su docstring dice que cada token
+        entra al modelo exactamente una vez y que es el unico brazo del catalogo con esa
+        garantia; la garantia se cumplia y la contabilidad la desmentia
+      · `gist_reader` cobraba cada unidad seleccionada TRES veces: gist, estimacion, lectura
+
+    Y LAS SIETE FORMAS DE FALLAR, CONTADAS. La superficie contaba UNA —el id inexistente—
+    y era ciega a las otras seis: no se le podia preguntar al registro con que frecuencia
+    el modelo erraba una llamada ni de que manera.
+
+    MAS EL DEFECTO QUE ESO DESTAPO, que es el mismo que ya tuvo `barren`: `hallucinated`
+    era un `int`, y `scoped()` comparte por referencia pero `replace` copia los enteros por
+    valor. Medido: `handoff` (773 llamadas) y `supervisor` (1.583) daban **CERO** ids
+    alucinados, contra 5 de `react` y 9 de `dag_strategy`. `dag_strategy` tambien
+    descompone y si contaba, porque le pasa al sub-agente la superficie del padre — ese
+    contraste es la prueba de que el cero era la copia por valor y no la conducta.
+    """
+    import re
+
+    from app.paradigms import PISTA_POR_TIPO
+    from app.retrieval import CorpusView
+    from app.tools import CHARS_PER_TOKEN, ToolFailure, ToolSurface
+
+    print("\n--- 71. medir no es leer, y una falla se cuenta por tipo ---")
+
+    docs = {f"u{i}": "x" * 400 for i in range(5)}
+
+    def superficie() -> ToolSurface:
+        v = CorpusView(task_id="t", documents=docs, unit_ids=list(docs),
+                       relevant_units=["u0"])
+        return ToolSurface(view=v, hybrid=None, semantic=None, lexical=None,
+                           variant="basic", budget_tokens=50_000)
+
+    s = superficie()
+    largo = s.unit_chars("u0")
+    ok &= check("`unit_chars` da el largo y NO deja rastro de lectura",
+                largo == 400 and not s.units_read_structural and s.served_chars == 0)
+    ok &= check(f"`unit_tokens` usa `CHARS_PER_TOKEN` ({CHARS_PER_TOKEN}), la misma "
+                "aritmetica con que la factibilidad PODA — no un `// 4` suelto",
+                s.unit_tokens("u0") == largo // CHARS_PER_TOKEN)
+
+    # NINGUN SITIO PUEDE VOLVER A USAR `read_one` COMO REGLA. Se mira el codigo: un
+    # `len(...read_one...)` es la forma exacta del defecto, y volveria a ser invisible.
+    fuente = Path("app/paradigms/modern.py").read_text(encoding="utf-8")
+    ok &= check("ningun paradigma mide un largo con `len(read_one(...))`",
+                not re.search(r"len\(\s*surface\.read_one", fuente))
+    # Se mira el CODIGO y no la prosa: el unico `// 4` que queda es el del comentario que
+    # explica por que ya no se usa, y un chequeo que no distingue las dos cosas obliga a
+    # borrar la explicacion para que pase.
+    codigo = [l.split("#")[0] for l in fuente.splitlines()]
+    ok &= check("ni estima tokens con un `// 4` escrito a mano",
+                not any("// 4" in l for l in codigo))
+
+    # LAS SIETE FORMAS, CONTADAS POR TIPO Y NO SOLO UNA.
+    s = superficie()
+    for nombre, args in (("read", {"unit_ids": "no-existe,tampoco"}),
+                         ("read", {}),
+                         ("inventada", {}),
+                         ("coverage", {})):
+        try:
+            s.dispatch(nombre, args)
+        except ToolFailure:
+            pass
+    ok &= check(f"cada forma de fallar se cuenta por separado ({dict(s.tool_failures)})",
+                s.tool_failures == {"id_inexistente": 1, "argumento": 1,
+                                    "desconocida": 1, "no_ofrecida": 1})
+    ok &= check("y los IDS inventados se cuentan aparte de las LLAMADAS que fallaron — "
+                "una sola llamada puede inventar varios",
+                s.hallucinated == 2 and s.tool_failures["id_inexistente"] == 1)
+    ok &= check("la fila los lleva, o no existen",
+                s.usage()["tool_failures_total"] == 4)
+
+    # SE CUENTA EN EL CUELLO. Un contador que hay que acordarse de tocar en cada `raise`
+    # deja de ser cierto en la primera prisa.
+    tools_src = Path("app/tools.py").read_text(encoding="utf-8")
+    ok &= check("el conteo vive en `dispatch` y no repartido por los `raise`",
+                "def _dispatch(self" in tools_src
+                and tools_src.count("self.tool_failures[tipo]") == 1)
+
+    # LO QUE ERRA UN SUB-AGENTE ES DE LA TAREA. Mismo defecto que `barren`, otro contador.
+    s = superficie()
+    sub = s.scoped(["u0", "u1"])
+    ok &= check("`scoped` comparte el objeto de fallas, no una copia",
+                sub.fallas is s.fallas)
+    try:
+        sub.dispatch("read", {"unit_ids": "fantasma"})
+    except ToolFailure:
+        pass
+    ok &= check("y lo que erra el sub-agente LLEGA al padre — `handoff` y `supervisor` "
+                "daban 0 en 2.356 llamadas por la copia por valor",
+                s.hallucinated == 1 and s.tool_failures.get("id_inexistente") == 1)
+
+    # LA PISTA SALE DEL TIPO. Una sola pista fija para las siete apunta al arreglo
+    # equivocado en seis, y una pista equivocada es peor que ninguna porque se sigue.
+    ok &= check("hay una pista distinta por forma de fallar",
+                len(set(PISTA_POR_TIPO.values())) == len(PISTA_POR_TIPO) >= 6)
+    ok &= check("la del batch habla de PARTIR la llamada, no de ids",
+                "Split" in PISTA_POR_TIPO["batch"])
+    bucle = Path("app/paradigms/__init__.py").read_text(encoding="utf-8")
+    ok &= check("y el bucle compartido la busca por tipo en vez de pegar una fija",
+                "PISTA_POR_TIPO.get(" in bucle
+                and '"hint": "Use only unit ids returned by a search."' not in bucle)
+    return ok
+
+
+def check_every_arm_has_a_named_ceiling(ok: bool) -> bool:
+    """§72: los doce brazos tienen techo nombrado, incluidos los que NO tienen techo fijo.
+
+    `guards.py` dice en su primera linea que tiene «todos los limites de todos los
+    patrones», y no era cierto: los cuatro brazos clasicos llevaban los suyos escritos a
+    mano adentro de `paradigms/__init__.py` —un `20`, un `10`, un `8`, un `4`— y ninguno
+    aparecia en el modulo ni en `TECHO_LLAMADAS`.
+
+    Y NO ERAN LOS CHICOS. `reflection` es el brazo mas caro del catalogo (118.911 tokens
+    por celda) y sus dos topes eran los que nadie habia nombrado; `react` es el FALLBACK,
+    o sea contra el que se mide la brecha de oraculo de todo el banco, y su `20` era un
+    literal en medio de una llamada. Que el limite del patron mas caro y el del patron de
+    referencia fueran los dos invisibles no es casualidad: son los que nadie movio nunca.
+
+    Y LOS QUE NO TIENEN TECHO FIJO SE DECLARAN, no se omiten. `map_reduce` hace una llamada
+    por unidad: su techo **es el alcance**, de 1 a 60 sobre el corpus. Un patron ausente de
+    la tabla se lee como un olvido, y un olvido invita a inventarle un numero.
+    """
+    from app import guards as G
+    from app.paradigms import REGISTRY
+
+    print("\n--- 72. todos los brazos tienen su techo nombrado ---")
+
+    cubiertos = set(G.TECHO_LLAMADAS) | set(G.SIN_TECHO_FIJO)
+    faltan = set(REGISTRY) - cubiertos
+    ok &= check(f"los {len(REGISTRY)} del REGISTRY estan cubiertos "
+                f"(faltan: {sorted(faltan) or 'ninguno'})", not faltan)
+    ok &= check("ninguno esta en las dos tablas — o tiene techo fijo o no lo tiene",
+                not (set(G.TECHO_LLAMADAS) & set(G.SIN_TECHO_FIJO)))
+    ok &= check("el del brazo mas caro esta nombrado: borrador + critica + revision",
+                G.TECHO_LLAMADAS["reflection"]
+                == G.REFLECTION_DRAFT_ITERATIONS + 1 + G.REFLECTION_REVISE_ITERATIONS)
+    ok &= check("y el del FALLBACK tambien, que es contra el que se mide todo",
+                G.TECHO_LLAMADAS["react"] == G.REACT_ITERATIONS)
+
+    # NINGUN LIMITE SUELTO EN EL ARCHIVO DEL PATRON. Es la unica forma de que la
+    # centralizacion siga siendo cierta: si se puede escribir un numero a mano, se escribe.
+    import re
+    fuente = Path("app/paradigms/__init__.py").read_text(encoding="utf-8")
+    sueltos = re.findall(r"max_iterations=(\d+)", fuente)
+    ok &= check(f"ningun `max_iterations` literal quedo en el catalogo clasico "
+                f"({sueltos or 'ninguno'})", not sueltos)
+    return ok
+
+
+def check_every_tool_works_in_isolation(ok: bool) -> bool:
+    """§70: cada herramienta, probada de a una contra una vista real, y por su EFECTO.
+
+    NO EXISTIA, y su ausencia dejo pasar el defecto mas caro de la sesion: `rewoo` llamaba
+    a `read` en 130 de 138 celdas y leia CERO unidades. Los tests probaban los paradigmas
+    de punta a punta y las auditorias miraban el registro; **ninguno probaba una herramienta
+    sola**.
+
+    LA DIFERENCIA ENTRE ESTO Y «QUE NO REVIENTE»: cada caso verifica el EFECTO observable —
+    que `read` aumente `units_read`, que un id inexistente cuente como alucinado, que un
+    argumento faltante degrade y no mate. Una herramienta que devuelve algo plausible sin
+    haber hecho nada es exactamente lo que no se ve desde arriba.
+
+    Y CUBRE LAS TRES FORMAS DE FALLA que el registro distingue:
+      · argumento ausente        -> `ToolFailure`, recuperable por el modelo
+      · id que no existe         -> `ToolFailure` Y se cuenta como alucinado
+      · nombre desconocido       -> `ToolFailure`, no `ValueError`: un nombre inventado
+                                    mataba la celda en unos paradigmas y degradaba en
+                                    otros, asi que dos brazos se puntuaban distinto por el
+                                    mismo error del modelo
+    """
+    from app.retrieval import CorpusView
+    from app.tools import ToolFailure, ToolSurface
+
+    print("\n--- 70. cada herramienta anda, probada sola ---")
+
+    docs = {f"memo-{i:03d}": f"Memo {i}. Marta Arrieta es directora. "
+                             f"Cuenta AR{i:07d}. Ciudad Rosario." for i in range(6)}
+
+    def superficie(variant: str = "basic") -> ToolSurface:
+        v = CorpusView(task_id="t", documents=docs, unit_ids=list(docs),
+                       relevant_units=["memo-002"])
+        return ToolSurface(view=v, hybrid=None, semantic=None, lexical=None,
+                           variant=variant, budget_tokens=60_000)
+
+    # `read` — el efecto es que la unidad quede LEIDA, no que devuelva algo.
+    s = superficie()
+    salida = s.dispatch("read", {"unit_ids": "memo-002"})
+    ok &= check("`read` devuelve el texto Y marca la unidad como leida",
+                "AR0000002" in salida and s.units_read == {"memo-002"})
+
+    s = superficie()
+    s.dispatch("read", {"unit_ids": "memo-001,memo-003"})
+    ok &= check("`read` en batch lee TODAS las que se le piden",
+                s.units_read == {"memo-001", "memo-003"})
+
+    # UN ID QUE NO EXISTE: falla visible Y contada. Devolver vacio en silencio seria lo
+    # que dejo pasar el defecto de `rewoo` durante toda la campaña.
+    s = superficie()
+    try:
+        s.dispatch("read", {"unit_ids": "no-existe"})
+        ok &= check("un id inexistente falla", False)
+    except ToolFailure as e:
+        ok &= check("un id inexistente levanta `ToolFailure` y se CUENTA como alucinado",
+                    s.hallucinated == 1 and "no-existe" in str(e))
+
+    # ARGUMENTO FALTANTE: degrada, no mata, y el mensaje nombra el argumento.
+    s = superficie()
+    try:
+        s.dispatch("read", {})
+        ok &= check("un argumento obligatorio faltante falla", False)
+    except ToolFailure as e:
+        ok &= check("un argumento faltante levanta `ToolFailure` y NOMBRA el argumento",
+                    "unit_ids" in str(e))
+
+    # NOMBRE DESCONOCIDO: `ToolFailure`, no `ValueError`. El bucle compartido atrapa solo
+    # `ToolFailure`, asi que un `ValueError` mata la celda en unos brazos y degrada en
+    # otros — y `rewoo` toma el nombre de un JSON escrito por el modelo.
+    s = superficie()
+    try:
+        s.dispatch("inventada", {})
+        ok &= check("un nombre desconocido falla", False)
+    except ToolFailure as e:
+        ok &= check("un nombre desconocido degrada como `ToolFailure` y lista el catalogo",
+                    "no existe" in str(e) and "read" in str(e))
+    except ValueError:
+        ok &= check("un nombre desconocido NO puede ser `ValueError`: mata la celda en "
+                    "unos paradigmas y degrada en otros", False)
+
+    # UNA HERRAMIENTA NO OFRECIDA EN LA VARIANTE tampoco mata.
+    s = superficie("basic")
+    try:
+        s.dispatch("coverage", {})
+        ok &= check("`coverage` no existe en `basic` y falla", False)
+    except ToolFailure:
+        ok &= check("una herramienta de otra variante degrada, no mata", True)
+
+    # LA SECUENCIA REGISTRA LO QUE SE PIDIO, aunque falle: una politica que solo guarda
+    # los aciertos describe algo que nadie ejecuto.
+    s = superficie()
+    for nombre, args in (("read", {"unit_ids": "memo-000"}), ("read", {}),
+                         ("inventada", {})):
+        try:
+            s.dispatch(nombre, args)
+        except ToolFailure:
+            pass
+    ok &= check("la secuencia guarda las llamadas que FALLARON tambien",
+                s.sequence == ["read", "read", "inventada"])
+    return ok
+
+
+def check_each_pattern_has_the_tools_it_needs(ok: bool) -> bool:
+    """§69: que un patron NO use una herramienta se decide leyendo, no borrando.
+
+    LA REGLA DEL AUTOR (2026-08-30): antes de sacarle una herramienta a un patron, fijarse
+    si **deberia** usarla. Una no-adopcion puede ser tres cosas distintas y se ven iguales
+    desde el registro — que no la necesite, que no se la ofrezcan, o que la plomeria este
+    rota. Las tres piden respuestas opuestas.
+
+    EL ANALISIS A MANO, sobre las 1.284 celdas, y su veredicto por patron:
+
+      rewoo             search+keyword+read, SIN semantica   -> FALTABA. Planifica a
+                        ciegas: no puede corregir una consulta que no matcheo. La lexica
+                        exige el termino exacto; la semantica tolera el parafraseo. Para un
+                        brazo que reacciona, que falte una modalidad cuesta una vuelta mas;
+                        para uno que NO reacciona, cuesta la tarea. **Se agrego.**
+      pointer_chase     idem, sin semantica                  -> correcto: sigue punteros,
+                        que son identificadores y nombres propios, y ahi gana el lexico
+      graph_traverse    solo `read`                          -> correcto, y ES su
+                        definicion: el grafo le dice a donde ir. Darle busqueda lo
+                        convertiria en `react` con prior de grafo
+      gist_reader       solo `read`                          -> correcto: ya ve todos los
+                        gists. Buscar sirve para encontrar donde mirar, y el mira todo
+      direct/extract/scan  ninguna                           -> correcto: el codigo les
+                        sirve el material
+      los cinco con bucle  las cuatro                        -> correcto: ven resultados
+
+    QUE FIJA ESTE TEST: que un patron que planifica sin ver resultados tenga TODA la
+    recuperacion disponible, porque es el que menos puede recuperarse de elegir mal.
+    """
+    import re
+    from app.paradigms.modern import REWOO_TOOLS
+    from app.tools import TOOL_SPECS
+
+    print("\n--- 69. cada patron tiene las herramientas que su mecanismo necesita ---")
+
+    disponibles = {t["function"]["name"] for t in TOOL_SPECS}
+    declaradas = set(re.findall(r"- (\w+)\(", REWOO_TOOLS))
+    faltan = disponibles - declaradas
+    ok &= check(f"`rewoo` planifica a ciegas y ve TODA la recuperacion "
+                f"(falta: {sorted(faltan) or 'ninguna'})", not faltan)
+    ok &= check("y la semantica esta explicada por que sirve, no solo listada — una "
+                "herramienta cuyo criterio de uso no se dice, no se usa",
+                "tolerates paraphrase" in REWOO_TOOLS)
+
+    # LOS QUE NO BUSCAN, NO BUSCAN POR DISEÑO. Se fija que sigan sin hacerlo: si mañana
+    # alguien le agrega busqueda a `graph_traverse`, deja de ser el patron que se midio.
+    import inspect
+    from app.paradigms import REGISTRY
+    for nombre, motivo in (("graph_traverse", "el grafo le dice a donde ir"),
+                           ("gist_reader", "ya ve todas las unidades en gist")):
+        src = inspect.getsource(REGISTRY[nombre])
+        busca = bool(re.search(r'dispatch\(\s*["\']?(search|keyword_search|semantic_search)',
+                               src))
+        ok &= check(f"`{nombre}` sigue sin buscar — {motivo}", not busca)
+    return ok
+
+
+def check_rewoo_can_actually_read(ok: bool) -> bool:
+    """§68: un argumento que pide un IDENTIFICADOR recibe ids, no texto.
+
+    EL DEFECTO QUE CIERRA. La sustitucion de evidencia de ReWOO es textual —`#E1` se
+    reemplaza por la salida del paso 1— y para una `query` eso esta bien. Para `unit_ids`
+    esta mal: a `read` le llegaba el **JSON entero de la busqueda** truncado, donde
+    esperaba un id.
+
+    Medido antes del arreglo, sobre 138 celdas: `rewoo` llamaba a `read` en **130** y leia
+    **CERO** unidades, y era el unico brazo del plantel con ids alucinados —**36**, contra
+    0 de los otros ocho—. Contestaba desde los snippets y nunca abria un documento: ganaba
+    donde el resumen alcanzaba (enumerar roles, u=1,00) y sacaba **0,00 en las nueve
+    replicas** de la celda mas simple del corpus —una unidad, un numero de cuenta— porque
+    el resumen no trae el numero.
+
+    LO ENCONTRO EL CAMINO PERFECTO A MANO, no un test: predije `rewoo` para esa celda
+    porque no hay nada que buscar, dio cero, y la contradiccion entre «deberia ser trivial»
+    y «da cero» fue lo que obligo a mirar.
+
+    Y EL ORDEN IMPORTA, que fue el segundo defecto —mio, al arreglar el primero—: los
+    resultados vienen RANKEADOS, y con `MAX_BATCH_READ` recortando, invertirlos no
+    reordena: DESCARTA los mejores.
+    """
+    import json
+    from app.paradigms.modern import ARGS_DE_ID, _ids_de
+    from app.tools import MAX_BATCH_READ
+
+    print("\n--- 68. un argumento de identificador recibe ids, no texto ---")
+
+    busqueda = json.dumps({"results": [
+        {"unit_id": f"memo-{i:03d}", "summary": "texto largo que no es un id"}
+        for i in range(12)]})
+
+    ids = _ids_de(busqueda).split(",")
+    ok &= check("extrae los `unit_id` de una salida de busqueda",
+                ids[0] == "memo-000" and all(i.startswith("memo-") for i in ids))
+    ok &= check("CONSERVA el orden del ranking — recortar sobre una lista invertida "
+                "descarta los mejores, no reordena",
+                ids[:3] == ["memo-000", "memo-001", "memo-002"])
+    ok &= check(f"y recorta en `MAX_BATCH_READ` ({MAX_BATCH_READ})",
+                len(ids) == MAX_BATCH_READ)
+
+    # SIN IDS, CADENA VACIA: un paso de lectura sin nada que leer tiene que fallar visible,
+    # no leer cualquier cosa.
+    ok &= check("una salida sin ids da vacio, no basura",
+                _ids_de("no soy json") == "" and _ids_de('{"results":[]}') == "")
+
+    ok &= check("`unit_ids` esta declarado como argumento de identificador",
+                "unit_ids" in ARGS_DE_ID)
+
+    # LA SUSTITUCION, sobre el codigo: un arg de id recibe ids y los demas texto.
+    fuente = Path("app/paradigms/modern.py").read_text(encoding="utf-8")
+    ok &= check("la sustitucion distingue por NOMBRE de argumento",
+                "if k in ARGS_DE_ID" in fuente)
+    ok &= check("y admite `#E1.ids` explicito, que es lo que un plan bien escrito dice",
+                '#{key}.ids' in fuente)
+    ok &= check("el prompt del plan lo explica, o el modelo no puede aprovecharlo",
+                "resolves to the unit ids" in fuente)
+    return ok
+
+
+def check_effort_ceilings_bind(ok: bool) -> bool:
+    """§67: el techo total de cada patron esta NOMBRADO, y ata contra lo observado.
+
+    DOS DEFECTOS QUE ESTO CIERRA, los dos encontrados desafiando las guardas:
+
+    1. NINGUN NOMBRE ACOTABA EL TOTAL. Cada constante acotaba una parte y la suma era
+       emergente. Deduje el techo de `supervisor` multiplicando sus constantes —4 x 3 = 12—
+       y el real es **17**, porque el patron hace ademas una llamada de plan por despacho y
+       una final que ninguna constante nombraba. La formula estaba solo en la forma del
+       codigo, y por eso la medi mal.
+
+    2. UN TECHO QUE NUNCA SE ALCANZA NO ES UN TECHO. El de `dag_strategy` era 160 y el
+       maximo observado en 138 celdas es 19: ocho veces por encima de todo lo que pasa. Un
+       tope asi no restringe nada y esconde lo que realmente corta al patron, que es el
+       umbral de rendimiento decreciente.
+
+    QUE EXIGE: que cada techo declarado este por encima de lo observado —o seria una
+    guarda que el registro viola— y **no absurdamente por encima**, o seria decoracion.
+    """
+    from app import guards as G
+
+    print("\n--- 67. los techos de esfuerzo estan nombrados y atan ---")
+
+    ok &= check("hay un techo total nombrado por patron con sub-agentes",
+                set(G.TECHO_LLAMADAS) >= {"rewoo", "handoff", "supervisor",
+                                          "dag_strategy"})
+    ok &= check("el de `supervisor` incluye sus llamadas propias: "
+                "DISPATCHES x (1 + TURNS) + 1, que su producto ingenuo no da",
+                G.TECHO_LLAMADAS["supervisor"]
+                == G.SUPERVISOR_DISPATCHES * (1 + G.SUPERVISOR_TURNS_PER_SUB) + 1)
+    ok &= check("y el de `rewoo` es estructural: dos llamadas, planificar y resolver",
+                G.TECHO_LLAMADAS["rewoo"] == 2)
+
+    # CONTRA EL REGISTRO ENTERO, y ese "entero" es el tercer defecto que esto cierra.
+    #
+    # Miraba UN archivo —`results/luna/gold_h1_rows.jsonl`— que es exactamente el archivo
+    # del que habian salido los numeros de los techos. **Un umbral calibrado sobre una
+    # muestra y verificado contra esa misma muestra no puede fallar.** Medido al ampliar el
+    # barrido: el techo de `dag_strategy` valia 24 porque el maximo de `gold_h1` es 19, y
+    # sobre el registro completo el maximo es **38** — la guarda estaba violada por 858
+    # filas y este chequeo la daba por buena.
+    #
+    # Es la misma forma que ya tuvo `_potencia_corpus.py`, cuyo umbral de 1,0 aprobaba al
+    # corpus que lo habia motivado. Un test que solo mira donde ya se miro no prueba nada.
+    import collections
+    import glob as _glob
+    from app.runner import load_rows
+    obs = collections.defaultdict(int)
+    vistos = 0
+    for ruta in _glob.glob("results/**/*_rows.jsonl", recursive=True):
+        for f in load_rows(Path(ruta)):
+            if f.get("infeasible"):
+                continue
+            vistos += 1
+            obs[f["paradigm"]] = max(obs[f["paradigm"]], f.get("calls", 0) or 0)
+    if not vistos:
+        ok &= check("(sin registro para contrastar: se saltea)", True)
+        return ok
+
+    viola = [f"{b}: techo {t} < observado {obs[b]}"
+             for b, t in G.TECHO_LLAMADAS.items() if b in obs and obs[b] > t]
+    ok &= check(f"ningun techo lo viola el registro ({viola or 'ninguno'})", not viola)
+
+    flojos = [f"{b}: techo {t} contra maximo {obs[b]} ({t/max(obs[b],1):.0f}x)"
+              for b, t in G.TECHO_LLAMADAS.items()
+              if b in obs and obs[b] and t > 4 * obs[b]]
+    ok &= check(f"y ninguno es decoracion — mas de 4x sobre lo observado "
+                f"({flojos or 'ninguno'})", not flojos)
+
+    # LA VENTANA ESCALA CON EL ALCANCE cuando se balancea, y no cuando no.
+    ok &= check("apagado, la ventana es la historica y el registro sigue comparable",
+                all(G.ventana_sub_agente(n, False) == G.SUPERVISOR_SCOPE_UNITS
+                    for n in (1, 5, 20, 60)))
+    ok &= check("encendido, escala: un alcance de 60 no se mira con la misma ventana "
+                "que uno de 5",
+                G.ventana_sub_agente(60, True) > G.ventana_sub_agente(5, True))
+    ok &= check("y nunca deja de aislar: sobre 60 unidades no ve mas que una fraccion",
+                G.ventana_sub_agente(60, True) < 60)
+
+    # `None` NO ES UN NUMERO GRANDE. Distinguir «sin tope» de «tope alto» es la misma
+    # distincion que la factibilidad hace entre `None` y `0` en sus proyecciones.
+    ok &= check("sin balance no hay tope de esfuerzo, y se dice con `None`",
+                G.presupuesto_de_esfuerzo(60_000, False) is None)
+    ok &= check("con balance, el tope sale del presupuesto DECLARADO de la tarea",
+                G.presupuesto_de_esfuerzo(60_000, True) == 60_000)
+    return ok
+
+
+def check_guard_policy_is_central(ok: bool) -> bool:
+    """§66: los limites de los patrones viven en UN lugar, y siguen viviendo ahi.
+
+    DE DONDE SALE. Los diecisiete numeros que gobiernan el catalogo estaban cada uno en el
+    archivo de su patron. Cada uno se leia solo y ninguno se podia comparar — y TRES de
+    ellos son la misma decision tomada tres veces: `handoff` corta el alcance en 2,
+    `dag_strategy` en 4 sub-preguntas, `supervisor` despacha 4 veces sobre ventanas de 8.
+    Tres respuestas a «¿en cuantos pedazos se corta esto?», elegidas por separado, en tres
+    archivos, y ninguna medida jamas como factor.
+
+    LA MUDANZA NO CAMBIO NINGUN VALOR, y este test lo fija: `app/guards.py` define, cada
+    patron importa, y el alias local conserva el nombre viejo para que ningun sitio de uso
+    cambie. Una mudanza que altera comportamiento no es una mudanza.
+
+    QUE IMPIDE HACIA ADELANTE: que el proximo patron defina su tope en su propio archivo.
+    El barrido busca asignaciones numericas de nombre en MAYUSCULAS dentro de
+    `app/paradigms/`, que es la forma que tiene una guarda.
+    """
+    import re
+    from app import guards
+
+    print("\n--- 66. la politica de guardas esta centralizada ---")
+
+    # Ningun archivo de patron define un numero de guarda por su cuenta.
+    sueltas = []
+    for f in sorted(Path("app/paradigms").glob("*.py")):
+        if f.name in ("__init__.py", "_diagramas.py", "parsing.py", "blackboard.py"):
+            continue
+        for linea in f.read_text(encoding="utf-8").splitlines():
+            m = re.match(r"^([A-Z][A-Z_]{3,})\s*(?::\s*\w+\s*)?=\s*([0-9][0-9_.]*)\s*$",
+                         linea)
+            if m:
+                sueltas.append(f"{f.name}:{m.group(1)} = {m.group(2)}")
+    ok &= check(f"ningun patron define su propio limite numerico "
+                f"({sueltas or 'ninguno'})", not sueltas)
+
+    # Y los que se mudaron siguen valiendo lo mismo: la mudanza no toca comportamiento.
+    ESPERADO = {
+        "HANDOFF_SCOPES": 2, "DAG_SUB_QUESTIONS": 4, "SUPERVISOR_DISPATCHES": 4,
+        "SUPERVISOR_SCOPE_UNITS": 8, "GRAPH_WALK_DEPTH": 2, "SCAN_CHUNK_TOKENS": 6_000,
+        "HANDOFF_TURNS_PER_AGENT": 6, "SUPERVISOR_TURNS_PER_SUB": 3,
+        "DAG_SUB_AGENT_ITERATIONS": 10, "REWOO_PLAN_STEPS": 8,
+        "DAG_REPLAN_ITERATIONS": 3, "DAG_READY_THRESHOLD": 0.8,
+        "DAG_DIMINISHING_RETURNS": 0.05, "SCAN_CARRY_CHARS": 6_000,
+        "CHASE_LEDGER_FACT_CHARS": 400, "REWOO_EVIDENCE_ITEM_CHARS": 32_000,
+        "REWOO_SUBSTITUTION_CHARS": 800,
+    }
+    mal = [f"{k}={getattr(guards, k, None)} (esperado {v})"
+           for k, v in ESPERADO.items() if getattr(guards, k, None) != v]
+    ok &= check(f"los {len(ESPERADO)} valores son los de antes de la mudanza "
+                f"({mal or 'todos'})", not mal)
+
+    # Los alias siguen resolviendo, o sea que los sitios de uso no cambiaron.
+    import importlib
+    alias = [("app.paradigms.dag", "DAG_MAX_SUB_QUESTIONS", 4),
+             ("app.paradigms.handoff", "SCOPES", 2),
+             ("app.paradigms.supervisor", "SUB_SCOPE_UNITS", 8),
+             ("app.paradigms.modern", "MAX_PLAN_STEPS", 8)]
+    rotos = [n for mod, n, v in alias
+             if getattr(importlib.import_module(mod), n, None) != v]
+    ok &= check(f"los alias locales siguen resolviendo ({rotos or 'todos'})", not rotos)
+
+    # LA TABLA TIENE QUE DECIR POR QUE, no solo cuanto. Un numero sin motivo es lo que
+    # habia antes, con mejor direccion postal.
+    doc = Path("app/guards.py").read_text(encoding="utf-8")
+    ok &= check("y el modulo explica que gobierna cada grupo, no solo el valor",
+                doc.count("# ─") >= 5 and "MISMA decisión tomada tres veces" in doc)
+    return ok
+
+
 def check_every_module_and_class_declares_itself(ok: bool) -> bool:
     """§65: todo modulo y toda clase de `app/` dicen QUE SON. La spec vive en el codigo.
 
@@ -4577,6 +5800,19 @@ def main() -> int:
     ok = check_retriever_exhaustion_is_of_the_task(ok)
     ok = check_surface_version_guards_the_sensitive_arms(ok)
     ok = check_every_module_and_class_declares_itself(ok)
+    ok = check_guard_policy_is_central(ok)
+    ok = check_effort_ceilings_bind(ok)
+    ok = check_rewoo_can_actually_read(ok)
+    ok = check_each_pattern_has_the_tools_it_needs(ok)
+    ok = check_every_tool_works_in_isolation(ok)
+    ok = check_measuring_is_not_reading(ok)
+    ok = check_every_arm_has_a_named_ceiling(ok)
+    ok = check_effort_balance_is_reachable(ok)
+    ok = check_absence_has_a_second_proof(ok)
+    ok = check_grading_scores_the_answer_not_its_wording(ok)
+    ok = check_new_predictors_reach_the_decision(ok)
+    ok = check_report_does_not_score_placeholders(ok)
+    ok = check_gaps_that_nobody_can_close(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

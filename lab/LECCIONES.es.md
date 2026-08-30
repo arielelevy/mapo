@@ -2566,3 +2566,309 @@ ser de costo y no de calidad**.
 > resultado que parece bueno.** El 26,8% de aciertos era interpretable —«el analista predice
 > mal»— cuando lo que pasaba era que la pregunta estaba mal hecha. Lo que lo destapó no fue
 > mirar el número sino que el autor señalara la regla violada.
+
+
+### 8.16 Tres veces el mismo cero, y las tres casi lo publico · `CORRECCIÓN`
+
+En una sola sesión, tres veces me encontré con un cero limpio, redondo y explicable — y las
+tres veces lo que medía era **exposición y no comportamiento**:
+
+| el cero | lo que iba a decir | lo que era |
+|---|---|---|
+| `supervisor` y `handoff` con **0% de búsquedas estériles** | «no se agotan» | `scoped()` no reataba `surfaced`: cada sub-agente creía que nadie había buscado |
+| `coverage`, `note`, `plan`, `advance`, `board` con **0 llamadas** | «el modelo no administra su propio proceso» | se ofrecieron en **55 de 5.083 filas** — el 1,1% |
+| siete brazos de recuperación con **0 filas** | (ninguna, porque acá el cero **sí** era el hallazgo) | nunca se corrieron, y el paper los daba por dial controlado |
+
+**Los tres se ven idénticos desde el archivo de resultados.** Un cero es un cero; lo que lo
+distingue es la pregunta *«¿cuántas veces tuvo la oportunidad?»*, y esa pregunta no está en
+la fila — hay que ir a buscarla al diseño de la corrida.
+
+> **La regla, y merece ser un reflejo: antes de interpretar un cero, medir el DENOMINADOR.**
+> Y el denominador casi nunca está en el mismo lugar que el numerador: el uso de una
+> herramienta está en `tool_usage.sequence`, y si estaba ofrecida está en la variante de
+> superficie, en el nombre del archivo, o en un factor del runner.
+
+**Lo que hace que esto siga pasando** es que un cero con explicación es más convincente que
+un número intermedio. «El modelo nunca administra su proceso» es una frase mejor que «lo
+hizo 1 de 28 veces», y por eso pasa más rápido el filtro de quien la escribe. **La forma
+narrativa del hallazgo es lo que lo vuelve peligroso**, no su magnitud.
+
+
+### 8.17 Una guarda que nadie llama, un techo verificado contra su propia muestra · `CORRECCIÓN`
+
+Desafiar las guardas —ponerlas una al lado de la otra y preguntarles cuántas veces atan—
+destapó siete defectos. **Ninguno rompía nada.** Los siete corrían, pasaban los tests, y
+producían números que se leían bien:
+
+| lo que parecía | lo que era |
+|---|---|
+| `pointer_chase` abre el alcance entero en 170/170 celdas | calculaba un promedio de largo con `read_one`, y medir contaba como leer |
+| `handoff` y `supervisor` no alucinan un solo id en 2.356 llamadas | `hallucinated` era un `int`, y `scoped()` no puede reatar un `int` |
+| el techo de `dag_strategy` nunca se viola | se verificaba contra el mismo archivo del que había salido su número |
+| el balance de esfuerzo está implementado y falta la corrida | **no lo llamaba nadie**, y el factor que lo enciende no existía |
+
+**Los cuatro tienen la misma forma, y no es la del bug.** Un bug hace que algo falle. Esto
+hace que algo **informe**: la topología estaba bien y la medida estaba mal, o la guarda
+estaba escrita y el camino hasta ella no existía. El programa no tiene manera de quejarse,
+porque desde adentro todo salió como estaba escrito.
+
+> **Las tres preguntas que los encuentran, y ninguna es «¿anda?»:**
+>
+> 1. **¿quién la llama?** Una función bien escrita, bien documentada y bien probada puede no
+>    estar cableada. `guards.ventana_sub_agente()` tenía las tres cosas y cero llamadores —
+>    y su test la invocaba directamente, así que probaba la aritmética y no el cableado.
+> 2. **¿contra qué se verifica?** Un umbral calibrado sobre una muestra y verificado contra
+>    esa misma muestra **no puede fallar**. Ya había pasado con `_potencia_corpus.py`, cuyo
+>    piso de 1,0 aprobaba al corpus que lo había motivado; volvió a pasar con el techo de
+>    `dag`. Se repite porque calibrar y verificar se hacen el mismo día.
+> 3. **¿qué rastro deja lo que no cambia nada?** `read_one` usado como regla no modificaba
+>    ni un token de lo que el modelo ve. Por eso ninguna utilidad se movió, ningún test
+>    falló, y `relevant_units_read_any` decía lo contrario de `relevant_units_read` sobre el
+>    mismo brazo.
+
+**Y una cuarta que es del método, no del código.** `PENDIENTES.es.md` tenía anotado el
+balance de esfuerzo como *«lo que queda para medir es la corrida»*. Esa frase da por hecho
+que se puede correr, y nadie la vuelve a mirar: un pendiente redactado como si el trabajo
+estuviera hecho es un pendiente que se cierra solo. **Lo que se escribe en la lista tiene
+que ser verificable desde afuera** — «existe el factor y el runner lo acepta» se comprueba;
+«está implementado» se cree.
+
+
+### 8.18 Un contrato que nunca puede admitir nada · `CORRECCIÓN`
+
+`C-ABSENCE` exige el dominio entero para admitir un enunciado de ausencia, y la regla es
+correcta: cualquier unidad sin leer puede contener justo lo que se niega. Pero tenía **una
+sola forma** de conseguir ese dominio —leerlo—, y sobre las nueve tareas de `B2_absence`:
+
+| ancho | material | presupuesto |
+|---|---:|---:|
+| `w4` | 40.234 | 40.000 |
+| `w16` | 160.982 | 40.000 |
+| `w48` | 482.961 | 40.000 |
+
+**En 9 de 9 la única prueba aceptada costaba más que la tarea entera.** El contrato no era
+estricto: era **insatisfacible**. Toda respuesta correcta —y la correcta es siempre
+«ninguno»— iba a ser rechazada, y no por estar mal.
+
+**Lo que lo hacía invisible es que el rechazo se lee como rigor.** Una guarda que rechaza
+parece estar trabajando. Nadie mira dos veces un `refused`, porque el modo de falla que uno
+espera de una guarda es que deje pasar algo, no que no deje pasar nada.
+
+> **La pregunta que faltaba, y es de una línea: ¿existe alguna entrada que este contrato
+> admita, dentro del régimen donde se le va a exigir?** Un contrato sólido y vacío pasa
+> todos los tests de soundness —nunca admite nada falso— y no sirve para nada. La solidez
+> se prueba con contraejemplos; la **no vacuidad** hay que probarla aparte, y no estaba.
+
+**Y habría producido un cero perfectamente interpretable.** `demand_obligations` está
+apagado, así que nunca se disparó; pero ese factor existe justamente para medir
+`C-ABSENCE`, y la primera corrida con él encendido habría dado **cero ausencias admitidas**.
+Eso se lee como *«el modelo no puede establecer ausencia»* y es *«el contrato no se puede
+satisfacer»*. Es la cuarta vez que aparece la forma de **8.16** —un cero de exposición
+disfrazado de conducta— y la primera que se agarra **antes** de correr, porque la pregunta
+salió de derivar el camino a mano y no de mirar un resultado.
+
+**El arreglo no afloja la carga, le agrega una segunda ruta al mismo dominio**: si la cadena
+que se niega no aparece en ninguna unidad del alcance, el dominio quedó cubierto por
+aritmética en vez de por lectura — `term_absence()` recorre **todas** las unidades, no una
+muestra. Prueba las 9 de 9 a costo cero. Con su límite dicho: prueba que el TÉRMINO no está,
+no que la COSA no esté si el material la nombraría de otra forma.
+
+
+### 8.19 Doce topologías no fallan la misma pregunta · `CORRECCIÓN`
+
+Derivando el camino perfecto a mano apareció que **9 de las 78 tareas daban 0,00 sobre todo
+el plantel**. La lectura fácil era «hay preguntas que ninguna topología resuelve», y era
+falsa: eran dos defectos del grader.
+
+| celda | el oráculo | lo que pasaba |
+|---|---|---|
+| `D1_presupposition` | `'no transfer is recorded'` | los **nueve** brazos rechazaron la premisa correctamente, con nueve redacciones distintas, y los nueve sacaron cero |
+| `C9_declared_roster` | las cuatro cuentas sueltas | las respuestas traían las cuatro **emparejadas con su nombre**, que es lo que la pregunta pide, y el grader lo leía como cuatro items equivocados |
+
+> **La señal era la unanimidad.** Que doce topologías con mecanismos opuestos —una que
+> planifica a ciegas, una que encadena, una que particiona, una que resume— fallen
+> exactamente las mismas nueve preguntas no describe al sistema medido: describe al
+> instrumento. **Cuando todos los brazos coinciden en cero, sospechar del grader antes que
+> del plantel.**
+
+**Y hay un costo silencioso que es peor que el cero.** Nueve tareas donde todo el mundo saca
+cero no bajan un promedio y ya: **salen del conjunto que discrimina**. La brecha de oráculo
+y el piso de ruido se calculan sobre las diferencias entre brazos, y ahí esas nueve
+aportaban exactamente nada. Corregidas, el corpus pasó a discriminar en las 41 limpias.
+
+**Dos defectos míos al corregirlo, y los dos los atajó la misma clase de guarda.**
+
+1. Indexé el oráculo sólo por `task_id`, y **el mismo `task_id` vive en varios corpus con
+   oráculos distintos**. El ensayo dio 1.758 filas cambiando con deltas de −1,000. Lo que lo
+   delató no fue revisar el código: fue que **un delta negativo era imposible** —el arreglo
+   agrega caminos de crédito y no saca ninguno—, así que el signo solo bastaba.
+2. La guarda de monotonía comparaba contra el `utility` guardado, y abortó en una fila
+   legítima. **El registro abarca varias versiones del grader**, así que el valor guardado no
+   dice qué habría dado el grader anterior.
+
+   > Comparar contra un número que produjo **otro programa** no prueba nada sobre este
+   > cambio. La única referencia honesta es el mismo programa sin el cambio — y eso obliga a
+   > conservar una réplica del camino viejo, que es barato y es lo que se hizo.
+
+**La regla que sale de las dos: antes de re-puntuar un registro, escribir qué es imposible.**
+«Ninguna fila puede bajar» es una propiedad del cambio, se puede verificar fila por fila, y
+convierte un error de plomería —que en un `.jsonl` de 5.900 filas nadie ve a ojo— en un
+aborto en la primera fila.
+
+
+### 8.20 Mi propio camino perfecto perdió contra una constante · `CORRECCIÓN`
+
+Derivé a mano el mejor camino para las 78 preguntas, leyendo cada una y razonando qué
+mecanismo pedía. Verificado contra el registro re-puntuado, sobre 41 tareas limpias:
+
+    oráculo (techo)          0,976
+    mejor FIJO (reflection)  0,930
+    camino a mano            0,749     -0,181 contra la constante
+
+**Perdió contra elegir siempre lo mismo.** Y la excusa disponible —`rewoo` estaba roto al
+medir, y 27 de los 41 picks eran `rewoo`— **no alcanza**: sacando esos, los 14 picks
+restantes igual pierden `0,143`.
+
+**Los dos errores de razonamiento, nombrados:**
+
+1. **Optimicé costo y me evaluaron por calidad.** Derivé bajo «máxima utilidad y, entre las
+   que empatan, mínimo costo», y esa segunda mitad me llevó a `rewoo` en 57 de 78 — dos
+   llamadas contra veinte. Por utilidad-por-token el camino gana 3,3× (0,023 contra 0,007).
+   Por utilidad sola, pierde. **Un objetivo con desempate no se puede evaluar por el
+   criterio principal solo**, y no lo vi hasta medirlo.
+2. **Descarté `reflection` por caro sin mirar qué compra.** Su docstring dice que la crítica
+   ve la respuesta y no el material, así que no puede detectar lo que no se leyó — y de ahí
+   deduje que sólo pule. Es el mejor fijo del corpus con 0,930. Verificar una respuesta
+   ya escrita atrapa más de lo que yo suponía, y `C3` lo mostró primero: en una cadena de
+   dos saltos, un error en el primero se propaga en silencio y sólo la segunda pasada lo ve.
+
+**Y el resultado que importa no es que yo perdiera, es lo que aparece al medirlo.** El
+arreglo del grader (`8.19`) subió a todos, y el techo y el piso quedaron pegados:
+
+> **la brecha disponible para TODO el ruteo es 0,046**, con los tres mejores fijos dentro de
+> 0,014 entre sí — por debajo del piso de ruido por celda.
+
+Ocho señales evaluadas leave-one-out, ninguna captura un quinto de eso; el vocabulario de
+región da **negativo**. La lectura fácil sería «hace falta una señal mejor», y es la
+equivocada:
+
+> **Cuando el techo y el piso se juntan, el problema no es la señal: es el objetivo.**
+> Perseguir 0,046 de calidad es perseguir ruido. Lo que este corpus premia es costo a
+> utilidad igualada — 4× entre el camino y el mejor fijo, 60× entre los extremos del
+> catálogo— y eso es una función objetivo distinta, no una feature más.
+
+**La regla de método:** un camino derivado a mano es una hipótesis, no una cota superior.
+Lo que lo vuelve útil no es acertar — es que **falla de forma diagnosticable**, y las dos
+razones por las que falló son ahora dos cosas que sé del catálogo y no sabía.
+
+
+### 8.21 Explicar la interacción no es capturar la brecha · `MÉTODO`
+
+Buscando predictores con el método completo apareció una contradicción que parecía un error
+y era el resultado: **`region` explica el 41,5% de la interacción tarea×brazo con `p=0,000`
+corregido por selección — y una política keyed en `region` pierde contra el mejor fijo.**
+
+Las dos cosas son ciertas. Lo que las reconcilia:
+
+> **var(γ) grande ≠ premio de ruteo grande.** El premio es `E[max u] − max E[u]`, y γ puede
+> ser enorme porque los brazos **malos** son malos en lugares distintos. Medido: el 68% de
+> var(γ) viene de los tres peores brazos del panel. Esa estructura es real, es predecible, y
+> no vale nada — nadie elige el que pierde por poco en vez del que pierde por mucho.
+
+**Lo único que se cobra es la interacción entre los brazos que competirían.** Restringido a
+los tres que están dentro de 0,05 del mejor: γ real `0,0031`, señal/ruido `0,40`, y el premio
+`+0,037` contra un piso de ruido de `+0,038` → **neto `−0,001`**.
+
+    El maximo por tarea ES el sesgo del maximo de estimaciones ruidosas.
+    No es una eleccion mejor: es que max de cosas con ruido > max de las verdades.
+
+**El orden correcto del análisis, que es lo que hay que llevarse:**
+
+1. **¿existe algo que predecir?** Descomponer la varianza y comparar γ contra el ruido de
+   réplica. Se contesta **sin mirar una sola feature**, y si γ no supera al ruido no hay
+   feature posible — no «no la encontramos», *no la hay*.
+2. **¿el premio está donde se puede cobrar?** Repetir la pregunta sólo entre los brazos que
+   competirían. Éste es el paso que faltaba y el que da vuelta la conclusión.
+3. **¿la feature sobrevive la selección?** Contra el **máximo** de los nulos de todas las
+   probadas, no contra el suyo. Elegir la mejor de nueve y preguntarle a su nulo individual
+   es la falacia que el nulo existía para evitar.
+4. **¿y fuera de muestra?** Leave-one-out. Con 41 tareas, ajustar y evaluar sobre lo mismo
+   da casi el oráculo y no significa nada.
+
+**Y el hallazgo que salió de aplicarlo:** sobre calidad no hay premio, pero el mismo registro
+da **3,2× de ahorro a utilidad indistinguible, fuera de muestra**, con un desempate
+lexicográfico cuya tolerancia la fija el ruido medido y no la mano. La pregunta «qué
+paradigma da la mejor respuesta» está agotada en este corpus; **«cuál es el más barato que da
+una respuesta indistinguible» no lo está.**
+
+
+### 8.22 Una corrección escrita, aplicada a dos de tres llamadores · `CORRECCIÓN`
+
+`decide.py` existe porque `Runner.report` llamaba a `router.plan` una vez y puntuaba lo que
+viniera, así que en toda tarea donde disparaba la regla de sonda el banco medía un
+**placeholder** como si fuera una decisión. Su docstring lo cuenta en pasado, como cerrado.
+
+**No lo estaba.** Se creó `decide_for` con el ciclo de dos pasos, `serve.answer` lo tomó, y
+`report` —el método que produce `selection_terms`, `router_captured_fraction` y
+`risk_coverage`— nunca migró. Medido: **23 de 46 tareas, la mitad justa, en los cuatro
+diales.**
+
+> Un módulo que declara en su docstring una propiedad que su llamador no tiene es **peor**
+> que uno que no la declara: se lee como garantía, y nadie vuelve a verificar lo que ya
+> figura como hecho.
+
+**Y la causa no era la que parecía.** «Falta la sonda» era la lectura obvia y era falsa: la
+campaña **ya había pagado** derivar `coupling` con una llamada al extractor, y el valor
+estaba en la región de cada fila. `report` lo tiraba y después declaraba que faltaba —
+**inventándose una carencia** y disparando un gate contra ella.
+
+    tirar evidencia que ya se pagó, y después gatear por su ausencia,
+    se ve exactamente igual que una decisión prudente.
+
+La corrección se valida por lo que **no** cambió: en `ACCOUNTABLE` y `CERTIFIED` los 23
+diferimientos **siguen**, porque una estimación `ELICITED` no sostiene una decisión con piso
+`OBSERVED`. Si hubieran caído a cero también, el arreglo habría aflojado el gate en vez de
+dejar de tirar evidencia — el error opuesto y peor.
+
+**La regla de método:** cuando un docstring dice que algo se arregló, contar los llamadores.
+Una corrección se aplica a un sitio; una propiedad la tienen todos o no la tiene ninguno.
+
+
+### 8.23 Medir la regla es lo que encontró el defecto del sensor · `CORRECCIÓN`
+
+Propuse una regla —si el literal que la pregunta cita no está en el alcance, la respuesta es
+una ausencia y sale barata— y la dejé anotada como **«se mide antes de adoptarse»**. Medirla
+dio dos cosas, y ninguna era la esperada.
+
+**Uno: la hipótesis era falsa.** Las 8 tareas que el sensor marcaba no eran de
+`B2_absence` sino todas booleanas (`C7`, `W1`), y la regla «funcionaba» —96% de ahorro sin
+perder utilidad— por una razón que no tenía nada que ver con ausencias: esas tareas son
+fáciles y casi todo empata en ellas.
+
+**Dos, y es el que importa: el sensor tenía un defecto que sólo se ve midiendo.**
+`C7` pregunta *«…Answer 'escalate' or 'no escalation'»*. Esos literales **no están en el
+material por construcción** — son el vocabulario de la respuesta.
+
+    buscado   «la cadena que hay que buscar no está en el corpus»  -> sobre el MATERIAL
+    medido    «la pregunta enumera sus opciones»                   -> sobre la PREGUNTA
+
+**El sensor afirmaba algo sobre el material a partir del formato de la pregunta**, que es
+exactamente la clase de error que `features.py` prohíbe en su primera línea — cometida por
+una función escrita para no cometerla.
+
+> **Un sensor no se valida leyéndolo.** Yo lo escribí, escribí su docstring explicando por
+> qué no era un disparador léxico, escribí un test que lo probaba, y el test pasaba. Lo que
+> lo destapó fue contrastarlo contra una verdad que el sensor **no ve** —el gold de qué
+> tareas son de ausencia— y encontrar precisión 50%.
+
+**Y la corrección tiene la forma correcta**: la guarda usa lo que el caller **declara**
+(`answer_cardinality`), no el fraseo. Distinguir opción de término mirando la redacción
+habría sido reemplazar un disparador léxico por otro.
+
+**Lo que se arrastró.** El 47% de ahorro del vocabulario de región que había cableado se
+midió con el sensor roto. Recomputado: 46%. Sobrevivió — pero eso fue **suerte**, no
+método: el ahorro venía de otro eje del mismo sensor. Si hubiera venido del roto, habría
+shippeado un vocabulario cuyo beneficio no existía.
+
+    La regla: cuando se arregla un sensor, re-medir TODO lo que se decidió con él,
+    aunque parezca que el arreglo toca otra cosa.

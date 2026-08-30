@@ -28,7 +28,8 @@ import httpx
 
 from .config import Settings
 from .llm import RETRYABLE_STATUS
-from .features import REGION_VOCABULARY, FeatureExtractor, Features, payload_for
+from .features import (REGION_VOCABULARY, FeatureExtractor, Features,
+                       measure_question_literal, payload_for)
 from dataclasses import replace as dc_replace
 
 from .beliefs import BeliefBase, Provenance
@@ -160,8 +161,17 @@ class Row:
 
     LOS `phi_*` SON LA REGIÓN, CONGELADA. La región es una función determinista de los
     features, pero guardar los features que la produjeron permite recomputarla con un
-    vocabulario nuevo sin volver a correr. `phi_horizon_unknown` está en `True` en las 78
-    tareas: es el eje que le faltaba al vocabulario y que costó la refutación de `P15`.
+    vocabulario nuevo sin volver a correr.
+
+    Y ESTE DOCSTRING DECÍA LO CONTRARIO DEL REGISTRO (corregido 2026-08-30). Afirmaba que
+    `phi_horizon_unknown` está en `True` en las 78 tareas. Contado: está en **`False` en
+    las 3.884 filas que lo llevan**, sin una sola excepción. Es constante, o sea que no
+    puede discriminar nada — y además ninguna regla lo requiere, no entra en el vocabulario
+    de región, y la sonda no lo mide. Ver `FEATURE_SENSOR` en `features.py`: es un hueco
+    que **nadie puede cerrar**, y por eso no cuenta como hueco.
+
+    El eje que sí le faltaba al vocabulario, y que costó la refutación de `P15`, es
+    `continuation`.
     """
 
     task_id: str
@@ -542,6 +552,7 @@ class Runner:
         stop_on_barren: int = 0,
         offer_read_all: bool = False,
         terse_tools: bool = False,
+        effort_balanced: bool = False,
         compact_material: bool = False,
         demand_obligations: bool = False,
         shared_state: bool | None = None,
@@ -591,6 +602,16 @@ class Runner:
         # que si es medible con ese N es el RIESGO —si el modelo elige peor herramienta—
         # y ese es el numero por el que el factor existe.
         self.terse_tools = terse_tools
+        # EL BALANCE DE ESFUERZO. Los patrones difieren **113x** en tokens por celda entre
+        # el mas barato y el mas caro, asi que una comparacion sin esto no mide la
+        # topologia: mide el presupuesto. Con el encendido cada brazo para al gastar su
+        # porcion del presupuesto declarado de la tarea, y la ventana del sub-agente escala
+        # con el alcance en vez de ser un 8 fijo.
+        #
+        # Sus funciones vivian en `guards.py` desde que se centralizaron las guardas y
+        # **no las llamaba nadie**: no habia factor que las encendiera. Un factor que no
+        # llega no falla, corre y mide su ausencia.
+        self.effort_balanced = effort_balanced
         self.compact_material = compact_material
         # CUARTO FACTOR. `C-ABSENCE` y `C-PRESUPPOSITION` necesitan que el agente declare
         # dos campos tipados, y pedirselos cambia el prompt de todos los brazos. Apagado
@@ -657,6 +678,8 @@ class Runner:
             suffix += "_readall"
         if terse_tools:
             suffix += "_terse"
+        if effort_balanced:
+            suffix += "_balanced"
         if compact_material:
             suffix += "_prune"
         if demand_obligations:
@@ -770,6 +793,7 @@ class Runner:
             stop_on_barren=self.stop_on_barren,
             offer_read_all=self.offer_read_all,
             terse_tools=self.terse_tools,
+            effort_balanced=self.effort_balanced,
             compact_material=self.compact_material,
             demand_obligations=self.demand_obligations,
             shared_state=self.shared_state,
@@ -791,11 +815,28 @@ class Runner:
         features, _ = self._extractor.extract(
             payload_for(task), allow_derived=allow_derived
         )
-        # Continuation is measured from the material itself — free, deterministic,
-        # COMPUTED. This is the axis whose absence P15 paid for.
+        # LOS TRES EJES QUE SE MIDEN SOBRE EL MATERIAL, gratis y deterministas.
+        #
+        # `continuation` es el que la ausencia de P15 pagó. `literal` y `cardinality` son
+        # los dos predictores de `CP-6`, y son los que hoy forman la región: medidos con la
+        # política de desempate por costo leave-one-out, `cardinalidad × literal` da 69% de
+        # ahorro con la utilidad dentro del ruido, contra 37% del vocabulario anterior.
+        #
+        # VAN ACÁ Y NO EN EL EXTRACTOR porque necesitan los DOCUMENTOS, que el extractor no
+        # recibe — es la misma razón por la que `continuation` ya estaba acá. Y van juntos
+        # en un solo `replace`: un eje que se olvida no falla, **corre y mide su ausencia**,
+        # que es la falla que este repo ya cerró tres veces en un día.
         return dc_replace(
             features,
             continuation=measure_continuation(self._documents, task["unit_ids"]),
+            literal=measure_question_literal(
+                task["question"], self._documents, task["unit_ids"],
+                # La cardinalidad DECLARADA por el caller es lo que distingue un termino de
+                # busqueda de una opcion de respuesta. Sin ella, las preguntas booleanas
+                # —que citan sus opciones— reportaban `lit_absent` sobre el material.
+                cardinality=task.get("answer_cardinality"),
+            ),
+            cardinality=task.get("answer_cardinality"),
         )
 
     # -- execution ---------------------------------------------------------
@@ -1420,13 +1461,64 @@ class Runner:
         def region_of(task_id: str) -> str:
             return next(iter(rows_by_task[task_id].values()))["region"]
 
+        # LA CREENCIA QUE EL REGISTRO YA TIENE, Y QUE ESTE METODO TIRABA (2026-08-30).
+        #
+        # `router.plan` recibe `coupling` como argumento y `decide()` no se lo pasaba, así
+        # que quedaba en `None` con credencia 0. Entonces `coupling_unmeasured` era
+        # verdadero SIEMPRE, la regla `probe_before_deciding_on_bulk` disparaba, y el plan
+        # volvía con `needs_probe`.
+        #
+        # **Medido: 23 de 46 tareas — exactamente la mitad — en los cuatro diales.** Y este
+        # método devuelve `plan.paradigm` sin sondear: en un plan con `needs_probe` ese
+        # paradigma es el PLACEHOLDER, el admisible más barato elegido para probarse
+        # DESPUÉS de sondear. O sea que en la mitad del corpus **`report()` no puntuaba una
+        # decisión: puntuaba un marcador de posición** — y `report()` es lo que produce
+        # `selection_terms`, `router_captured_fraction` y `risk_coverage`.
+        #
+        #     Es exactamente el defecto que el docstring de `decide.py` dice haber cerrado
+        #     —«`Runner.report` llamaba a `router.plan` una vez y puntuaba lo que
+        #     viniera»—. Se creó `decide_for` con el ciclo de dos pasos y **este llamador
+        #     nunca migró**. La corrección quedó escrita y a medio aplicar.
+        #
+        # Y LA CAUSA NO ERA QUE FALTARA SONDEAR: la campaña YA PAGÓ derivar `coupling` con
+        # una llamada al extractor (`allow_derived=True`), y el valor está en la región de
+        # cada fila. Tirarlo y después declarar que falta es inventarse una carencia.
+        #
+        # Se recupera de ahí — sin gastar un token — y se asienta como `ELICITED`, que es
+        # lo que es: la estimación de un modelo. En `CERTIFIED` el piso es `OBSERVED`, así
+        # que ahí la sonda **sigue haciendo falta**, y eso es correcto: una estimación no
+        # alcanza para una decisión certificada.
+        _COUP = {"loose": 0.15, "mixed": 0.5, "tight": 0.85}
+
+        def coupling_of(task_id: str) -> tuple[float | None, float]:
+            """El `coupling` que la campaña ya derivó, leído de la región de la fila."""
+            partes = region_of(task_id).split("/")
+            for parte in partes:
+                if parte in _COUP:
+                    return _COUP[parte], 1.0
+            return None, 0.0
+
+        diferidas: list[str] = []
+
         def decide(task_id: str) -> str:
+            coup, cred = coupling_of(task_id)
             plan = router.plan(
                 task=task_of(task_id),
                 candidates=sorted(rows_by_task[task_id]),
                 region=region_of(task_id),
                 requested=assurance,
+                # LA EVIDENCIA QUE EL REGISTRO YA TIENE. `ELICITED` porque es la estimación
+                # de un modelo, no una observación: en `CERTIFIED` no alcanza, y ahí el plan
+                # va a seguir pidiendo sonda — como corresponde.
+                coupling=coup,
+                coupling_provenance=Provenance.ELICITED,
+                coupling_credence=cred,
             )
+            # UN PLAN QUE PIDE SONDA NO ES UNA DECISION, ES UN DIFERIMIENTO. Puntuarlo como
+            # decisión mide un placeholder; y ejecutarlo sería actuar sobre evidencia que
+            # el gate acaba de llamar insuficiente. Se registra aparte y el reporte lo dice.
+            if getattr(plan, "needs_probe", False):
+                diferidas.append(task_id)
             # This is what makes `log_belief_base` mean something. The flag was declared
             # on the A2 and A3 profiles and nothing acted on it, so no belief base was
             # ever written, so calibration could never be computed, so elicited
@@ -1476,6 +1568,19 @@ class Runner:
             "theta_signature": learned.signature,
             "summary": study.summary(),
             "oracle_gap_credibility": study.credible_oracle_gap(self.replicates()),
+            # EL CICLO EPISTEMICO, INSTRUMENTADO. Sin estos campos no se puede afirmar
+            # nada sobre el objetivo del producto —decidir bien, y si falta una variable ir
+            # a buscarla—, porque el registro no dice si falto ninguna. Antes: 5.932 filas
+            # sin un solo campo de sondeo, diferimiento o creencia faltante.
+            "epistemic": {
+                "deferred_for_probe": sorted(set(diferidas)),
+                "deferred_fraction": round(
+                    len(set(diferidas)) / max(1, len(rows_by_task)), 5),
+                "coupling_recovered": sum(
+                    1 for t in rows_by_task if coupling_of(t)[0] is not None),
+                "tasks": len(rows_by_task),
+                "derived_floor": profile.derived_floor.value,
+            },
             "selection_terms": study.selection_terms(decide).as_dict(),
             "router_captured_fraction": round(study.captured_fraction(decide), 5),
             "risk_coverage": study.risk_coverage(rank, decide),

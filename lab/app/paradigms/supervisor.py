@@ -39,21 +39,21 @@ from __future__ import annotations
 from typing import Any
 
 from ..llm import LLMClient, Usage
+from .. import guards
 from ..tools import ToolSurface
 from . import answer_contract, Result, _run_tool_loop, parse_answer
 from .parsing import extract_json
 
 # Cuantos sub-agentes como maximo. Lo fija el codigo: el gasto de un brazo no puede
 # depender de cuando el modelo decida que ya esta.
-MAX_DISPATCHES = 4
+MAX_DISPATCHES = guards.SUPERVISOR_DISPATCHES
 # Turnos de herramienta por sub-agente. Acotado por la misma razon.
-MAX_TURNS_PER_SUB = 3
+MAX_TURNS_PER_SUB = guards.SUPERVISOR_TURNS_PER_SUB
 # CUANTAS UNIDADES VE UN SUB-AGENTE. Es la constante que hace que esto sea un patron de
 # sub-agentes y no `react` con pasos: su contexto es una VENTANA sobre el material, no el
 # material. Mas chica que esto y el sub-agente no puede resolver nada que cruce dos
 # unidades; mas grande y deja de aislar.
-SUB_SCOPE_UNITS = 8
-
+SUB_SCOPE_UNITS = guards.SUPERVISOR_SCOPE_UNITS
 SUPERVISOR_PROMPT = """You are coordinating specialists to answer a task.
 
 Task: {question}
@@ -79,7 +79,28 @@ Be specific and cite the unit ids you used. If the answer is not in the units, s
 
 
 def supervisor(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
-    """Despacha de a un sub-agente, mirando lo que volvio antes de decidir el siguiente."""
+    """Despacha de a UN sub-agente, mirando lo que volvio antes de decidir el siguiente.
+
+    QUE HACE: el tercero de la familia de sub-agentes, y el que no fija su plan. A
+    diferencia de `dag_strategy` —que planifica antes de ejecutar— y de `handoff` —que fija
+    sus alcances en el codigo—, este mira el resultado de cada despacho y recien ahi elige
+    el proximo.
+
+    GUARDAS QUE LO GOBIERNAN:
+      · `MAX_DISPATCHES = 4` despachos; `MAX_TURNS_PER_SUB = 3` vueltas por sub-agente
+      · `SUB_SCOPE_UNITS = 8`: el sub-agente recibe una **ventana de 8 unidades** recortada
+        por el codigo mediante una busqueda sobre la sub-pregunta — **no el alcance
+        entero**. El aislamiento de contexto no es una optimizacion del patron: es su
+        definicion
+      · esa ventana es tambien su techo: si la respuesta esta fuera de las 8 que la
+        busqueda trajo, el sub-agente no la puede alcanzar
+
+    CUANDO ES EL CAMINO CORRECTO: cuando las sub-preguntas dependen unas de otras pero cada
+    una se resuelve local — se necesita adaptar el plan sin perder aislamiento.
+
+    CUANDO NO: cuando hace falta cobertura garantizada. Medido: hace **1.114 busquedas con
+    70% de esterilidad y rachas de 36** — es el brazo que mas busca en vano del plantel.
+    """
     usage = Usage()
     iterations = 0
     establecido: list[tuple[str, str]] = []
@@ -136,7 +157,16 @@ def supervisor(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) ->
         #
         # Y el recorte es de la VISTA: el sub-agente no puede leer afuera porque las
         # unidades no estan, no porque se le haya pedido que no lo haga.
-        alcance = surface.hybrid.rank(surface.view, sub, SUB_SCOPE_UNITS)
+        # LA VENTANA ESCALA CON EL ALCANCE cuando el balance esta encendido. Con el 8
+        # fijo —el default historico— medido: en **28 de 78 tareas el sub-agente ve el
+        # alcance ENTERO**, asi que el aislamiento que el docstring de arriba llama «no una
+        # optimizacion sino su definicion» no existe en el 36% del corpus. Una ventana fija
+        # sobre un alcance variable no es una ventana: es una constante que a veces resulta
+        # ser todo.
+        ventana = guards.ventana_sub_agente(
+            len(surface.unit_ids()), surface.effort_balanced
+        )
+        alcance = surface.hybrid.rank(surface.view, sub, ventana)
         if not alcance:
             # Sin ningun candidato, un alcance vacio dejaria al sub-agente sin nada que
             # leer y su fracaso mediria la busqueda, no la topologia. Se le da el alcance

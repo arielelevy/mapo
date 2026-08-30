@@ -85,6 +85,37 @@ hay evidencia de que una sea mejor —gana en un corpus, pierde en el otro, todo
 ruido— así que queda **RRF**, y en Weaviate va clavado (`rankedFusion`), no heredado del
 default, que cambió en su v1.24.
 
+## El vocabulario de región cambió, y por medición (2026-08-30)
+
+`REGION_VOCABULARY = "regions/3-literal"` — el anterior (`card/oracle/coup/chain`) **por**
+un eje nuevo, `literal`: en cuántas unidades aparece el literal que la pregunta cita.
+`measure_question_literal()` es hermana de `measure_continuation` —forma de token cerrada,
+verificada por contención, sin modelo en el medio— y **no es un disparador léxico**: la
+misma pregunta cambia de valor si cambia el material.
+
+**No se eligió, se midió.** Con la política de desempate por costo evaluada leave-one-out
+sobre 41 tareas × 7 brazos, contra el mejor fijo (`reflection`, u=0,930, 125.169 tokens):
+
+| vocabulario | utilidad | ahorro |
+|---|---:|---:|
+| **`regions/3-literal`** | **0,951** | **46%** |
+| `regions/2-continuation` | 0,928 | 37% |
+
+**El anterior sigue siendo recomputable** (`Features.region_previa()`): 5.932 filas lo
+llevan estampado y `load_rows` levanta si un archivo mezcla dos.
+
+**Y el sensor tenía un defecto que sólo se vio midiendo** (`EP-5`): una pregunta booleana
+cita **sus opciones de respuesta**, no un término de búsqueda —`C7` pregunta «Answer
+'escalate' or 'no escalation'»— y esos literales no están en el material por construcción.
+La guarda usa `answer_cardinality`, que el caller **declara**. Recomputado con el sensor
+corregido, el vocabulario sobrevive: 0,951 y 46%. **Fragilidad anotada**: 14 regiones sobre
+41 tareas son 2,9 por región, y ése es su límite real hasta que `M-8` amplíe el panel.
+
+**Lo que NO se tomó, y es decisión abierta del autor (`CP-8`)**: `cardinalidad × literal`
+ahorra **69%** y es puramente `COMPUTABLE`, así que **deja a la SONDA sin nada que
+resolver**. Lo destapó `test_science.py` §21. Se tomó el que domina al anterior sin apagar
+nada.
+
 ## La superficie es parte del contrato (2026-08-29)
 
 `SURFACE_VERSION = "v2-agotamiento-compartido"`, y es la **quinta** guarda de mezcla.
@@ -219,6 +250,11 @@ era saber **cuál abrir**:
 > desincronizó —declaraba `CONTRATOS.es.md` como no implementado, y no conocía tres
 > archivos—. Se reemplazó por un puntero a acá el 2026-08-29. Dos índices del mismo repo
 > empiezan a decir cosas distintas, y el que nadie mantiene es el que miente.
+
+> **Cierre del 2026-08-30**: `historico/CIERRE-2026-08-30.es.md` — once defectos, el
+> grader que ponía cero a doce topologías, los predictores con el método completo, y la
+> auditoría del ciclo epistémico contra el objetivo real del producto. **Es lo que hay que
+> leer para retomar.**
 
 > **Cierre del 2026-08-29**: `historico/IMPLEMENTACION-2026-08-29.es.md` — el board,
 > el guard, los cinco defectos que destaparon, y el estado verificado al cerrar.

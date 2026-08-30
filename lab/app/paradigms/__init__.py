@@ -27,11 +27,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable
 
+from .. import guards
 from ..contracts import OBLIGATIONS_CONTRACT
 from ..llm import Completion, LLMClient, Usage
 from ..cognitive import compact_history, manage_history
 from ..context_guard import ContextGuard
-from ..tools import ToolFailure, ToolSurface, specs_for
+from ..tools import PISTA_POR_TIPO, ToolFailure, ToolSurface, specs_for
 
 def framed(surface: Any, contrato: str, pregunta: str, cuerpo: str = "") -> str:
     """El prompt, con lo ESTABLE adelante y lo VARIABLE al final. `X-4d`.
@@ -198,7 +199,26 @@ def _run_tool_loop(
     # anterior y disparara o callaria por el motivo equivocado.
     guard = ContextGuard() if surface.context_guard else None
 
+    # EL TOPE DE ESFUERZO, EN TOKENS Y NO EN VUELTAS. `None` es el regimen medido: sin
+    # tope, que es lo que corrio todo el registro. Con el balance encendido sale de la
+    # porcion del presupuesto DECLARADO de la tarea — la misma unidad con la que la
+    # factibilidad ya lo admitio.
+    #
+    # POR QUE EN TOKENS. Los techos del catalogo estan puestos sobre LLAMADAS y el costo lo
+    # maneja lo que cada llamada ARRASTRA: `handoff` tiene techo de 12 llamadas y gasta
+    # 86.646 tokens; `dag_strategy` tiene techo de 160 y gasta 84.916. Casi lo mismo, con un
+    # factor 13 de diferencia en el techo. Contar llamadas para acotar esfuerzo es contar
+    # envases para acotar peso.
+    tope_tokens = guards.presupuesto_de_esfuerzo(
+        surface.budget_tokens, surface.effort_balanced
+    )
+
     for _ in range(max_iterations):
+        # Se corta ANTES de la llamada, no despues: parar recien cuando el gasto ya se paso
+        # mide el tope una llamada tarde, y la ultima llamada de un bucle largo es la mas
+        # cara de todas porque arrastra la conversacion entera.
+        if tope_tokens is not None and usage.total_tokens >= tope_tokens:
+            break
         iterations += 1
         # LA COLA SE INYECTA ACA, y por eso es general. Este es el unico bucle de
         # herramientas del repo, asi que inyectar aca alcanza a TODO paradigma
@@ -262,9 +282,22 @@ def _run_tool_loop(
                 # A tool call the model got wrong returns to it, recoverable, as it
                 # would in a real system. Raising here scored the whole task zero and
                 # conflated "invented one citation" with "got the answer wrong".
+                #
+                # LA PISTA SALE DEL TIPO DE FALLA (2026-08-30). Era una sola, fija, para
+                # las siete formas de fallar: «usa solo ids devueltos por una busqueda».
+                # Es correcta para UNA —el id inexistente, donde ademas repetia lo que el
+                # mensaje ya decia— y apunta al arreglo equivocado en las otras seis. A un
+                # modelo que pidio 15 ids en un batch de 10, o que omitio un argumento
+                # obligatorio, se le contestaba con un consejo sobre citas.
+                #
+                # Una pista equivocada es peor que ninguna, porque se sigue. Y este es el
+                # unico canal por el que el modelo se entera de que erro la llamada.
                 output = json.dumps({
                     "error": str(failure),
-                    "hint": "Use only unit ids returned by a search.",
+                    "hint": PISTA_POR_TIPO.get(
+                        getattr(failure, "kind", "otra"),
+                        "Re-read the tool description before calling it again.",
+                    ),
                 })
             messages.append({
                 "role": "tool",
@@ -345,7 +378,23 @@ def _finish(
 
 
 def direct(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
-    """One call, no tools, no reasoning scaffold."""
+    """UNA llamada, sin herramientas, con TODO el material adentro del prompt.
+
+    QUE HACE: pega las unidades en un solo prompt y pide la respuesta. No busca, no elige,
+    no itera. Es el limite inferior de complejidad del catalogo.
+
+    GUARDAS QUE LO GOBIERNAN:
+      · la factibilidad lo poda si el material no entra en su porcion del presupuesto —
+        y lo poda en **72 de las 78 tareas** de `gold_h1`. En la practica es un brazo de
+        corpus chico
+      · sin herramientas: no puede recuperar nada que no le hayan puesto adelante
+
+    CUANDO ES EL CAMINO CORRECTO: cuando todo entra y la respuesta exige ver todo junto —
+    contar, detectar una contradiccion entre unidades, elegir el registro mas reciente
+    entre varios. Ninguna de esas se puede descomponer sin perder la respuesta.
+
+    CUANDO NO: en cuanto el material no entra. Y ahi no es que ande mal — no corre.
+    """
     prompt = (
         f"{task['question']}\n\n"
         f"Material:\n{_units_block(surface)}\n\n{answer_contract(surface)}"
@@ -372,7 +421,28 @@ def cot(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result
 
 
 def react(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
-    """Interleaved reasoning and tool use. The fallback paradigm."""
+    """Razonamiento y uso de herramientas intercalados. Es el FALLBACK del catalogo.
+
+    QUE HACE: el bucle clasico. El modelo ve el resultado de cada llamada antes de decidir
+    la siguiente, asi que puede encadenar — buscar, leer lo que encontro, buscar otra vez
+    con lo que aprendio.
+
+    GUARDAS QUE LO GOBIERNAN:
+      · `max_iterations` acota las vueltas; cada vuelta reenvia la conversacion ENTERA,
+        asi que el costo crece con el cuadrado de los turnos (medido: turno 0 = 607 tokens
+        de prompt, turno 8 = 67.233)
+      · sin senal de agotamiento por defecto: `stop_on_barren` esta apagado, asi que
+        insiste aunque la busqueda no traiga nada nuevo (medido: 46,5% de sus busquedas
+        son esteriles, con rachas de hasta 14)
+
+    CUANDO ES EL CAMINO CORRECTO: cuando hay DEPENDENCIA SECUENCIAL — el paso dos no se
+    puede formular sin el resultado del uno. Es el unico brazo del catalogo cuyo bucle
+    real puede encadenar, y descomponer una cadena la destruye.
+
+    ES EL FALLBACK, y eso significa que corre en toda tarea y que es contra el que se mide
+    la brecha de oraculo. Que sea el mejor paradigma fijo del corpus no es un elogio del
+    bucle: es que casi ninguna tarea premia otra cosa.
+    """
     messages = [{
         "role": "user",
         "content": (
@@ -382,7 +452,7 @@ def react(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Resu
         ),
     }]
     completion, usage, transcript, iterations = _run_tool_loop(
-        client, surface, messages, max_iterations=20
+        client, surface, messages, max_iterations=guards.REACT_ITERATIONS
     )
     return _finish(
         completion.text if completion else "", usage, surface, transcript, iterations
@@ -430,7 +500,7 @@ def plan_execute(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) 
 
     plan_prompt = (
         f"Task: {task['question']}\n\n"
-        f"{len(surface.unit_ids())} units are available. Break this into at most 5 "
+        f"{len(surface.unit_ids())} units are available. Break this into at most {guards.PLAN_SUB_QUESTIONS} "
         f"independent sub-questions. Return JSON: {{\"sub_questions\": [\"...\"]}}. "
         f"JSON only."
     )
@@ -440,7 +510,10 @@ def plan_execute(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) 
     usage.merge(plan.usage)
 
     try:
-        sub_questions = json.loads(plan.text.strip())["sub_questions"][:5]
+        sub_questions = (
+            json.loads(plan.text.strip())["sub_questions"]
+            [:guards.PLAN_SUB_QUESTIONS]
+        )
     except (json.JSONDecodeError, KeyError, TypeError):
         # A malformed plan is a real failure of this paradigm on this task. Recording it
         # as such is the point; substituting the original question would hide it.
@@ -453,7 +526,8 @@ def plan_execute(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) 
             "content": f"{sub}\n\nUse the search and read tools to answer concisely.",
         }]
         completion, sub_usage, _, _ = _run_tool_loop(
-            client, surface, messages, max_iterations=4
+            client, surface, messages,
+            max_iterations=guards.PLAN_SUB_AGENT_ITERATIONS,
         )
         usage.merge(sub_usage)
         findings.append(f"Q: {sub}\nA: {completion.text if completion else ''}")
@@ -472,7 +546,24 @@ def plan_execute(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) 
 
 
 def reflection(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
-    """Answer with tools, critique that answer, then revise once."""
+    """Responde con herramientas, critica esa respuesta, y revisa una vez.
+
+    QUE HACE: una pasada normal con herramientas, despues una llamada que critica la
+    salida anterior, despues una revision. Es andamiaje sobre el resultado, no sobre la
+    busqueda.
+
+    GUARDAS QUE LO GOBIERNAN:
+      · **una** sola revision: no itera hasta converger
+      · la critica ve la RESPUESTA, no el material. Si el error fue no haber leido algo,
+        la critica no tiene con que detectarlo — sólo puede pulir lo que ya esta
+
+    CUANDO ES EL CAMINO CORRECTO: cuando la falla probable es de FORMA o de completitud
+    aparente sobre evidencia que ya se tiene, no de recuperacion.
+
+    CUANDO NO: cuando la falla es no haber encontrado. Es el brazo mas caro del catalogo
+    (118.911 tokens por celda) porque la revision arrastra la conversacion entera otra vez,
+    y su efecto medido de +0,250 salio integro de una celda que se da vuelta sola.
+    """
     usage = Usage()
 
     messages = [{
@@ -483,7 +574,8 @@ def reflection(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) ->
         ),
     }]
     first, first_usage, transcript, iterations = _run_tool_loop(
-        client, surface, messages, max_iterations=10
+        client, surface, messages,
+        max_iterations=guards.REFLECTION_DRAFT_ITERATIONS,
     )
     usage.merge(first_usage)
     draft = first.text if first else ""
@@ -514,7 +606,8 @@ def reflection(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) ->
         },
     ]
     revised, revise_usage, _, revise_iters = _run_tool_loop(
-        client, surface, revise_messages, max_iterations=8
+        client, surface, revise_messages,
+        max_iterations=guards.REFLECTION_REVISE_ITERATIONS,
     )
     usage.merge(revise_usage)
 

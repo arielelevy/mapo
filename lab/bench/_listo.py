@@ -53,6 +53,14 @@ PASOS = [
     ("lo afirmado se re-deriva del registro",
      [PY, "bench/audits/_audit_afirmaciones.py"], False),
     ("ninguna guarda quedó inerte", [PY, "bench/audits/_audit_inerte.py"], False),
+    # LLAMAR NO ES LOGRAR, y esta faltaba. `rewoo` llamaba a `read` en 130 de 138 celdas y
+    # leía CERO unidades —único brazo con ids alucinados, 36 contra 0 de los otros ocho— y
+    # estuvo así en el registro desde siempre. Ninguna de las guardas de arriba lo veía:
+    # los tests prueban el código, `_audit_inerte` mira guardas que ningún corpus dispara,
+    # `_audit_specs` mira lo que los módulos declaran. Ninguna miraba si una llamada tuvo
+    # su EFECTO.
+    ("toda llamada a una herramienta obtiene su efecto",
+     [PY, "bench/audits/_audit_plomeria.py"], False),
     ("el presupuesto está estimado contra el corpus", [PY, "bench/_estimate.py"], False),
     # LA UNICA QUE GASTA, y va última a propósito: si algo de arriba falla, esto no se paga.
     # En la práctica pega en el caché y sale gratis, pero eso es una propiedad del caché y

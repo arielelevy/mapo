@@ -23,25 +23,116 @@ from collections import defaultdict
 from typing import Any
 
 from .parsing import extract_json, well_formed
+from .. import guards
 from ..llm import LLMClient, Usage
 from ..tools import MAX_BATCH_READ, ToolFailure, ToolSurface, _summarise
 from . import ANSWER_CONTRACT, answer_contract, Result, _finish
 
 # Evidence caps. Substituting a full 8k-token unit into a search query would be
 # nonsense; and the solver prompt must stay bounded by construction, not by hope.
-SUBSTITUTION_CHARS = 800
-EVIDENCE_ITEM_CHARS = 32_000
-MAX_PLAN_STEPS = 8
+SUBSTITUTION_CHARS = guards.REWOO_SUBSTITUTION_CHARS
+EVIDENCE_ITEM_CHARS = guards.REWOO_EVIDENCE_ITEM_CHARS
+MAX_PLAN_STEPS = guards.REWOO_PLAN_STEPS
+# ARGUMENTOS QUE PIDEN UN IDENTIFICADOR, NO TEXTO. La sustitución de evidencia de ReWOO es
+# textual —`#E1` se reemplaza por la salida del paso 1— y para una `query` eso está bien.
+# Para `unit_ids` está mal, y ese error dejaba a `rewoo` estructuralmente impedido de leer.
+ARGS_DE_ID = ("unit_ids", "unit_id", "entity_id", "ids")
 
+
+def _ids_de(salida: str) -> str:
+    """Los `unit_id` que trae la salida de una búsqueda, como lista separada por comas.
+
+    POR QUÉ EXISTE (2026-08-30). El plan del modelo escribe `read(unit_ids="#E1")`, que es
+    lo natural y lo que ReWOO significa en la literatura: un paso referencia el RESULTADO
+    del anterior. Pero la sustitución reemplazaba `#E1` por el **JSON entero de la
+    búsqueda** truncado, así que a `read` le llegaba un blob en vez de un id.
+
+    Medido antes del arreglo: `rewoo` llamaba a `read` en **130 de 138 celdas y leía CERO
+    unidades**, y era el único brazo del plantel con ids alucinados —36, contra 0 de todos
+    los demás—. Contestaba desde los snippets y nunca abría un documento: ganaba donde el
+    resumen alcanzaba y sacaba 0,00 donde la respuesta era un dato que el resumen no trae,
+    como un número de cuenta sobre UNA sola unidad.
+
+    Devuelve cadena vacía si la salida no tiene ids — un paso de lectura sin nada que leer
+    tiene que fallar visible, no leer cualquier cosa.
+    """
+    try:
+        cuerpo = json.loads(salida)
+    except (ValueError, TypeError):
+        return ""
+    # EL ORDEN SE CONSERVA, y no es un detalle: los resultados de una búsqueda vienen
+    # RANKEADOS, así que devolverlos al revés es leer primero el peor. La primera versión
+    # de esto usaba una pila y los invertía — `memo-007` antes que `memo-003` — y con
+    # `MAX_BATCH_READ` recortando, invertir no reordena: DESCARTA los mejores.
+    vistos: list[str] = []
+
+    def recorrer(nodo: Any) -> None:
+        if isinstance(nodo, dict):
+            uid = nodo.get("unit_id")
+            if isinstance(uid, str) and uid not in vistos:
+                vistos.append(uid)
+            for v in nodo.values():
+                recorrer(v)
+        elif isinstance(nodo, list):
+            for v in nodo:
+                recorrer(v)
+
+    recorrer(cuerpo)
+    return ",".join(vistos[:MAX_BATCH_READ])
+
+
+# LAS CUATRO, Y LA SEMANTICA ES LA QUE MAS FALTA (2026-08-30).
+#
+# Este prompt declaraba TRES de las cuatro herramientas de recuperacion disponibles, y la
+# que faltaba era `semantic_search`. Medido sobre 138 celdas: `rewoo` llamo `search` 255
+# veces y `keyword_search` 149 — y `semantic_search` **cero**, porque nunca se la
+# ofrecieron.
+#
+# Y es justo la que su mecanismo mas necesita. `rewoo` planifica A CIEGAS: escribe el plan
+# entero antes de ver un solo resultado, asi que **no puede corregir una consulta que no
+# matcheo**. La busqueda lexica es la mas fragil ante el parafraseo —exige el termino
+# exacto— y la semantica es la unica que tolera que la consulta planeada no use las
+# palabras del documento.
+#
+#     Para un brazo que reacciona, que le falte una modalidad cuesta una vuelta mas.
+#     Para uno que NO reacciona, cuesta la tarea entera.
+#
+# Se agrega en vez de sacar nada: antes de quitarle una herramienta a un patron hay que
+# preguntarse si deberia usarla, y aca la respuesta era que le faltaba.
 REWOO_TOOLS = (
     "- search(query, limit): fused ranking, returns unit_id + summary per hit\n"
     "- keyword_search(query, limit): exact-term ranking, returns unit_id + highlight\n"
+    "- semantic_search(query, limit): meaning-based ranking, tolerates paraphrase — "
+    "prefer it when the wording of the documents cannot be guessed\n"
     "- read(unit_ids): full text of up to {batch} comma-separated unit ids"
 )
 
 
 def rewoo(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
-    """Plan every tool call up front, execute without the LLM, solve once."""
+    """Planifica TODAS las llamadas de antemano, las ejecuta sin el modelo, y responde una vez.
+
+    QUE HACE, y el orden es el punto: (1) una llamada al modelo que produce un plan de
+    hasta `MAX_PLAN_STEPS` pasos, (2) el CODIGO ejecuta esos pasos sin volver a consultar
+    al modelo, (3) una llamada final que resuelve con la evidencia junta.
+
+    LA CONSECUENCIA ESTRUCTURAL: **dos llamadas al modelo, pase lo que pase.** Por eso es
+    el brazo mas barato del catalogo por lejos —1.050 tokens por celda contra 137.211 de
+    `react`— y por eso gana 23 de 46 tareas bajo el criterio «maxima utilidad al menor
+    costo»: donde todos empatan, gana el que cuesta menos.
+
+    GUARDAS QUE LO GOBIERNAN:
+      · `MAX_PLAN_STEPS = 8` pasos; `EVIDENCE_ITEM_CHARS = 32.000` por item;
+        `SUBSTITUTION_CHARS = 800` al sustituir el resultado de un paso en el siguiente
+      · **no puede reaccionar**: el plan se fija antes de ver un solo resultado. Si el paso
+        uno devuelve algo inesperado, los pasos dos a ocho ya estaban escritos
+
+    CUANDO ES EL CAMINO CORRECTO: cuando lo que hay que traer se puede enumerar ANTES de
+    empezar — una lista de nombres dada en la pregunta, un conteo sobre un alcance
+    declarado. La independencia entre pasos es su precondicion, no una preferencia.
+
+    CUANDO NO: en cualquier cadena. Planificar de antemano un encadenamiento es planificar
+    una busqueda cuyo termino todavia no se conoce.
+    """
     usage = Usage()
 
     plan_prompt = (
@@ -52,7 +143,9 @@ def rewoo(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Resu
         f"Return JSON only:\n"
         f'{{"steps": [{{"tool": "search", "args": {{"query": "..."}}, "out": "E1"}}, ...]}}\n'
         f"A later step may reference earlier evidence by writing #E1, #E2... inside an "
-        f"argument string. At most {MAX_PLAN_STEPS} steps."
+        f"argument string. In `unit_ids` the reference resolves to the unit ids that "
+        f"step found, so `read(unit_ids=\"#E1\")` reads what the search returned. "
+        f"At most {MAX_PLAN_STEPS} steps."
     )
     plan = client.complete(
         messages=[{"role": "user", "content": plan_prompt}], max_tokens=800
@@ -74,8 +167,17 @@ def rewoo(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Resu
         args = dict(step.get("args") or {})
         for k, v in args.items():
             if isinstance(v, str):
+                # UN ARGUMENTO DE IDENTIFICADOR RECIBE IDS, NO TEXTO. Es el arreglo de
+                # `RW-1`: la sustitución textual servía para una `query` y dejaba a `read`
+                # con un blob JSON donde esperaba un id, así que este patrón llamaba a
+                # `read` 130 veces y leía cero unidades. También se admite `#E1.ids`
+                # explícito, que es lo que un plan bien escrito debería decir.
                 for key, val in evidence.items():
-                    v = v.replace(f"#{key}", val[:SUBSTITUTION_CHARS])
+                    v = v.replace(f"#{key}.ids", _ids_de(val))
+                for key, val in evidence.items():
+                    reemplazo = (_ids_de(val) if k in ARGS_DE_ID
+                                 else val[:SUBSTITUTION_CHARS])
+                    v = v.replace(f"#{key}", reemplazo)
                 args[k] = v
         try:
             output = surface.dispatch(str(step.get("tool", "")), args)
@@ -102,7 +204,25 @@ def rewoo(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Resu
 
 
 def gist_reader(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
-    """One prompt over per-unit gists; targeted batched full reads only where named."""
+    """Un prompt sobre GISTS por unidad, y lecturas completas sólo donde el modelo las nombra.
+
+    QUE HACE: sirve un resumen corto de cada unidad —todas— y deja que el modelo pida la
+    lectura completa de las que le importan, en batch. Es una estrategia de dos
+    granularidades: barato y ancho primero, caro y angosto despues.
+
+    GUARDAS QUE LO GOBIERNAN:
+      · `MAX_BATCH_READ` acota cuantas unidades entran en una lectura
+      · el gist es una compresion con perdida: **lo que el resumen no menciona, el modelo
+        no lo puede pedir**. Si la respuesta vive en un detalle que el gist descarto, el
+        brazo no tiene forma de llegar
+
+    CUANDO ES EL CAMINO CORRECTO: cuando la respuesta esta en pocas unidades pero **cuales**
+    no se sabe de antemano, y el material no entra entero. Ve el alcance completo a costo
+    de resumen y paga texto completo solo donde hace falta.
+
+    CUANDO NO: cuando la respuesta depende de un detalle que un resumen borra —una fecha,
+    un identificador, una diferencia menor entre dos registros que compiten.
+    """
     usage = Usage()
     unit_ids = surface.unit_ids()
 
@@ -138,7 +258,11 @@ def gist_reader(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -
     selected: list[str] = []
     spent = 0
     for u in wanted:
-        cost = len(surface.read_one(u)) // 4 if u in unit_ids else 0
+        # `unit_tokens` y no `len(read_one(...)) // 4`: medir el largo de algo NO es
+        # haberlo leido. `read_one` suma a `served_chars` y marca la unidad como leida
+        # estructuralmente, asi que estimar el costo de una unidad la cobraba — y cada
+        # unidad seleccionada terminaba contada TRES veces: gist, estimacion y lectura.
+        cost = surface.unit_tokens(u) if u in unit_ids else 0
         if u in unit_ids and spent + cost <= allowance:
             selected.append(u)
             spent += cost
@@ -183,9 +307,7 @@ def gist_reader(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -
 # el indice a `app/ingest.py` se fue con ellas — el paradigma quedaba con un `NameError` en
 # tiempo de ejecucion, no de import, asi que ningun test de importacion lo veia. Lo encontro
 # el smoke de humo de los 13, que es exactamente para lo que existe.
-WALK_DEPTH = 2
-
-
+WALK_DEPTH = guards.GRAPH_WALK_DEPTH
 # `_entity_graph` VIVIA ACA y construia el indice adentro del request. Se movio entero a
 # `app/ingest.py` por `G-4`, y no se dejo un envoltorio de compatibilidad a proposito: un
 # envoltorio habria permitido que un paradigma nuevo lo llamara sin darse cuenta, que es
@@ -196,11 +318,23 @@ WALK_DEPTH = 2
 def graph_traverse(
     client: LLMClient, surface: ToolSurface, task: dict[str, Any]
 ) -> Result:
-    """Chains as graph walks: extract question entities, walk, read the hits, answer.
+    """Cadenas como caminatas de grafo: extrae entidades, camina, lee los aciertos, responde.
 
-    The coupled hop A->B is resolved because A and B are already connected nodes: the
-    chain is a deterministic traversal, not an iterated search, so the per-question
-    cost is fixed by construction (2 LLM calls + a walk that costs nothing).
+    QUE HACE: en vez de buscar por texto, arma un grafo de entidades desde la pregunta y
+    camina `WALK_DEPTH` saltos, leyendo las unidades que el camino toca.
+
+    GUARDAS QUE LO GOBIERNAN:
+      · `WALK_DEPTH = 2` saltos; `MAX_BATCH_READ` en la lectura
+      · **depende de que exista un grafo que caminar**. Si el corpus resuelve las entidades
+        de antemano —una forma canonica por nombre, sin abreviaturas ni anafora— la parte
+        dificil ya esta hecha y el patron no tiene nada que aportar
+
+    ESTA EN STANDBY, no retirado, y la diferencia importa: fue **falsificado** por una
+    prediccion registrada (`P10a`) con dos condiciones de revival escritas. La segunda de
+    ellas —un corpus con variantes de superficie y anafora— ya se cumple desde `K-6`.
+
+    CUANDO SERIA EL CAMINO CORRECTO: una cadena de referencias donde resolver **quien es
+    quien** sea la dificultad, no encontrar el documento.
     """
     usage = Usage()
     # CONSUME, NO CONSTRUYE (G-4). El indice se arma en la etapa de ingesta, antes y
@@ -253,7 +387,8 @@ def graph_traverse(
     selected: list[str] = []
     spent = 0
     for u in ranked:
-        cost = len(surface.read_one(u)) // 4
+        # Estimar no es leer: `unit_tokens` mide sin dejar rastro de lectura.
+        cost = surface.unit_tokens(u)
         if spent + cost > allowance:
             break
         selected.append(u)
@@ -280,12 +415,22 @@ def graph_traverse(
 def extract_compute(
     client: LLMClient, surface: ToolSurface, task: dict[str, Any]
 ) -> Result:
-    """Map to structured rows, aggregate in code, phrase once.
+    """Mapea a filas estructuradas, agrega EN CODIGO, y redacta una vez.
 
-    map_reduce fails two ways: its reduce is prose (lossy) and context-bounded. Here
-    the reduce is a computation — dedupe and counts happen in code, exactly, at zero
-    LLM cost and with no context bound. The model phrases a computed table; it never
-    does arithmetic in tokens.
+    QUE HACE: por cada unidad, una extraccion a un esquema fijo; despues el codigo agrega
+    —cuenta, suma, filtra— sin pedirle al modelo que haga aritmetica; despues una llamada
+    que redacta.
+
+    LA IDEA ES SACARLE AL MODELO LA PARTE QUE HACE MAL: contar. La agregacion es
+    deterministica y auditable porque la hace el codigo.
+
+    GUARDAS QUE LO GOBIERNAN:
+      · una llamada por unidad, asi que el costo crece **lineal con el alcance** — y por
+        eso la factibilidad lo poda en **66 de 78 tareas** bajo presupuesto de produccion
+      · el esquema de extraccion es fijo: lo que no entra en el esquema se pierde
+
+    SU INFACTIBILIDAD **ES** EL RESULTADO, no un hueco del registro: el patron es correcto
+    y no entra en el presupuesto que produccion tiene. Eso se mide una vez y se declara.
     """
     usage = Usage()
 
@@ -354,25 +499,43 @@ def extract_compute(
     )
 
 
-CHUNK_TOKENS = 6_000
-CARRY_MAX_CHARS = 6_000
-
-
+CHUNK_TOKENS = guards.SCAN_CHUNK_TOKENS
+CARRY_MAX_CHARS = guards.SCAN_CARRY_CHARS
 def streaming_scan(
     client: LLMClient, surface: ToolSurface, task: dict[str, Any]
 ) -> Result:
-    """One sequential pass with carried state: the corpus is paid exactly once.
+    """Una pasada secuencial con estado acarreado: el corpus se paga EXACTAMENTE una vez.
 
-    The unknown horizon stops mattering: the carry (a structured registry of findings
-    and open candidates) grows with the FINDINGS, not with the steps, and each chunk is
-    checked against it. No retrieval, no history resend, no lottery.
+    QUE HACE: recorre las unidades en orden, en trozos de `CHUNK_TOKENS`, arrastrando un
+    resumen de estado acotado a `CARRY_MAX_CHARS`. Nunca vuelve atras.
+
+    LA PROPIEDAD QUE LO DEFINE: cada token de material entra al modelo **una sola vez**.
+    Es el unico brazo del catalogo con esa garantia, y por eso es el contraejemplo del
+    problema que §7.8 mide — el resto reenvia la conversacion en cada vuelta.
+
+    GUARDAS QUE LO GOBIERNAN:
+      · `CHUNK_TOKENS = 6.000` por trozo; `CARRY_MAX_CHARS = 6.000` de estado
+      · **el acarreo es una compresion con perdida y sin vuelta atras**: lo que el estado
+        no conserva al pasar de trozo, se perdio para siempre
+
+    CUANDO SERIA EL CAMINO CORRECTO: alcances muy anchos donde la respuesta se puede
+    construir incrementalmente — un conteo, un maximo, una acumulacion.
+
+    CUANDO NO: cuando hace falta comparar dos unidades lejanas entre si. Podado por
+    factibilidad en 66 de 78 tareas.
     """
     usage = Usage()
 
     chunks: list[list[str]] = [[]]
     spent = 0
     for unit_id in surface.unit_ids():
-        cost = len(surface.read_one(unit_id)) // 4
+        # ACA SE JUGABA LA PROPIEDAD QUE DEFINE AL BRAZO. Armar los trozos con `read_one`
+        # cobraba el corpus ENTERO una vez, y despues el prompt lo cobraba otra: el
+        # docstring de arriba dice que cada token de material entra una sola vez y que es
+        # el unico brazo del catalogo con esa garantia. La garantia se cumplia —el modelo
+        # veia cada unidad una vez— y `served_chars` decia lo contrario, que es la unica
+        # metrica donde se habria visto.
+        cost = surface.unit_tokens(unit_id)
         if spent + cost > CHUNK_TOKENS and chunks[-1]:
             chunks.append([])
             spent = 0
@@ -430,30 +593,48 @@ def streaming_scan(
 # Structure trace on demand from the seed, never a corpus index (DocTrace 2606.10921).
 # ---------------------------------------------------------------------------
 
-LEDGER_FACT_CHARS = 400
-
-
+LEDGER_FACT_CHARS = guards.CHASE_LEDGER_FACT_CHARS
 def pointer_chase(
     client: LLMClient, surface: ToolSurface, task: dict[str, Any]
 ) -> Result:
-    """Follow the chain one unit at a time; the loop is code, the LLM is a sensor.
+    """Sigue la cadena de a una unidad; el bucle lo lleva el CODIGO y el LLM es sensor.
 
-    Every hop the model sees the question, a small typed ledger of facts, and the
-    full text of the CURRENT unit only. It emits a proposition — the fact this unit
-    contributes and where the trail points next — and code does everything else:
-    validates the pointer, fetches, counts stalls and hallucinated pointers, and
-    stops at the arithmetic hop cap. Decoding is deterministic, so a revisit or a
-    barren search can never resolve differently on a retry — both break immediately.
+    QUE HACE: el codigo mantiene el estado de la caminata —donde esta, que ya visito, que
+    hechos junto en el ledger— y en cada paso le pregunta al modelo una sola cosa: cual es
+    el proximo puntero. El modelo nunca decide cuando parar.
+
+    ES EL CASO MAS PURO DEL INVARIANTE DEL PRODUCTO: el LLM emite una proposicion, el
+    codigo maneja el flujo de control.
+
+    GUARDAS QUE LO GOBIERNAN:
+      · `LEDGER_FACT_CHARS = 400` por hecho acarreado; el presupuesto corta la caminata
+      · el modelo puede devolver `DONE`, `DEAD_END` o `NONE`, y el codigo los distingue —
+        no llegar y decidir que no hay camino son cosas distintas
+
+    ESTA RETIRADO por `P14a`: **nunca toco una unidad relevante** en el corpus donde se lo
+    midio. Y sus frenos SI se confirmaron, asi que el mecanismo sobrevive a la muerte del
+    patron — lo que fallo fue la caminata, no la disciplina de control.
     """
     usage = Usage()
     unit_ids = surface.unit_ids()
+    # EL PROMEDIO NO SE PAGA LEYENDO. Esto llamaba a `read_one` sobre CADA unidad del
+    # alcance para quedarse con un largo promedio, y `read_one` deja rastro: medido,
+    # `pointer_chase` daba `units_read_structural == n_units` en **170 de 170 celdas**.
+    #
+    # O sea que el brazo que se define por seguir UN puntero desde UN ancla figuraba
+    # abriendo el alcance completo, en la unica metrica que mostraria si lo hace. El
+    # veredicto de P14a —que nunca toco una unidad relevante— sobrevive porque se calculo
+    # sobre `units_read`, las lecturas del MODELO; pero `relevant_units_read_any`, que
+    # incluye las estructurales, decia exactamente lo contrario. Dos metricas con lecturas
+    # opuestas del mismo brazo, y la diferencia era un calculo de promedio.
     mean_unit = max(
-        1, sum(len(surface.read_one(u)) for u in unit_ids) // max(1, len(unit_ids)) // 4
+        1, sum(surface.unit_tokens(u) for u in unit_ids) // max(1, len(unit_ids))
     )
     # Same arithmetic as app.feasibility: the cap is a guarantee, shared by both
     # layers, tested against the BUDGET — the chase holds no conversation (nothing is
     # resent; the solve reads a small ledger), so the conversation share is not owed.
-    hop_cap = min(6, max(2, surface.budget_tokens // mean_unit))
+    hop_cap = min(guards.CHASE_MAX_HOPS,
+                  max(guards.CHASE_MIN_HOPS, surface.budget_tokens // mean_unit))
 
     hits: list[dict[str, Any]] = json.loads(
         surface.dispatch("search", {"query": task["question"], "limit": 5})

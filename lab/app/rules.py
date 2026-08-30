@@ -19,6 +19,8 @@ enough evidence per proposition to calibrate.
     has_oracle          bool   a cheap failure detector exists      COMPUTED
     irreversible        bool   the task commits an unsafe action    COMPUTED
     shared_writes       bool   units write shared state             COMPUTED
+    literal_absent      bool   el literal que cita la pregunta no
+                               esta en ninguna unidad del alcance   COMPUTED
     coupling_tight      bool   sub-results depend on each other     ELICITED or OBSERVED
     horizon_unknown     bool   step count not knowable in advance   ELICITED or OBSERVED
     best_paradigm       str    what theta says wins in this region  COMPUTED from theta
@@ -238,6 +240,9 @@ def sense(
     coupling: float | None = None,
     coupling_provenance: Provenance = Provenance.ELICITED,
     coupling_credence: float = 0.0,
+    # EL LITERAL, COMO CREENCIA Y NO COMO DATO SUELTO (EP-4, 2026-08-30). Ver el bloque
+    # donde se asienta, más abajo.
+    literal: str | None = None,
     horizon_unknown: bool | None = None,
     horizon_provenance: Provenance = Provenance.ELICITED,
     horizon_credence: float = 0.0,
@@ -340,6 +345,40 @@ def sense(
     # "Unmeasured" means: no belief about coupling at the provenance floor the RULES
     # will accept. Reading the floor from the shared policy is what keeps the probe
     # rule and the specialise rule from disagreeing about what counts as known.
+    # EL LITERAL DE LA PREGUNTA, COMO CREENCIA (EP-4, 2026-08-30)
+    #
+    # `measure_question_literal` ya existía y su valor ya entraba a la región, pero **no
+    # estaba en el vocabulario de proposiciones**: ninguna regla podía razonar sobre él.
+    # Tener la pieza no es tener el ciclo.
+    #
+    # ES `COMPUTED`, y ahí está lo que lo hace valioso: se establece por contención de una
+    # cadena conocida contra el material —aritmética, sin modelo en el medio— así que
+    # **satisface el piso más alto que cualquier regla puede pedir**, incluido el de una
+    # acción irreversible. Es la misma clase que `term_absence` de `contracts.py`, que es de
+    # donde salió: una creencia que no se podía establecer por el camino caro —leer el
+    # dominio entero, insatisfacible en 9 de 9 tareas de `B2`— y que se establece barata.
+    #
+    #     Esto es exactamente lo que el producto promete: si falta una variable, ir a
+    #     buscarla — y traerla con la procedencia más fuerte que hay, no con la del modelo.
+    #
+    # Se asienta y NINGUNA REGLA LA USA TODAVÍA. Es deliberado: agregar una creencia no
+    # cambia comportamiento, agregar una regla sí, y una regla que cambia el ruteo se mide
+    # antes de adoptarse. Lo que esto habilita hoy es que el descubrimiento de particiones
+    # y el EXPLAIN la vean.
+    if literal is not None:
+        base.assert_(Belief(
+            proposition="literal_absent",
+            value=(literal == "lit_absent"),
+            credence=1.0,
+            provenance=Provenance.COMPUTED,
+            evidence=(
+                f"el literal que cita la pregunta {'NO aparece' if literal == 'lit_absent' else 'aparece'} "
+                f"en ninguna unidad del alcance"
+                if literal in ("lit_absent", "lit_present")
+                else f"la pregunta no cita un literal verificable ({literal})"
+            ),
+        ))
+
     measured = base.satisfies(
         "coupling_tight", COUPLING_CREDENCE_FLOOR, policy.derived_floor
     )

@@ -39,6 +39,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..beliefs import Belief, BeliefBase, Provenance
+from .. import guards
 from ..llm import LLMClient, Usage
 from ..tools import ToolSurface
 from . import ANSWER_CONTRACT, answer_contract, Result, _run_tool_loop, parse_answer
@@ -46,11 +47,9 @@ from .parsing import extract_json
 
 # Cuantos alcances. Dos es el minimo que tiene transferencia; mas alcances multiplican el
 # costo fijo sin cambiar la estructura, y la estructura es lo que se mide.
-SCOPES = 2
-
+SCOPES = guards.HANDOFF_SCOPES
 # Vueltas por agente. Acotado por el codigo, no por el modelo.
-MAX_TURNS_PER_AGENT = 6
-
+MAX_TURNS_PER_AGENT = guards.HANDOFF_TURNS_PER_AGENT
 # Piso para autorizar la transferencia. El agente la PROPONE —eso es su opinion, asi que
 # ELICITED— y la regla exige que lo que pide exista LITERAL en otro alcance, que es un
 # hecho computable sobre el material. Sin eso, un agente podria pedir transferencia
@@ -143,7 +142,28 @@ def _authorises(base: BeliefBase, missing: str, scope: list[str],
 
 
 def handoff(client: LLMClient, surface: ToolSurface, task: dict[str, Any]) -> Result:
-    """Alcances independientes, y una transferencia que autoriza el codigo."""
+    """Alcances INDEPENDIENTES, y una transferencia que autoriza el codigo.
+
+    QUE HACE: parte el alcance en `SCOPES` porciones disjuntas, le da una a cada
+    sub-agente, y el codigo —no el modelo— decide cuando pasa de uno al siguiente. Cada
+    sub-agente ve **solo sus unidades**: no puede leer afuera porque las unidades no estan,
+    no porque se le haya pedido que no lo haga.
+
+    GUARDAS QUE LO GOBIERNAN:
+      · `SCOPES = 2` porciones; `MAX_TURNS_PER_AGENT = 6` vueltas por sub-agente
+      · el reparto es un **paso por indice**, fijo: no se aprende ni se adapta al contenido
+      · **la particion es la limitacion y la virtud**: garantiza cobertura y destruye
+        cualquier relacion que cruce la costura
+
+    CUANDO ES EL CAMINO CORRECTO: cuando hay que probar algo sobre TODO el alcance y las
+    unidades son independientes entre si — una ausencia («ninguno cumple»), una
+    enumeracion exhaustiva, una lista de lookups dada de antemano. Medido: gana 3 de las 5
+    tareas del corpus que tienen un unico mejor brazo, y las tres son de ausencia.
+
+    CUANDO NO: cuando la respuesta cruza unidades. Si la contradiccion esta entre la unidad
+    3 y la 15, y el corte cae en el medio, **ningun sub-agente la ve** y los dos contestan
+    con confianza.
+    """
     usage = Usage()
     base = BeliefBase()
     units = surface.unit_ids()

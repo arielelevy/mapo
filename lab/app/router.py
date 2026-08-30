@@ -253,6 +253,10 @@ class Router:
         coupling_provenance: Provenance = Provenance.ELICITED,
         coupling_credence: float = 0.0,
         horizon_unknown: bool | None = None,
+        # EL LITERAL, COMO CREENCIA (EP-4). Llega hasta `sense` o no existe: una creencia
+        # que el router no propaga es una que ninguna regla puede ver, y este repo ya pagó
+        # tres veces por un factor que no llega.
+        literal: str | None = None,
         horizon_provenance: Provenance = Provenance.ELICITED,
         horizon_credence: float = 0.0,
         prior_beliefs: list[dict[str, Any]] | None = None,
@@ -391,6 +395,7 @@ class Router:
             horizon_unknown=horizon_unknown,
             horizon_provenance=horizon_provenance,
             horizon_credence=horizon_credence,
+            literal=literal,
             base=history,
         )
 

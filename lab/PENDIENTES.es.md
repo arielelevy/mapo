@@ -956,6 +956,789 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   invisible»*— cometida en los campos que ese mismo docstring no enumeraba.
   `test_science.py` §63.
 
+- [x] **GD-1** · **las guardas desafiadas y las cuatro deudas RESUELTAS** (2026-08-30).
+
+  Centralizarlas las volvió comparables, y comparadas ninguna aguantaba igual:
+
+  | brazo | techo real | máx observado | ¿ataba? |
+  |---|---|---:|---|
+  | `handoff` | `2 × 6 = 12` | 11 | sí, y justo |
+  | `supervisor` | `4 × (1+3) + 1 = 17` | 17 | siempre |
+  | `dag_strategy` | `4 × 10 × (1+3) = 160` | **19** | **nunca** |
+  | `rewoo` | 2, por construcción | 2 | por construcción |
+
+  **Y el hallazgo que decidió el diseño: el esfuerzo NO estaba balanceado, con 113× de
+  rango** —`rewoo` 1.050 tokens por celda contra `reflection` 118.911—. Si los patrones no
+  compiten al mismo presupuesto, la comparación **no mide la topología: mide el
+  presupuesto**, y toda conclusión de la forma «el patrón X gana» arrastra ese confundido.
+
+  **El eje correcto no son las llamadas, y el registro lo dice**: `handoff` tiene techo de
+  **12** y gasta 86.646; `dag_strategy` tiene techo de **160** y gasta 84.916. Casi lo
+  mismo, con factor 13 de diferencia en el techo. *El techo cuenta llamadas y el costo lo
+  maneja lo que cada llamada arrastra — contar llamadas para acotar esfuerzo es contar
+  envases para acotar peso.*
+
+  **Las cuatro deudas, resueltas:**
+
+  1. **el techo TOTAL, nombrado** — `TECHO_LLAMADAS` en `guards.py`. Faltaba, y su ausencia
+     fue lo primero que medí mal: deduje el de `supervisor` de sus constantes y me dio 12
+     cuando el real es 17, porque hace una llamada de plan por despacho y una final que
+     **ninguna constante nombraba**
+  2. **el de `dag` bajado a donde ata** — de 160 a 24, y ahora está dicho que lo que
+     realmente lo corta es `DAG_DIMINISHING_RETURNS` en vez de esconderlo detrás de un
+     número enorme
+  3. **la ventana del sub-agente, fracción y no absoluto** — `ventana_sub_agente()` escala
+     con el alcance. Sobre 60 unidades da 24 y sobre 5 da 3; antes daba 8 siempre, y por eso
+     **en 28 de 78 tareas el sub-agente veía el alcance entero**
+  4. **el presupuesto de esfuerzo en TOKENS** — `presupuesto_de_esfuerzo()`, en la porción
+     del presupuesto declarado de la tarea, que es la misma unidad con la que la
+     factibilidad ya lo admitió. *Admitir un brazo porque entra en el presupuesto y después
+     dejarlo gastar diez veces eso es admitirlo con una cuenta y medirlo con otra*
+
+  **Todo detrás del factor `effort_balanced`, apagado por defecto**, porque encenderlo
+  cambia comportamiento y volvería incomparable el registro pagado. `test_science.py` §67
+  verifica los techos **contra lo observado**: que ninguno lo viole el registro, y que
+  ninguno sea decoración —más de 4× sobre el máximo—.
+
+  Lo que queda para medir es la corrida: `{balanceado, no}` sobre los brazos con
+  sub-agentes. **Es la primera vez que se puede comparar topologías a igual presupuesto.**
+
+- [x] **RW-2** · **a `rewoo` le faltaba la búsqueda semántica, y era la que más
+  necesitaba** (2026-08-30). Salió de la regla del autor: *antes de sacarle una herramienta
+  a un patrón, fijarse si debería usarla.*
+
+  Medido: `rewoo` llamó `search` **255** veces —el que más de todo el plantel— y
+  `semantic_search` **cero**. No es que no la eligiera: **su prompt declaraba tres de las
+  cuatro** y la semántica no estaba.
+
+  **Y es justo la que su mecanismo más necesita.** `rewoo` planifica **a ciegas**: escribe
+  el plan entero antes de ver un solo resultado, así que **no puede corregir una consulta
+  que no matcheó**. La léxica es la más frágil ante el parafraseo —exige el término
+  exacto— y la semántica es la única que tolera que la consulta planeada no use las
+  palabras del documento.
+
+  > **Para un brazo que reacciona, que le falte una modalidad cuesta una vuelta más. Para
+  > uno que NO reacciona, cuesta la tarea entera.**
+
+  Agregada, con el criterio de uso adentro de la descripción —*«preferila cuando no se
+  puede adivinar la redacción de los documentos»*—, porque una herramienta cuyo criterio no
+  se dice no se usa.
+
+  **Y el análisis a mano de los otros once, para que no se toque lo que está bien:**
+
+  | patrón | tiene | veredicto |
+  |---|---|---|
+  | `pointer_chase` | sin semántica | **correcto** — sigue punteros, que son identificadores y nombres propios: ahí gana el léxico |
+  | `graph_traverse` | sólo `read` | **correcto, y es su definición** — el grafo le dice a dónde ir. Darle búsqueda lo volvería `react` con prior de grafo |
+  | `gist_reader` | sólo `read` | **correcto** — ya ve todos los gists; buscar sirve para encontrar dónde mirar y él mira todo |
+  | `direct` · `extract_compute` · `streaming_scan` | ninguna | **correcto** — el código les sirve el material |
+  | los cinco con bucle | las cuatro | **correcto** — ven resultados y pueden elegir |
+
+  `test_science.py` §69 fija las dos direcciones: que el que planifica a ciegas tenga toda
+  la recuperación, y que los que no buscan **sigan sin buscar** — si mañana alguien le
+  agrega búsqueda a `graph_traverse`, deja de ser el patrón que se midió.
+
+  > **Una no-adopción puede ser tres cosas y se ven iguales desde el registro**: que no la
+  > necesite, que no se la ofrezcan, o que la plomería esté rota. Las tres piden respuestas
+  > opuestas, y por eso se decide leyendo y no borrando.
+
+- [x] **RW-1** · **`rewoo` llamaba `read` 130 veces y leía CERO unidades — ARREGLADO**
+  (2026-08-30). Lo destapó derivar el camino perfecto a mano.
+
+  | brazo | llama `read` | **lee algo** | ids alucinados |
+  |---|---:|---:|---:|
+  | los otros ocho | 69–130 | **69–131** | **0** |
+  | **`rewoo`** | **130** | **0** | **36** |
+
+  **La causa**: la sustitución de evidencia de ReWOO es textual —`#E1` se reemplaza por la
+  salida del paso 1— y para una `query` está bien. Para `unit_ids` está mal: a `read` le
+  llegaba el **JSON entero de la búsqueda** truncado, donde esperaba un id.
+
+  **Y eso reescribía qué era el patrón**: no «el brazo barato que planifica bien» sino uno
+  que **contesta desde los snippets y nunca abre un documento**. Ganaba donde el resumen
+  alcanza (enumerar roles, `u = 1,00` a 1.625 tokens) y sacaba **0,00 en las nueve réplicas**
+  de la celda más simple del corpus —una unidad, un número de cuenta— porque el resumen no
+  trae el número. Sus 1.050 tokens no eran eficiencia: eran el precio de no leer.
+
+  **El arreglo**: un argumento cuyo nombre pide un identificador —`unit_ids`, `entity_id`—
+  recibe **los ids extraídos** del paso referenciado; los demás siguen recibiendo texto. Se
+  admite además `#E1.ids` explícito, y el prompt del plan lo explica, porque una capacidad
+  que el modelo no sabe que tiene no la usa.
+
+  **Y un segundo defecto, mío, al arreglar el primero**: la primera versión del extractor
+  usaba una pila e **invertía el orden**. Los resultados vienen **rankeados**, y con
+  `MAX_BATCH_READ` recortando, invertir no reordena: **descarta los mejores**. Corregido y
+  fijado en el test.
+
+  `test_science.py` §68. **Y la guarda que faltaba**: `bench/audits/_audit_plomeria.py`
+  —*llamar no es lograr*— entra como **novena condición de lanzamiento**. Ninguna guarda
+  previa podía verlo: los tests prueban el código, `_audit_inerte` mira guardas que ningún
+  corpus dispara, `_audit_specs` mira lo que los módulos declaran. **Ninguna miraba si una
+  llamada tuvo su efecto.**
+
+  **Lo que queda pendiente de esto es re-medir.** Todo lo que `rewoo` aportó al registro lo
+  aportó sin leer, incluidas dos conclusiones de esta sesión: que gana 23 de 46 tareas bajo
+  «máxima utilidad al menor costo», y que sostiene la observación de que el premio del
+  corpus es de costo. Esa observación puede seguir en pie —los otros brazos difieren 50×
+  entre sí— pero **el ganador competía sin abrir un documento**, y hasta re-correrlo eso
+  hay que decirlo cada vez que se lo cite.
+
+- [x] **RW-3** · **un nombre de herramienta inventado MATABA la celda en unos brazos y
+  degradaba en otros** (2026-08-30). Salió de probar las herramientas de a una, que es lo que
+  no se había hecho nunca.
+
+  `dispatch` levantaba `ValueError` para un nombre fuera del catálogo, con el comentario de
+  que un nombre desconocido es un bug del paradigma. **Un renglón más arriba**, el caso de la
+  herramienta *no ofrecida* ya se había corregido a `ToolFailure` por exactamente el motivo
+  opuesto: el bucle compartido atrapa sólo `ToolFailure`, así que un `ValueError` **mata la
+  celda** donde otro brazo apenas pierde una vuelta —y entonces dos brazos se puntúan distinto
+  por el mismo error del modelo—. El arreglo se aplicó a un caso y no al otro.
+
+  **Y el camino es alcanzable desde el modelo**: `rewoo` toma el nombre de `step["tool"]`, que
+  sale de un JSON que escribió el modelo. Es texto libre, no un nombre validado.
+
+  Medido antes de tocar nada: **cero filas con `error` en 1.656**, y ningún nombre fuera del
+  catálogo en ninguna secuencia. **Nunca se disparó** — es deuda latente, no un hallazgo, y no
+  cambia ningún número publicado. Ahora es `ToolFailure` y el mensaje **lista el catálogo**,
+  que es lo que le permite al modelo corregirse en la vuelta siguiente.
+
+- [x] **RW-4** · **no había ninguna prueba unitaria de las herramientas** (2026-08-30). Los
+  tests corrían los paradigmas de punta a punta y las auditorías miraban el registro; **nadie
+  probaba una herramienta sola**. Por ese hueco pasó RW-1 —130 llamadas a `read`, cero
+  unidades leídas— sin que nada se pusiera rojo: la llamada existía, devolvía texto plausible,
+  y el efecto no lo miraba nadie.
+
+  `test_science.py` **§70** prueba cada herramienta contra una vista real y **por su efecto**,
+  no porque no reviente: que `read` deje la unidad en `units_read`, que un id inexistente
+  levante y **se cuente** como alucinado, que un argumento faltante **nombre** el argumento,
+  que un nombre desconocido degrade, que una herramienta de otra variante degrade, y que la
+  secuencia guarde también **las llamadas que fallaron** —una política que sólo registra los
+  aciertos describe algo que nadie ejecutó—.
+
+- [x] **CP-6** · **los predictores, identificados con el método completo — y el objetivo
+  correcto no era la calidad** (2026-08-30). `bench/analysis/_predictores.py`, panel
+  rectangular de 41 tareas × 7 brazos × 3 réplicas, cero llamadas al modelo.
+
+  **1. Dónde vive el premio.** `u = μ + α(tarea) + β(brazo) + γ(interacción) + ε`. Un
+  router **sólo puede cobrar γ**: α no lo cambia nadie y β lo cobra entero el mejor fijo
+  sin decidir nada.
+
+  | componente | varianza | % |
+  |---|---:|---:|
+  | α dificultad de la tarea | 0,0424 | 29% |
+  | β calidad del brazo | 0,0351 | 24% |
+  | **γ interacción** | **0,0693** | **47%** |
+  | ε ruido entre réplicas | 0,0325 | — |
+
+  γ real (descontando el ruido de la media) = **0,0585**, señal/ruido **5,40**. **Hay
+  interacción real.**
+
+  **2. Qué la explica** — fracción de var(γ) capturada, con nulo por permutación (2.000) y
+  corrección por selección contra el **máximo** de los nulos:
+
+  | señal | niveles | explica | nulo p95 | p |
+  |---|---:|---:|---:|---:|
+  | *(la celda — cota superior, no es señal)* | 11 | 0,560 | 0,336 | 0,000 |
+  | `region` (el vocabulario de hoy) | 7 | **0,415** | 0,220 | **0,000** |
+  | cardinalidad × término literal | 7 | 0,259 | 0,221 | 0,008 |
+  | `n_units` (bins) | 4 | 0,255 | 0,128 | 0,000 |
+  | término literal | 3 | 0,126 | 0,098 | 0,013 |
+  | acoplamiento | 2 | 0,094 | 0,060 | 0,006 |
+
+  `region` sobrevive la corrección por selección con `p = 0,000`.
+
+  **3. Y sin embargo una política keyed en `region` PIERDE contra el mejor fijo. La
+  contradicción se resuelve así:**
+
+  > **var(γ) grande ≠ premio de ruteo grande.** El premio es `E[max u] − max E[u]`, y γ es
+  > enorme porque los brazos **malos** son malos en lugares distintos. `gist_reader` 25% +
+  > `graph_traverse` 24% + `rewoo` 19% = **68% de var(γ)** viene de los tres peores. Esa
+  > estructura es real, es predecible y **no vale nada**: nadie elige el que pierde por poco
+  > en vez del que pierde por mucho.
+
+  **Entre los tres que de verdad compiten** —`reflection` 0,930, `dag_strategy` 0,920,
+  `react` 0,917—: γ real `0,0031`, señal/ruido **0,40**; premio máximo `+0,037` contra un
+  piso de ruido de `+0,038` (bootstrap sobre réplicas) → **premio neto `−0,001`**. El máximo
+  por tarea *es* el sesgo del máximo de estimaciones ruidosas, no una elección mejor.
+  El único que separa a los tres contendientes entre sí es **`acoplamiento`** (0,142 contra
+  nulo p95 0,077, `p = 0,003`), y separa algo que no se puede cobrar.
+
+  **4. El objetivo correcto: costo a utilidad igualada.** Desempate lexicográfico —de los
+  que empatan dentro del ruido medido (`tol = 0,104`, una desviación del ruido de la media,
+  no un número elegido), el más barato—. **Evaluado leave-one-out**, o sea aprendiendo en
+  las otras tareas del grupo:
+
+  | señal | utilidad | costo | vs mejor fijo | ahorro |
+  |---|---:|---:|---:|---:|
+  | *(la celda — cota superior)* | 0,946 | 15.102 | +0,016 | 88% |
+  | **cardinalidad × término literal** | **0,938** | **38.824** | **+0,008** | **69%** |
+  | **término literal** | **0,943** | **54.415** | **+0,013** | **57%** |
+  | `n_units` (bins) | 0,937 | 69.653 | +0,007 | 44% |
+  | `region` (el de hoy) | 0,928 | 78.832 | −0,002 | 37% |
+
+  > Contra `reflection` (u=0,930, 125.169 tokens): **misma utilidad dentro del ruido, 3,2×
+  > más barato, fuera de muestra.** El `+0,008` de utilidad **no** es el resultado —está muy
+  > dentro de la tolerancia—; el resultado es el 69%.
+
+  **Los predictores identificados, en orden de valor:**
+
+  1. **`término literal`** — ¿hay en la pregunta una cadena que aparezca **verbatim** en el
+     material? Aritmética pura, costo cero, misma maquinaria que `contracts.term_absence`.
+     Es el más fuerte por sí solo y el que no existía.
+  2. **`answer_cardinality`** — ya la declara el caller; sola no sirve (`p = 0,372`) y
+     multiplicada por la anterior da el mejor resultado.
+  3. **`acoplamiento`** — el único que separa a los brazos que compiten, aunque eso no se
+     pueda cobrar hoy.
+  4. `region`, el vocabulario actual, queda **por debajo** de los tres en el eje que sí
+     paga: 37% de ahorro contra 69%, y `−0,002` de utilidad.
+
+- [x] **EP-1** · **`report()` puntuaba un PLACEHOLDER en la mitad del corpus** — y es el
+  método que produjo los números con los que se refutó P15 (2026-08-30).
+
+  `Router.plan()` recibe `coupling` como argumento y el `decide()` de `Runner.report`
+  **no se lo pasaba**: quedaba en `None` con credencia 0, así que `coupling_unmeasured` era
+  verdadero siempre, la regla `probe_before_deciding_on_bulk` disparaba, y el plan volvía
+  con `needs_probe`. Medido por el camino exacto de `report()`: **23 de 46 tareas — la
+  mitad justa — en los cuatro diales.**
+
+  Y `report()` devuelve `plan.paradigm` sin sondear. En un plan con `needs_probe` ese
+  paradigma es el **placeholder** —el admisible más barato, elegido para probarse DESPUÉS
+  de sondear—. O sea que en la mitad del corpus no se puntuaba una decisión: se puntuaba
+  un marcador de posición, y de ahí salen `selection_terms`,
+  `router_captured_fraction` y `risk_coverage`.
+
+  **Es la corrección que quedó a medio aplicar.** El docstring de `decide.py` describe este
+  defecto **como cerrado** —«`Runner.report` llamaba a `router.plan` una vez y puntuaba lo
+  que viniera»—: se creó `decide_for` con el ciclo de dos pasos y **este llamador nunca
+  migró**. Un módulo que declara una propiedad que su llamador no tiene es peor que uno que
+  no la declara, porque se lee como garantía.
+
+  **Y la causa no era que faltara sondear.** La campaña ya pagó derivar `coupling` con una
+  llamada al extractor (`allow_derived=True`) y el valor está en la región de cada fila.
+  Tirarlo y después declarar que falta es inventarse una carencia. Recuperarlo cuesta cero:
+
+  | dial | piso | antes | ahora |
+  |---|---|---:|---:|
+  | EXPLORATORY · STANDARD | assumed · elicited | 23 | **0** |
+  | ACCOUNTABLE · CERTIFIED | elicited · observed | 23 | 23 |
+
+  Los primeros eran **artificiales**; los segundos son **reales y correctos** — una
+  estimación elicitada no sostiene una decisión con piso `OBSERVED`. Que la corrección
+  conserve los segundos es lo que prueba que no aflojó el gate. `test_science.py` §77.
+
+- [x] **EP-2** · **P15 recomputada: NO se da vuelta, pero el número estaba mal**
+  (2026-08-30). `bench/analysis/_p15_recomputada.py`, mismo registro, misma θ fría, cambia
+  **una sola cosa**: si la decisión recibe la creencia que la campaña ya había pagado.
+
+  | en `STANDARD` | vieja | nueva |
+  |---|---:|---:|
+  | diferidas (placeholder puntuado) | **23 de 46** | **0** |
+  | β — rutear donde NO ayuda | 0,556 | **0,472** |
+  | α — rutear donde SÍ ayuda | 0,800 | 0,600 |
+  | brecha capturada | −4,46 | **−3,74** |
+
+  **El router mejora de forma material y sigue perdiendo.** El veredicto de P15 se sostiene;
+  lo que estaba mal era la magnitud y el camino, no la conclusión.
+
+  **Y se ve por qué no puede ganar: `π = 0,217`.** En el **78%** de las tareas la
+  especialización no ayuda —el mejor fijo ya es óptimo— así que ahí el router sólo puede
+  perder, y con β = 0,47 pierde en la mitad de ese 78%. Eso no lo arregla ninguna señal: es
+  la forma del corpus, y coincide con `CP-5` por un camino independiente.
+
+  **Lo que estos números NO son**: corren con bundle `cold_start`, no con la θ ajustada que
+  `report()` aprende de los episodios. La comparación es válida —cambia una sola cosa— pero
+  los absolutos **no son comparables al −0,087 publicado**. Para eso hay que correr
+  `report()` entero, que ya no puntúa placeholders.
+
+  **Y un defecto mío en el camino**: filtré las filas `infeasible` y `Runner.study` **no las
+  filtra** —sólo saca `infra_error`—, así que `complete_tasks` cayó de 46 a **4** y el
+  análisis corría sobre nueve veces menos datos, en silencio. Se replica la construcción, no
+  se la mejora: lo que se compara es la decisión, todo lo demás tiene que ser idéntico.
+
+- [x] **EP-3** · **un hueco que nadie puede cerrar no es un hueco** (2026-08-30). El
+  objetivo del producto es decidir con creencias y, si falta una variable, ir a buscarla.
+  Auditado: la superficie de «qué puede faltar» tenía **dos** elementos y la sonda podía
+  establecer **uno**.
+
+  **`horizon_unknown` no es un feature**, y hay cinco razones independientes:
+
+  1. **ninguna regla lo requiere** — `rules.py` lo asienta y nadie lo lee
+  2. no entra en el vocabulario de región, ni en el anterior ni en el actual
+  3. la sonda no lo mide: `probe.py` establece `coupling` y nada más
+  4. es **constante** en el registro: `False` en las **3.884** filas que lo llevan
+  5. y el docstring de `Row` afirmaba que está en `True` en las 78 tareas — **la única
+     descripción que existía del eje decía lo contrario del registro** (corregido)
+
+  **Y no es decoración inofensiva**, que es lo que lo hace importar: un eje `DERIVED` sin
+  establecer **acota la confianza y empuja al router al fallback**. Un eje que nadie puede
+  llenar hace abstenerse al motor para siempre y sin motivo.
+
+  > «no lo sé, y puedo averiguarlo» → **sondear**, y decidir después
+  > «no lo sé, y nadie puede» → **decidir con lo que hay**, o abstenerse por eso
+
+  Son decisiones opuestas y `missing()` las devolvía mezcladas. `FEATURE_SENSOR` declara
+  **quién** puede establecer cada eje —`None` es una respuesta válida— y
+  `fillable_gaps()` / `permanent_gaps()` las separan. `missing()` no cambia: la distinción
+  se agrega, no reemplaza. `test_science.py` §78.
+
+  **Lo que queda abierto**: darle sensor a `horizon_unknown` o sacarlo. No se saca ahora
+  porque la plomería permite releer las filas que lo llevan y un corpus futuro podría
+  hacerlo variar — pero mientras tanto ya no hace abstenerse por nada.
+
+- [x] **EP-4** · **`literal_absent` es una creencia con sensor, no un helper de contrato**
+  (2026-08-30). `measure_question_literal` ya existía y su valor ya entraba a la región,
+  pero **no estaba en el vocabulario de proposiciones**: ninguna regla podía razonar sobre
+  él. Tener la pieza no es tener el ciclo.
+
+  Es **`COMPUTED`** —contención de una cadena conocida contra el material, aritmética, sin
+  modelo en el medio— así que **satisface el piso más alto que cualquier regla puede pedir,
+  incluido el de una acción irreversible**. Es la misma clase que `term_absence` de
+  `contracts.py`, de donde salió: una creencia que no se podía establecer por el camino
+  caro —leer el dominio entero, insatisfacible en 9 de 9 tareas de `B2`— y que se
+  establece barata.
+
+  > Esto es exactamente lo que el producto promete: si falta una variable, ir a buscarla —
+  > y traerla con la procedencia más fuerte que hay, no con la del modelo.
+
+  Se asienta y **ninguna regla la usa todavía**, deliberadamente: agregar una creencia no
+  cambia comportamiento, agregar una regla sí, y una regla que cambia el ruteo se mide
+  antes de adoptarse. Lo que habilita hoy es que el descubrimiento de particiones y el
+  EXPLAIN la vean.
+
+- [x] **EP-5** · **la regla NO se adopta — y medirla destapó un defecto en el sensor**
+  (2026-08-30). La hipótesis era: si el literal que la pregunta cita no está en el alcance,
+  la respuesta es una ausencia y la establece una búsqueda léxica vacía. **La hipótesis era
+  falsa y el sensor tenía un defecto.**
+
+  **Las 8 tareas que `lit_absent` marcaba no eran de `B2_absence`**: eran todas
+  `C7_irreversible` y `W1_shared_writes` —las booleanas—, y las marcaba porque esas
+  preguntas citan `'escalate'`, `'no escalation'`, `'safe to write'`, `'conflict'`: **las
+  opciones de respuesta, no un término de búsqueda.** Esos literales no están en el material
+  **por construcción**.
+
+  > `measure_question_literal` estaba afirmando algo sobre el **material** a partir del
+  > **formato de la pregunta**. Como detector de ausencia daba precisión 50% y recall 50%,
+  > y sus 8 aciertos aparentes no incluían ni una tarea de ausencia real.
+
+  **La guarda usa lo que el caller DECLARA** (`answer_cardinality == "boolean"`), no el
+  fraseo: distinguirlas mirando cómo está redactada la pregunta sería el disparador léxico
+  que `features.py` prohíbe en su primera línea. Recibirlo del caller es lo que ya se hace
+  con `irreversible` y `shared_writes`.
+
+  **Corregido, el sensor dispara en 2 tareas de 41 (recall 12%), así que la regla no se
+  puede medir en este panel y NO se adopta.** Proponerla igual sería proponerla a ciegas.
+
+  **Y lo que arrastraba**: el 47% de ahorro de `regions/3-literal` se había medido con el
+  sensor defectuoso. Recomputado con el corregido: **u=0,951 (+0,021) y 46% de ahorro** — el
+  vocabulario **sobrevive**, porque el ahorro venía de distinguir `lit_present` de `no_lit`
+  y no del `lit_absent` roto. `test_science.py` §76.
+
+  **La fragilidad que sí queda anotada**: 14 regiones sobre 41 tareas son **2,9 tareas por
+  región**. Es poco, y es el límite real de este vocabulario hasta que `M-8` amplíe el panel.
+
+- [x] **CP-7** · **los dos predictores, implementados y cableados** (2026-08-30).
+  `measure_question_literal()` en `features.py` —hermana de `measure_continuation`: forma
+  de token cerrada, verificada por contención, sin modelo en el medio—, más `cardinality`
+  declarada por el caller vía `payload_for`. Los dos son `COMPUTABLE`, así que
+  **sobreviven la proyección D2** y una regla que los use sí puede disparar en modo
+  determinista — cosa que el vocabulario anterior no lograba, porque dependía de
+  `coupling`, que es `DERIVED` y en D2 colapsaba a `unknown`.
+
+  **Vocabulario nuevo: `regions/3-literal` = la región anterior × `literal`.** Verificado
+  corriendo el código del producto sobre el registro:
+
+  | | utilidad | costo | ahorro |
+  |---|---:|---:|---:|
+  | mejor fijo `reflection` | 0,930 | 125.169 | — |
+  | política por región **nueva** | **0,951** | 66.624 | **47%** |
+  | política por región anterior | 0,928 | 78.832 | 37% |
+
+  El anterior se conserva recomputable (`region_previa()`): 5.932 filas lo llevan
+  estampado y borrarlo las volvería irreproducibles. `test_science.py` §76 fija el camino
+  completo —del payload a la región— y que `literal` **no** sea un disparador léxico: la
+  misma pregunta cambia de valor si cambia el material, cosa que un léxico no puede hacer.
+
+  **Y un hueco que apareció al hacerlo**: `continuation` no estaba en
+  `FEATURE_AVAILABILITY`. El descubrimiento de particiones consulta ese mapa para descartar
+  los ejes `DERIVED`, y un campo sin clasificar **se cae del filtro en silencio**.
+  Clasificado como `COMPUTABLE`.
+
+- [ ] **CP-8** · **decisión del autor: 22 puntos de ahorro sobre la mesa.** El vocabulario
+  que MÁS ahorra es `cardinalidad × literal` —**69%** contra el 47% del elegido— y es
+  **puramente `COMPUTABLE`. Por eso deja a la SONDA sin nada que resolver**: el ciclo de
+  decisión de dos pasos existe para pagar una sonda barata, establecer un eje `DERIVED` y
+  refinar la región; si la región no tiene ninguno, el subsistema queda inerte.
+
+  > Una mejora medida que apaga un subsistema en silencio no es una mejora medida: son dos
+  > cambios, y uno no se midió.
+
+  Lo destapó `test_science.py` §21, no el análisis. Se tomó el que **domina al anterior sin
+  apagar nada**, y la elección entre «22 puntos más de ahorro» y «conservar la sonda» es del
+  autor. Lo que la decidiría es medir si la sonda compra algo — **nunca se midió**.
+
+- [ ] **CP-9** · **correr la política de desempate por costo como brazo del banco.** Todo lo
+  anterior es una medición **sobre el registro**, no un resultado del motor: la política se
+  evaluó recomputando elecciones sobre filas ya pagas. Hasta que corra de verdad, `+0,021` y
+  `47%` son una promesa bien fundada, no un número del producto. Es la primera vez que algo
+  sale **neto positivo fuera de muestra** en este corpus, así que es la corrida que más
+  importa.
+
+- [x] **CP-4** · **el camino a mano NO es el camino perfecto: pierde contra una constante**
+  (2026-08-30). Verificado con `bench/analysis/_senales_del_camino.py` sobre el registro ya
+  re-puntuado, 41 tareas limpias:
+
+  | | utilidad | costo/tarea |
+  |---|---:|---:|
+  | oráculo (techo irrealizable) | **0,976** | — |
+  | mejor FIJO — `reflection` | **0,930** | 125.169 |
+  | camino a mano | **0,749** | 31.919 |
+
+  **Captura `−0,181` contra el mejor fijo.** Un camino que elige distinto en cada tarea y
+  termina por debajo de elegir siempre lo mismo no compró nada: la maquinaria de decidir
+  costó y no rindió.
+
+  **Y el déficit no es sólo el brazo roto**, que era la excusa disponible:
+
+  | picks | tareas | camino | oráculo | brecha |
+  |---|---:|---:|---:|---:|
+  | de `rewoo` (roto al medir, RW-1) | 27 | 0,718 | 0,988 | +0,270 |
+  | de otros brazos | 14 | 0,810 | 0,952 | **+0,143** |
+
+  Incluso sacando `rewoo`, los picks restantes pierden `0,143`. **El razonamiento estaba mal
+  de los dos lados**, no sólo contaminado.
+
+  **Lo que sí se sostiene es el eje que el camino estaba optimizando.** Se derivó bajo
+  «máxima utilidad y, entre las que empatan, mínimo costo», y el mejor fijo resultó ser
+  `reflection`, el brazo más caro del catálogo:
+
+  > utilidad por cada 1.000 tokens: **camino 0,023 · `reflection` 0,007** — 3,3×.
+
+  Juzgarlo sólo por utilidad es juzgarlo por la mitad de su objetivo. Pero por esa mitad,
+  pierde, y hay que decirlo así.
+
+- [x] **CP-5** · **la brecha de calidad se DERRUMBÓ a 0,046, y ninguna señal la captura**
+  (2026-08-30). Es la consecuencia del arreglo del grader (`CP-3`): corregir las 9 tareas
+  que daban cero universal subió a todos, y el techo y el piso quedaron pegados.
+
+  | | |
+  |---|---:|
+  | oráculo | 0,976 |
+  | mejor fijo (`reflection`, 41/41 tareas, 123 réplicas) | 0,930 |
+  | **brecha disponible para TODO el ruteo** | **0,046** |
+
+  Y los tres primeros fijos están dentro de `0,014` entre sí — `reflection` 0,930,
+  `dag_strategy` 0,920, `react` 0,917 —, o sea **por debajo del piso de ruido por celda**.
+
+  **Ocho señales evaluadas leave-one-out**, todas computables antes de gastar un token:
+
+  | señal | grupos | LOO | vs fijo | % de la brecha |
+  |---|---:|---:|---:|---:|
+  | cardinalidad × **término literal** | 7 | 0,939 | **+0,009** | 20% |
+  | `region` (el vocabulario de hoy) | 7 | 0,922 | −0,008 | −18% |
+  | cobertura exigida · el material cabe · demanda imposible | 2 | 0,888 | −0,042 | −93% |
+  | cardinalidad × cabe · cardinalidad · término literal | 3–7 | 0,870–0,879 | −0,051…−0,060 | — |
+
+  **Ninguna llega a un quinto de una brecha que ya es 0,046.** El vocabulario de región
+  actual da **negativo**, lo que confirma `P15` por un camino independiente y con el
+  registro corregido.
+
+  > **Y la conclusión no es «hace falta mejor señal»: es que el OBJETIVO está mal.** Sobre
+  > calidad quedan 0,046 para pelear, por debajo del ruido — mejorar señales para perseguir
+  > eso es perseguir ruido. Lo que este corpus premia es **costo a utilidad igualada**, que
+  > es un objetivo distinto y donde el camino a mano ya gana 3,3×.
+
+  **La única señal que dio positivo vale como dirección, no como resultado**: `término
+  literal` —¿existe en la pregunta una cadena entrecomillada que aparezca verbatim en el
+  material?— es aritmética pura, cuesta cero, usa la misma maquinaria que
+  `contracts.term_absence`, y es el eje que el razonamiento a mano usó para 57 de las 78
+  preguntas. `+0,009` no es un hallazgo; que sea la **única** positiva sí es una pista.
+
+- [x] **CP-3** · **9 de 78 tareas daban cero sobre TODO el plantel, y era el grader**
+  (2026-08-30). Que **doce topologías** fallaran las mismas nueve preguntas era más
+  consistente con una medición rota que con doce fracasos, y lo era. Dos defectos distintos:
+
+  **`D1_presupposition` — el oráculo era UNA redacción de un rechazo.** La premisa es falsa
+  —no hubo transferencia— y el oráculo es `'no transfer is recorded'`, comparado por
+  igualdad de cadenas. Sobre `d1-000-w4` los **nueve** brazos contestaron correctamente:
+
+  > «Not stated in the source documents» · «The date cannot be determined from the provided
+  > text» · «Not specified» · «Cannot be determined from the provided evidence»
+
+  Los nueve sacaron **0,00**. Hay infinitas formas correctas de rechazar una premisa y se
+  estaba puntuando la elección de palabras.
+
+  **`C9_declared_roster` — la pregunta pide el emparejamiento y el grader lo prohibía.**
+  Pregunta *«para cada uno de estos individuos, reportá la cuenta»*; el oráculo son las
+  cuatro cuentas sueltas; las respuestas traían **las cuatro correctas** emparejadas con su
+  nombre. La intersección de conjuntos no cruza `ar9263415718` con
+  `marta arrieta ar9263415718`.
+
+  **Las dos correcciones se auto-limitan**, que es lo que impide que sean aflojar: el
+  crédito por rechazo se lee **del oráculo** —sólo si el oráculo mismo es un rechazo— así
+  que una tarea con oráculo de VALOR no lo puede recibir, y un rechazo que igual entrega la
+  fecha no cuenta como rechazo; el emparejamiento exige **frontera de palabra** y asignación
+  **uno a uno**, y la precisión sigue castigando el exceso.
+
+  **Re-puntuado sin gastar un token** (`bench/oneoff/_regrade_2026_08_30.py`, con backups):
+  252 filas, todos los deltas positivos, `c9` `+0,825` · `d1` `+1,000` · `c2` `+0,044`.
+  **Y el efecto que importa: el corpus pasó a discriminar en las 41 tareas limpias** — antes
+  9 de 41 tenían máximo 0,00 y no aportaban nada ni a la brecha de oráculo ni al piso de
+  ruido. `test_science.py` §75.
+
+  **Dos defectos MÍOS en el camino, los dos atajados antes de escribir:**
+
+  1. La primera versión del script indexaba el oráculo sólo por `task_id`, y **el mismo
+     `task_id` existe en varios corpus con oráculos distintos**. El ensayo dio 1.758 filas
+     cambiando con deltas de **−1,000** y los 15 brazos cambiando de puesto. Un delta
+     negativo era **imposible** —el arreglo agrega crédito y no saca ninguno— y por eso se
+     vio. Ahora el oráculo se indexa por `(corpus, tarea)`.
+  2. La guarda de monotonía comparaba contra el `utility` **guardado**, y abortó en una fila
+     que baja de 0,875 a 0,824. No era contaminación: **el registro abarca varias versiones
+     del grader**, así que el valor guardado no dice qué habría dado el grader anterior.
+     Comparar contra un número que produjo otro programa no prueba nada sobre este cambio;
+     la guarda ahora compara contra el grader viejo **recomputado** (`score_previo`), que sí
+     es una propiedad del cambio. La deriva se **cuenta y se reporta** (9 filas), no se
+     ignora.
+
+- [x] **CP-1** · **`C-ABSENCE` no era estricto, era VACIO** (2026-08-30). Exigía el dominio
+  entero para admitir una ausencia —regla correcta— y tenía **una sola** forma de
+  conseguirlo: leerlo. Medido sobre las nueve tareas de `B2_absence`:
+
+  | ancho | material | presupuesto |
+  |---|---:|---:|
+  | `w4` | 40.234 | 40.000 |
+  | `w16` | 160.982 | 40.000 |
+  | `w48` | 482.961 | 40.000 |
+
+  **En 9 de 9 la ruta exhaustiva no entra en el presupuesto.** Ninguna respuesta correcta
+  podía ser admitida jamás — y la correcta es siempre «ninguno», porque las nueve tienen
+  cero unidades relevantes. No era una carga de prueba dura: era una que no se podía
+  levantar.
+
+  **Nunca se disparó** porque `demand_obligations` está apagado. Pero ese factor existe
+  justamente para medir `C-ABSENCE`, así que la primera corrida con él encendido habría
+  dado **cero ausencias admitidas** y se habría leído como *«el modelo no puede establecer
+  ausencia»* cuando era *«el contrato no se puede satisfacer»*. Es la cuarta vez que
+  aparece la forma de la lección 8.16 —un cero de exposición disfrazado de conducta— y la
+  primera que se agarra **antes** de correr.
+
+  **La segunda prueba, y no afloja la carga**: si la cadena que se niega no aparece en
+  NINGUNA unidad del alcance, el dominio quedó cubierto igual — por aritmética en vez de
+  por lectura. `term_absence()` recorre **todas** las unidades, no una muestra. Es el mismo
+  idioma que `presupposition()` ya usaba con el signo dado vuelta: el agente propone la
+  cadena (`ELICITED`, línea tipada `NEGATES:`) y el código la verifica literal contra el
+  material (`COMPUTED`). Medido: prueba las **9 de 9** a costo cero.
+
+  **Y el límite, dicho**: prueba que el TÉRMINO no está, no que la COSA no esté si el
+  material la nombraría de otra forma. De ahí las dos guardas —largo mínimo de 4 caracteres
+  y máximo de 4 palabras—: una paráfrasis larga ausente sólo prueba que la paráfrasis
+  falta. `test_science.py` §74, incluida la comprobación de insatisfacibilidad contra el
+  corpus real.
+
+- [x] **GP-1** · **medir el largo de una unidad contaba como haberla leído** (2026-08-30).
+  Cinco sitios de `paradigms/modern.py` llamaban a `surface.read_one(u)` para quedarse
+  únicamente con `len(...)`, y `read_one` deja rastro: suma a `served_chars` y mete la
+  unidad en `units_read_structural`.
+
+  **Ninguno cambiaba lo que el modelo ve**, y por eso era invisible: la topología estaba
+  bien y la medida estaba mal. Medido sobre las filas que tienen el contador:
+
+  | brazo | qué decía la métrica | qué pasaba |
+  |---|---|---|
+  | `pointer_chase` | `units_read_structural == n_units` en **170 de 170 celdas** | promediaba el largo de TODAS las unidades antes del primer salto |
+  | `streaming_scan` | el corpus cobrado **dos** veces en `served_chars` | una pasada para armar los trozos, otra para el prompt |
+  | `gist_reader` | cada unidad seleccionada cobrada **tres** veces | gist, estimación, lectura |
+
+  **Lo de `pointer_chase` invertía una conclusión.** Es el brazo que se define por seguir
+  UN puntero desde UN ancla, y la única métrica que mostraría si lo hace decía que abría el
+  corpus completo. El veredicto de `P14a` —que nunca tocó una unidad relevante— **sobrevive**
+  porque se calculó sobre `units_read`, las lecturas del MODELO; pero
+  `relevant_units_read_any`, que incluye las estructurales, decía exactamente lo contrario.
+  Dos métricas con lecturas opuestas del mismo brazo, y la diferencia era un promedio.
+
+  Arreglado con `ToolSurface.unit_chars()` / `unit_tokens()` —una regla que mide sin leer— y
+  con `CHARS_PER_TOKEN` en vez de los `// 4` escritos a mano, que hacían que la constante con
+  la que la factibilidad **poda** y la que el paradigma usa para **gastar** coincidieran por
+  casualidad. `test_science.py` §71 lo fija, y prohíbe la forma del defecto en el código.
+
+- [x] **GP-2** · **de siete formas de fallar una llamada, se contaba UNA** (2026-08-30). La
+  superficie tenía `hallucinated` y nada más: no se le podía preguntar al registro con qué
+  frecuencia el modelo erraba una llamada, ni de qué manera. Es la misma ceguera que dejó
+  vivir 138 celdas de `rewoo` llamando a `read` sin leer nada.
+
+  Ahora `dispatch` cuenta por tipo —`id_inexistente`, `argumento`, `batch`, `no_ofrecida`,
+  `desconocida`, `fuera_de_alcance`— y lo cuenta **en el cuello y no en cada `raise`**, que
+  es lo único que hace que una forma nueva de fallar no se pueda agregar sin quedar contada.
+
+- [x] **GP-3** · **lo que erraba un sub-agente no volvía nunca al padre** (2026-08-30). El
+  mismo defecto que ya se había arreglado para `barren`, vivo en otro contador:
+  `hallucinated` era un `int`, `scoped()` comparte por referencia lo que es de la tarea, y
+  un `int` no se puede reatar.
+
+  | brazo | llamadas | ids alucinados |
+  |---|---:|---:|
+  | `supervisor` | 1.583 | **0** |
+  | `handoff` | 773 | **0** |
+  | `react` | 3.466 | 5 |
+  | `dag_strategy` | 6.769 | 9 |
+
+  `handoff` y `supervisor` son los dos que corren TODO adentro de `scoped()`.
+  `dag_strategy` también descompone y **sí** contaba, porque le pasa al sub-agente la
+  superficie del padre. **Ese contraste es la prueba**: el cero no describe dos brazos que
+  no se equivocan, describe dos brazos donde equivocarse no deja rastro. Arreglado con un
+  objeto `Fallas` compartido, mismo idioma que `Barren`.
+
+- [x] **GP-4** · **la pista de error era una sola para las siete fallas** (2026-08-30). El
+  bucle compartido le pegaba a toda `ToolFailure` la misma línea —«usá sólo ids devueltos
+  por una búsqueda»—, que es correcta para UNA (donde además repetía lo que el mensaje ya
+  decía) y apunta al arreglo equivocado en las otras seis: a un modelo que pidió 15 ids en
+  un batch de 10, o que omitió un argumento, se le contestaba con un consejo sobre citas.
+  **Una pista equivocada es peor que ninguna, porque se sigue** — y es el único canal por el
+  que el modelo se entera de que erró.
+
+- [x] **GP-5** · **`guards.py` decía tener todos los límites y le faltaban los de los brazos
+  más caros** (2026-08-30). Los cuatro clásicos llevaban los suyos escritos a mano adentro
+  de `paradigms/__init__.py` —un `20`, un `10`, un `8`, un `4`— y ninguno aparecía en el
+  módulo ni en `TECHO_LLAMADAS`.
+
+  **Y no eran los chicos.** `reflection` es el brazo más caro del catálogo (118.911 tokens
+  por celda) y sus dos topes eran los que nadie había nombrado; `react` es el FALLBACK, o
+  sea contra el que se mide la brecha de oráculo de todo el banco, y su `20` era un literal
+  en medio de una llamada. Que el límite del patrón más caro y el del patrón de referencia
+  fueran los dos invisibles no es casualidad: son los que nadie movió nunca.
+
+  Ahora los quince están cubiertos, y los que **no** tienen techo fijo se declaran en
+  `SIN_TECHO_FIJO` en vez de faltar — `map_reduce` hace una llamada por unidad, así que su
+  techo *es* el alcance. Un patrón ausente de la tabla se lee como un olvido, y un olvido
+  invita a inventarle un número.
+
+- [x] **GP-6** · **el techo de `dag_strategy` estaba violado por 858 filas y el test no
+  podía verlo** (2026-08-30). Valía 24, calibrado sobre `gold_h1` donde el máximo son 19
+  llamadas; sobre el registro **completo** el máximo es **38**.
+
+  > **Un umbral calibrado sobre una muestra y verificado contra esa misma muestra no puede
+  > fallar.** Es la forma exacta que ya tuvo `_potencia_corpus.py`, cuyo umbral de 1,0
+  > aprobaba justamente al corpus que lo había motivado.
+
+  El techo pasó a 48 y §67 ahora barre **todos** los archivos de `results/`. Y se le puso el
+  nombre que le corresponde: no es un límite de diseño sino un **alambre de aviso** —lo que
+  de verdad corta a `dag` es `DAG_DIMINISHING_RETURNS`—.
+
+- [x] **GP-7** · **el balance de esfuerzo no se podía encender** (2026-08-30). Es el más
+  grande de los siete. `guards.ventana_sub_agente()` y `guards.presupuesto_de_esfuerzo()`
+  estaban escritas, documentadas y probadas por §67 **y no las llamaba nadie**: el test las
+  ejercitaba directamente, así que pasaba, pero el runner nunca las tocaba y el factor del
+  que cuelgan, `effort_balanced`, **no existía en ningún archivo del repo**.
+
+  Y esta misma lista lo tenía anotado como *«lo que queda para medir es la corrida»*, que da
+  por hecho que se puede correr. No se podía: no había qué encender.
+
+  > Es la falla que este repo ya nombra como propia —**un factor que no llega no falla,
+  > corre y mide su ausencia**— cometida sobre la GUARDA en vez de sobre la tool. `§59`
+  > prueba que un factor llega a la declaración de tools; nadie probaba que llegara al
+  > **flujo de control**, que es el otro camino.
+
+  Cableado como todos los demás: parámetro del runner, sufijo `_balanced` en el archivo,
+  campo de la superficie que el sub-agente hereda, y consumido en los dos lugares donde ata
+  —la ventana de `supervisor` y el corte por tokens del bucle compartido—. Apagado por
+  defecto y **verificado idéntico apagado**, así que el registro pagado sigue siendo
+  comparable. `§73` lo fija por las dos mitades: que encendido cambie algo y que apagado no
+  cambie nada.
+
+- [ ] **X-21** · **la superficie de herramientas es el SEGUNDO dial que nunca se giró, y casi
+  me hace afirmar un nulo que no existe** (2026-08-30).
+
+  Contando el uso de cada herramienta sobre todo el registro histórico:
+
+  | herramienta | llamadas |
+  |---|---:|
+  | `keyword_search` · `read` · `search` · `semantic_search` | 6.248 · 4.345 · 3.675 · 786 |
+  | `read_all` | **7** |
+  | `post` | **1** |
+  | `coverage` · `note` · `notes` · `plan` · `advance` · `board` | **0** |
+
+  Iba a escribir que **el modelo sólo usa herramientas que traen material y jamás las que
+  administran su propio proceso**. Es una frase buena y el número la sostenía. **Y está
+  mal**, por la misma razón que ya me engañó dos veces hoy: **es un cero de exposición, no
+  de comportamiento.**
+
+  | variante de superficie | filas | qué herramientas existían |
+  |---|---:|---|
+  | `basic` | **4.789** | sólo las cuatro de recuperación |
+  | `managed` | 112 | idem, con compactación del harness |
+  | `accounting` | 28 | + `coverage`, `read_all` |
+  | `cognitive` | 27 | + `note`, `notes`, `plan`, `advance` |
+  | (sin declarar) | 127 | régimen anterior al campo |
+
+  > **Las herramientas de autogestión se ofrecieron en 55 de 5.083 filas — el 1,1%.** Cero
+  > llamadas sobre 55 filas no dice que el modelo no las use: dice que casi no se las
+  > ofrecimos. Y `read_all` se llamó 7 veces sobre las 109 filas donde estaba ofrecido
+  > (6,4%); `post`/`board`, 1 sobre 46 (2,2%).
+
+  **Es el mismo hallazgo que `X-19`, un nivel más arriba.** La recuperación tiene 9 brazos y
+  corrieron 2; la superficie tiene 4 variantes y `basic` es el **94%** de las filas. Los dos
+  diales que §6.4 presenta como controlados están, en los hechos, **constantes**.
+
+  **Y eso cambia qué se puede decir de las no-adopciones.** El nulo del board (1 de 125
+  llamadas) y el de `read_all` (3 de 63 celdas en `P30`) siguen en pie —ahí sí hubo
+  exposición y hubo elección— pero **la afirmación general «el modelo no administra su
+  propio proceso» no tiene sustento**: `cognitive` corrió 27 filas y de ahí salió el «1
+  apunte en 28 filas» que este repo cita como si fuera un resultado del modelo.
+
+  **Lo que hay que correr, y es barato**: la matriz de superficies con `n` comparable —
+  `basic` contra `accounting` contra `cognitive` sobre las mismas tareas y con `repeat 3`.
+  Hasta entonces, cualquier frase sobre autogestión descansa en 55 filas.
+
+- [ ] **X-20** · **la descripción cambia CUÁL herramienta se elige, no SI se usa — y la
+  hipótesis del autor queda medio probada y medio abierta** (2026-08-30).
+
+  La hipótesis: *«las herramientas o brazos que no se usan es porque falta una descripción
+  adecuada o instrucciones»*. Es testeable y el banco ya tiene el factor: `terse_tools`
+  cambia el texto que el modelo lee para decidir qué herramienta usar, y corrió pareado
+  sobre 46 celdas.
+
+  | | llamadas a tools | unidades leídas | búsquedas | `u` | tok/celda |
+  |---|---:|---:|---:|---:|---:|
+  | descripción normal | 115 | 110 | 80 | 0,717 | 25.955 |
+  | descripción corta | 113 | 105 | 78 | **0,717** | 25.680 |
+
+  **Nada se movió** — ni el volumen de uso, ni las unidades leídas, ni la utilidad, ni el
+  costo. Pero la **mezcla** sí, y con una simetría que no parece casual:
+
+  | herramienta | normal | corta | Δ |
+  |---|---:|---:|---:|
+  | `keyword_search` | 46 | 34 | **−12** |
+  | `search` | 25 | 37 | **+12** |
+  | `read` · `semantic_search` | 35 · 9 | 35 · 7 | 0 · −2 |
+
+  > **La descripción reasigna la elección ENTRE alternativas; no cambia si la capacidad se
+  > adopta.** Doce llamadas cambiaron de herramienta y el resultado fue idéntico a la
+  > milésima.
+
+  **Y eso es evidencia contra la hipótesis, pero no la cierra**, porque la manipulación no
+  es la que la hipótesis propone. `terse_tools` **acorta** descripciones de herramientas que
+  el modelo **ya usaba**. Lo que la hipótesis dice es que una descripción **mejor** subiría
+  la adopción de una herramienta **no usada**. Son manipulaciones distintas y sólo una
+  corrió.
+
+  **Lo que hay a favor de que la descripción no sea la causa**, y es leerlas: las que no se
+  adoptan ya están escritas de forma persuasiva y con el argumento adentro. `read_all` dice
+  *«úsalo cuando hayas decidido que necesitás la mayoría: leer las mismas unidades de a una
+  cuesta varias veces más, porque la conversación entera se reenvía en cada turno»* — que es
+  **exactamente el mecanismo que §7.8 midió**, dicho en la propia herramienta. Se llamó **3
+  de 63 veces**. Y `post` dice *«SOBREVIVE la compactación de contexto»*: **1 de 125**.
+
+  **El experimento que lo cerraría** es barato y está bien definido: reescribir la
+  descripción de `read_all` en la dirección opuesta a `terse` —más explícita, con el número
+  del ahorro— y correr un brazo pareado. Si la adopción no se mueve, la causa no es el texto
+  y hay que buscarla en otro lado (que la herramienta compita con un hábito, o que el modelo
+  no represente el costo del reenvío).
+
+  **Y encaja con una regla que este repo ya tenía**: los patrones se distinguen por
+  estructura de control de flujo, jamás por fraseo. Acá el fraseo movió la elección entre
+  herramientas y **no movió ningún resultado** — que es la misma conclusión un nivel más
+  abajo.
+
 - [ ] **X-19** · **siete de los nueve brazos de recuperación NUNCA corrieron, y el paper los
   presentaba como variable controlada** (2026-08-30, del EDA sobre todos los registros).
 
@@ -1595,6 +2378,12 @@ selección. Es un costo enunciado ahora, no descubierto después.
 | M-2 | Instrumentar retención de verdad | El recall de evidencia ya está medido y manda (ver §Findings). Falta el **segundo eslabón**: cuánta de la evidencia recuperada sobrevive hasta la llamada que responde. Eso sí necesita código y corrida | código + corrida |
 | M-3 | Transferencia de θ entre familias de modelos | El colapso de `react` en nano sugiere que parte de lo aprendido es del modelo y no de la tarea. Condiciona la lectura de todo el registro | corrida |
 | M-4 | Corpus natural + segunda familia | Validez externa real. Un segundo generador propio **reformula** la objeción, no la responde. QA numérica sobre documentos largos calza con los contratos | la fase cara |
+| **M-7** | **Barrer `effort_balanced`** | Recién ahora es corrible: hasta el 2026-08-30 el factor no existía (GP-7). Es la primera vez que se pueden comparar topologías **a igual presupuesto** — hoy hay **113×** entre el brazo más barato y el más caro, así que toda conclusión de la forma «el patrón X gana» arrastra ese confundido. `{balanceado, no}` sobre los brazos con sub-agentes | corrida |
+| **CP-1** ✅ | **CERRADO 2026-08-30 — y era peor de lo registrado: el contrato era INSATISFACIBLE.** | Medido sobre `b2-000-w16`: `keyword_search('trustee')` devuelve **0 unidades** y `'director'` devuelve 5 como control. O sea que **una búsqueda léxica vacía sobre el alcance completo prueba la ausencia** — es un hecho `COMPUTED`, no un juicio del modelo. Y ningún brazo la usa: en las B2, `rewoo` (u=0,00) llamó `search` 19 veces contra 12 de `keyword_search`, y `search` es el ranking fusionado, que **nunca vuelve vacío**. El que gana la ausencia es `handoff` (u=0,92) y gana **leyendo** 19 unidades — la respuesta cara a una pregunta que tiene una respuesta aritmética. Esto NO es un patrón: es una regla de la capa de decisión, exactamente en la forma que el producto declara (el LLM propone, el código decide) | código, sin corrida |
+| **CP-2** | **Una cadena pide encadenar Y verificar, no sólo encadenar** | En `c3-001-h2` elegí `react` —el único con bucle reactivo real— y ganó `reflection`, que es `react` más una crítica (0,33 contra 1,00). En una cadena de dos saltos un error en el salto uno **se propaga en silencio**, y la segunda pasada es lo único que lo agarra. El eje que separa a los dos no está en el vocabulario de región ni en el de ontología: es «¿el error de un paso es visible en el resultado del siguiente?» | medir |
+| **CP-3** ✅ | **CERRADO 2026-08-30 — no era el catálogo, era el grader.** | Las 5 de `C9_declared_roster` y las 4 de `D1_presupposition` tienen máximo 0,00 sobre todos los brazos factibles. No son tareas difíciles: son tareas donde **ninguna topología ayuda**, y un banco que las promedia con el resto diluye tanto la brecha de oráculo como el ruido. Hay que decidir si se arreglan (el contrato de respuesta de C9, el rechazo de premisa de D1) o si se declaran fuera de la comparación de topologías | decidir |
+| **M-8** | **El corpus está medido en 41 de 78, y las que faltan son las ANCHAS** | Desglose: 78 − 32 nunca medidas − 5 contaminadas = **41**. Y las 32 no son al azar: **21 son de `w48`** (60 unidades, 483k tokens), 9 de `w4`, 2 base. `w48` es justo el régimen donde los paradigmas deberían diferir — donde leer todo es imposible, donde la cobertura no se puede pagar, donde la topología tendría que decidir. **Toda conclusión de esta semana está medida sin la banda más ancha del corpus**: la brecha de 0,046, `π = 0,217`, el −0,094 del producto, los predictores. No las invalida — las **acota** al régimen estrecho, y es la diferencia entre «no hay premio» y «no lo podemos ver». Estimado contra el corpus: **894 celdas, ~149M tokens**, y las `w48` son casi todo | caro |
+| **M-6** | **Re-correr `rewoo`, que compitió sin abrir un documento** | Sus 138 celdas no miden el paradigma: miden un ReWOO que contesta desde snippets (RW-1). Con la lectura arreglada y `semantic_search` en el prompt (RW-2), el brazo es **otro**. Ojo al analizar: es el **mismo nombre de brazo**, así que ninguna guarda de mezcla separa las dos poblaciones — hay que separarlas por fecha a mano. Bloquea dos afirmaciones vivas: que `rewoo` gana 23 de 46 tareas, y que sostiene «el premio del corpus es de costo» | ~145k tokens |
 | M-5 | C3 profundo en nano | Región abierta: la grilla completa dio u=0,000, y también oráculo-cero en `gold_transfer`. No hay ganador conocido | corrida |
 
 ---

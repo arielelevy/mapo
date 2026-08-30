@@ -42,6 +42,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .parsing import extract_json, well_formed
+from .. import guards
 from .blackboard import Blackboard
 from ..llm import LLMClient, Usage
 from ..feasibility import MAX_ORCHESTRATION_CALLS
@@ -51,14 +52,11 @@ from . import ANSWER_CONTRACT, answer_contract, Result, _run_tool_loop, parse_an
 # Typical production values for this topology. Held fixed across the study so the
 # paradigm is measured at one configuration rather than at whichever one happened to
 # suit each task.
-DAG_MAX_SUB_QUESTIONS = 4
-DAG_MAX_REPLAN_ITERATIONS = 3
-DAG_READY_THRESHOLD = 0.8
-DAG_DIMINISHING_RETURNS = 0.05
-DAG_SUB_AGENT_ITERATIONS = 10
-
-
-
+DAG_MAX_SUB_QUESTIONS = guards.DAG_SUB_QUESTIONS
+DAG_MAX_REPLAN_ITERATIONS = guards.DAG_REPLAN_ITERATIONS
+DAG_READY_THRESHOLD = guards.DAG_READY_THRESHOLD
+DAG_DIMINISHING_RETURNS = guards.DAG_DIMINISHING_RETURNS
+DAG_SUB_AGENT_ITERATIONS = guards.DAG_SUB_AGENT_ITERATIONS
 @dataclass(frozen=True)
 class DagShape:
     """La forma del grafo de control, DERIVADA del request y no propuesta por el modelo."""
@@ -323,7 +321,29 @@ def _parse_json(text: str, key: str | None = None) -> Any:
 def dag_strategy(
     client: LLMClient, surface: ToolSurface, task: dict[str, Any]
 ) -> Result:
-    """Plan -> waves -> verify -> replan (<=3) -> synthesise, over a blackboard."""
+    """Plan -> olas -> verify -> replan (<=3) -> sintesis, sobre un blackboard.
+
+    QUE HACE: descompone en sub-preguntas, las ejecuta en olas paralelas contra un
+    blackboard compartido que **escribe el codigo**, verifica el estado sobre cuatro
+    dimensiones, y si no esta listo replanifica. Es el brazo mas elaborado del catalogo.
+
+    GUARDAS QUE LO GOBIERNAN:
+      · `DAG_MAX_SUB_QUESTIONS = 4`; `DAG_SUB_AGENT_ITERATIONS = 10`;
+        `DAG_MAX_REPLAN_ITERATIONS = 3`
+      · `DAG_READY_THRESHOLD = 0.8` para declararse listo y `DAG_DIMINISHING_RETURNS = 0.05`
+        para cortar por rendimiento decreciente
+      · el blackboard **estructural** —el que escribe el codigo en cada ola— se renderiza
+        en el prompt de cada sub-agente, asi que leerlo no le cuesta al modelo ninguna
+        decision. Es una dimension separable (`shared_state`) y NO se midio apagada
+
+    CUANDO ES EL CAMINO CORRECTO: cuando la descomposicion es segura y la verificacion vale
+    lo que cuesta — un alcance ancho, sub-preguntas independientes, y una respuesta que se
+    puede chequear contra el estado acumulado.
+
+    CUANDO NO: es el mas caro de la familia y hace 826 busquedas con 64% de esterilidad.
+    **Su efecto medido es la CONJUNCION de la topologia de olas y el blackboard**, y nada
+    en el registro las separa todavia.
+    """
     usage = Usage()
     # EL MISMO OBJETO que la tool escribe. Dos boards serian dos «estados
     # compartidos» a la vez, y un sub-agente que postea no veria lo que el codigo
