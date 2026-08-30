@@ -1463,6 +1463,45 @@ therefore tiny: being wrong on the other thirty-eight costs more than being righ
 five can pay. That is the same conclusion Theorem 1 reaches from the other direction, and
 it is why the optimal operating point involves abstaining on most requests.
 
+**And the axis cannot be built from what the request declares — shown by counterexample
+rather than by correlation.** The obvious repair is to add the missing axis to the feature
+map. We searched for it: **no combination of up to three computable fields separates the
+signs.** Every declared field takes values on both sides. One pair settles it:
+
+| | `C5_unknown_horizon` | `C8_currency` |
+|---|---|---|
+| `coverage_demanded` | `exhaustive` | `exhaustive` |
+| `answer_cardinality` | `singular` | `singular` |
+| `completeness_domain` | `from_scope` | `from_scope` |
+| `irreversible` · `shared_writes` | False · False | False · False |
+| `budget_tokens` · `n_units` | 60,000 · 5 | 60,000 · 5 |
+| **assigned region** | `*/no_oracle/loose/chain` | **the same** |
+| rows measured | 153 | 153 |
+| **coverage–utility correlation** | **+0.331** | **−0.373** |
+
+Identical on every computable field, landing in the same region, with opposite optimal
+behaviour. The questions show why: `C5` asks which individual has *contradictory* city
+information **across the supplied units** — the contradiction is only visible after reading
+all of them, so coverage is the mechanism. `C8` asks for the domicile **currently** on file
+— the answer is the most recent among competing records, so reading more supplies more
+stale candidates. **What decides is cross-unit contradiction versus temporal recency: a
+property of what the question means, not of any declared quantity.**
+
+> **This sharpens the diagnosis rather than repeating it.** The claim is not that the region
+> vocabulary is missing an axis. It is that **no feature map over the currently declared
+> request can separate those two tasks**, because the information is not there to map.
+
+**It is not a dead end, and the direction it points is concrete.** The property is knowable
+— the corpus generator distinguishes the two cells by construction — it is simply not
+exposed as a task field. So the result does not say the approach fails; it says **what has
+to be declared**: an axis for temporal resolution, or more generally for whether the answer
+is obtained by *covering* a scope or by *selecting* among competing candidates. That is a
+decision about the request contract, not a learning problem.
+
+And it is checkable **before spending anything**: two cells with identical computable
+declarations and opposite optimal behaviour are a proof that the contract is insufficient,
+and that proof costs zero calls.
+
 **A caution we owe the reader**, and it is about this table rather than about routing: the
 per-cell correlations rest on 54 to 162 rows each, one corpus and one model. The **sign**
 pattern is the claim; the magnitudes are not.
@@ -1504,6 +1543,33 @@ that might separate them do not accumulate evidence — 2 to 6 tasks each agains
 absence. The vocabulary places those five in the same bin as the thirty-eight where nothing
 is worth choosing, so the signal is averaged away. **The policy is not failing to decide; it
 is being handed bins in which the correct answer is "it does not matter."**
+
+**And a variance decomposition bounds what any router could win, independently of how it
+is built.** Over 1,284 measured rows:
+
+| source of variance in utility | variance | share |
+|---|---:|---:|
+| **total** | **0.2469** | |
+| between **tasks** | 0.1153 | **47%** |
+| between **paradigms** | **0.0311** | **13%** |
+| between **replicates** of the same cell | **0.0311** | **13%** |
+
+**0.0311 against 0.0311.** Not "comparable", not "the same order": equal to four decimal
+places. **The signal a router selects on is exactly the size of the noise it is measured
+against.**
+
+A router chooses a paradigm, so it can only compete for the share the paradigm explains. The
+47% carried by the task is not movable by any policy — no routing makes a hard task easy —
+and the replicate share is noise by construction. The ceiling on any routing policy over
+this corpus is therefore a fraction of a thirteen percent that is indistinguishable from
+measurement error.
+
+That is the same conclusion the risk–coverage fit reaches (§7.10, margins of 0.04 against a
+noise floor of 0.14) and the same one the oracle gap reaches (§7.9, no task clearing its own
+noise), arrived at from a third direction. **It does not show that selection cannot pay in
+general. It shows that a corpus on which selection can be demonstrated must carry more
+between-arm variance than this one does** — a requirement on the corpus, checkable before
+any run, and one we had never checked.
 
 **What this does not say**, stated so it is not read for more than it is: it is not evidence
 that paradigm selection does not pay. It is evidence that **under this region vocabulary and

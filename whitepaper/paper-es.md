@@ -1508,6 +1508,46 @@ más de lo que acertar en las cinco puede pagar. Es la misma conclusión a la qu
 Teorema 1 por el otro lado, y es por qué el punto de operación óptimo implica abstenerse en
 la mayoría de los pedidos.
 
+**Y el eje no se puede construir con lo que el request declara — mostrado con un
+contraejemplo y no con una correlación.** La reparación obvia es agregarle el eje que falta
+al mapa de features. Lo buscamos: **ninguna combinación de hasta tres campos computables
+separa los signos.** Cada campo declarado toma valores de los dos lados. Un par lo cierra:
+
+| | `C5_unknown_horizon` | `C8_currency` |
+|---|---|---|
+| `coverage_demanded` | `exhaustive` | `exhaustive` |
+| `answer_cardinality` | `singular` | `singular` |
+| `completeness_domain` | `from_scope` | `from_scope` |
+| `irreversible` · `shared_writes` | False · False | False · False |
+| `budget_tokens` · `n_units` | 60.000 · 5 | 60.000 · 5 |
+| **región asignada** | `*/no_oracle/loose/chain` | **la misma** |
+| filas medidas | 153 | 153 |
+| **correlación cobertura-utilidad** | **+0,331** | **−0,373** |
+
+Idénticas en cada campo computable, cayendo en la misma región, con comportamiento óptimo
+opuesto. Las preguntas muestran por qué: `C5` pregunta qué individuo tiene información de
+ciudad *contradictoria* **entre las unidades suministradas** —la contradicción sólo se ve
+después de leerlas todas, así que la cobertura es el mecanismo—. `C8` pide el domicilio
+**actualmente** en archivo — la respuesta es el más reciente entre registros que compiten,
+así que leer más aporta más candidatos viejos. **Lo que decide es contradicción entre
+unidades contra recencia temporal: una propiedad de lo que la pregunta significa, no de
+ninguna cantidad declarada.**
+
+> **Esto afila el diagnóstico en vez de repetirlo.** La afirmación no es que al vocabulario
+> de región le falte un eje. Es que **ningún mapa de features sobre el request declarado hoy
+> puede separar esas dos tareas**, porque la información no está para mapear.
+
+**No es un callejón sin salida, y la dirección que señala es concreta.** La propiedad es
+conocible —el generador del corpus distingue las dos celdas por construcción— simplemente no
+está expuesta como campo de la tarea. Así que el resultado no dice que el enfoque falle:
+dice **qué hay que declarar**: un eje de resolución temporal, o más en general si la
+respuesta se obtiene *cubriendo* un alcance o *seleccionando* entre candidatos que compiten.
+Es una decisión sobre el contrato del request, no un problema de aprendizaje.
+
+Y es chequeable **antes de gastar nada**: dos celdas con declaración computable idéntica y
+comportamiento óptimo opuesto son una prueba de que el contrato es insuficiente, y esa
+prueba cuesta cero llamadas.
+
 **Una salvedad que le debemos al lector**, y es sobre esta tabla y no sobre el ruteo: las
 correlaciones por celda descansan en entre 54 y 162 filas cada una, un corpus y un modelo.
 El patrón de **signos** es la afirmación; las magnitudes no.
@@ -1548,6 +1588,33 @@ podrían separarlos no acumulan evidencia — de 2 a 6 tareas cada una contra un
 ausencia. El vocabulario mete esas cinco en el mismo bin que las treinta y ocho donde no hay
 nada que elegir, así que la señal se promedia hasta desaparecer. **La política no está
 fallando en decidir: le están dando bins donde la respuesta correcta es «da igual».**
+
+**Y una descomposición de la varianza acota lo que cualquier router podría ganar, con
+independencia de cómo esté construido.** Sobre 1.284 filas medidas:
+
+| fuente de varianza de la utilidad | varianza | del total |
+|---|---:|---:|
+| **total** | **0,2469** | |
+| entre **tareas** | 0,1153 | **47%** |
+| entre **paradigmas** | **0,0311** | **13%** |
+| entre **réplicas** de la misma celda | **0,0311** | **13%** |
+
+**0,0311 contra 0,0311.** No «comparable», no «del mismo orden»: iguales a la cuarta
+decimal. **La señal sobre la que un router elige tiene exactamente el tamaño del ruido
+contra el que se la mide.**
+
+Un router elige paradigma, así que sólo puede competir por la porción que el paradigma
+explica. El 47% que carga la tarea no lo mueve ninguna política —ningún ruteo vuelve fácil
+una tarea difícil— y la porción de réplica es ruido por construcción. El techo de cualquier
+política de ruteo sobre este corpus es entonces una fracción de un trece por ciento que no
+se distingue del error de medición.
+
+Es la misma conclusión a la que llega el ajuste riesgo-cobertura (§7.10, márgenes de 0,04
+contra un piso de ruido de 0,14) y la misma a la que llega la brecha de oráculo (§7.9,
+ninguna tarea supera su propio ruido), alcanzada por un tercer camino. **No muestra que la
+selección no pueda pagar en general. Muestra que un corpus donde la selección se pueda
+demostrar tiene que llevar más varianza entre brazos que éste** — un requisito sobre el
+corpus, chequeable antes de cualquier corrida, y que nunca habíamos chequeado.
 
 **Lo que esto NO dice**, enunciado para que no se lea de más: no es evidencia de que la
 selección de paradigma no pague. Es evidencia de que **bajo este vocabulario de región y

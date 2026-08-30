@@ -956,6 +956,112 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   invisible»*— cometida en los campos que ese mismo docstring no enumeraba.
   `test_science.py` §63.
 
+- [x] **X-16** · **la varianza que un router puede pelear ES EXACTAMENTE el ruido contra el
+  que se mide** (2026-08-29, análisis exploratorio sobre 1.284 filas medidas).
+
+  Descomposición de la varianza de la utilidad:
+
+  | fuente | varianza | del total |
+  |---|---:|---:|
+  | **total** | **0,2469** | |
+  | entre **tareas** | 0,1153 | **47%** |
+  | entre **paradigmas** | **0,0311** | **13%** |
+  | entre **réplicas** de la misma celda | **0,0311** | **13%** |
+
+  > **`0,0311` contra `0,0311`.** No «parecido», no «del mismo orden»: **iguales a la cuarta
+  > decimal.** La señal sobre la que un router elige tiene exactamente el tamaño del ruido
+  > contra el que se la mide.
+
+  **Y eso es una cota, no una observación.** Un router elige **paradigma**: sólo puede
+  pelear por el 13% que el paradigma explica. El 47% de la tarea no lo mueve nadie —ninguna
+  política hace que una tarea difícil sea fácil— y el 13% de réplica es ruido por
+  definición. Así que el techo de cualquier política de ruteo sobre este corpus es una
+  fracción de un 13% que se confunde con el error de medición.
+
+  **Es la versión más limpia de lo que `X-14` mostró desde el ajuste** —márgenes de 0,04
+  contra ruido de 0,14— y de lo que `X-13` mostró desde el oráculo —brecha que no supera su
+  propio ruido en 0 de 43 tareas—. Las tres miden la misma cosa por caminos distintos y dan
+  lo mismo.
+
+  **Lo que NO dice**: no dice que el ruteo no sirva en general. Dice que **en este corpus la
+  varianza de paradigma está al nivel del ruido**, y que un corpus donde el ruteo pueda
+  demostrarse tiene que tener **más varianza entre brazos** — que es un requisito sobre el
+  corpus, chequeable antes de correr y por ahora nunca chequeado.
+
+- [x] **X-17** · **Simpson otra vez, ahora en las unidades relevantes** (2026-08-29).
+
+  | campo | `r` global | `r` promediada **dentro de cada celda** |
+  |---|---:|---:|
+  | `relevant_units_read` | **−0,126** | **+0,381** |
+  | `relevant_units_read_any` | −0,200 | +0,215 |
+  | `wall_seconds` | −0,141 | +0,047 |
+  | `tooled_calls` | +0,087 | +0,293 |
+
+  **Leer las unidades relevantes parece DAÑINO globalmente y es fuertemente ÚTIL adentro de
+  cada celda.** El signo se da vuelta porque las celdas difíciles tienen más unidades
+  relevantes *y* menos utilidad: entre celdas, «leyó muchas relevantes» es un marcador de
+  dificultad; dentro de una celda, es lo que hace ganar.
+
+  Es exactamente la forma de `X-12` en otra variable, y sube la apuesta de la regla que este
+  repo ya tenía escrita: **un número derivado se verifica en la granularidad donde vive.**
+  Con `relevant_units_read` el agregado no atenúa el efecto — **le cambia el signo**, y
+  cualquiera que optimizara contra la correlación global estaría empujando en la dirección
+  contraria.
+
+  El analizador que lo encontró (`bench/analysis/_eda.py`) reporta las dos columnas **una al
+  lado de la otra y marca las discrepancias**, precisamente porque una sola no alcanza.
+
+- [x] **X-15** · **el eje que decide NO se puede construir con lo que el request declara —
+  probado con un contraejemplo, no con una correlación** (2026-08-29).
+
+  `X-12` mostró que el signo del efecto de la cobertura se da vuelta entre celdas. La
+  pregunta obvia era: **¿qué campo computable lo predice?** La respuesta es **ninguno**, y no
+  por falta de búsqueda: **ninguna combinación de hasta tres campos computables separa los
+  signos.** Cada campo tiene valores de los dos lados.
+
+  **Y hay un contraejemplo que lo cierra sin apelar a estadística:**
+
+  | | `C5_unknown_horizon` | `C8_currency` |
+  |---|---|---|
+  | `coverage_demanded` | `exhaustive` | `exhaustive` |
+  | `answer_cardinality` | `singular` | `singular` |
+  | `completeness_domain` | `from_scope` | `from_scope` |
+  | `irreversible` · `shared_writes` | False · False | False · False |
+  | `budget_tokens` · `n_units` | 60.000 · 5 | 60.000 · 5 |
+  | **región asignada** | `*/no_oracle/loose/chain` | **la misma** |
+  | filas medidas | 153 | 153 |
+  | **correlación cobertura-utilidad** | **+0,331** | **−0,373** |
+
+  **Idénticas en los seis campos computables, en la misma región, con efecto opuesto.**
+
+  **Y las preguntas dicen por qué:**
+
+  - `C5` — *«exactamente un individuo tiene información de ciudad contradictoria **entre las
+    unidades suministradas**»*. Hay que leer todo para encontrar la contradicción:
+    **exhaustividad**.
+  - `C8` — *«¿cuál es el domicilio **actualmente** en archivo para la cuenta X?»*. Hay que
+    encontrar el **más reciente** entre registros que compiten: **discriminación**. Leer más
+    trae más candidatos viejos.
+
+  Lo que decide es **contradicción entre unidades contra recencia temporal** — una propiedad
+  de lo que la pregunta *significa*, no de ninguna cantidad declarada.
+
+  > **Es la forma más fuerte del diagnóstico de `P15`, y cambia su enunciado.** No es «al
+  > vocabulario le falta un eje»: es **«el eje no se puede construir con lo que el request
+  > declara hoy»**. Ningún mapa de features sobre los campos actuales puede separar esas dos
+  > tareas, porque la información no está.
+
+  **Lo que esto habilita, y por qué no es un callejón sin salida.** La propiedad **es**
+  conocible —el generador del corpus la sabe: son dos celdas distintas por construcción—
+  simplemente **no está expuesta como campo de la tarea**. Así que el resultado no dice «el
+  enfoque no sirve», dice **qué hay que declarar**: un eje de resolución temporal, o más
+  general, si la respuesta se obtiene por **cobertura** o por **selección entre candidatos
+  que compiten**. Es una decisión de diseño del contrato, no un problema de aprendizaje.
+
+  Y es chequeable **antes de correr**: dos celdas con la misma declaración computable y
+  comportamiento óptimo opuesto son una prueba de que el contrato es insuficiente, y esa
+  prueba cuesta cero llamadas.
+
 - [x] **X-14** · **θ se ajustó sobre el registro completo, y el veredicto es que se abstenga
   — pero no por `tau`** (2026-08-29, cero llamadas al modelo).
 
