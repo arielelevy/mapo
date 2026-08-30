@@ -956,6 +956,45 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
   invisible»*— cometida en los campos que ese mismo docstring no enumeraba.
   `test_science.py` §63.
 
+- [x] **X-14** · **θ se ajustó sobre el registro completo, y el veredicto es que se abstenga
+  — pero no por `tau`** (2026-08-29, cero llamadas al modelo).
+
+  Con 428 episodios sobre 8 regiones, **dos regiones tienen dos o más brazos por encima del
+  piso de evidencia** —las primeras del proyecto— y sus márgenes son:
+
+  | región | margen | brazos con evidencia | tareas |
+  |---|---:|---:|---:|
+  | `few/no_oracle/loose/flat` | **0,0417** | 9 | 8 |
+  | `many/no_oracle/loose/flat` | **0,0381** | 9 | 15 |
+  | las otras 6 | — | 0 | 2–6 cada una |
+
+  **Y el ruido por celda es 0,1407.** El margen es **3,4× más chico que el ruido**, y en esas
+  dos regiones específicamente el ruido es 0,1125 y 0,1126 — o sea que la comparación no
+  mejora mirándola de cerca.
+
+  > **`tau` no es la palanca, y ahora se sabe por qué y no por falta de datos.** Con
+  > `tau = 0,05` ya ninguna región opina; con `tau = 0` opinan las dos. Pero cualquier
+  > umbral por debajo de `0,14` haría que θ decida sobre diferencias **más chicas que la
+  > dispersión entre réplicas de la misma celda**. No hay un `tau` que la haga opinar
+  > *responsablemente*: el problema no es el umbral, es que el margen vive debajo del ruido.
+
+  **Y eso cierra el diagnóstico de `P15` desde el otro lado.** `P15` mostró que θ pierde
+  `−0,087` sobre un mundo nuevo y lo atribuyó a que el vocabulario de región no distingue el
+  eje que decide. Esto lo confirma midiendo el interior: **las regiones que sí juntan
+  evidencia no separan los brazos**, y las seis que podrían separarlos no juntan evidencia
+  (2 a 6 tareas cada una, contra un piso de 8).
+
+  **Y conecta con `X-12`**: el premio son 5 tareas de 43, concentradas en `B2_absence`. El
+  vocabulario mete esas 5 en la misma región que las 38 donde no hay nada que elegir, así que
+  la señal se promedia hasta desaparecer. **No es que θ no sepa decidir: es que el
+  vocabulario le da bins donde la respuesta correcta es «da igual».**
+
+  **Lo que esto NO habilita**, dicho para que no se lea de más: no dice que la selección de
+  paradigma no sirva. Dice que **con este vocabulario de región y este corpus** el margen no
+  supera el ruido. Las dos cosas que lo moverían son un eje que distinga lo que `X-12`
+  mostró que importa —si la tarea premia exhaustividad o discriminación— y más tareas por
+  región. Ninguna es un ajuste de `tau`.
+
 - [x] **X-12** · **por qué el ruteo tiene premio: no existe una cantidad de lectura que
   sirva siempre** (2026-08-29, sobre el registro completo de 1.656 filas).
 

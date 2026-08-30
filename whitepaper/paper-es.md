@@ -1512,6 +1512,49 @@ la mayoría de los pedidos.
 correlaciones por celda descansan en entre 54 y 162 filas cada una, un corpus y un modelo.
 El patrón de **signos** es la afirmación; las magnitudes no.
 
+## 7.10 La política ajusta, y correctamente se niega a contestar
+
+El Corolario 3 de §5.1 dice que la cobertura óptima está por debajo de uno en cuanto alguna
+pérdida se rutee. Sobre el registro completo podemos reportar dónde cae en realidad, y la
+respuesta es **cero**, por un motivo medido y no supuesto.
+
+Ajustando la política sobre 428 episodios en 8 regiones —replay offline, sin inferencia—
+**dos regiones tienen dos o más brazos por encima del piso de evidencia**, las primeras del
+proyecto:
+
+| región | margen (mejor − segundo) | brazos con evidencia | tareas |
+|---|---:|---:|---:|
+| `few/no_oracle/loose/flat` | **0,0417** | 9 | 8 |
+| `many/no_oracle/loose/flat` | **0,0381** | 9 | 15 |
+| las otras seis | — | 0 | 2–6 cada una |
+
+**Y el ruido entre réplicas por celda es 0,1407.** El margen es **3,4× más chico que el
+ruido**; dentro de esas dos regiones el ruido es 0,1125 y 0,1126, así que la comparación no
+mejora mirándola de cerca.
+
+> **El umbral de abstención no es la palanca, y ahora se sabe en vez de sospecharse.** Con
+> `τ = 0,05` ninguna región opina; con `τ = 0` opinan las dos. Pero cualquier umbral por
+> debajo de `0,14` haría que la política decida sobre diferencias **más chicas que la
+> dispersión entre réplicas de la misma celda**. No hay un `τ` que la haga opinar
+> *responsablemente*: el problema no es el umbral, es que el margen vive debajo del ruido.
+
+**Esto cierra el diagnóstico de §6.5 desde adentro.** La refutación de transferencia que
+reporta esa sección —la política perdiendo 0,087 contra el mejor brazo fijo sobre un mundo
+no visto— se atribuyó a un vocabulario de región sin eje para la propiedad que decide. Acá está el mismo hecho medido
+por dentro: **las regiones que sí acumulan evidencia no separan los brazos**, y las seis que
+podrían separarlos no acumulan evidencia — de 2 a 6 tareas cada una contra un piso de 8.
+
+**Y se compone con §7.9.** El premio son cinco tareas de cuarenta y tres, concentradas en la
+ausencia. El vocabulario mete esas cinco en el mismo bin que las treinta y ocho donde no hay
+nada que elegir, así que la señal se promedia hasta desaparecer. **La política no está
+fallando en decidir: le están dando bins donde la respuesta correcta es «da igual».**
+
+**Lo que esto NO dice**, enunciado para que no se lea de más: no es evidencia de que la
+selección de paradigma no pague. Es evidencia de que **bajo este vocabulario de región y
+este corpus**, el margen no supera al ruido. Las dos cosas que lo moverían son un eje que
+distinga lo que §7.9 mostró que importa —si la tarea premia exhaustividad o discriminación—
+y más tareas por región. Ninguna es un ajuste de `τ`.
+
 ---
 
 # 8. Mecanismos de falla

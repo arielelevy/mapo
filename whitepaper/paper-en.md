@@ -1467,6 +1467,50 @@ it is why the optimal operating point involves abstaining on most requests.
 per-cell correlations rest on 54 to 162 rows each, one corpus and one model. The **sign**
 pattern is the claim; the magnitudes are not.
 
+## 7.10 The policy fits, and correctly declines to answer
+
+Corollary 3 of §5.1 says optimal coverage is below one whenever any loss would be routed.
+On the completed record we can report where it actually lands, and the answer is **zero**,
+for a reason that is measured rather than assumed.
+
+Fitting the policy over 428 episodes across 8 regions — offline replay, no inference —
+**two regions carry two or more arms above the evidence floor**, the first in this project
+to do so:
+
+| region | margin (best − second) | arms with evidence | tasks |
+|---|---:|---:|---:|
+| `few/no_oracle/loose/flat` | **0.0417** | 9 | 8 |
+| `many/no_oracle/loose/flat` | **0.0381** | 9 | 15 |
+| the other six | — | 0 | 2–6 each |
+
+**And the per-cell replicate noise is 0.1407.** The margin is **3.4× smaller than the
+noise**; inside those two regions specifically the noise is 0.1125 and 0.1126, so the
+comparison does not improve on closer inspection.
+
+> **The abstention threshold is not the lever, and now we know why rather than suspecting
+> it.** At `τ = 0.05` no region opines; at `τ = 0` both do. But any threshold below `0.14`
+> would have the policy decide on differences **smaller than the spread between replicates
+> of the same cell**. There is no `τ` that makes it opine *responsibly*: the problem is not
+> the threshold, it is that the margin lives beneath the noise.
+
+**This closes the diagnosis of §6.5 from the inside.** The transfer refutation reported
+there — the policy losing 0.087 to the best fixed arm on an unseen world — was attributed
+to a region vocabulary with no axis for the property that decides. Here is the same fact measured from
+within: **the regions that do accumulate evidence do not separate the arms**, and the six
+that might separate them do not accumulate evidence — 2 to 6 tasks each against a floor of
+8.
+
+**And it composes with §7.9.** The prize is five tasks out of forty-three, concentrated in
+absence. The vocabulary places those five in the same bin as the thirty-eight where nothing
+is worth choosing, so the signal is averaged away. **The policy is not failing to decide; it
+is being handed bins in which the correct answer is "it does not matter."**
+
+**What this does not say**, stated so it is not read for more than it is: it is not evidence
+that paradigm selection does not pay. It is evidence that **under this region vocabulary and
+this corpus**, the margin does not clear the noise. The two things that would move it are an
+axis distinguishing what §7.9 showed to matter — whether a task rewards exhaustiveness or
+discrimination — and more tasks per region. Neither is a tuning of `τ`.
+
 ---
 
 # 8. Failure mechanisms
