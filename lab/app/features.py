@@ -588,3 +588,99 @@ class FeatureExtractor:
             )
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             return None, completion.usage
+
+
+# ── LA CLASE DE UNA CONSULTA, y de ahí qué índice la sirve ──────────────────────────
+#
+# LA REGLA, y es del autor (2026-08-30): **para un nombre propio va BM25, no la híbrida.**
+# No es una preferencia — está medida sobre `gold_h1`, persiguiendo los eslabones de C3:
+#
+#     consulta            híbrida                       léxica
+#     `Ramiro Herrera`    memo-049  (equivocada)        memo-005  puesto 1  ✓
+#     `M. Arrieta`        fuera del top-5               memo-000  puesto 3  ✓
+#     `Renata Novoa`      —                             memo-058  puesto 1  ✓
+#
+# POR QUÉ, y el mecanismo importa más que la tabla: un vector denso codifica *de qué habla*
+# un texto, y sesenta memos con la misma plantilla hablan de lo mismo. El nombre propio es
+# justo la parte que **no** es semántica — es un identificador, y para un identificador la
+# coincidencia exacta con IDF es el instrumento correcto. Fusionar la densa contra la léxica
+# no es neutral acá: **le mete ruido a la única señal que discrimina**.
+#
+# ES UNA REGLA DE CREENCIAS Y NO UN TRUCO DEL PARADIGMA. La clase de la consulta es una
+# proposición tipada, `COMPUTED`, con procedencia y verificable; la elección de índice es una
+# regla que la consume. Puesta adentro de un brazo sería una heurística de ese brazo; puesta
+# acá la puede usar cualquiera y queda en el EXPLAIN.
+
+# Formas cerradas, y ninguna es "parsear prosa": una palabra interrogativa, un verbo de
+# instrucción, o signos de pregunta descalifican a la consulta como nombre.
+_NO_ES_NOMBRE = re.compile(
+    r"\b(what|which|who|when|where|why|how|list|report|find|every|all|the|of|for|and"
+    r"|starting|follow|step|steps)\b|\?", re.IGNORECASE)
+# `Marta Arrieta`, `M. Arrieta`, `I. Ybarra` — dos a cuatro tokens capitalizados, con
+# iniciales admitidas. Es la forma que el corpus usa para nombrar personas, y la misma que
+# usa para abreviarlas.
+_FORMA_NOMBRE = re.compile(
+    r"^[A-Z][A-Za-z'’-]*\.?(?:\s+[A-Z][A-Za-z'’-]*\.?){1,3}$")
+
+
+def query_kind(query: str) -> str:
+    """`entidad_nombrada` | `prosa`. Determinista, sin modelo, verificable por forma.
+
+    Devuelve un str y no un bool porque el vocabulario va a crecer —un identificador
+    (`memo-014`, `AR9911`) no es lo mismo que un nombre de persona ni que prosa— y un bool
+    obligaría a inventar un segundo bool en vez de un tercer valor.
+    """
+    q = (query or "").strip()
+    if not q or _NO_ES_NOMBRE.search(q):
+        return "prosa"
+    return "entidad_nombrada" if _FORMA_NOMBRE.match(q) else "prosa"
+
+
+def indice_para(query: str) -> str:
+    """El brazo de recuperación que corresponde a esta consulta: `lexical` o `hybrid`.
+
+    LO QUE NO HACE: no decide por el paradigma ni por la tarea. Decide por la CONSULTA, que
+    es lo único de lo que esta regla sabe algo. Un brazo que busca prosa y después un nombre
+    cambia de índice entre una llamada y la otra, y está bien que lo haga.
+    """
+    return "lexical" if query_kind(query) == "entidad_nombrada" else "hybrid"
+
+
+# Una corrida de tokens capitalizados, con iniciales admitidas: `M. Arrieta`,
+# `Agustina Vallejos`, `I. Ybarra`.
+_CORRIDA_NOMBRE = re.compile(r"\b[A-Z][A-Za-z'’-]*\.?(?:\s+[A-Z][A-Za-z'’-]*\.?)*")
+
+
+def entidad_en(texto: str) -> str | None:
+    """La entidad nombrada más larga dentro de un texto libre, o `None`.
+
+    POR QUÉ EXISTE, y es la lección más general de este arreglo (2026-08-30). El modelo es
+    un SENSOR: emite la proposición «el rastro sigue por acá». Pero emite **prosa**, y el
+    código estaba usando esa prosa como clave de búsqueda tal cual venía. Medido sobre los
+    saltos de C3, el modelo escribió:
+
+        `M. Arrieta settlement account`        en vez de   `M. Arrieta`
+        `Agustina Vallejos reports to`         en vez de   `Agustina Vallejos`
+        `C. Ibarrola settlement account reports to`
+
+    Y esas colas no son inocentes: arrastran a `query_kind` a clasificar la consulta como
+    prosa, con lo cual `indice_para` manda a la híbrida **la consulta que era un nombre** —
+    justo el caso donde la híbrida está medida como peor. La regla de creencias era
+    correcta y la entrada estaba sucia.
+
+        La salida de un sensor se TIPA antes de usarse. Pasarla cruda a una decisión es
+        dejar que el sensor decida, que es el invariante que el producto prohíbe.
+
+    Se toma la corrida capitalizada MÁS LARGA y no la primera: si el modelo escribe «the
+    manager of I. Ybarra», la primera corrida no existe y la más larga es la que sirve. Con
+    empate gana la primera, que es determinista.
+    """
+    if not texto:
+        return None
+    corridas = [m.group(0).strip(" .,;:") for m in _CORRIDA_NOMBRE.finditer(texto)]
+    # Un solo token capitalizado no es una entidad para este propósito: `Report`, `Search`,
+    # `The` empiezan oraciones. Se exigen dos, que es la forma con que el corpus nombra.
+    validos = [c for c in corridas if len(c.split()) >= 2]
+    if not validos:
+        return None
+    return max(validos, key=lambda c: (len(c.split()), -corridas.index(c)))

@@ -123,6 +123,32 @@ así.
 
 ---
 
+## Los ejes que este banco cubre, y los que no (relevado 2026-08-30)
+
+Se contrastó contra lo que la literatura de agentes 2024-2026 exige. La tabla está acá y no
+en un documento aparte porque **un checklist que vive lejos del código no se corre**.
+
+| eje | estado | dónde |
+|---|---|---|
+| grading sin juez LLM | **cubierto** — no hay juez, y por eso el sesgo de posición/verbosidad no existe | `app/verify.py` |
+| sin pases gratis | **cubierto** — `''`, `'   '` y una cortesía dan `0,0`. Es el fallo que τ-bench tiene | `verify.score` |
+| validez de tarea | **cubierto** — el portón **declara** las irresolubles en vez de puntuarlas | `app/feasibility.py` |
+| contaminación | **cubierto** — corpus generado, filtración estructuralmente imposible. Y se declara la contaminación **del analista** | `corpus/`, `CONTAMINADAS` |
+| costo como eje | **cubierto** — prompt/completion separados, aranceles con fuente y fecha, acantilado de contexto largo, Pareto | `config/tariffs.json` |
+| barras de error | **cubierto**, y de más: nulos por permutación **con corrección por selección** | `_predictores.py` |
+| atribución de falla | **cubierto** — embudo ver/usar, taxonomía de modos, `ToolFailure` tipado | `_eda_react.py`, `_c3_cadena.py` |
+| **`pass^k`** | **cubierto desde 2026-08-30** — y va en el marcador | `bench/fiabilidad.py` |
+| **adecuación del oráculo** | **cubierto desde 2026-08-30** | `audits/_audit_oraculo.py` |
+| **holdout** | **corriendo** — no existía como medición válida; todo lo publicado hasta hoy es en muestra | `--corpus gold_holdout` |
+| modelo vs harness | **falta** — tres modelos declarados, `gold_h1` es esencialmente `luna` | |
+| eje de seguridad | **falta** — el gate de irreversibilidad está; las tareas adversariales no | |
+| latencia en la decisión | **falta** — medida en el 100% de las filas, **ninguna decisión la mira** | `first_ttft_ms` |
+
+> **El que más duele es el holdout**, porque es el criterio de éxito escrito del producto y
+> su única corrida estaba en el archivo pre-K6, sin estampar y no replayable. Por eso
+> `_run_homogenea.py` toma `--corpus`: un holdout medido con otro harness no mide
+> generalización, mide dos harnesses.
+
 ## Dónde vive cada cosa
 
 ```

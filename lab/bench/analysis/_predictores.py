@@ -158,15 +158,21 @@ def main() -> None:
     # SOLO EL PANEL COMPLETO. Un brazo que corrio la mitad de las tareas mete su propio
     # sesgo de seleccion en beta, y entonces la descomposicion deja de ser una
     # descomposicion. Se exige rectangulo: los mismos brazos en todas las tareas.
-    medidas = {tid for tid, _ in reps}
-    tids = [t["task_id"] for t in tareas
-            if t["task_id"] not in CONTAMINADAS and t["task_id"] in medidas]
-    # Dos pasadas: los brazos que cubren casi todas las tareas medidas, y despues las
-    # tareas que TODOS esos brazos corrieron. Sin esto no hay rectangulo y la
-    # descomposicion deja de serlo.
-    brazos = [p for p in roster
-              if sum((tid, p) in reps for tid in tids) >= 0.95 * len(tids)]
-    tids = [tid for tid in tids if all((tid, p) in reps for p in brazos)]
+    # EL PANEL SE PIDE, NO SE DEDUCE. La regla ingenua —«los brazos que cubren el 95% de
+    # las tareas medidas»— colapsa en cuanto UN brazo tiene mas cobertura que el resto: al
+    # re-correr `rewoo` sobre las 78 mientras los otros seguian en menos, el universo se
+    # amplio y ningun otro llegaba al 95%. El panel quedaba en UN brazo y el analisis
+    # comparaba un brazo contra si mismo, reportando `gamma = 0` sin quejarse de nada.
+    #
+    # `bench.panel.rectangulo` mira PRIMERO las tareas ricas —las que corrio la campana— y
+    # recien despues los brazos. Vive en un solo lugar porque esta misma regla estaba
+    # escrita en cinco analisis y un test, y se rompio en los seis el mismo dia.
+    from bench.panel import rectangulo
+    panel = rectangulo(
+        [{"task_id": t, "paradigm": p, "infeasible": False} for t, p in reps],
+        roster=roster, excluir=CONTAMINADAS)
+    tids, brazos = panel.tareas, panel.brazos
+    print(f"  panel: {panel.descripcion()}")
     tmap = {t["task_id"]: t for t in tareas}
 
     U = {(tid, p): statistics.mean(reps[(tid, p)]) for tid in tids for p in brazos}

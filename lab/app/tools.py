@@ -1040,6 +1040,60 @@ class ToolSurface:
         """
         return self.unit_chars(unit_id) // CHARS_PER_TOKEN
 
+    def unit_mentions(self, unit_id: str, patron: str) -> bool:
+        """¿Esta unidad menciona esto? Un PREDICADO, y por eso no deja rastro de lectura.
+
+        POR QUE NO ES UNA LECTURA, y la distincion importa porque `unit_chars` ya establecio
+        que medir no es leer y esto va un paso mas alla. Devuelve un **booleano**: el texto
+        no entra al contexto de nadie, no se le sirve al modelo, no cuesta un token. Es la
+        misma pregunta que el indice lexico ya contesta para rankear —«¿este documento
+        contiene este termino?»— y nadie llama lectura a indexar.
+
+        LO QUE NO PUEDE HACER, y por eso devuelve `bool` y no `str`: cualquier cosa que
+        devuelva contenido tiene que pasar por `read_one` y dejar rastro. Un accesor de
+        texto «sin rastro» seria una puerta trasera para que un paradigma lea gratis, que es
+        exactamente el defecto que `unit_chars` documenta haber destapado.
+
+        PARA QUE EXISTE (2026-08-30): `pointer_chase` saltaba al primer hit de
+        `keyword_search` sin verificar que la unidad nombrara a quien perseguia. Sobre 60
+        memos con la misma plantilla, la relevancia de `M. Arrieta` la reparten muchos que
+        no la nombran, y las tres cadenas de C3 se descarrilaron con el contador de saltos
+        en verde. La verificacion la hace el codigo, cuesta cero, y convierte un paseo en
+        una cadena.
+        """
+        if unit_id not in self.view.unit_ids:
+            raise ToolFailure(f"Unit {unit_id} is not part of this task.",
+                              kind="fuera_de_alcance")
+        return patron.lower() in self.view.documents[unit_id].lower()
+
+    def unit_matches(self, unit_id: str, rx: Any) -> bool:
+        """Igual que `unit_mentions` pero con una expresion ya compilada. Sigue sin dar texto."""
+        if unit_id not in self.view.unit_ids:
+            raise ToolFailure(f"Unit {unit_id} is not part of this task.",
+                              kind="fuera_de_alcance")
+        return bool(rx.search(self.view.documents[unit_id].lower()))
+
+    def unit_offset(self, unit_id: str, rx: Any) -> int:
+        """A que altura de la unidad aparece esto por primera vez. Un NUMERO, no texto.
+
+        MISMA CLASE QUE `unit_chars`: es una posicion, no contenido, y no deja rastro de
+        lectura. Devuelve un entero grande cuando no aparece, para que ordenar por este
+        valor mande los ausentes al final sin necesidad de un caso especial.
+
+        PARA QUE (2026-08-30): **un documento que trata SOBRE una entidad la nombra antes
+        que uno que solo la referencia de paso.** Es la intuicion posicional de toda la
+        recuperacion clasica, y aca desempata el caso que ninguna otra prueba separaba:
+        `memo-056` abre con «Agustina Vallejos serves as auditor…» y `memo-045` la menciona
+        recien en un parrafo tardio —«was formerly auditor…; the position was vacated»—,
+        que es un senuelo que el corpus pone a proposito. Las dos la nombran con nombre
+        completo, asi que la prueba de forma no alcanza; la posicion si.
+        """
+        if unit_id not in self.view.unit_ids:
+            raise ToolFailure(f"Unit {unit_id} is not part of this task.",
+                              kind="fuera_de_alcance")
+        m = rx.search(self.view.documents[unit_id].lower())
+        return m.start() if m else 1 << 30
+
     def read_one(self, unit_id: str) -> str:
         """Lectura ESTRUCTURAL: la pide el codigo del paradigma, no el modelo.
 
@@ -1496,6 +1550,33 @@ class ToolSurface:
             "board_pending": self.board_state.pending_count,
             "board_covered": self.board_state.done_count,
             "batched_reads": self.batched_reads,
+            # LO QUE LA RECUPERACION SACO A LA SUPERFICIE, y no sólo lo que se leyó.
+            #
+            # POR QUÉ FALTABA Y POR QUÉ IMPORTA (2026-08-30). `surfaced` existía —lo usan
+            # los contadores de agotamiento— y **no salía en la fila**. Así que el registro
+            # podía decir cuántas unidades se LEYERON pero no cuáles la búsqueda había
+            # llegado a ofrecer, y ésas son preguntas distintas: un recuperador puede
+            # traer la unidad correcta y que el paradigma no la lea.
+            #
+            # LO QUE ESO IMPEDÍA MEDIR, en concreto. `HydeFused` es una rama EXPLORATORIA:
+            # su trabajo no es rankear mejor, es **ensanchar** — traer unidades que el
+            # ranking base no trae. Medido por utilidad da nulo (43 de 43 celdas idénticas),
+            # y medido por lectura también (`units_read` igual en las 43). Pero ninguna de
+            # las dos es su vara:
+            #
+            #     la pregunta correcta para una rama exploratoria no es «¿gana?»
+            #     sino «¿trae lo que la base no trae?», y eso vive en `surfaced`.
+            #
+            # Se guardan los IDS y no sólo el conteo, porque la comparación que decide es
+            # de CONJUNTOS entre brazos —`surfaced(hyde) \ surfaced(hybrid)`— y un conteo
+            # igual puede esconder dos conjuntos disjuntos.
+            "surfaced_units": len(self.surfaced),
+            # Y cuántas de las surgidas eran las que había que traer. Es el recall del
+            # recuperador, separado del recall de la LECTURA que ya está en
+            # `relevant_units_read`: un brazo puede tener 100% de recall de recuperación y
+            # 0% de lectura, y hoy las dos cosas se veían iguales desde la fila.
+            "surfaced_relevant": len(self.surfaced & self.view.relevant),
+            "surfaced_ids": sorted(self.surfaced),
             "hallucinated_units": self.hallucinated,
             # LAS SIETE FORMAS DE FALLAR, y no una. `hallucinated_units` es UNA de ellas y
             # era la unica que dejaba rastro; las otras seis pasaban sin registro, asi que

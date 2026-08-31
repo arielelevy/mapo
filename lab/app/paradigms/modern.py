@@ -19,14 +19,16 @@ No prompt cleverness: the difference under test is control structure.
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from typing import Any
 
 from .parsing import extract_json, well_formed
 from .. import guards
 from ..llm import LLMClient, Usage
+from ..features import entidad_en, indice_para
 from ..tools import MAX_BATCH_READ, ToolFailure, ToolSurface, _summarise
-from . import ANSWER_CONTRACT, answer_contract, Result, _finish
+from . import ANSWER_CONTRACT, Infeasible, answer_contract, Result, _finish
 
 # Evidence caps. Substituting a full 8k-token unit into a search query would be
 # nonsense; and the solver prompt must stay bounded by construction, not by hope.
@@ -383,6 +385,41 @@ def graph_traverse(
         frontier = next_frontier - seen
 
     ranked = sorted(scores, key=lambda u: -scores[u])
+
+    # LA CAMINATA NO ARRANCO: NO SE CONTESTA (GT-1, 2026-08-30)
+    #
+    # Si ningun termino de la pregunta matchea una entidad del grafo, `frontier` queda
+    # vacia y con ella `scores` y `ranked`. Hasta hoy el codigo seguia igual: `selected`
+    # vacio, cero lecturas, y la llamada de solve con `texts = []` — **el brazo contestaba
+    # desde la nada**.
+    #
+    # MEDIDO SOBRE SUS 165 FILAS, y el histograma de llamadas tiene exactamente dos valores:
+    #
+    #     NO llama a ninguna herramienta    89 filas (54%)   u = 0,112
+    #     lee al menos una unidad           76 filas         u = 0,525
+    #
+    # O sea que **la mitad de sus corridas midieron un indice inutilizable**, no el
+    # paradigma. Y su veredicto `P10a` se calculo sobre esa poblacion.
+    #
+    # POR QUE `Infeasible` Y NO UNA RESPUESTA VACIA. Un grafo que no conecta con la pregunta
+    # es un hecho COMPUTED sobre el material, y contestar igual es exactamente lo que fallar
+    # cerrado prohibe. Marcarlo infactible tiene tres efectos, y los tres son correctos:
+    #
+    #   · **no se puntua** — una celda que no corrio no es una respuesta mala. Es la
+    #     diferencia entre «no pudo» y «contesto mal», que este banco separa en todos lados
+    #     menos aca
+    #   · **no se gasta la llamada de solve** sobre evidencia que no existe
+    #   · **queda el motivo en el registro**, asi que la fila dice por que
+    #
+    # La infactibilidad ES un resultado: es la misma decision que ya se tomo para
+    # `extract_compute` y `streaming_scan` bajo presupuesto de produccion.
+    if not ranked:
+        raise Infeasible(
+            f"la caminata no alcanzo ninguna unidad: de las {len(seeds)} entidades que la "
+            f"pregunta nombra, ninguna matchea las {len(known)} del grafo. El mecanismo de "
+            f"este brazo no puede arrancar sobre esta tarea"
+        )
+
     allowance = surface.budget_tokens
     selected: list[str] = []
     spent = 0
@@ -594,6 +631,109 @@ def streaming_scan(
 # ---------------------------------------------------------------------------
 
 LEDGER_FACT_CHARS = guards.CHASE_LEDGER_FACT_CHARS
+# CUANTOS SALTOS PIDE LA PREGUNTA, si lo dice. Es una senal del ENTORNO —contable,
+# determinista, sin modelo en el medio— del mismo tipo que `measure_continuation` y
+# `measure_question_literal`: se lee del texto de la pregunta, nunca se le pregunta a nadie.
+#
+# POR QUE EXISTE (2026-08-30). `pointer_chase` declaraba en su docstring que «el modelo nunca
+# decide cuando parar» y el codigo lo desmentia: `if upper == "DONE": break`. En C3 —una
+# cadena de N escalones declarados— eso es exactamente el modo de falla medido: 5 de 15
+# respuestas de `react` y 4 de 15 de `reflection` cortaron **un escalon antes** y devolvieron
+# la cuenta de un intermedio, que esta a la vista y es plausible. Un `DONE` a mitad de camino
+# no es una observacion del sensor: es una decision de flujo de control, y el invariante del
+# producto la prohibe.
+SALTOS_DECLARADOS = re.compile(r"\b(?:upward|upwards|up)\s+(\d+)\s+step", re.IGNORECASE)
+
+
+SUJETO_DECLARADO = re.compile(
+    r"\bstarting from\s+([A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*)*)", re.IGNORECASE)
+
+
+def sujeto_declarado(pregunta: str) -> str | None:
+    """El sujeto de arranque que la pregunta nombra, o `None`.
+
+    Forma cerrada y verificable, hermana de `saltos_declarados`: sale del texto de la
+    pregunta, no de una llamada al modelo.
+    """
+    m = SUJETO_DECLARADO.search(pregunta or "")
+    return m.group(1).strip(" ,.") if m else None
+
+
+def saltos_declarados(pregunta: str) -> int | None:
+    """Los saltos que la pregunta EXIGE, o `None` si no declara ninguno.
+
+    `None` y no `0`: no declarar un largo es distinto de declarar cero, y el codigo trata
+    los dos casos distinto — sin declaracion, el modelo sigue decidiendo cuando parar, que
+    es lo correcto cuando el largo genuinamente no se conoce (`C5_unknown_horizon`).
+    """
+    m = SALTOS_DECLARADOS.search(pregunta or "")
+    return int(m.group(1)) if m else None
+
+
+def _primer_hit_que_nombra(
+    surface: ToolSurface, hits: list[dict[str, Any]], buscado: str, visitadas: list[str],
+) -> str | None:
+    """El primer hit NO visitado cuyo texto realmente menciona lo que se busca.
+
+    POR QUE HACE FALTA. `keyword_search` ordena por relevancia lexica, y sobre un corpus de
+    memos con la misma plantilla la relevancia de `M. Arrieta` la reparten muchos memos que
+    NO la nombran. Tomar el hit 1 sin mirar convierte una cadena en un paseo.
+
+    LA PRUEBA ES POR APELLIDO, no por el nombre completo, y esa es la unica parte fina: el
+    corpus escribe el destino del salto abreviado —`A. Vallejos` apunta a `Agustina
+    Vallejos`— asi que exigir la cadena entera fallaria SIEMPRE. El apellido es el token
+    que sobrevive a la abreviatura, y la inicial —cuando esta— desempata.
+
+    NO LEE: usa `surface.unit_mentions` / `unit_matches`, que son PREDICADOS. El texto no
+    entra al contexto de nadie y el chequeo no cuesta un token ni deja rastro de lectura —
+    es la misma pregunta que el indice lexico ya contesta para rankear.
+    """
+    partes = [p for p in buscado.replace(".", " ").split() if p]
+    if not partes:
+        return None
+    apellido = partes[-1].lower()
+    inicial = partes[0][0].lower() if len(partes) > 1 else None
+    if inicial is None:
+        rx_ancla = rx_menciona = re.compile(rf"\b{re.escape(apellido)}\b")
+    else:
+        # DOS PRUEBAS, Y LA DIFERENCIA ENTRE ELLAS ES EL DESAMBIGUADOR. La unidad que
+        # ANCLA a una persona la escribe con nombre completo —«Agustina Vallejos serves as
+        # auditor»—; la que solo la REFERENCIA la abrevia —«reports to A. Vallejos»—. Las
+        # dos mencionan el apellido, y sin separarlas la caminata salta a la unidad que la
+        # nombra de paso en vez de a la suya: en h1, persiguiendo `M. Arrieta`, los tres
+        # primeros hits lexicos son memo-001 (que la referencia), memo-004 y memo-000 (la
+        # suya). Preferir la forma completa es lo que las ordena, y es determinista.
+        rx_ancla = re.compile(rf"\b{re.escape(inicial)}[a-z]{{2,}}\s+{re.escape(apellido)}\b")
+        rx_menciona = re.compile(
+            rf"\b{re.escape(inicial)}\w*\.?\s+{re.escape(apellido)}\b")
+    anclas, menciones = [], []
+    for h in hits:
+        uid = h["unit_id"]
+        if uid in visitadas:
+            continue
+        if not surface.unit_mentions(uid, apellido):
+            continue
+        if surface.unit_matches(uid, rx_ancla):
+            anclas.append(uid)
+        elif surface.unit_matches(uid, rx_menciona):
+            menciones.append(uid)
+    # SE PREFIERE UNA CLASE ENTERA SOBRE LA OTRA, no un puntaje mezclado: la distincion
+    # ancla-o-referencia es categorica y promediarla la borraria.
+    #
+    # Y DENTRO DE LA CLASE MANDA LA POSICION, no el ranking lexico. Medido en h3: para
+    # `A. Vallejos` los dos primeros candidatos —`memo-045` y `memo-056`— la nombran con
+    # nombre completo, asi que la prueba de forma empata y el ranking pone primero al
+    # equivocado. `memo-045` la menciona en un parrafo tardio («was formerly auditor…; the
+    # position was vacated», un senuelo del corpus) y `memo-056` abre con ella. Un salto a
+    # `memo-045` no rompe la cadena de golpe: la corre UN escalon, y el brazo termina
+    # devolviendo la cuenta del anteultimo — el modo de falla `intermedia`, el dominante.
+    clase = anclas or menciones
+    if not clase:
+        return None
+    return min(clase, key=lambda uid: surface.unit_offset(uid, rx_ancla if anclas
+                                                          else rx_menciona))
+
+
 def pointer_chase(
     client: LLMClient, surface: ToolSurface, task: dict[str, Any]
 ) -> Result:
@@ -610,10 +750,27 @@ def pointer_chase(
       · `LEDGER_FACT_CHARS = 400` por hecho acarreado; el presupuesto corta la caminata
       · el modelo puede devolver `DONE`, `DEAD_END` o `NONE`, y el codigo los distingue —
         no llegar y decidir que no hay camino son cosas distintas
+      · **el largo declarado manda sobre el `DONE`** (2026-08-30): si la pregunta dice
+        «upward N step(s)», el codigo exige N saltos antes de aceptar que la caminata
+        termino, y el `solve` recibe cual unidad es el TERMINO
 
-    ESTA RETIRADO por `P14a`: **nunca toco una unidad relevante** en el corpus donde se lo
-    midio. Y sus frenos SI se confirmaron, asi que el mecanismo sobrevive a la muerte del
-    patron — lo que fallo fue la caminata, no la disciplina de control.
+    EL DOCSTRING DECIA ESTO Y EL CODIGO NO LO HACIA, y el arreglo del 2026-08-30 cierra esa
+    brecha. Decia «el modelo nunca decide cuando parar» y abajo tenia `if upper == "DONE":
+    break` — o sea que el sensor cortaba el bucle. En C3, donde el largo de la cadena esta
+    ESCRITO en la pregunta, ese `DONE` prematuro es el modo de falla dominante medido: los
+    brazos cortan un escalon antes y devuelven la cuenta de un intermedio, que esta a la
+    vista y es indistinguible de la correcta. Dos correcciones, las dos de flujo de control
+    y ninguna de fraseo:
+
+      1. mientras falten saltos declarados, `DONE` se ignora y la caminata sigue
+      2. el `solve` recibe del CODIGO cual es la unidad terminal — el ledger trae N+1
+         hechos del mismo tipo y elegir entre ellos era la decision que el bucle acababa
+         de sacarle al sensor
+
+    ESTABA RETIRADO por `P14a`: **nunca toco una unidad relevante** en el corpus donde se lo
+    midio. Y sus frenos SI se confirmaron, asi que el mecanismo sobrevivio a la muerte del
+    patron — lo que fallo fue la caminata, no la disciplina de control. Este arreglo ataca
+    la caminata, que es lo que P14a habia falsificado.
     """
     usage = Usage()
     unit_ids = surface.unit_ids()
@@ -636,8 +793,29 @@ def pointer_chase(
     hop_cap = min(guards.CHASE_MAX_HOPS,
                   max(guards.CHASE_MIN_HOPS, surface.budget_tokens // mean_unit))
 
+    # EL ANCLA SE BUSCA POR EL SUJETO, NO POR LA PREGUNTA ENTERA. Medido en C3: buscando con
+    # la pregunta completa —«Starting from Renata Novoa, follow the reporting line upward 3
+    # step(s). Report the settlement account on file…»— el ranking se lo llevan los memos que
+    # hablan de cuentas de liquidacion, que son los SESENTA, y el ancla salio mal en 3 de 3
+    # (`memo-054` en vez de `memo-058`). La pregunta trae la instruccion Y el sujeto, y la
+    # instruccion es ruido lexico compartido por todo el corpus.
+    #
+    # El sujeto se saca del texto de la pregunta con una forma cerrada, sin modelo: es una
+    # senal del entorno, igual que `saltos_declarados`.
+    #
+    # Y QUE INDICE LA SIRVE NO LO DECIDE ESTE BRAZO: lo decide `features.indice_para`, que
+    # es una regla de creencias sobre la CLASE de la consulta. Para una entidad nombrada va
+    # el lexico y no la hibrida, porque un vector denso codifica *de que habla* un texto y
+    # sesenta memos con la misma plantilla hablan de lo mismo — el nombre propio es
+    # justamente la parte que no es semantica. Medido: la hibrida trae la unidad equivocada
+    # para `Ramiro Herrera` y deja a `M. Arrieta` fuera del top-5; el lexico las pone
+    # primera y tercera.
+    sujeto = sujeto_declarado(task["question"])
+    consulta_ancla = sujeto or task["question"]
+    herramienta_ancla = ("keyword_search"
+                         if indice_para(consulta_ancla) == "lexical" else "search")
     hits: list[dict[str, Any]] = json.loads(
-        surface.dispatch("search", {"query": task["question"], "limit": 5})
+        surface.dispatch(herramienta_ancla, {"query": consulta_ancla, "limit": guards.CHASE_HITS})
     ).get("results", [])
 
     ledger: list[str] = []
@@ -646,28 +824,71 @@ def pointer_chase(
     pointer_hallucinations = 0
     outcome = "no_anchor"
     iterations = 0
+    saltos = saltos_declarados(task["question"])
+    done_prematuros = 0
+    # QUE BUSCO EN CADA SALTO, Y QUE LE VOLVIO. Sin esto una caminata que se frena es
+    # indiagnosticable desde la fila: no se distingue «el modelo pidio la cosa equivocada»
+    # de «la pidio bien y el indice no la trajo» de «la trajo y la guarda la rechazo», y las
+    # tres piden arreglos distintos. Es la misma leccion que `FEATURE_SENSOR`.
+    consultas: list[dict[str, Any]] = []
+    ancla_determinista = False
+    # EL TOPE NO PUEDE SER MENOR QUE LO QUE LA PREGUNTA EXIGE. `hop_cap` sale del
+    # presupuesto y de una constante; si la pregunta pide 3 saltos y el presupuesto da 2, la
+    # caminata se corta por una razon que no tiene nada que ver con la cadena y el resultado
+    # se lee como «no la encontro». Se levanta el piso al largo declarado, +1 por el ancla.
+    if saltos is not None:
+        hop_cap = max(hop_cap, saltos + 1)
 
     if hits:
-        menu = "\n".join(f"[{h['unit_id']}] {h['summary']}" for h in hits)
-        anchor_prompt = (
-            f"Task: {task['question']}\n\n"
-            f"Search hits:\n{menu}\n\n"
-            "Which ONE unit is the anchor — where this task's subject is most likely "
-            'stated? JSON only: {"start": "<unit-id>"}'
+        # `search` DEVUELVE `summary` Y `keyword_search` DEVUELVE `highlight`, y como ahora
+        # la regla de creencias elige la herramienta segun la clase de la consulta, el menu
+        # tiene que servir a las dos. Cablear `summary` hacia que el brazo explotara con
+        # `KeyError` en cuanto la consulta fuera un nombre — que es justo el caso que el
+        # arreglo vino a habilitar.
+        # EL ANCLA ES EL SALTO CERO, Y SE RESUELVE COMO CUALQUIER OTRO SALTO.
+        #
+        # Era una llamada al modelo —«¿cuál de estos hits es el ancla?»— y ahí quedaba la
+        # ultima decision de flujo en manos del sensor. Medido en h3: con la MISMA huella y
+        # los MISMOS hits, la reptica 0 eligio `memo-058` (correcta, y la cadena salio
+        # entera: 058→056→052→050) y las repticas 1 y 2 eligieron `memo-054`, que arranca
+        # otra cadena. Utilidad 1,000 contra 0,000 por una eleccion que el codigo podia
+        # hacer solo — y que ademas cuesta una llamada.
+        #
+        # Cuando la pregunta DECLARA el sujeto, resolverlo es exactamente el mismo problema
+        # que resolver `A. Vallejos` en el salto dos: misma funcion, misma guarda de
+        # contencion, mismo desempate por posicion. Que el ancla usara otro mecanismo que
+        # los demas saltos era la incoherencia de fondo.
+        #
+        # Sin sujeto declarado el modelo sigue eligiendo, y esta bien: ahi no hay nada
+        # que el codigo pueda derivar.
+        deterministico = (
+            _primer_hit_que_nombra(surface, hits, sujeto, []) if sujeto else None
         )
-        pick = client.complete(
-            messages=[{"role": "user", "content": anchor_prompt}], max_tokens=100
-        )
-        usage.merge(pick.usage)
-        iterations += 1
-        picked = extract_json(pick.text, "start", sink=surface)
-        if picked is not None:
-            start = str(picked).strip()
+        if deterministico is not None:
+            current = deterministico
+            ancla_determinista = True
         else:
-            start = ""
-        # An anchor outside the offered hits is a proposition the code does not
-        # accept: fall back to the retriever's top hit, deterministically.
-        current = start if start in {h["unit_id"] for h in hits} else hits[0]["unit_id"]
+            menu = "\n".join(
+                f"[{h['unit_id']}] {h.get('summary') or h.get('highlight') or ''}"
+                for h in hits)
+            anchor_prompt = (
+                f"Task: {task['question']}\n\n"
+                f"Search hits:\n{menu}\n\n"
+                "Which ONE unit is the anchor — where this task's subject is most likely "
+                'stated? JSON only: {"start": "<unit-id>"}'
+            )
+            pick = client.complete(
+                messages=[{"role": "user", "content": anchor_prompt}], max_tokens=100
+            )
+            usage.merge(pick.usage)
+            iterations += 1
+            picked = extract_json(pick.text, "start", sink=surface)
+            start = str(picked).strip() if picked is not None else ""
+            # An anchor outside the offered hits is a proposition the code does not
+            # accept: fall back to the retriever's top hit, deterministically.
+            current = (start if start in {h["unit_id"] for h in hits}
+                       else hits[0]["unit_id"])
+            ancla_determinista = False
         outcome = "hop_cap"
 
         for _ in range(hop_cap):
@@ -707,21 +928,62 @@ def pointer_chase(
                 ledger.append(f"[{current}] {fact[:LEDGER_FACT_CHARS]}")
 
             upper = nxt.upper()
+            # EL `DONE` PREMATURO SE RECHAZA, y esto es lo que hace cierto el docstring.
+            # `saltos` viene de la PREGUNTA, no del modelo: mientras la caminata no haya
+            # dado los que se le exigen, «ya esta» no es una observacion admisible sino una
+            # decision de flujo, y el codigo la ignora y sigue. Se cuenta, porque un brazo
+            # que quiere parar diez veces antes de tiempo esta diciendo algo.
+            #
+            # Y si no hay puntero, no se puede seguir aunque falten saltos: eso es una
+            # caminata rota y se marca distinto de una completa. Confundirlas taparia
+            # justo el caso que el arreglo existe para hacer visible.
+            if upper == "DONE" and saltos is not None and len(visited) - 1 < saltos:
+                done_prematuros += 1
+                nxt, upper = "", ""
             if not nxt or upper == "DONE":
-                outcome = "done" if upper == "DONE" else "no_pointer"
+                if upper == "DONE":
+                    outcome = "done"
+                elif saltos is not None and len(visited) - 1 < saltos:
+                    outcome = "sin_puntero_faltando_saltos"
+                else:
+                    outcome = "no_pointer"
                 break
             if upper == "DEAD_END":
                 outcome = "dead_end"
                 break
             if upper.startswith("SEARCH:"):
+                crudo = nxt[7:].strip()
+                # LA SALIDA DEL SENSOR SE TIPA ANTES DE USARSE. El modelo escribe
+                # `M. Arrieta settlement account`, y esa cola arrastra a `query_kind` a
+                # llamarla prosa — con lo cual la consulta que ERA un nombre se va a la
+                # hibrida, justo donde esta medida como peor. Se persigue la ENTIDAD.
+                buscado = entidad_en(crudo) or crudo
+                # EL LIMITE SUBE DE 3 A 8, y sube PORQUE ahora hay guarda. Con `[0]` a
+                # ciegas, un limite ancho era peor: mas candidatos equivocados a los que
+                # saltar. Con la verificacion de contencion, ancho es estrictamente mejor —
+                # el codigo descarta lo que no nombra a quien perseguimos. Medido sobre los
+                # nueve eslabones de C3: con 8 estan los nueve, y el peor —`S. Quiroga`—
+                # aparece en el puesto 7.
                 found = json.loads(
                     surface.dispatch(
-                        "keyword_search", {"query": nxt[7:].strip(), "limit": 3}
+                        ("keyword_search" if indice_para(buscado) == "lexical" else "search"),
+                        {"query": buscado, "limit": guards.CHASE_HITS}
                     )
                 ).get("results", [])
-                candidate = next(
-                    (h["unit_id"] for h in found if h["unit_id"] not in visited), None
-                )
+                # UN SALTO A UNA UNIDAD QUE NO NOMBRA A QUIEN PERSEGUIMOS NO ES UN SALTO.
+                # Antes se tomaba el primer hit no visitado sin mirar nada mas, y en C3 eso
+                # basto para descarrilar las tres cadenas: `M. Arrieta` sobre 60 memos que
+                # comparten formato hace que BM25 devuelva vecinos plausibles, y el primero
+                # no es el que la nombra. El brazo caminaba, contaba saltos, y llegaba a
+                # cualquier lado con el contador en verde — que es peor que no caminar.
+                #
+                # La guarda es de CONTENCION y la resuelve el codigo: el apellido del
+                # nombre buscado tiene que aparecer en la unidad. Es la misma prueba que
+                # usa el verificador del corpus, y no cuesta una llamada.
+                consultas.append({"crudo": crudo, "busco": buscado,
+                                  "indice": indice_para(buscado),
+                                  "hits": [h["unit_id"] for h in found]})
+                candidate = _primer_hit_que_nombra(surface, found, buscado, visited)
                 if candidate is None:
                     stalls += 1
                     outcome = "stall"
@@ -751,12 +1013,43 @@ def pointer_chase(
             current = candidate
 
     facts = "\n".join(f"- {f}" for f in ledger) or "(none)"
+    # DE CUAL UNIDAD SALE LA RESPUESTA LO DECIDE EL CODIGO, no el modelo. En una cadena de N
+    # escalones el ledger trae N+1 hechos y **cada uno es plausible**: en C3 cada unidad del
+    # camino lleva su propia cuenta de liquidacion, pegada al nombre que la ancla. Pasarle
+    # los N+1 sin decir cual es el termino le devuelve al sensor justo la decision que el
+    # bucle acaba de sacarle — y el modo de falla medido es precisamente ese: contestar la
+    # cuenta de un intermedio.
+    #
+    # Solo se afirma cuando la caminata LLEGO. Si dio menos saltos de los exigidos, la
+    # ultima unidad visitada NO es el termino, y decir que si lo es seria fabricar la
+    # premisa. En ese caso se dice cuantos faltaron, que es lo que habilita la abstencion.
+    if saltos is not None and visited:
+        completa = len(visited) - 1 >= saltos
+        if completa:
+            terminal = visited[saltos]
+            gobierno = (
+                f"The question asks for exactly {saltos} step(s) up the chain. The walk "
+                f"was driven by code, one step at a time, and the unit reached after "
+                f"{saltos} step(s) is [{terminal}]. **The answer is the value asked for as "
+                f"stated in [{terminal}]** — the other units on the trail carry values of "
+                f"the same shape for other people, and none of those is the answer."
+            )
+        else:
+            gobierno = (
+                f"The question asks for {saltos} step(s) up the chain, and the walk "
+                f"completed only {len(visited) - 1} before the trail broke ({outcome}). "
+                f"The final unit was never reached, so its value is NOT among these facts. "
+                f"Say the answer cannot be determined."
+            )
+    else:
+        gobierno = ""
     solve = (
         f"Task: {task['question']}\n\n"
         f"Facts gathered by following the document trail "
         f"({' -> '.join(visited) or 'no units reached'}; chase ended: {outcome}):\n"
         f"{facts}\n\n"
-        f"Answer strictly from these facts. If they do not contain the answer, say "
+        + (gobierno + "\n\n" if gobierno else "")
+        + f"Answer strictly from these facts. If they do not contain the answer, say "
         f"so.\n\n{answer_contract(surface)}"
     )
     final = client.complete(messages=[{"role": "user", "content": solve}])
@@ -774,5 +1067,14 @@ def pointer_chase(
         "stalls": stalls,
         "pointer_hallucinations": pointer_hallucinations,
         "ledger_facts": len(ledger),
+        # LOS TRES CAMPOS DEL ARREGLO, y estan en la fila porque sin ellos el efecto no se
+        # puede atribuir: si sube la utilidad hay que poder decir si fue porque la caminata
+        # llego mas lejos o porque el `solve` dejo de elegir mal entre los intermedios.
+        "saltos_exigidos": saltos,
+        "done_prematuros": done_prematuros,
+        "consultas": consultas,
+        "ancla_determinista": ancla_determinista,
+        "cadena_completa": (None if saltos is None
+                            else bool(visited) and len(visited) - 1 >= saltos),
     }
     return result

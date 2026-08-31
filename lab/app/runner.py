@@ -1219,8 +1219,24 @@ class Runner:
             )
         except Infeasible as reason:
             # Recorded as a distinct outcome. It scores no utility — nothing was
-            # answered — but it is not a wrong answer, and its zero cost must not enter
-            # the cost model as if the paradigm had run cheaply.
+            # answered — but it is not a wrong answer.
+            #
+            # Y AHORA PUEDE HABER GASTADO ANTES DE RENDIRSE (2026-08-30). Hasta hoy
+            # `Infeasible` sólo lo levantaba `_units_block`, **antes de la primera
+            # llamada**, así que `cost_tokens=0` era la verdad y `spent` —que se asigna
+            # recién cuando el paradigma vuelve— no hacía falta. `graph_traverse` rompió
+            # las dos cosas de una vez: paga una llamada de extracción POR UNIDAD y recién
+            # después descubre que su caminata no alcanza nada.
+            #
+            #   · el crash: `spent` no existía en esta rama — `UnboundLocalError`, y lo
+            #     destapó el portón al correr la matriz light
+            #   · y lo peor, que no era un crash: `cost_tokens=0` habría reportado **cero
+            #     por tokens realmente quemados**. Una infactibilidad que costó plata y
+            #     figura gratis es exactamente el error que el comentario de arriba decía
+            #     estar evitando, con el signo dado vuelta
+            #
+            # Se lee el medidor del cliente, que tiene lo gastado hasta la excepción.
+            gastado = getattr(client, "spent", None) or Usage()
             return Row(
                 task_id=task["task_id"],
                 cell=task["cell"],
@@ -1228,8 +1244,8 @@ class Runner:
                 trial=trial,
                 region=features.region(),
                 utility=0.0,
-                cost_tokens=0,
-                calls=0,
+                cost_tokens=gastado.total_tokens,
+                calls=gastado.calls,
                 wall_seconds=0.0,
                 iterations=0,
                 cross_unit_lookups=0,
@@ -1239,7 +1255,7 @@ class Runner:
                 retriever=self.retriever_arm,
                 analyzer=ANALYZER_VERSION,
                 surface_version=SURFACE_VERSION,
-                tokens_by_model=dict(spent.by_model),
+                tokens_by_model=dict(gastado.by_model),
                 has_oracle=bool(task.get("has_oracle", True)),
                 answer="",
                 truth_coupling=task.get("truth_coupling", 0.0),

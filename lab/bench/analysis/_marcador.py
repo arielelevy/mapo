@@ -78,18 +78,32 @@ def main() -> None:
 
     U, C = collections.defaultdict(list), collections.defaultdict(list)
     region = {}
+    # LAS FILAS CRUDAS SE CONSERVAN, y no es redundante con `U`: `U` colapsa las replicas en
+    # una lista de utilidades por celda y pierde de que fila vino cada una. `pass^k` necesita
+    # las replicas SIN colapsar, y ademas los campos que `U` no lleva.
+    crudas = []
     for f in load_rows(_Path("results/luna/gold_h1_rows.jsonl")):
         if f.get("infeasible"):
             continue
+        crudas.append(f)
         U[(f["task_id"], f["paradigm"])].append(f["utility"])
         C[(f["task_id"], f["paradigm"])].append(f.get("cost_tokens") or 0)
         region[f["task_id"]] = f.get("region", "")
 
-    medidas = {t for t, _ in U}
-    tids = [t for t in tareas if t not in CONTAMINADAS and t in medidas]
-    brazos = [p for p in roster
-              if sum((t, p) in U for t in tids) >= 0.95 * len(tids)]
-    tids = [t for t in tids if all((t, p) in U for p in brazos)]
+    # EL PANEL SE PIDE, NO SE DEDUCE. La regla ingenua —«los brazos que cubren el 95% de
+    # las tareas medidas»— colapsa en cuanto UN brazo tiene mas cobertura que el resto: al
+    # re-correr `rewoo` sobre las 78 mientras los otros seguian en menos, el universo se
+    # amplio y ningun otro llegaba al 95%. El panel quedaba en UN brazo y el analisis
+    # comparaba un brazo contra si mismo, reportando `gamma = 0` sin quejarse de nada.
+    #
+    # `bench.panel.rectangulo` mira PRIMERO las tareas ricas —las que corrio la campana— y
+    # recien despues los brazos. Vive en un solo lugar porque esta misma regla estaba
+    # escrita en cinco analisis y un test, y se rompio en los seis el mismo dia.
+    from bench.panel import rectangulo
+    panel = rectangulo(
+        [{"task_id": t, "paradigm": p, "infeasible": False} for t, p in U],
+        roster=roster, excluir=CONTAMINADAS)
+    tids, brazos = panel.tareas, panel.brazos
     um = {(t, p): statistics.mean(U[(t, p)]) for t in tids for p in brazos}
     cm = {(t, p): statistics.mean(C[(t, p)]) for t in tids for p in brazos}
 
@@ -187,6 +201,18 @@ def main() -> None:
      ordenes de magnitud entre los competidores, cuando en utilidad hay centesimas. Es el
      mismo hecho que aparecio por cuatro caminos independientes esta semana.
 """)
+
+    # ── FIABILIDAD: `pass^k` ────────────────────────────────────────────────────
+    # VA EN EL MARCADOR Y NO EN UN ANALISIS APARTE, y esa es la decision. Todo lo de arriba
+    # es `pass@1` —el promedio sobre replicas— y responde «cuanto acierta». Nada de eso
+    # dice si se puede CONTAR con que acierte, y para un producto que promete «misma base
+    # de creencias => misma decision» esa es la mitad que importa. Una metrica que vive en
+    # su propio script es una metrica que nadie mira.
+    from bench.fiabilidad import imprimir, perfil
+    print("=" * 96)
+    print("FIABILIDAD — la varianza que vive DENTRO de una celda")
+    print("=" * 96 + chr(10))
+    imprimir(perfil(crudas, k=3, tareas=tids, brazos=brazos))
 
 
 if __name__ == "__main__":

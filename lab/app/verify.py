@@ -80,6 +80,11 @@ REFUSAL_MARKERS = (
     "can not be determined", "unable to determine", "no date", "not mentioned",
     "not in the", "no evidence", "not documented", "does not appear",
     "no such", "did not", "never",
+    # AGREGADOS 2026-08-30, y los destapo C3 y no D1. Al clasificar las respuestas de la
+    # cadena aparecieron tres formas de negativa que el vocabulario no cubria —«not on
+    # file», «not identified», «not determinable»— y las tres son inequivocas. Faltaban
+    # porque D1 no las produce: el vocabulario se habia derivado de UNA celda.
+    "not on file", "not identified", "not determinable", "no reporting line",
 )
 
 # Un año de cuatro digitos, una fecha numerica, o un mes con nombre. Es lo que la pregunta

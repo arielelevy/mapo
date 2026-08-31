@@ -14,7 +14,7 @@ py tests\test_consolidation.py
 
 ---
 
-## `test_science.py` — 65 chequeos, 657 aserciones
+## `test_science.py` — 67 chequeos, 670 aserciones
 
 > El número sale de contar `ok = check_...(ok)` en `main()` y `[PASS]` en la corrida,
 > no de acordarse. Decía «33 secciones» y hacía rato que no era cierto — un conteo a

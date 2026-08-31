@@ -2610,7 +2610,7 @@ def check_every_paradigm_runs_offline(ok: bool) -> bool:
     existe, y el unico que atrapa esta clase de defecto antes de gastar.
     """
     from app.llm import Usage as _RealUsage
-    from app.paradigms import REGISTRY, RETIRED
+    from app.paradigms import Infeasible, REGISTRY, RETIRED
     from app.retrieval import CorpusView, LexicalRetriever
     from app.tools import ToolSurface
 
@@ -2663,6 +2663,17 @@ def check_every_paradigm_runs_offline(ok: bool) -> bool:
             resultado = REGISTRY[nombre](_Cliente(), surface, tarea)
             if not hasattr(resultado, "answer"):
                 fallos.append(f"{nombre}: no devolvio un Result")
+        except Infeasible:
+            # `Infeasible` NO ES UNA EXPLOSION: es un resultado. El brazo dice que su
+            # mecanismo no puede correr sobre esta tarea, el runner lo asienta como fila
+            # infactible, y ninguna estadistica lo puntua. `direct` lo levanta cuando el
+            # material no entra en el presupuesto y `graph_traverse` cuando la caminata no
+            # alcanza ninguna unidad — y este cliente de mentira no produce entidades, asi
+            # que aca lo levanta siempre.
+            #
+            #     Contar la infactibilidad como falla borraria justamente la distincion que
+            #     este banco defiende en todos lados: «no pudo» no es «contesto mal».
+            pass
         except Exception as exc:  # noqa: BLE001 — el punto es atrapar CUALQUIER cosa
             fallos.append(f"{nombre}: {type(exc).__name__}: {exc}")
 
@@ -3738,6 +3749,132 @@ def check_money_is_a_unit_not_a_number(ok: bool) -> bool:
     return ok
 
 
+def check_surfacing_is_recorded_apart_from_reading(ok: bool) -> bool:
+    """§80: lo que la recuperacion SACO A LA SUPERFICIE se registra aparte de lo leido.
+
+    ERAN DOS PREGUNTAS Y LA FILA CONTESTABA UNA. `surfaced` existia desde siempre —lo usan
+    los contadores de agotamiento del retriever— y **no salia en la fila**. Asi que el
+    registro podia decir cuantas unidades se LEYERON pero no cuales la busqueda habia
+    llegado a ofrecer, y no son lo mismo: un recuperador puede traer la unidad correcta y
+    que el paradigma no la lea.
+
+    LO QUE ESO IMPEDIA MEDIR, y es concreto. `HydeFused` es una rama **exploratoria**: su
+    trabajo no es rankear mejor, es **ensanchar**. Medida por utilidad da nulo —43 de 43
+    celdas identicas— y por lectura tambien —`units_read` igual en las 43—. Pero ninguna de
+    las dos es su vara:
+
+        la pregunta correcta para una rama exploratoria no es «¿gana?»
+        sino «¿trae lo que la base no trae?», y eso vive en `surfaced`.
+
+    POR QUE SE GUARDAN LOS IDS Y NO SOLO EL CONTEO: la comparacion que decide es de
+    CONJUNTOS entre brazos —lo que trae HyDE menos lo que trae la base— y **dos conjuntos
+    disjuntos pueden tener el mismo tamano**. Un conteo no distingue «trajo otras cuatro»
+    de «trajo las mismas cuatro».
+    """
+    from app.retrieval import CorpusView, LexicalRetriever
+    from app.tools import ToolSurface
+
+    print("\n--- 80. surgir no es leer, y se registran por separado ---")
+
+    docs = {f"u{i}": f"memo {i}: Marta Arrieta, director, cuenta AR{i:07d}"
+            for i in range(6)}
+    v = CorpusView(task_id="t", documents=docs, unit_ids=list(docs),
+                   relevant_units=["u1", "u3"])
+    s = ToolSurface(view=v, hybrid=LexicalRetriever(), semantic=LexicalRetriever(),
+                    lexical=LexicalRetriever(), variant="basic", budget_tokens=50_000)
+
+    s.dispatch("keyword_search", {"query": "director", "limit": 4})
+    u = s.usage()
+    ok &= check(f"una busqueda deja rastro de lo que SURGIO ({u['surfaced_units']} unidades)",
+                u["surfaced_units"] == 4)
+    ok &= check("y de cuantas de esas eran relevantes — el recall del RECUPERADOR",
+                u["surfaced_relevant"] == 2)
+    ok &= check("surgir NO es leer: la misma busqueda deja `units_read` en cero",
+                u["units_read"] == 0)
+    ok &= check("los IDS se guardan, no solo el conteo — dos conjuntos DISJUNTOS pueden "
+                "tener el mismo tamano, y la comparacion entre brazos es de conjuntos",
+                u["surfaced_ids"] == ["u0", "u1", "u2", "u3"])
+
+    s.dispatch("read", {"unit_ids": "u1"})
+    u = s.usage()
+    ok &= check(f"y los dos recalls se separan: recuperacion {u['surfaced_relevant']} "
+                f"contra lectura {u['relevant_units_read']} — un brazo puede tener 100% de "
+                f"uno y 50% del otro, y hasta hoy se veian iguales desde la fila",
+                u["surfaced_relevant"] == 2 and u["relevant_units_read"] == 1)
+
+    # ES DE LA TAREA, NO DEL SUB-AGENTE. `surfaced` ya se compartia por referencia —es lo
+    # que arreglo la v2 de la superficie— y el reporte tiene que heredarlo o `handoff` y
+    # `supervisor` reportarian el ensanchamiento de su ultimo sub-agente.
+    sub = s.scoped(["u0", "u1"])
+    sub.dispatch("keyword_search", {"query": "marta", "limit": 2})
+    ok &= check("lo que surge adentro de un sub-agente cuenta para la TAREA",
+                s.usage()["surfaced_units"] >= u["surfaced_units"]
+                and sub.surfaced is s.surfaced)
+    return ok
+
+
+def check_hyde_branch_is_separable(ok: bool) -> bool:
+    """§79: la rama HyDE se puede medir SIN fusionar, que es la pregunta previa.
+
+    `HydeFused` esta medido y es INERTE. Sobre `gold_h1`, **43 de 43 celdas con utilidad
+    identica**, y el mecanismo del nulo esta a la vista: `units_read` es igual en las 43, o
+    sea que **la rama nunca cambio que unidades se leyeron**. Sobre `gold_p18`, 115 celdas
+    pareadas, `+0,017` a 1,06x el costo, con 13 mejoras y 6 empeoramientos — lo que da el
+    azar.
+
+    Y SU PROPIO DOCSTRING EXPLICA POR QUE, sin darse cuenta: defiende la fusion como
+    seguridad —«hace que ese error tenga que VENCER al ranking base en vez de
+    reemplazarlo»—. Es cierto, y tiene un costo que no estaba medido:
+
+        la misma fusion que la protege de equivocarse es la que la deja muda.
+        Con RRF contra un ranking base fuerte, la rama nunca gana.
+
+    `hyde_only` contesta la pregunta PREVIA a discutir como exponerla: **¿la rama tiene
+    senal propia?** Si reemplazando el ranking tampoco le gana nunca a `hybrid`, no hay nada
+    que fusionar mejor ni nada que exponer como herramienta.
+
+    NO ES UN CANDIDATO A PRODUCCION, y este chequeo lo fija: reemplazar el ranking es
+    exactamente lo peligroso que la fusion evita. Es un instrumento de diagnostico.
+    """
+    import inspect
+
+    from app.embeddings import EmbeddingClient
+    from app.retrieval import (MODEL_CALLING_ARMS, HydeFused, HydeOnly, build_arms)
+
+    print("\n--- 79. la rama HyDE se puede medir sin fusionar ---")
+
+    ok &= check("`hyde_only` HEREDA de `hybrid_hyde`: misma generacion, misma cache por "
+                "consulta, mismo costo — lo unico que cambia es la fusion, que es la "
+                "variable bajo prueba",
+                issubclass(HydeOnly, HydeFused))
+    fuente = inspect.getsource(HydeOnly.rank)
+    ok &= check("y su `rank` NO fusiona: el ranking sale de la hipotetica y nada mas",
+                "fused" not in fuente and "RRF_K" not in fuente)
+    ok &= check("una generacion vacia cae al brazo base, no a un ranking vacio — sin "
+                "fusion no hay red debajo, asi que importa mas que en el fusionado",
+                "self._base.rank(" in fuente)
+
+    ok &= check("esta declarado como brazo que LLAMA AL MODELO: su costo y su piso de "
+                "ruido propio no se pueden esconder",
+                "hyde_only" in MODEL_CALLING_ARMS)
+
+    # LLEGA AL CATALOGO, y solo con cliente. La misma guarda de §59, un nivel mas abajo:
+    # un brazo que no se construye no se puede correr, y su ausencia se leeria como un
+    # efecto nulo medido.
+    class _Emb:
+        def embed(self, textos):  # noqa: D401
+            return [[0.0] for _ in textos]
+
+    sin = build_arms(embedder=_Emb())
+    ok &= check("sin cliente NO existe — no se puede generar una hipotetica sin modelo",
+                "hyde_only" not in sin)
+
+    d = HydeOnly.describe(HydeOnly.__new__(HydeOnly)) if False else None
+    ok &= check("`describe()` declara `fusion: None`, o las dos filas se leerian iguales",
+                "d[\"fusion\"] = None" in inspect.getsource(HydeOnly.describe))
+    return ok
+
+
 def check_gaps_that_nobody_can_close(ok: bool) -> bool:
     """§78: un hueco que nadie puede cerrar no es un hueco — y el literal es una creencia.
 
@@ -3917,6 +4054,22 @@ def check_report_does_not_score_placeholders(ok: bool) -> bool:
         if not f.get("infeasible"):
             rows[f["task_id"]][f["paradigm"]] = f
             region[f["task_id"]] = f.get("region", "")
+
+    # EL PANEL SE PIDE, NO SE DEDUCE. La regla ingenua —«los brazos que cubren el 95% de
+    # las tareas medidas»— colapsa en cuanto UN brazo tiene mas cobertura que el resto: al
+    # re-correr `rewoo` sobre las 78 mientras los otros seguian en 46, el universo de tareas
+    # se amplio a 78 y ningun otro brazo llegaba al 95%. El panel quedo en un solo brazo y
+    # este chequeo se cayo con un `ValueError` que no hablaba de paneles.
+    #
+    # `bench.panel.rectangulo` mira PRIMERO las tareas ricas —las que corrio la campana— y
+    # recien despues los brazos. Vive en un solo lugar porque la misma regla estaba escrita
+    # en cinco analisis y un test, y se rompio en los seis el mismo dia.
+    from bench.panel import rectangulo
+    panel = rectangulo(list(load_rows(ruta)))
+    rows = {t: rows[t] for t in panel.tareas}
+    region = {t: region[t] for t in panel.tareas}
+    ok &= check(f"el panel se arma sin colapsar: {panel.descripcion()}",
+                len(panel.brazos) >= 5 and len(panel.tareas) >= 20)
 
     router = Router(PolicyBundle.cold_start(fallback=FALLBACK, tau=0.3),
                     COST_PRIORS, FALLBACK)
@@ -5813,6 +5966,8 @@ def main() -> int:
     ok = check_new_predictors_reach_the_decision(ok)
     ok = check_report_does_not_score_placeholders(ok)
     ok = check_gaps_that_nobody_can_close(ok)
+    ok = check_hyde_branch_is_separable(ok)
+    ok = check_surfacing_is_recorded_apart_from_reading(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

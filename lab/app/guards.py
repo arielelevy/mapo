@@ -124,6 +124,15 @@ DAG_DIMINISHING_RETURNS = 0.05
 
 SCAN_CARRY_CHARS = 6_000        # `streaming_scan`: estado entre trozos, sin vuelta atrás
 CHASE_LEDGER_FACT_CHARS = 400   # `pointer_chase`: por hecho en el ledger
+# CUANTOS CANDIDATOS MIRA CADA SALTO de `pointer_chase`. Ocho, y esta MEDIDO sobre los nueve
+# eslabones de las tres cadenas de C3: con 8 caen los nueve, y el peor —`S. Quiroga`— aparece
+# en el puesto 7. Era 3, escrito a mano adentro del paradigma.
+#
+# Y ES ANCHO PORQUE HAY GUARDA. Antes el codigo tomaba el primer hit no visitado a ciegas, y
+# con eso un limite ancho es PEOR: mas candidatos equivocados a los que saltar. Con la
+# verificacion de contencion —la unidad tiene que nombrar a quien se persigue— ancho pasa a
+# ser estrictamente mejor. Subir este numero sin esa guarda seria un retroceso.
+CHASE_HITS = 8
 REWOO_EVIDENCE_ITEM_CHARS = 32_000   # `rewoo`: por item de evidencia del plan
 REWOO_SUBSTITUTION_CHARS = 800       # `rewoo`: al sustituir un resultado en el paso siguiente
 

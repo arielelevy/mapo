@@ -238,15 +238,27 @@ def main() -> None:
               f"{orden_antes.index(p) + 1:11d} {orden_despues.index(p) + 1:13d}")
 
     movidos = sum(1 for i, p in enumerate(orden_despues) if orden_antes.index(p) != i)
-    print(f"\n  {movidos} de {len(orden_despues)} brazos cambian de puesto — y NO es lo "
-          f"que yo esperaba.")
-    print(f"  Prediie que el defecto deprimia a todos por igual y que el orden no se "
-          f"moveria. La")
-    print(f"  correccion solo puede tocar a quien CORRIO esas tareas, y la factibilidad "
-          f"poda a unos")
-    print(f"  brazos de `C9`/`D1` y a otros no: un defecto uniforme sobre las TAREAS no es "
-          f"uniforme")
-    print(f"  sobre los BRAZOS. Lo que si se sostiene: ningun delta es negativo.")
+    # LA PROSA TIENE QUE SEGUIR AL NUMERO, y esta no lo hacia: el texto afirmaba «y NO es lo
+    # que yo esperaba» pasara lo que pasara, asi que en la segunda pasada —la de los
+    # marcadores de rechazo, donde no se movio nadie— imprimia «0 de 15 cambian de puesto, y
+    # NO es lo que esperaba» contra su propio docstring, que decia que esperaba justo eso.
+    # Una conclusion cableada dentro de un script de medicion es una afirmacion sin medida.
+    print(f"\n  {movidos} de {len(orden_despues)} brazos cambian de puesto.")
+    if movidos:
+        print("  La correccion solo puede tocar a quien CORRIO las tareas afectadas, y la")
+        print("  factibilidad poda a unos brazos de esas celdas y a otros no: un defecto")
+        print("  uniforme sobre las TAREAS no es uniforme sobre los BRAZOS.")
+    else:
+        print("  El arreglo agrega credito en pocas filas y a brazos que ya estaban")
+        print("  separados por mas que el delta, asi que el orden aguanta. Eso NO dice que")
+        print("  el arreglo sea menor: dice que su efecto no alcanza a cruzar dos brazos.")
+    def _media(d, p):
+        return sum(d[p]) / len(d[p])
+
+    negativos = [p for p in orden_despues
+                 if _media(por_brazo_despues, p) < _media(por_brazo_antes, p) - 1e-9]
+    print(f"  Deltas negativos: {negativos or 'ninguno'}"
+          + ("" if not negativos else "   <-- REVISAR: el arreglo no deberia sacar credito"))
 
     if not escribir:
         print("\n  Nada se escribio. Para aplicar:  py bench/oneoff/_regrade_2026_08_30.py "

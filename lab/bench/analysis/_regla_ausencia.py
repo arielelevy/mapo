@@ -54,10 +54,20 @@ def main() -> None:
             U[(f["task_id"], f["paradigm"])].append(f["utility"])
             C[(f["task_id"], f["paradigm"])].append(f.get("cost_tokens") or 0)
 
-    medidas = {t for t, _ in U}
-    tids = [t for t in tareas if t not in CONTAMINADAS and t in medidas]
-    brazos = [p for p in roster if sum((t, p) in U for t in tids) >= 0.95 * len(tids)]
-    tids = [t for t in tids if all((t, p) in U for p in brazos)]
+    # EL PANEL SE PIDE, NO SE DEDUCE. La regla ingenua —«los brazos que cubren el 95% de
+    # las tareas medidas»— colapsa en cuanto UN brazo tiene mas cobertura que el resto: al
+    # re-correr `rewoo` sobre las 78 mientras los otros seguian en menos, el universo se
+    # amplio y ningun otro llegaba al 95%. El panel quedaba en UN brazo y el analisis
+    # comparaba un brazo contra si mismo, reportando `gamma = 0` sin quejarse de nada.
+    #
+    # `bench.panel.rectangulo` mira PRIMERO las tareas ricas —las que corrio la campana— y
+    # recien despues los brazos. Vive en un solo lugar porque esta misma regla estaba
+    # escrita en cinco analisis y un test, y se rompio en los seis el mismo dia.
+    from bench.panel import rectangulo
+    panel = rectangulo(
+        [{"task_id": t, "paradigm": p, "infeasible": False} for t, p in U],
+        roster=roster, excluir=CONTAMINADAS)
+    tids, brazos = panel.tareas, panel.brazos
     um = {(t, p): statistics.mean(U[(t, p)]) for t in tids for p in brazos}
     cm = {(t, p): statistics.mean(C[(t, p)]) for t in tids for p in brazos}
 

@@ -26,6 +26,66 @@
 
 ---
 
+## Estado al 2026-08-30 — el harness contra la literatura
+
+Se relevó lo que la literatura de 2024-2026 exige de un harness de agentes ([ABC](https://arxiv.org/abs/2507.02825),
+[AI Agents That Matter](https://arxiv.org/abs/2407.01502), [HAL](https://arxiv.org/abs/2510.11977),
+[Adding Error Bars to Evals](https://arxiv.org/abs/2411.00640), [tau2-bench](https://github.com/sierra-research/tau2-bench),
+[AgentHarm](https://arxiv.org/abs/2410.09024), [OpenAI sobre SWE-bench Verified](https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/))
+y se contrastó contra el nuestro. **Lo que estaba, estaba bien; lo que faltaba, faltaba
+entero.**
+
+**Cerrado el 2026-08-30:**
+
+| | |
+|---|---|
+| **`H-5` `pass^k`** | **cerrado.** `bench/fiabilidad.py`, y va en el **marcador**, no en un script aparte. Medido: entre **17% y 34%** de las celdas de cada brazo cambian de resultado entre réplicas, con `t=0` y la misma huella. `react` cae `−0,078`, `supervisor` `−0,196` |
+| **`H-6` auditoría de oráculo** | **cerrado.** `bench/audits/_audit_oraculo.py`. Sobre 567 ceros: **0 con señal fuerte** de defecto del corrector. La auditoría de OpenAI encontró 59,4% en SWE-bench Verified — el pitfall más caro que hay, porque un cero se lee igual venga de donde venga |
+| **`H-7` corpus como argumento** | **cerrado.** `_run_homogenea.py --corpus`. El holdout ahora corre por **el mismo camino de código** que la campaña; antes tenía un script propio de 5 brazos × 4 tareas × repeat 2, y un holdout medido con otro harness no mide generalización: mide dos harnesses |
+| **`C3` resuelto** | **cerrado.** `pointer_chase` **0,33 → 0,89** en C3, empatando al mejor. Cuatro correcciones, ninguna de fraseo — detalle abajo |
+
+**Y una afirmación nuestra que hay que corregir.** `CLAUDE.md` decía «determinismo casi al
+token verificado». Es cierto **por llamada** y **falso por trayectoria**: un bucle de
+herramientas compone la varianza, y `pass^k` la mide por primera vez. Se vio en vivo en
+`C3` h3 — misma huella, mismos hits, la réplica 0 eligió `memo-058` (u=1,000) y las réplicas
+1 y 2 `memo-054` (u=0,000).
+
+**Abierto, y en este orden:**
+
+| | |
+|---|---|
+| **`H-1` holdout válido** | **corriendo el 2026-08-30.** Es el criterio de éxito escrito del producto y **no existía**: la única corrida de `gold_holdout` estaba en `results/archivo-2026-08-29-pre-K6/` — 40 filas, 5 brazos, sin `analyzer`, sin `fingerprint`, sin `region_vocabulary`, declarada no replayable. Todo lo reportado hasta hoy es **en muestra** |
+| **`H-2` modelo vs harness** | abierto. [Harness-Bench](https://arxiv.org/pdf/2605.27922) lo pone como requisito metodológico. Corremos tres modelos pero `gold_h1` es esencialmente `luna`; `terra` sólo C3. No podemos decir cuánto de un resultado es el andamiaje |
+| **`H-3` eje de seguridad** | abierto. Tenemos `irreversible`/`shared_writes` **declarados por el caller, jamás inferidos** —que es exactamente lo que [AgentHarm](https://arxiv.org/abs/2410.09024) pide— pero cero tareas adversariales |
+| **`H-4` latencia en la decisión** | abierto. `first_ttft_ms` y `ttft_ms_total` están en el **100%** de las filas y **ninguna decisión los mira**. Rango de 3,6× en latencia serial entre brazos |
+
+### C3: qué se arregló, y por qué cada uno es estructural
+
+El modo de falla dominante estaba mal diagnosticado por mí: propuse una guarda contra
+«saltarse la cadena» y el modo real era **cortarla un escalón antes** (`intermedia`), que es
+otra cosa. Las cuatro correcciones que sí la resuelven:
+
+1. **Regla de creencias: nombre propio ⇒ BM25, no híbrida** (`features.indice_para`). Un
+   vector denso codifica *de qué habla* un texto, y sesenta memos con la misma plantilla
+   hablan de lo mismo; el nombre propio es justo la parte que **no** es semántica. Medido:
+   la híbrida trae la unidad equivocada para `Ramiro Herrera` y deja a `M. Arrieta` fuera
+   del top-5; el léxico las pone primera y tercera.
+2. **La salida del sensor se tipa antes de usarse** (`features.entidad_en`). El modelo
+   escribía `'M. Arrieta settlement account'`, y esa cola arrastraba a la consulta a
+   clasificar como prosa — o sea, **la regla era correcta y la entrada estaba sucia**.
+3. **Un salto a una unidad que no nombra a quien se persigue no es un salto**
+   (`unit_mentions`/`unit_offset`, predicados que no devuelven texto ni dejan rastro de
+   lectura). Con desempate por posición de la primera mención: el documento que trata
+   **sobre** una entidad la nombra antes que el que la referencia de paso.
+4. **El ancla es el salto cero y lo resuelve el código.** Era una llamada al modelo, y ahí
+   quedaba la última decisión de flujo en manos del sensor.
+
+> **La hipótesis que esto deja lista para el paper:** sustituir una decisión de flujo del
+> modelo por un sensor determinista sobre una señal del entorno mejora **la utilidad y el
+> determinismo a la vez**. `pass^k` es la métrica que faltaba para medir el segundo efecto.
+
+---
+
 ## Qué sigue: una sola cosa
 
 > **Sincronizado 2026-08-29 (segunda pasada).** Quedan **23 pendientes vivos, y 22 son la
@@ -1191,6 +1251,187 @@ que 0,07 — y un efecto más chico que eso no cambia ninguna decisión.
      pueda cobrar hoy.
   4. `region`, el vocabulario actual, queda **por debajo** de los tres en el eje que sí
      paga: 37% de ahorro contra 69%, y `−0,002` de utilidad.
+
+- [ ] **GT-1** · **`graph_traverse` corre con el índice VACÍO en el 54% de sus celdas, y
+  contesta igual** (2026-08-30). Lo señaló el autor: *«¿graph está siendo usado cuando no hay
+  NER? Debería podarse.»* Medido sobre sus 165 filas:
+
+  | qué hace | filas | utilidad |
+  |---|---:|---:|
+  | **NO llama a ninguna herramienta** | **89 (54%)** | **0,112** |
+  | lee al menos una unidad | 76 | 0,525 |
+
+  El histograma de llamadas tiene exactamente dos valores: `{}` en 89 filas y `{'read': 1}`
+  en 76. No hay término medio.
+
+  **El mecanismo, leído en el código.** El brazo extrae un grafo de entidades (una llamada
+  al modelo **por unidad**), después le pide al modelo las entidades de la pregunta, y camina
+  desde ahí. Si ningún término de la pregunta matchea una entidad del grafo, `frontier` queda
+  vacía → `scores` vacío → `ranked` vacío → `selected` vacío → **ninguna lectura** — y el
+  código sigue hasta la llamada de solve con `texts = []`.
+
+  > **Paga la extracción por unidad, no obtiene nada, y contesta desde la nada.** Eso no
+  > mide el paradigma: mide un índice inutilizable. Y su veredicto (`P10a`, falsificado) se
+  > calculó sobre una población donde **la mitad de las corridas no tenían índice**.
+
+  **El arreglo, y es el invariante del producto al pie de la letra**: un grafo que no conecta
+  con la pregunta es un hecho `COMPUTED`. Contestar igual es exactamente lo que fallar cerrado
+  prohíbe. Dos cambios:
+
+  1. **contar la precondición** — un campo tipado que diga que la caminata no alcanzó nada,
+     para que esas filas sean distinguibles en vez de parecer respuestas malas
+  2. **no gastar la llamada de solve** cuando no hay nada que resolver: abstenerse
+     explícitamente en vez de adivinar
+
+  **NO SE APLICA TODAVÍA, y la razón importa**: `graph_traverse` está corriendo en `w48` en
+  este momento. Cambiar la conducta de un brazo a mitad de corrida mezcla dos brazos bajo un
+  nombre — que es exactamente lo que se acaba de pagar con `rewoo` (`RW-1`, 292 filas
+  borradas). Se aplica cuando `w48` cierre, y sus filas viejas se borran igual que las de
+  `rewoo`.
+
+- [x] **ON-3** · **el orden SÍ mueve el resultado, pero por el canal equivocado**
+  (2026-08-30). `bench/runs/_run_orden_intervenido.py`, 189k tokens.
+
+  **La intervención**: se toma el plan que `rewoo` escribió, se permutan **sólo los pasos
+  independientes** —el prefijo de pasos fuente, antes del primer consumidor de `#E`— y se
+  re-ejecuta. Mismo multiconjunto, mismo material, mismo plan; lo único que cambia es el
+  orden, **y lo elegimos nosotros**.
+
+  > **El determinismo, que bloqueaba la prueba observacional, hace fuerte a ésta.** Con
+  > `t=0` + seed no hace falta piso de ruido: dos órdenes que dan utilidades distintas lo
+  > hacen **por causa**. Cualquier rango > 0 es real.
+
+  **Resultado**: 9 tareas de `C9`, **2 movieron la utilidad**, magnitud `0,13`. Rango medio
+  `0,030`.
+
+  **Y hay dos canales que la permutación mueve a la vez, y el dato los separa:**
+
+  | canal | qué es | ¿se movió? |
+  |---|---|---|
+  | **A** — la SECUENCIA de nombres | lo que un Hebbiano sobre pares aprendería | **casi no varió** |
+  | **B** — la POSICIÓN de la evidencia en el prompt de solve | efecto de posición | es lo que se movió |
+
+  Permutar índices **no** siempre cambia la secuencia de nombres: si los cuatro pasos libres
+  son cuatro `search`, cualquier permutación da `search,search,search,search`. Lo que sí
+  cambia siempre es el orden en que la evidencia entra al prompt, porque `evidence` es un
+  dict y su orden de inserción es el de ejecución.
+
+  **Y la separación la confirma el dato**: la tarea con MÁS variación de secuencia (4
+  distintas) **no se movió**, y las dos que se movieron tenían sólo 2. La variación de
+  secuencia **no predice** el efecto.
+
+  **Conclusión, con las dos mitades**: hay un efecto causal de orden, **chico (0,13 en 2 de
+  9) y de POSICIÓN**, no de secuencia. El canal que el aprendizaje por pares necesitaría
+  sigue sin probarse — y para probarlo haría falta un plan con herramientas **distintas**
+  entre los pasos libres, que `C9` no produce porque su plan son N búsquedas iguales.
+
+  **Lo accionable, que no es el aprendizaje**: la respuesta de `rewoo` **depende del orden en
+  que se concatena la evidencia**. Eso es una fragilidad, no una feature, y se cierra
+  ordenando la evidencia de forma determinista —por relevancia o por id— en vez de por orden
+  de ejecución.
+
+- [x] **ON-5** · **los pares y las triplas SÍ aportan sobre los conteos, y es chico**
+  (2026-08-30). `bench/analysis/_hebbiano_pares.py`. Reformulado como pregunta de
+  aprendizaje y no de orden: **¿un predictor sobre n-gramas le gana, fuera de muestra, a uno
+  sobre conteos?**
+
+  Se predice **γ** —el residuo de `u = μ + α + β + γ + ε`— y no la utilidad cruda: un par
+  aparece más en las filas buenas porque los brazos que lo usan son otros brazos. `α` y `β`
+  son ese confundido, y sacarlos deja lo único que un aprendizaje sobre herramientas podría
+  explicar. Lectura Hebbiana literal: cada n-grama acumula el residuo medio donde co-ocurre,
+  y la predicción es el promedio de los pesos de sus n-gramas.
+
+  **Leave-one-task-out**, con nulo por permutación:
+
+  | orden | n-gramas | R² fuera de muestra | nulo p95 | p |
+  |---|---:|---:|---:|---:|
+  | unigramas (conteos) | 4 | 0,0002 | −0,0004 | 0,022 |
+  | **pares** | 16 | **0,0069** | 0,0008 | **0,002** |
+  | **triplas** | 48 | **0,0216** | −0,0003 | **0,002** |
+
+  **`pares − unigramas = +0,0067`, y las triplas suben más.** Monótono, y los tres sobre su
+  nulo. **La afirmación de `tools.py` se sostiene**: la asociación entre pares no se reduce a
+  la estadística marginal.
+
+  **Y la magnitud manda sobre el entusiasmo**: `R² = 0,0216` es el **2% de γ**, y γ es a su
+  vez lo único ruteable. Es real, es reproducible, y es chico. Los pesos aprendidos son
+  legibles y coherentes con lo medido por otro lado — `search → search` **−0,232** y
+  `search → semantic_search` −0,206 son la firma del agotamiento del retriever; `read → read`
+  **+0,073** sobre 267 filas es el único par con peso positivo apreciable.
+
+- [ ] **ON-4** · **probar el canal A**: repetir `ON-3` sobre una celda cuyo plan use
+  herramientas **heterogéneas** entre los pasos libres (`search` + `keyword_search` +
+  `semantic_search`), para que permutar cambie la secuencia de nombres y no sólo las
+  posiciones. `C4` y `C8` son candidatas. Sin eso, la afirmación del docstring de `sequence`
+  en `tools.py` sigue sin decidirse — y la observacional dice que **el conteo lleva señal y
+  la secuencia no le agrega** (`p=0,005` contra `p=0,022` corregidos).
+
+- [x] **ON-1** · **ontología → CAPACIDAD → clase de costo: el puente, con dos teoremas y
+  una refutación** (2026-08-30). `bench/analysis/_ontologia_capacidad.py`, cero llamadas.
+
+  Mapear «ontología → paradigma» directo es lo que refutó `P15`: el paradigma es un nombre de
+  control de flujo y la pregunta no tiene opinión sobre control de flujo. **Lo que la pregunta
+  determina es qué capacidad hace falta**, y la capacidad determina qué clase de costo puede
+  tenerla.
+
+  **`T1` se sostiene, y refinada separa casi perfecto.** Una contradicción es una relación
+  entre dos unidades: alcanzarlas vale `+0,388` de utilidad (0,479 contra 0,053–0,120). Pero
+  predije que, controlando eso, la clase de costo daría igual — **y da muy distinto**. La
+  capacidad no es «leer las dos», es **tenerlas en la MISMA llamada**:
+
+  | puede tenerlas juntas | utilidad |
+  |---|---:|
+  | `react` 0,909 · `dag` 0,833 · `direct` 0,833 · `gist_reader` 0,800 · `reflection` 0,714 | **≥0,71** |
+  | `pointer_chase` 0,400 · `supervisor` 0,333 · `handoff` **0,067** · `extract_compute` 0,000 · `streaming_scan` 0,000 | **≤0,40** |
+
+  `handoff` **lee las dos y saca 0,067**, porque cada sub-agente ve su mitad y ninguna llamada
+  tiene el par: es la costura, exactamente donde el camino a mano predijo que se perdería.
+
+  **Y una excepción que refina más**: `rewoo` 0,133 aunque *puede* tenerlas juntas. Le falta
+  la segunda capacidad — **poder elegir cuáles dos** —, que exige ver un resultado antes de
+  pedir el siguiente. Así que la ontología de esta pregunta pide **dos** capacidades
+  independientes: *payload ≥ 2 unidades* y *selección adaptativa*. Con ninguna: 0,0–0,4. Con
+  una: 0,13. Con las dos: 0,71–0,91.
+
+  **`T2` en la dirección predicha y débil**: donde la cobertura exhaustiva es insatisfacible
+  (42 de 78 tareas) el ganador se concentra 52% contra 58% en las satisfacibles. Seis puntos
+  no son evidencia; queda como dirección, no como resultado.
+
+  **`T3` REFUTADA, y con mecanismo.** Predije que un roster declarado en la pregunta tiene
+  valor de adaptación cero —los pasos se enumeran antes de empezar—. Medido, adaptarse vale
+  **`+0,414` en `C9`**, prácticamente lo mismo que en `C3` (`+0,417`), donde adaptarse
+  genuinamente hace falta. La causa está medida en otro lado: **K-6 midió que el 36,5% de las
+  menciones son invisibles a un keyword del nombre completo**. El roster está declarado, pero
+  **la resolución de cada nombre no lo está** — un plan fijo que busca la forma canónica
+  falla, y adaptarse es lo que lo recupera.
+
+- [x] **ON-2** · **el Hebbiano sobre pares no se puede validar en un banco determinista**
+  (2026-08-30). `bench/analysis/_orden_importa.py`.
+
+  `tools.py` justifica guardar la secuencia con una afirmación que nunca se verificó: que un
+  conteo no distingue *«busco, leo, busco, leo»* de *«busco, busco, leo, leo»*, y que ahí es
+  donde el aprendizaje por pares tiene contenido propio.
+
+  **La prueba estricta no se puede correr.** Comparando filas con el MISMO multiconjunto de
+  herramientas y distinto orden: de **738 grupos, sólo 9** tienen dos órdenes distintos. Con
+  `t=0` + seed las réplicas salen casi idénticas.
+
+  > **El determinismo que el banco necesita para replay destruye la variación que el
+  > aprendizaje por pares necesitaría.** No es que la afirmación sea falsa: es que este banco
+  > no puede decidirla, y un brazo deliberadamente estocástico sería la única forma.
+
+  **Lo que sí salió**, pareado dentro de celda (brazo y tarea controlados):
+
+  | par | celdas | Δu |
+  |---|---:|---:|
+  | `search → semantic_search` | 21 | **−0,329** |
+  | `search → search` | 17 | **−0,276** |
+  | `read → read` | 74 | +0,081 |
+
+  Buscar de nuevo después de buscar se asocia con perder, y cambiar de modalidad no rescata —
+  es la firma del agotamiento del retriever, que ya está medida por otro lado (46,5% de las
+  búsquedas de `react` son estériles). **Pero la causalidad es ambigua**: que una réplica
+  busque dos veces es síntoma de que la primera fue mal, no necesariamente causa.
 
 - [x] **EP-1** · **`report()` puntuaba un PLACEHOLDER en la mitad del corpus** — y es el
   método que produjo los números con los que se refutó P15 (2026-08-30).

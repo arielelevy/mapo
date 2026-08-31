@@ -554,6 +554,58 @@ class HydeFused:
         }
 
 
+class HydeOnly(HydeFused):
+    """HyDE **sin fusionar**: el ranking sale de la hipotética y nada más. `H-4`.
+
+    POR QUÉ EXISTE. `HydeFused` está medido y es inerte: sobre `gold_h1`, **43 de 43 celdas
+    con utilidad idéntica**, y el mecanismo del nulo está a la vista — `units_read` es igual
+    en las 43, o sea que **la rama nunca cambió qué unidades se leyeron**. Sobre `gold_p18`,
+    115 celdas pareadas, `+0,017` a 1,06× el costo, con 13 mejoras y 6 empeoramientos: lo
+    que da el azar.
+
+    Y su docstring defiende la fusión como seguridad —«hace que ese error tenga que VENCER
+    al ranking base en vez de reemplazarlo»—, lo cual es cierto y tiene un costo que no
+    estaba medido:
+
+        la misma fusión que la protege de equivocarse es la que la deja muda.
+        Con RRF contra un ranking base fuerte, la rama nunca gana.
+
+    QUÉ CONTESTA ESTE BRAZO, y es la pregunta previa a todo lo demás: **¿la rama HyDE tiene
+    señal propia?** Si reemplazando el ranking tampoco le gana nunca a `hybrid`, entonces no
+    hay nada que fusionar mejor ni nada que exponer como herramienta — y el tema se cierra.
+    Si gana en alguna celda, entonces la fusión estaba tapando algo y vale la pena discutir
+    cómo exponerla.
+
+    NO ES EL BRAZO QUE VA A PRODUCCIÓN, y decirlo importa: reemplazar el ranking es
+    exactamente lo peligroso que `HydeFused` evita — una hipotética bien escrita y falsa
+    apunta a documentos parecidos y equivocados, sin nada que la corrija. Esto es un
+    instrumento de diagnóstico, no un candidato.
+
+    HEREDA TODO LO DEMÁS. Misma generación, misma caché por consulta, mismo costo declarado,
+    mismo `deterministic: False`. Lo único que cambia es que no fusiona — que es la variable
+    bajo prueba, y la única.
+    """
+
+    name = "hyde_only"
+
+    def rank(self, view: CorpusView, query: str, limit: int) -> list[str]:
+        hipotetica = self._hypothetical(query)
+        if not hipotetica:
+            # MISMA REGLA QUE EL FUSIONADO: una generación vacía cae al brazo base y no a
+            # nada. Devolver vacío haría que una falla de HyDE se lea como una falla de
+            # recuperación — y acá importa más, porque sin fusión no hay red debajo.
+            return self._base.rank(view, query, limit)
+        return self._semantic.rank(view, hipotetica, limit)
+
+    def describe(self) -> dict[str, Any]:
+        d = super().describe()
+        d["retriever"] = self.name
+        # SIN FUSIÓN, y se declara: es la única diferencia con `hybrid_hyde`, así que tiene
+        # que estar en el registro o las dos filas se leen iguales.
+        d["fusion"] = None
+        return d
+
+
 class LLMReranked:
     """Optional cross-encoder-style rerank of a base retriever's candidates.
 
@@ -618,7 +670,7 @@ class LLMReranked:
 #
 # Los demas brazos son funciones puras sobre vectores cacheados: compartirlos es correcto
 # y ademas barato, asi que la distincion no es «por las dudas».
-MODEL_CALLING_ARMS = frozenset({"hybrid_reranked", "hybrid_hyde"})
+MODEL_CALLING_ARMS = frozenset({"hybrid_reranked", "hybrid_hyde", "hyde_only"})
 
 
 def build_arm(name: str, embedder: Any, client: Any) -> Any:
@@ -653,4 +705,6 @@ def build_arms(embedder: Any = None, client: Any = None) -> dict[str, Any]:
             # el modelo. Necesita cliente por la misma razon que el rerank —genera texto—
             # y por eso comparte su condicion de NO determinista.
             arms["hybrid_hyde"] = HydeFused(arms["hybrid"], embedder, client)
+            # SIN FUSIONAR, para poder preguntar si la rama tiene senal propia (`H-4`).
+            arms["hyde_only"] = HydeOnly(arms["hybrid"], embedder, client)
     return arms

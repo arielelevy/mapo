@@ -1,10 +1,12 @@
-# La factibilidad antes de la selección: cuándo importa realmente la topología de orquestación en agentes LLM
+# Determinismo antes que selección: qué es aprendible en la orquestación de agentes LLM
 
-**Borrador 0.1 — 2026-08-23**
+**Borrador 0.2 — 2026-08-30**
 **Autor**: Ariel Edgardo Levy
-**Estado**: borrador de trabajo. La teoría está completa y verificada por máquina; las
-mediciones son preliminares, n=1 por celda. Toda afirmación empírica lleva su tamaño de
-muestra. Destino: arXiv cs.LG (primario), cs.AI (cross-list).
+**Estado**: borrador de trabajo. La teoría está verificada por máquina; las mediciones
+empíricas son de **78 tareas × 12 paradigmas × 3 réplicas** sobre un corpus con entidades
+reales (121,4M tokens). Toda afirmación empírica lleva su tamaño de muestra. Lo que aún **no**
+hay es una medición válida sobre datos held-out; está declarado donde corresponde.
+Destino: arXiv cs.LG (primario), cs.AI (cross-list).
 
 > **Traducción de `paper-en.md`, que es la versión canónica.** Si difieren, manda el inglés.
 
@@ -12,47 +14,87 @@ muestra. Destino: arXiv cs.LG (primario), cs.AI (cross-list).
 
 ## Resumen
 
-Elegir el paradigma de razonamiento por tarea tiene un premio grande y medido: la
-selección oráculo supera al mejor paradigma fijo por 17,1pp, el mejor ruteador publicado
-recupera cerca de un cuarto de esa brecha, y el auto-ruteo zero-shot recupera valor
-negativo. Sostenemos que el cuello de botella no es la capacidad del selector sino el
-encuadre de la decisión, y desarrollamos tres resultados **delante** del problema de
-aprendizaje en lugar de dentro de él.
+Este trabajo empezó preguntando **qué paradigma de orquestación conviene por tarea** y
+termina con una respuesta distinta a la que buscaba. Sobre un registro completo —78 tareas ×
+12 paradigmas × 3 réplicas, sin juez LLM y con el corrector auditado— **el ruteo por calidad
+no tiene premio neto**: `−0,008` contra el mejor paradigma fijo, y el mecanismo del fracaso
+es más informativo que el número. Lo que sí queda en pie, y es lo que el paper sostiene, son
+dos afirmaciones sobre **determinismo** y una sobre **qué es lo aprendible**.
 
-Primero, **la factibilidad es aritmética**. Si una topología puede correr una tarea es
-computable a partir de cantidades declaradas — cuántas unidades, cuán largas, cuál es el
-presupuesto — sin una sola llamada al modelo y sin estadística. Sobre un corpus escalado
-de 16k a 1,27M de tokens esto poda tres de siete topologías candidatas antes de gastar un
-token, y separa dos modos de falla que se confunden de rutina: a map-reduce lo acota la
-**cardinalidad**, no el tamaño total.
+**Primero: la interacción existe, es enorme, y no es cobrable.** Descomponiendo
+`u = μ + α(tarea) + β(brazo) + γ + ε`, la interacción γ explica el **48%** de la varianza con
+señal/ruido `5,30`, y una señal la predice —`cardinalidad × término literal`, que captura dos
+tercios del techo y **sobrevive la corrección por selección** contra el máximo de nueve nulos
+por permutación—. Y aun así el premio neto es negativo, porque **`var(γ)` grande ≠ premio de
+ruteo grande**: γ es enorme porque los brazos *malos* son malos en lugares distintos.
+Restringida a los brazos que competirían, γ real cae a `0,0046` con señal/ruido `0,38`.
+Reportar varianza de interacción como evidencia de que rutear conviene mide la estructura
+equivocada. El resultado se replica a nivel de familias declaradas desde el código:
+`+0,079` contra un piso de ruido de `+0,065`, y ninguna señal predice qué familia gana.
 
-Segundo, **la selección paga sólo bajo una condición precisa**. Damos el Teorema del Valor
-de Selección —`Σⱼ π_j·α_j·G_j > Σⱼ ν_j·β_j·L_j`, una descomposición exacta **por destino**
-sobre un catálogo de `k` brazos— y sus corolarios: un ruteador obligado a elegir siempre no
-controla ni cuán seguido se equivoca ni cuánto cuesta cada error, y la cobertura óptima está
-por debajo de uno siempre que alguna pérdida fuera ruteada. El umbral de imposibilidad queda
-parametrizado por la **selectividad de pérdida** `ρ`, la razón entre pérdida realizada y
-distribucional: un ruteador que se equivoca seguido pero barato puede superar la cota
-clásica y capturar valor igual. Mostramos además que donde existe un detector de falla
-barato, escalar domina a predecir — un ruteador que se equivoca paga una pérdida de
-calidad, una cascada paga una pérdida de costo — lo que particiona el problema por
-**verificabilidad** y no por tipo de tarea.
+**Segundo: el determinismo es el recurso escaso, y es recuperable.** `pass^k` —acertar en las
+tres réplicas— cae entre `0,078` y `0,196` por brazo, con **17% a 34% de las celdas
+inestables** a temperatura cero, semilla fija y la misma huella. Ningún brazo alcanza
+reproducibilidad por decisión mayor a `0,983`. Pero se recupera **sacando decisiones de
+control del modelo y devolviéndolas al código**: cuatro correcciones estructurales —ninguna
+de fraseo— llevaron un brazo de `0,33` a `0,89` en la celda de cadenas acopladas *y* hicieron
+coincidir sus réplicas. La intervención decisiva es de una sola línea de diseño: con la misma
+huella y los mismos resultados de búsqueda, dejar que el modelo eligiera el ancla de una
+caminata daba `1,000 / 0,000 / 0,000`; que lo elija el código da `1,000` en las tres. **La
+conjetura ingenua de que el no-determinismo se compone con el número de decisiones es falsa**
+(`r = −0,24`, `n = 8`): importa cuál decisión, no cuántas.
 
-Tercero, y empíricamente, **la superficie de herramientas gobierna la varianza que se le
-atribuye a la elección de topología**. Sobre cuatro celdas de features, los paradigmas que
-no usan herramientas abarcan un rango de costo de 1,2×; los que sí, de 50×. Agregar una
-sola señal — que el retriever no devuelve nada nuevo desde tres búsquedas — cortó el costo
-de la topología más elaborada 3,05× contra una dispersión de réplica de 1,62× sobre la
-misma medida.
+**Tercero: lo aprendible es la capacidad, no la identidad del paradigma.** El intento previo
+de mapear ontología de la pregunta → nombre de paradigma se refutó (`−0,087`). Se propone el
+eslabón que faltaba —ontología → **capacidades exigidas** → brazos que las tienen— con diez
+capacidades declaradas desde el código, cada una con su evidencia. La prueba correcta es
+**dejar un brazo afuera**, no una tarea: un modelo con identidad de paradigma no tiene
+parámetro para un brazo que no vio; uno con capacidades sí. Medido, las capacidades predicen
+un brazo no visto mejor que la dificultad de la tarea sola (`MAE 0,233` contra `0,257`, ganando
+6 de 8 pliegues) y mejor que la identidad del brazo aunque ésta *vea* al brazo dejado afuera
+(`0,339`). Contra el nulo de capacidades barajadas da `p = 0,065`: **sugestivo y no
+establecido**, y ocho brazos son ocho puntos.
 
-Contribuimos la teoría, una capa de medición verificada por máquina, un generador de
-corpus con ground truth exacto en cuatro escalas, y un análisis preliminar de fallas de
-siete topologías. **No** contribuimos todavía un selector validado.
+Como soporte quedan tres resultados anteriores que el registro completo confirma: la
+**factibilidad es aritmética** y poda topologías antes de gastar un token; el **Teorema del
+Valor de Selección** particiona el problema por verificabilidad y no por tipo de tarea; y la
+**superficie de herramientas** gobierna la varianza que suele atribuirse a la topología.
 
-**Palabras clave**: agentes LLM, orquestación, predicción selectiva, aprender a diferir,
-generación aumentada por recuperación, diseño de herramientas, evaluación de agentes
+Contribuimos la teoría, una capa de medición cuyos ejes se contrastan explícitamente contra
+la literatura de benchmarks de agentes 2024-2026, un generador de corpus con ground truth
+exacto y entidades con variantes de superficie, un catálogo de capacidades declarado desde el
+código, y el análisis de fallas de doce topologías. **No** contribuimos todavía un selector
+validado sobre datos held-out.
+
+**Palabras clave**: agentes LLM, determinismo, orquestación, patrones DAG, predicción
+selectiva, aprendizaje plástico, capacidades, evaluación de agentes
 
 ---
+
+## Cómo se decide un request
+
+![El método determinista: qué decide el código y qué emite el modelo](figuras/metodo-determinista.svg)
+
+La figura es el argumento del paper en una imagen. El carril de arriba es determinista y
+auditable: sensores de forma cerrada, creencias tipadas con procedencia, un portón aritmético,
+las capacidades que la pregunta exige, y recién ahí una elección entre los brazos capaces —o
+una abstención—. El carril de abajo es el modelo, y **sólo emite proposiciones**: qué dice una
+unidad, hacia dónde sigue un rastro. Nunca decide cuántas vueltas dar, qué índice usar ni
+cuándo parar.
+
+**Toda decisión que cruza al carril de abajo se lleva el determinismo con ella**, y eso está
+medido, no argumentado. La guarda que cierra el ciclo —tipar la salida del sensor antes de
+usarla— es del 2026-08-30 y salió de un caso concreto: el modelo emitía
+`'M. Arrieta settlement account'` y esa cola arrastraba la consulta a clasificarse como prosa,
+mandándola al índice equivocado. **La regla era correcta y la entrada estaba sucia.**
+
+| lo que decide el código | lo que emite el modelo |
+|---|---|
+| cuántas vueltas dar (del largo declarado en la pregunta) | qué dice esta unidad |
+| qué índice usar (léxico para entidad nombrada, híbrido para prosa) | hacia dónde sigue el rastro |
+| qué unidad es el ancla, y cuál el término de la cadena | qué hecho aporta lo leído |
+| si hay evidencia suficiente para responder, o si hay que abstenerse | la redacción de la respuesta |
+
 
 # 1. Introducción
 
@@ -1394,6 +1436,13 @@ Descomponiendo la varianza de la utilidad sobre 1.284 filas medidas:
 | entre **tareas** | 0,1153 | 47% |
 | entre **paradigmas** | **0,0311** | 13% |
 | entre **réplicas** de una celda | **0,0311** | 13% |
+| **interacción tarea × paradigma** (residual) | 0,0694 | **27%** |
+
+> **La cuarta fila es la que faltaba, y la agregamos porque su ausencia hacía que la tabla
+> no cerrara**: 47 + 13 + 13 = 73%, no 100%. El residual es la interacción, y es el término
+> que §7.11 mide después con el método completo sobre otro panel (48% ahí, con `n` distinta
+> y descontando el ruido). Que sea grande **no contradice** lo que sigue: §7.11.3 muestra
+> que esa interacción, restringida a los brazos que competirían, cae a `0,0046`.
 
 **0,0311 contra 0,0311** — iguales a la cuarta decimal. Un router elige paradigma, así que
 sólo puede competir por la porción que el paradigma explica; la de la tarea no la mueve
@@ -1471,6 +1520,496 @@ igual», y lo dice en vez de adivinar.**
 > distinguir «la selección no paga» de «este montaje no lo puede ver».
 
 ---
+
+## 7.9 La corrida homogénea completa: los doce paradigmas sobre las 78 tareas
+
+Las secciones anteriores midieron sobre 41 de las 78 tareas del corpus, y lo que faltaba no
+era aleatorio: **21 de las 32 sin medir eran del ancho mayor**, 60 unidades y ~483.000
+tokens de material por tarea. Ése es exactamente el régimen donde las topologías deberían
+separarse —donde leer todo es imposible y la cobertura exhaustiva no se puede pagar— así que
+toda conclusión anterior estaba acotada al régimen estrecho sin decirlo.
+
+Esta sección cierra el corpus. Doce paradigmas × 78 tareas × 3 réplicas, un modelo, mismas
+condiciones. Sin errores de infraestructura.
+
+### 7.9.1 Un brazo se mide dos veces, y las dos son distintas
+
+| brazo | aplica | u donde aplica | u × cobertura | tokens/celda |
+|---|---:|---:|---:|---:|
+| `react` | 100% | **0,850** | **0,850** | 108.137 |
+| `dag_strategy` | 100% | 0,830 | 0,830 | 105.293 |
+| `reflection` | 100% | 0,803 | 0,803 | 133.574 |
+| `rewoo` | 100% | 0,669 | 0,669 | **10.840** |
+| `gist_reader` | 100% | 0,584 | 0,584 | 23.075 |
+| `supervisor` | 100% | 0,581 | 0,581 | 64.079 |
+| `handoff` | 96% | 0,583 | 0,557 | 131.310 |
+| `pointer_chase` | 96% | 0,515 | 0,492 | 9.787 |
+| `graph_traverse` | 52% | 0,511 | 0,266 | 21.356 |
+| `streaming_scan` | 12% | 0,750 | 0,090 | 26.380 |
+| `extract_compute` | 12% | 0,583 | 0,070 | 26.184 |
+| `direct` | **6%** | **0,917** | **0,055** | 22.822 |
+
+![Bueno donde aplica, contra lo que aporta sobre el corpus](figuras/aplica-contra-aporta.svg)
+
+**Un paradigma tiene dos números y colapsarlos esconde el caso que importa.** `direct` es el
+mejor del plantel donde su mecanismo corre —0,917— y su mecanismo corre en el **6%** de las
+celdas —**12 filas de 201**, y ese número va junto al porcentaje porque «el mejor del plantel»
+sobre doce filas es una afirmación de otra clase que sobre doscientas—, porque la aritmética de factibilidad lo poda en cuanto el material no entra. Sobre el
+corpus aporta 0,055. Reportar un solo número obliga a elegir cuál de las dos afirmaciones
+falsear.
+
+La cobertura no es una propiedad del brazo sino de la **intersección** entre su mecanismo y
+la distribución de tareas, y por eso se decide antes de gastar: `direct`, `streaming_scan` y
+`extract_compute` no fallan en el 88–94% restante — **no corren**.
+
+### 7.9.2 La degradación con el ancho separa lo que la utilidad media junta
+
+![Cómo se degrada cada brazo cuando el material crece](figuras/degradacion-por-ancho.svg)
+
+El eje son los tres anchos declarados —**5, 20 y 60 unidades**—. Las tareas sin sufijo de
+ancho quedan **fuera**: agrupan celdas de 1, 8, 9 y 60 unidades, así que no son el extremo
+angosto de nada y meterlas convertía el eje en algo que no está ordenado.
+
+| brazo | w4 (5 u.) | w16 (20 u.) | w48 (60 u.) | Δ |
+|---|---:|---:|---:|---:|
+| `react` | 0,94 | 0,82 | **0,81** | −0,13 |
+| `dag_strategy` | 0,83 | 0,83 | **0,80** | **−0,03** |
+| `reflection` | 0,89 | 0,80 | 0,71 | −0,18 |
+| **`rewoo`** | 0,60 | 0,73 | 0,66 | **+0,06** |
+| `handoff` | 0,72 | 0,62 | 0,51 | −0,22 |
+| `supervisor` | 0,64 | 0,59 | 0,43 | −0,20 |
+| `gist_reader` | 0,86 | 0,59 | 0,42 | −0,45 |
+| `pointer_chase` | 0,68 | 0,49 | 0,39 | −0,30 |
+| `graph_traverse` | 0,91 | 0,44 | 0,42 | **−0,49** |
+
+**Todos se degradan menos uno.** `graph_traverse` pierde 0,49 y `gist_reader` 0,45 al pasar
+de 5 a 60 unidades — el gist de 180 caracteres y el índice de entidades dejan de discriminar
+cuando hay sesenta candidatos. **`rewoo` es la única excepción**, y sube: `+0,06`. No es
+casualidad — es el único brazo cuyo costo no es función del alcance.
+
+Un promedio sobre anchos habría llamado «mejor» a `gist_reader` que a `rewoo` por 0,584
+contra 0,669, y habría escondido que uno se desploma exactamente donde el otro se sostiene.
+
+### 7.9.3 Tres clases de costo, y no son las del catálogo
+
+Ajustando `log(costo)` contra `log(alcance)` por brazo, y preguntando por separado qué
+explica mejor el costo —el alcance o la cantidad de vueltas— aparece una taxonomía que
+**corta transversal** a la de control de flujo:
+
+| clase | brazos | qué la define |
+|---|---|---|
+| **alcance** | `handoff` | `R² = 0,77` contra el alcance, exponente 0,73. El costo lo fija cuánto material arrastra cada llamada |
+| **vueltas** | `react`, `reflection`, `dag_strategy`, `supervisor`, `gist_reader`, `pointer_chase` | el costo lo fija cuántas veces itera, y eso es **endógeno**: gasta hasta que algo lo detiene |
+| **estructural** | `rewoo`, `direct`, `graph_traverse`, `extract_compute`, `streaming_scan` | ni una ni la otra: el costo está fijado por la forma del patrón |
+
+El dato que obliga a separar estas clases de los techos declarados: **`handoff` tiene un
+techo de 12 llamadas y gasta 131.310 tokens; `dag_strategy` tiene uno de 160 y gasta
+105.293.** Casi lo mismo, con un factor 13 de diferencia en el techo.
+
+> Contar llamadas para acotar esfuerzo es contar envases para acotar peso.
+
+Y una consecuencia operativa: la clase **vueltas** es la única sobre la que una regla de
+parada puede actuar. Medido en el mismo registro, el 46,5% de las búsquedas de `react` no
+traen ninguna unidad nueva, con rachas de hasta 14.
+
+### 7.9.4 El espacio de capacidades
+
+![El espacio de capacidades](figuras/espacio-capacidades.svg)
+
+La taxonomía de control de flujo —«plan-ejecuta», «supervisor», «cadena»— no predice
+rendimiento. Lo que sí predice es qué **capacidades** le da cada topología al modelo, y son
+tres:
+
+| eje | qué es | de dónde sale |
+|---|---|---|
+| **payload por llamada** | cuántas unidades ve el modelo de una vez | del código |
+| **adaptabilidad** | ¿puede corregir el plan tras ver un resultado? | del código |
+| **ley de costo** | de qué es función su costo | medida |
+
+Las dos primeras se leen del código, y por eso **ubican a un brazo que todavía no se
+corrió** — cosa que una tabla de resultados no puede hacer.
+
+El caso que las valida es la pregunta de contradicción, donde la respuesta es una relación
+entre dos unidades y ninguna unidad la contiene:
+
+| capacidades | utilidad |
+|---|---:|
+| payload ≥ 2 unidades **y** adaptabilidad | **0,71 – 0,91** |
+| sólo payload | 0,13 |
+| ninguna | 0,00 – 0,40 |
+
+`handoff` **lee las dos unidades relevantes y saca 0,067**, porque cada sub-agente ve su
+mitad y ninguna llamada tiene el par: la capacidad no es «leerlas» sino «tenerlas juntas».
+Y `rewoo` saca 0,133 aunque *puede* tenerlas juntas, porque le falta la otra — poder elegir
+**cuáles** dos exige ver un resultado antes de pedir el siguiente.
+
+En la figura, `react`, `dag_strategy` y `reflection` caen prácticamente en el mismo punto.
+Eso no es un defecto del dibujo: **son el mismo brazo para decidir**, y por eso sus
+utilidades quedan dentro de 0,05 entre sí.
+
+### 7.9.5 Dónde está el margen
+
+![El negocio de cada brazo](figuras/utilidad-contra-costo.svg)
+
+En el ancho mayor, `react` saca 0,81 a 108.137 tokens por celda y `rewoo` 0,66 a 10.840:
+**+0,15 de utilidad por un factor 10 de costo**. Y el costo es casi enteramente de entrada
+—de **98,6% a 100,0%** según el brazo, con la salida entre 0,0% y 1,4%—, lo cual dice que **los
+paradigmas no se diferencian en lo que generan sino en lo que arrastran al prompt**. Es la
+misma afirmación que la ley de costo, medida por otro lado.
+
+> **Un brazo queda afuera de ese rango y hay que decirlo**: en `graph_traverse` la suma de
+> entrada y salida da `101,9%` del costo registrado. Entrada y salida son las dos particiones
+> del mismo total, así que por encima de 100% no hay una tercera categoría: **es un defecto
+> de contabilidad de ese brazo**, no una propiedad medida. Se excluye del rango y queda
+> anotado como deuda, no como hallazgo.
+
+## 7.10 Dónde falla, y qué lo arregla
+
+Las secciones anteriores comparan brazos. Ésta abre uno: **por qué gana el más simple, qué
+varianza esconde el promedio, y qué pasa cuando una decisión de control se le saca al
+modelo.** Las tres preguntas se contestan sobre el mismo registro, sin gastar un token más.
+
+
+> **POR QUÉ `u` CAMBIA DE VALOR ENTRE SECCIONES, y no es un error.** `react` figura con
+> `0,850` en §7.9.1, `0,843` en §7.10.1 y `0,875` en §7.10.2. Son **tres paneles distintos**,
+> y compararlos sin decirlo sería el defecto que `bench/panel.py` existe para impedir:
+>
+> | sección | panel | por qué ése |
+> |---|---|---|
+> | §7.9.1 | 78 tareas × 12 brazos, cada brazo sobre las celdas donde CORRIÓ | mide cobertura y aporte, que exigen incluir a los brazos podados |
+> | §7.10.1 | 64 × 8 (rectángulo completo) | el embudo compara etapas entre brazos: exige que todos hayan corrido las mismas tareas |
+> | §7.10.2 y §7.11 | 59 × 8 (rectángulo con ≥3 réplicas) | `pass^3` y la descomposición necesitan las tres réplicas de cada celda |
+>
+> **La regla del rectángulo está en un solo lugar** (`bench/panel.py`) y devuelve también lo
+> descartado, porque un panel que se achica sin decir cuánto miente por omisión. Toda `u`
+> reportada usa `λ = 0` —calidad pura, con el costo en su propia columna— salvo donde se
+> indique lo contrario.
+
+### 7.10.1 El embudo: `react` no gana buscando
+
+![Ver contra usar](figuras/embudo-ver-contra-usar.svg)
+
+La utilidad de una celda es el producto de dos cosas que fallan por razones distintas:
+
+    u  ≈  P(vio TODAS las unidades portadoras)  ×  P(contestó bien | las vio)
+
+| brazo | u | **vio** | **u \| vio** | u \| no vio | leídas |
+|---|---:|---:|---:|---:|---:|
+| `react` | 0,843 | 60% | **0,970** | 0,708 | 7,8 |
+| `dag_strategy` | 0,822 | 57% | 0,945 | 0,720 | 11,6 |
+| `gist_reader` | 0,611 | **77%** | **0,594** | 0,667 | 28,8 |
+| `supervisor` | 0,577 | 40% | 0,778 | 0,479 | 6,8 |
+
+**`react` no ve más que nadie** — 60%, y `gist_reader` ve el 77%. Toda su ventaja está en la
+segunda etapa: con el material a la vista da 0,970, y `gist_reader` da 0,594, *peor que
+cuando no lo vio todo*. Pareado por tarea, `Δvio` es chico o negativo y `Δ(u|vio)` se lleva
+la brecha entera.
+
+> **El mecanismo:** cada representación intermedia más chica que el material es una pérdida
+> que no se recupera aguas abajo. Un gist de 180 caracteres, una ventana recortada para el
+> sub-agente, un índice de entidades — los tres tiran información *antes* de saber cuál
+> hacía falta. `react` no tiene ninguna.
+
+La simplicidad no es acá una virtud estética: es la **ausencia de un canal con pérdida**, y
+eso se mide.
+
+### 7.10.2 `pass^k`: el promedio esconde la mitad que importa
+
+> **`pass^k` NO es `pass@k`, y significa casi lo opuesto.** En la literatura de código
+> `pass@k` mide «al menos un acierto en `k` intentos» y **crece** con `k`. `pass^k` mide «los
+> `k` intentos acertaron todos» y **decrece** con `k`. El nombre viene de `tau2-bench`, que lo
+> introdujo para agentes multi-turno por esta misma razón; lo conservamos por consistencia con
+> esa literatura y lo señalamos acá porque el parecido tipográfico invita a leer la tabla al
+> revés.
+
+Todo lo anterior es `pass@1` —el promedio sobre réplicas— y responde «cuánto acierta».
+`pass^k` responde **«se puede contar con que acierte»**, que para un sistema que promete
+«misma base de creencias ⟹ misma decisión» es la mitad que importa.
+
+| brazo | pass@1 | **pass^3** | caída | celdas inestables |
+|---|---:|---:|---:|---:|
+| `react` | 0,875 | **0,797** | −0,078 | 17% |
+| `dag_strategy` | 0,874 | 0,763 | −0,112 | 20% |
+| `rewoo` | 0,718 | 0,576 | −0,142 | 27% |
+| `supervisor` | 0,637 | 0,441 | **−0,196** | **34%** |
+
+**Entre el 17% y el 34% de las celdas cambian de resultado entre réplicas**, con `t=0`,
+semilla fija y la misma huella. Eso **corrige una afirmación previa nuestra**: el
+determinismo verificado con una llamada por modelo es cierto *por llamada* y falso *por
+trayectoria* — un bucle de herramientas amplifica cualquier desvío, porque una elección
+distinta en el paso uno cambia todo lo que sigue.
+
+Ningún piso de ruido *entre brazos* muestra esta varianza: vive **dentro** de una celda.
+
+### 7.10.3 El caso C3: el modo de falla no era el que parecía
+
+![Modos de falla de C3](figuras/c3-modos-de-falla.svg)
+
+`C3_coupled_chain` pide subir N escalones de una línea de reporte sobre 60 unidades y
+reportar un dato del último. La cadena está minada a propósito: **cada unidad del camino
+lleva un dato del mismo tipo pegado al nombre que la ancla**, el enlace va por anáfora
+(«The above-named», «That person»), y el destino del salto viene abreviado (`A. Vallejos`
+apunta a `Agustina Vallejos`).
+
+Clasificar las respuestas por modo, y no por puntaje, invierte el diagnóstico. El modo
+dominante no es saltarse la cadena (2 casos) sino **cortarla un escalón antes** (7): los
+brazos devuelven el dato de un intermedio, que está a la vista y es indistinguible del
+correcto. Y `dag_strategy`, que gana la celda, **no encadena mejor**: hace 12 correctas, 3
+abstenciones y **cero respuestas equivocadas**. Los demás contestan igual.
+
+> El banco puntúa «se abstuvo» y «contestó mal» los dos con 0,000. Es correcto para medir
+> utilidad y **ciego justo en el eje que la capa de decisión existe para gobernar.**
+
+### 7.10.4 Sustituir una decisión del modelo por un sensor determinista
+
+Sobre ese diagnóstico se corrigió `pointer_chase` —el brazo cuyo mecanismo *es* seguir
+cadenas y que sacaba 0,33 en C3—. Cuatro correcciones, **todas de flujo de control o de
+tipado, ninguna de fraseo**:
+
+1. **Regla de creencias: una entidad nombrada se busca con el índice léxico, no con el
+   híbrido.** Un vector denso codifica *de qué habla* un texto, y sesenta documentos con la
+   misma plantilla hablan de lo mismo; el nombre propio es justo la parte que **no** es
+   semántica, y fusionarle la rama densa le mete ruido a la única señal que discrimina.
+   Medido: el híbrido devuelve la unidad equivocada para `Ramiro Herrera` y deja a
+   `M. Arrieta` fuera del top-5; el léxico las pone primera y tercera.
+2. **La salida del sensor se tipa antes de usarse.** El modelo emitía
+   `'M. Arrieta settlement account'`, y esa cola arrastraba la consulta a clasificar como
+   prosa: **la regla era correcta y la entrada estaba sucia.**
+3. **Un salto a una unidad que no nombra a quien se persigue no es un salto**, y entre
+   candidatos empatados gana el que la nombra **antes** — un documento que trata *sobre* una
+   entidad la nombra antes que uno que la referencia de paso. Se resuelve con predicados que
+   devuelven un booleano o una posición, nunca texto: no cuestan un token.
+4. **El ancla es el salto cero y lo resuelve el código.** Era una llamada al modelo, y ahí
+   quedaba la última decisión de flujo en manos del sensor.
+
+![El sensor determinista](figuras/sensor-determinista.svg)
+
+El panel izquierdo dibuja **cada réplica por separado**, y ahí se ve lo que un promedio
+esconde: el «antes» no era peor en promedio sino **inestable** — la misma pregunta, la misma
+huella y los mismos resultados de búsqueda daban 1,000 o 0,000 según la réplica. El panel
+derecho muestra los dos ejes moviéndose juntos, que es la afirmación entera.
+
+**Resultado: `pointer_chase` pasa de 0,33 a 0,89 en C3**, empatando al mejor brazo de la
+celda. Y la corrección (4) prueba el punto por sí sola: **con la misma huella y los mismos
+resultados de búsqueda**, la réplica 0 elegía el ancla correcta y recorría la cadena entera
+(u=1,000) mientras las réplicas 1 y 2 elegían otra y sacaban 0,000. Una decisión de flujo en
+el sensor se lleva puesto el determinismo.
+
+> **La hipótesis, y es falsable:** sustituir una decisión de control del modelo por un sensor
+> determinista sobre una señal del entorno mejora **la utilidad y el determinismo a la vez**.
+> `pass^k` es la métrica que faltaba para medir el segundo efecto, y sin ella la mitad de la
+> mejora era invisible.
+
+Lo que queda declarado y no resuelto: la réplica que todavía falla **se abstiene** en vez de
+contestar mal, que es el comportamiento buscado y que el banco puntúa igual que un error.
+
+### 7.10.5 Un eje medido que ninguna decisión mira
+
+![Latencia serial](figuras/latencia-serial.svg)
+
+Hay **dos relojes** y confundirlos invalida el número. El tiempo de pared no sirve: el 63-67%
+de las filas de `react` y `dag_strategy` están por debajo de medio segundo porque son replays
+del caché en disco — eso mide cuánto tarda el banco en releer, no cuánto tarda el sistema en
+contestar. Lo que sí sirve viene del proveedor, en el objeto `usage` de cada respuesta, y por
+eso el caché lo conserva: es la latencia de la llamada que efectivamente se hizo.
+
+| brazo | u | primer token | **latencia serial** | u por segundo |
+|---|---:|---:|---:|---:|
+| `react` | 0,843 | 265 ms | **1,35 s** | 0,62 |
+| `dag_strategy` | 0,822 | 410 ms | 2,87 s | 0,29 |
+| `rewoo` | 0,677 | 304 ms | **0,77 s** | **0,88** |
+| `supervisor` | 0,577 | 360 ms | 2,66 s | 0,22 |
+
+**El primer token es prácticamente igual en todos** —250 a 410 ms, es una llamada al mismo
+modelo—. Lo que cambia 3,6× es la latencia **serial**: la suma sobre todas las llamadas, o
+sea la parte que no se acelera con más tokens por segundo porque cada llamada espera a la
+anterior. Es la ley de costo `turn-driven` cobrada en tiempo del usuario en vez de en tokens,
+y es un eje que **ninguna decisión del ruteador mira hoy**.
+
+Y no destraba nada, que es lo que hay que decir: `react` es a la vez el de mayor utilidad y
+el de menor latencia serial entre los contendientes. El único que compra tiempo es `rewoo`
+—1,8× más rápido— y cuesta 0,165 de utilidad. Es un intercambio explícito, no un almuerzo
+gratis: sólo lo compra quien tenga un techo de latencia declarado.
+
+### 7.10.6 ¿Se compone el no-determinismo con cada decisión? La forma simple es falsa
+
+La sección anterior invita a una conjetura general, y vale la pena escribirla porque **el
+registro la refuta en su forma ingenua**:
+
+> Si un brazo delega `d` decisiones de control al modelo, y cada una vuelve a salir igual
+> entre réplicas con probabilidad `q`, entonces `pass^k ≈ pass@1 · q^d`. Más decisiones en el
+> sensor ⟹ menos determinismo, multiplicativamente.
+
+Es contable: `d` se mide como iteraciones por celda, y `pass^3` ya está. Sobre los ocho brazos
+del panel:
+
+| brazo | decisiones | pass@1 | pass^3 | `q` implícita |
+|---|---:|---:|---:|---:|
+| `dag_strategy` | 8,9 | 0,822 | 0,703 | 0,983 |
+| `supervisor` | 8,6 | 0,587 | 0,406 | 0,958 |
+| `reflection` | 5,9 | 0,798 | 0,688 | 0,975 |
+| `react` | 4,3 | 0,843 | 0,734 | 0,968 |
+| `pointer_chase` | 3,8 | 0,515 | 0,359 | 0,909 |
+| `rewoo` | 2,0 | 0,688 | 0,531 | 0,879 |
+| `gist_reader` | 1,9 | 0,611 | 0,516 | 0,913 |
+
+**La correlación entre número de decisiones y caída de `pass^3` es `r = −0,24` con `n = 8`** —
+débil, y con el signo **contrario** al que la conjetura predice: los brazos con más decisiones
+pierden *menos*. La explicación que el propio dato sugiere es que una decisión no sólo agrega
+varianza sino también **una oportunidad de corregir**: un brazo adaptativo que dobla mal puede
+volver, y uno de dos llamadas no. Los dos efectos casi se cancelan en este corpus.
+
+Lo que sí se sostiene, y es más útil que la conjetura original, son dos cosas:
+
+1. **`q` está acotada lejos de 1 para todos.** El máximo es `0,983` (`dag_strategy`) y el
+   mínimo `0,879` (`rewoo`). Ninguna arquitectura de las medidas recupera la reproducibilidad
+   por decisión, así que **toda trayectoria con decisiones delegadas pierde determinismo**, y
+   la pregunta no es si se pierde sino cuánto.
+2. **Importa más CUÁL decisión se saca que CUÁNTAS.** La evidencia acá no es correlacional
+   sino una intervención: sacar **una sola** decisión —el ancla— llevó a `pointer_chase` de
+   réplicas que discrepaban (1,000 / 0,000 / 0,000) a réplicas que coinciden, sin tocar las
+   otras. Ocho puntos de correlación no compiten con eso.
+
+> El no-determinismo no se reparte por igual entre las decisiones de una trayectoria. Contar
+> decisiones no predice; identificar **cuál** decide el resultado, sí.
+
+Ésta es una limitación declarada del análisis, no un resultado: con ocho brazos y un corpus,
+lo correlacional acá no puede decidir casi nada. Lo que la sostiene es la intervención.
+
+## 7.11 Por qué no hay premio de ruteo, aunque la interacción sea enorme
+
+Éste es el resultado central del corpus, y es negativo con un mecanismo preciso. La forma en
+que suele argumentarse que rutear conviene —«hay mucha interacción entre tarea y método, así
+que elegir por tarea tiene que pagar»— **no se sostiene**, y este registro muestra dónde se
+rompe.
+
+### 7.11.1 Hay interacción, y es grande
+
+Descomponiendo `u(tarea, brazo) = μ + α(tarea) + β(brazo) + γ(interacción) + ε` sobre un
+panel de **59 tareas × 8 brazos**, que es el 76% de las 78 medidas. El criterio de recorte
+es mecánico y está en un solo lugar del código, no se elige por sección: **primero** las
+tareas que tienen al menos 7 brazos medidos —lo que impide que una tarea corrida por un
+experimento parcial redefina el universo—, **después** los brazos que cubren ≥95% de ésas, y
+**al final** las tareas donde están todos. Los cuatro brazos que quedan afuera son los que la
+factibilidad poda en casi todas las celdas (`direct`, `streaming_scan`, `extract_compute`) más
+`graph_traverse`, que se declara infactible en el 56-59% de las celdas anchas.
+
+> Se declara acá porque ésta es la sección que más insiste en corregir por selección, y un
+> recorte sin criterio sería exactamente lo que audita en otros.
+
+| componente | varianza | % |
+|---|---:|---:|
+| α — dificultad de la tarea | 0,0632 | 41% |
+| β — calidad del brazo | 0,0160 | 10% |
+| **γ — interacción** | **0,0736** | **48%** |
+| ε — ruido entre réplicas | 0,0351 | |
+
+γ descontado el ruido da **0,0619**, con **señal/ruido 5,30**. Bajo el argumento habitual,
+acá habría que rutear.
+
+### 7.11.2 Y hay una señal que la explica, que sobrevive la corrección por selección
+
+![Qué señal explica la interacción](figuras/predictores-de-la-interaccion.svg)
+
+La figura ordena diez señales por cuánto de γ explican, con **su propio nulo por permutación**
+dibujado como una raya negra sobre cada barra. Varias la superan — y esa comparación es
+exactamente la falacia que el nulo existía para evitar, porque **se probaron nueve candidatas
+y se eligió la mejor**. La vara correcta es la línea punteada: el **máximo de los nueve nulos
+en cada permutación**.
+
+Sólo `cardinalidad × término literal` la cruza, con 0,309 y `p` corregido `< 0,001`, y captura
+**dos tercios del techo** que marca `la celda` — que está en el gráfico como **cota superior**,
+no como candidata: es la etiqueta de diseño del corpus, no se conoce al decidir, y ninguna
+señal real puede superarla.
+
+### 7.11.3 Y el premio neto es negativo
+
+**`var(γ)` grande ≠ premio de ruteo grande.** El premio es `E[max_p u] − max_p E[u]`, y γ
+puede ser enorme porque los brazos **malos** son malos en lugares distintos. Esa estructura es
+real, es predecible, y **no vale nada**: nadie va a elegir el brazo que pierde por poco en vez
+del que pierde por mucho.
+
+Lo único cobrable es la interacción **entre los brazos que competirían**. `gist_reader` aporta
+el 20% de `var(γ)` y `rewoo` el 15%; los tres punteros, 6-7% cada uno. Restringido a esos tres
+—los que están a menos de 0,05 del mejor fijo—:
+
+```
+gamma real estimado          0,0046      señal/ruido  0,38
+oráculo entre contendientes  0,932
+mejor fijo                   0,875
+premio máximo               +0,058
+piso de ruido (bootstrap)   +0,065
+premio NETO                 −0,008
+```
+
+Y **ninguna señal separa a los tres contendientes entre sí**: todas con `p > 0,29`. Sólo `la
+celda` lo logra (`p = 0,007`), y ésa no se conoce al decidir.
+
+> El 48% de interacción es real y vive **entre los brazos que nadie elegiría**. Reportar
+> `var(γ)` como evidencia de que rutear conviene mide la estructura equivocada.
+
+### 7.11.4 Tampoco a nivel de familias
+
+Una respuesta natural es que las señales quizá no separen individuos pero sí **grupos**: un
+ruteador que elige familia y después toma el más barato de la familia es otro ruteador, con
+otro premio. Se probó, declarando las familias **desde el código** —por cuándo el brazo decide
+su próxima llamada— y no desde el resultado:
+
+| familia | brazos | u media |
+|---|---|---:|
+| `adaptativo` | `react`, `reflection` | 0,818 |
+| `plan_fijo` | `dag_strategy`, `rewoo` | 0,750 |
+| `canal_con_pérdida` | `gist_reader`, `handoff`, `pointer_chase`, `supervisor` | 0,571 |
+
+Valuar una familia por su **máximo** sería hacer trampa dos veces —le regala una elección por
+tarea que el ruteador de familias no puede hacer, y premia a la familia más numerosa por puro
+sesgo del máximo—, así que cada familia se representa por su brazo de mejor media, elegido
+**una vez** sobre todo el panel.
+
+```
+adaptativo          gana en 54 de 64 tareas  (84%)
+plan_fijo                       5 de 64       (8%)
+canal_con_pérdida               5 de 64       (8%)
+
+premio de rutear FAMILIAS   +0,079   (piso de ruido +0,065)
+premio de rutear BRAZOS     +0,110
+```
+
+**Y acá hay que hacer la resta que el paper acaba de enseñar**, porque los dos premios
+superan el piso: `+0,079 − 0,065 = +0,014` para familias y `+0,110 − 0,065 = +0,045` para
+brazos. Los dos netos son **positivos**, y aun así ninguno es cobrable — por una razón
+distinta de la de §7.11.3, y por eso hay que decirla:
+
+> allá el premio no existía; **acá existe y no hay con qué agarrarlo.** El premio es lo que
+> capturaría un oráculo, y un oráculo no es una política: **ninguna señal predice la familia
+> ganadora**. La mejor, `cardinalidad`, da información mutua `0,092` y **no sobrevive la
+> corrección por selección** (`p = 0,365`).
+
+Un premio sin señal que lo prediga es una cota superior, no un resultado. La distinción
+importa porque las dos secciones concluyen lo mismo por caminos opuestos, y presentarlas
+juntas sin la resta invita al lector a pensar que nos contradecimos.
+
+> **No falla porque las señales sean débiles: falla porque no hay frontera que cruzar.** Una
+> familia que gana el 84% de las veces no es un cluster que rutear — es un default.
+
+### 7.11.5 Lo que este corpus sí premia
+
+Sobre calidad la decisión no tiene premio. Sobre **costo a utilidad igualada**, el mismo
+registro da un ahorro grande con una pérdida dentro del ruido, y a diferencia del premio de
+calidad **sobrevive evaluarlo fuera de muestra** (leave-one-task-out):
+
+| señal | utilidad vs mejor fijo | ahorro |
+|---|---:|---:|
+| `cardinalidad × término` | −0,017 | **42%** |
+| `región` | −0,110 | 74% |
+| `n_units` | +0,000 | 1% |
+
+Es un intercambio, no una mejora: hay que decirlo así. Una medición previa nuestra sobre un
+panel más chico daba `+0,008` de utilidad con 69% de ahorro —un almuerzo gratis— y **con el
+registro completo desapareció**. La pregunta «qué paradigma da la mejor respuesta» está
+agotada en este corpus; la pregunta «cuál es el más barato que da una respuesta
+indistinguible» no.
+
 
 # 8. Mecanismos de falla
 

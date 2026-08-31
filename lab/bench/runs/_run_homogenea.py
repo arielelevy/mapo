@@ -49,7 +49,15 @@ from app.config import Settings
 from app.paradigms import campaign_roster
 from app.runner import Runner
 
-CORPUS = "gold_h1"
+# EL CORPUS ES UN ARGUMENTO, NO UNA CONSTANTE (2026-08-30). Lo era, y por eso el holdout
+# —que es el criterio de exito escrito del producto— se corria con un script aparte
+# (`_run_holdout.py`, 5 brazos x 4 tareas x repeat 2) que NO comparte este camino de codigo.
+# Un holdout medido con otro harness no mide generalizacion: mide dos harnesses.
+#
+# La literatura lo pone como falla sistemica —«inadequate holdout sets», Kapoor et al.— y
+# aca era peor que inadecuado: la unica corrida de `gold_holdout` quedo en el archivo
+# pre-K6, sin `analyzer`, sin `fingerprint` y sin `region_vocabulary`, o sea no replayable.
+CORPUS_POR_OMISION = "gold_h1"
 REPEAT = 3
 
 # LOS MODELOS, y su alcance. `M-4` lo decidio: `luna` y `terra` entran a la homogenea, y
@@ -150,6 +158,9 @@ def main() -> None:
     ap.add_argument("--anchos", default=",".join(ORDEN),
                     help="que estratos correr, en orden. Por defecto los tres.")
     ap.add_argument("--repeat", type=int, default=REPEAT)
+    ap.add_argument("--corpus", default=CORPUS_POR_OMISION,
+                    help="que corpus corre. `gold_holdout` es el held-out del producto: "
+                         "MISMO harness, datos que el sistema nunca vio")
     ap.add_argument("--sin-chequeo", action="store_true",
                     help="saltear `bench/_listo.py`. Queda escrito en la consola.")
     # PROBAR ESTO NO PUEDE ARRANCAR LA CAMPAÑA, y hace falta decirlo porque ya paso: correr
@@ -168,6 +179,15 @@ def main() -> None:
                     help="celdas a EXCLUIR de esta corrida, separadas por coma "
                          "(ej. B2_absence,D1_presupposition). Queda en la consola y en "
                          "la razon declarada de la linea base.")
+    # CORRER UN SOLO BRAZO ES UN CASO REAL, no un atajo. `RW-1` dejo a `rewoo` midiendo
+    # un brazo que no podia leer, sus 292 filas se BORRARON del arbol vivo —una fila que
+    # midio codigo roto no es evidencia debil, es evidencia de otra cosa— y hay que
+    # rellenarlas sin volver a pagar los otros once patrones. Sin esta bandera, la unica
+    # forma era escribir otro script que duplicara la maquinaria de estratos, resume y
+    # porton, que es como una corrida empieza a vivir en dos lados.
+    ap.add_argument("--patrones", default="",
+                    help="correr SOLO estos, separados por coma (ej. rewoo). Por defecto, "
+                         "el plantel entero. Queda impreso en la consola.")
     ap.add_argument("--modelo", default="nano", choices=sorted(MODELOS),
                     help="qué modelo corre. Cada uno escribe en su propio directorio: "
                          "dos modelos en el mismo `.jsonl` es lo que `load_rows` levanta.")
@@ -197,7 +217,19 @@ def main() -> None:
     if args.ensayo:
         print("[ensayo] escribe en `results/_ensayo/`. NADA de esto es la campana.\n")
     roster = campaign_roster()
-    runner = Runner(settings, CORPUS, retriever_arm="hybrid", surface_variant="basic")
+    if args.patrones:
+        pedidos = [p.strip() for p in args.patrones.split(",") if p.strip()]
+        desconocidos = [p for p in pedidos if p not in roster]
+        if desconocidos:
+            # FALLA CERRADA: un nombre que no esta en el plantel no se saltea en silencio.
+            # Un typo dejaria correr NADA y el resumen diria «0 filas nuevas», que se lee
+            # igual que «ya estaba todo».
+            raise SystemExit(
+                f"--patrones nombra {desconocidos}, que no estan en el plantel: {roster}")
+        roster = pedidos
+        print(f"[!] CORRIDA PARCIAL, por pedido explicito: solo {roster}" + chr(10))
+    runner = Runner(settings, args.corpus, retriever_arm="hybrid",
+                    surface_variant="basic")
 
     # EL ALCANCE DEL MODELO. `terra` corre SOLO C3 y eso no es una bandera que se pueda
     # olvidar: si corriera entero, esta misma corrida costaria USD 554 en vez de 51.
@@ -242,7 +274,7 @@ def main() -> None:
         print(f"  el corpus NO se toca: sigue teniendo {len(runner._tasks)} y su receta "  # noqa: SLF001
               f"lo regenera igual")
         print()
-    print(f"corpus {CORPUS} · {len(roster)} patrones · repeat {args.repeat}")
+    print(f"corpus {args.corpus} · {len(roster)} patrones · repeat {args.repeat}")
     print(f"plantel: {roster}")
     print(f"estratos: {anchos}")
     print(f"celdas del plan: {total_celdas:,}   ya en el archivo: {ya:,}")

@@ -1,52 +1,96 @@
-# Feasibility Before Selection: When Orchestration Topology Actually Matters for LLM Agents
+# Determinism before selection: what is learnable in LLM agent orchestration
 
-**Draft 0.1 — 2026-08-23**
+**Draft 0.2 — 2026-08-30**
 **Author**: Ariel Edgardo Levy
-**Status**: working draft. Theory is complete and machine-checked; measurements are
-preliminary at n=1 per cell. Every empirical claim below carries its sample size.
-Target: arXiv cs.LG (primary), cs.AI (cross-list).
+**Status**: working draft. The theory is machine-verified; empirical measurements come from
+**78 tasks × 12 paradigms × 3 replicates** over a corpus with real entities (121.4M tokens).
+Every empirical claim carries its sample size. What is still missing is a valid held-out
+measurement; that is declared where it matters.
+Destination: arXiv cs.LG (primary), cs.AI (cross-list).
 
 ---
 
 ## Abstract
 
-Per-task selection of an agent's reasoning paradigm has a large, measured prize: oracle
-selection beats the best fixed paradigm by 17.1pp, and the best published router recovers
-about a quarter of that gap while zero-shot self-routing recovers negative value. We argue
-the bottleneck is not selector capacity but decision framing, and we develop three results
-in front of the learning problem rather than inside it.
+This work began by asking **which orchestration paradigm to pick per task** and ends with a
+different answer than it sought. Over a complete record — 78 tasks × 12 paradigms × 3
+replicates, with no LLM judge and an audited grader — **routing on quality has no net prize**:
+`−0.008` against the best fixed paradigm, and the mechanism of that failure is more
+informative than the number. What does stand, and what this paper argues, is two claims about
+**determinism** and one about **what is learnable**.
 
-First, **feasibility is arithmetic**. Whether a topology can run a task is computable from
-declared quantities — unit count, unit length, budget — with no model call and no
-statistics. On a corpus scaled from 16k to 1.27M tokens this prunes three of seven
-candidate topologies before any token is spent, and it separates two failure modes that
-are routinely conflated: map-reduce is bounded by *cardinality*, not by total size.
+**First: the interaction exists, it is enormous, and it is not billable.** Decomposing
+`u = μ + α(task) + β(arm) + γ + ε`, the interaction γ explains **48%** of variance at
+signal-to-noise `5.30`, and one signal predicts it — `cardinality × literal term`, capturing
+two thirds of the ceiling and **surviving selection correction** against the maximum of nine
+permutation nulls. And the net prize is still negative, because **large `var(γ)` ≠ large
+routing prize**: γ is enormous because the *bad* arms are bad in different places. Restricted
+to arms that would actually compete, real γ falls to `0.0046` at signal-to-noise `0.38`.
+Reporting interaction variance as evidence that routing pays measures the wrong structure. The
+result replicates at the level of families declared from code: `+0.079` against a `+0.065`
+noise floor, with no signal predicting which family wins.
 
-Second, **selection pays only under a precise condition**. We give the Selection Value
-Theorem — `Σⱼ π_j·α_j·G_j > Σⱼ ν_j·β_j·L_j`, an exact decomposition **by destination** over a
-catalogue of `k` arms — and its corollaries: a router obliged to always choose controls
-neither how often it errs nor how much each error costs, and optimal coverage is below one
-whenever any loss would be routed. The impossibility threshold is parameterised by **loss
-selectivity** `ρ`, the ratio of realised to distributional loss: a router that errs often
-but cheaply can exceed the classical bound and still capture value. We
-further show that where a cheap failure detector exists, escalation dominates prediction —
-a router that misroutes pays a quality loss, a cascade pays a cost loss — which partitions
-the problem by verifiability rather than by task type.
+**Second: determinism is the scarce resource, and it is recoverable.** `pass^k` — succeeding
+on all three replicates — drops between `0.078` and `0.196` per arm, with **17% to 34% of
+cells unstable** at temperature zero, fixed seed and identical fingerprint. No arm reaches
+per-decision reproducibility above `0.983`. But it is recovered by **taking control decisions
+away from the model and giving them back to code**: four structural corrections — none of
+phrasing — took one arm from `0.33` to `0.89` on the coupled-chain cell *and* made its
+replicates agree. The decisive intervention is a single design line: with the same fingerprint
+and the same search results, letting the model choose a walk's anchor gave
+`1.000 / 0.000 / 0.000`; letting code choose it gives `1.000` three times. **The naive
+conjecture that non-determinism compounds with the number of decisions is false** (`r = −0.24`,
+`n = 8`): which decision matters, not how many.
 
-Third, and empirically, **tool surface governs the variance that topology choice is
-credited with**. Across four feature cells, paradigms that do not use tools span a 1.2×
-cost range; paradigms that do span 50×. Adding one signal — that the retriever has
-returned nothing new for three consecutive searches — cut the cost of the most
-elaborate topology by 3.05× against a replicate spread of 1.62× on the same measure.
+**Third: what is learnable is capability, not paradigm identity.** The earlier attempt to map
+question ontology → paradigm name was refuted (`−0.087`). We propose the missing link —
+ontology → **required capabilities** → arms that have them — with ten capabilities declared
+from code, each with its evidence. The correct test is **leave-one-arm-out**, not
+leave-one-task-out: a model keyed on paradigm identity has no parameter for an arm it never
+saw; one keyed on capabilities does. Measured, capabilities predict an unseen arm better than
+task difficulty alone (`MAE 0.233` vs `0.257`, winning 6 of 8 folds) and better than arm
+identity even when the latter *sees* the held-out arm (`0.339`). Against a shuffled-capability
+null it gives `p = 0.065`: **suggestive, not established**, and eight arms are eight points.
 
-We contribute the theory, a machine-checked measurement layer, a corpus generator with
-exact ground truth at four scales, and a preliminary failure analysis of seven topologies.
-We do not yet contribute a validated selector.
+Three earlier results survive as support: **feasibility is arithmetic** and prunes topologies
+before a token is spent; the **Selection Value Theorem** partitions the problem by
+verifiability rather than task type; and the **tool surface** governs variance usually
+attributed to topology.
 
-**Keywords**: LLM agents, orchestration, selective prediction, learning to defer,
-retrieval-augmented generation, tool design, agent evaluation
+We contribute the theory, a measurement layer whose axes are explicitly checked against the
+2024-2026 agent-benchmark literature, a corpus generator with exact ground truth and
+surface-variant entities, a capability catalogue declared from code, and failure analysis of
+twelve topologies. We do **not** yet contribute a selector validated on held-out data.
+
+**Keywords**: LLM agents, determinism, orchestration, DAG patterns, selective prediction,
+plastic learning, capabilities, agent evaluation
 
 ---
+
+## How a request is decided
+
+![The deterministic method: what code decides and what the model emits](figuras/metodo-determinista.svg)
+
+The figure is the paper's argument in one image. The upper lane is deterministic and
+auditable: closed-form sensors, typed beliefs with provenance, an arithmetic gate, the
+capabilities the question requires, and only then a choice among capable arms — or an
+abstention. The lower lane is the model, and it **only emits propositions**: what a unit says,
+where a trail leads. It never decides how many turns to take, which index to use, or when to
+stop.
+
+**Every decision that crosses into the lower lane takes determinism with it**, and that is
+measured, not argued. The guard closing the loop — typing the sensor's output before using it —
+dates from 2026-08-30 and came from a concrete case: the model emitted
+`'M. Arrieta settlement account'`, and that tail dragged the query into classifying as prose,
+sending it to the wrong index. **The rule was right and the input was dirty.**
+
+| what code decides | what the model emits |
+|---|---|
+| how many turns to take (from the length declared in the question) | what this unit says |
+| which index to use (lexical for a named entity, hybrid for prose) | where the trail leads next |
+| which unit is the anchor, and which is the chain's terminus | what fact the reading contributes |
+| whether there is enough evidence to answer, or to abstain | the wording of the answer |
+
 
 # 1. Introduction
 
@@ -1354,6 +1398,13 @@ Decomposing the variance of utility over 1,284 measured rows:
 | between **tasks** | 0.1153 | 47% |
 | between **paradigms** | **0.0311** | 13% |
 | between **replicates** of one cell | **0.0311** | 13% |
+| **task × paradigm interaction** (residual) | 0.0694 | **27%** |
+
+> **The fourth row was missing, and we add it because without it the table does not close**:
+> 47 + 13 + 13 = 73%, not 100%. The residual is the interaction — the term §7.11 later
+> measures with the full method on a different panel (48% there, with different `n` and net of
+> noise). Its being large **does not contradict** what follows: §7.11.3 shows that
+> interaction, restricted to the arms that would actually compete, falls to `0.0046`.
 
 **0.0311 against 0.0311** — equal to four decimal places. A router chooses a paradigm, so it
 can only compete for the share the paradigm explains; the task's share is not movable by any
@@ -1429,6 +1480,459 @@ matter", and it says so instead of guessing.**
 > "selection does not pay" from "this setup cannot see it."
 
 ---
+
+## 7.9 The complete homogeneous run: twelve paradigms over all 78 tasks
+
+The preceding sections measured over 41 of the corpus's 78 tasks, and what was missing was
+not random: **21 of the 32 unmeasured tasks were from the widest band**, 60 units and
+~483,000 tokens of material each. That is precisely the regime where topologies should
+separate — where reading everything is impossible and exhaustive coverage cannot be paid for
+— so every earlier conclusion was bounded to the narrow regime without saying so.
+
+This section closes the corpus. Twelve paradigms × 78 tasks × 3 replicates, one model, the
+same conditions throughout. No infrastructure failures.
+
+### 7.9.1 An arm is measured twice, and the two numbers differ
+
+| arm | applies | u where it applies | u × coverage | tokens/cell |
+|---|---:|---:|---:|---:|
+| `react` | 100% | **0.850** | **0.850** | 108,137 |
+| `dag_strategy` | 100% | 0.830 | 0.830 | 105,293 |
+| `reflection` | 100% | 0.803 | 0.803 | 133,574 |
+| `rewoo` | 100% | 0.669 | 0.669 | **10,840** |
+| `gist_reader` | 100% | 0.584 | 0.584 | 23,075 |
+| `supervisor` | 100% | 0.581 | 0.581 | 64,079 |
+| `handoff` | 96% | 0.583 | 0.557 | 131,310 |
+| `pointer_chase` | 96% | 0.515 | 0.492 | 9,787 |
+| `graph_traverse` | 52% | 0.511 | 0.266 | 21,356 |
+| `streaming_scan` | 12% | 0.750 | 0.090 | 26,380 |
+| `extract_compute` | 12% | 0.583 | 0.070 | 26,184 |
+| `direct` | **6%** | **0.917** | **0.055** | 22,822 |
+
+![Good where it applies, against what it contributes over the corpus](figuras/aplica-contra-aporta.svg)
+
+**A paradigm has two numbers, and collapsing them hides the case that matters.** `direct` is
+the best arm in the roster where its mechanism runs — 0.917 — and that mechanism runs on
+**6%** of cells, because the feasibility arithmetic prunes it the moment the material does
+not fit. Over the corpus it contributes 0.055. Reporting a single number forces you to
+falsify one of the two claims.
+
+Coverage is not a property of the arm but of the **intersection** between its mechanism and
+the task distribution, which is why it is decided before spending: `direct`,
+`streaming_scan` and `extract_compute` do not fail on the remaining 88–94% — **they do not
+run**.
+
+### 7.9.2 Degradation with width separates what the mean utility merges
+
+![How each arm degrades as the material grows](figuras/degradacion-por-ancho.svg)
+
+The axis is the three declared widths — **5, 20 and 60 units**. Tasks without a width
+suffix are **excluded**: they group cells of 1, 8, 9 and 60 units, so they are not the narrow
+end of anything, and including them turned the axis into something that is not ordered.
+
+| arm | w4 (5 u.) | w16 (20 u.) | w48 (60 u.) | Δ |
+|---|---:|---:|---:|---:|
+| `react` | 0.94 | 0.82 | **0.81** | −0.13 |
+| `dag_strategy` | 0.83 | 0.83 | **0.80** | **−0.03** |
+| `reflection` | 0.89 | 0.80 | 0.71 | −0.18 |
+| **`rewoo`** | 0.60 | 0.73 | 0.66 | **+0.06** |
+| `handoff` | 0.72 | 0.62 | 0.51 | −0.22 |
+| `supervisor` | 0.64 | 0.59 | 0.43 | −0.20 |
+| `gist_reader` | 0.86 | 0.59 | 0.42 | −0.45 |
+| `pointer_chase` | 0.68 | 0.49 | 0.39 | −0.30 |
+| `graph_traverse` | 0.91 | 0.44 | 0.42 | **−0.49** |
+
+**All of them degrade except one.** `graph_traverse` loses 0.49 and `gist_reader` 0.45 going
+from 5 to 60 units — the 180-character gist and the entity index stop discriminating once
+there are sixty candidates. **`rewoo` is the only exception, and it rises**: `+0.06`. That is
+not luck — it is the only arm whose cost is not a function of scope.
+
+An average over widths would have called `gist_reader` better than `rewoo` on 0.584 against
+0.669, and would have hidden that one collapses exactly where the other holds.
+
+### 7.9.3 Three cost classes, and they are not the catalogue's
+
+Fitting `log(cost)` against `log(scope)` per arm, and separately asking what better explains
+the cost — the scope or the number of turns — yields a taxonomy that **cuts across** the
+control-flow one:
+
+| class | arms | what defines it |
+|---|---|---|
+| **scope** | `handoff` | `R² = 0.77` against scope, exponent 0.73. Cost is set by how much material each call carries |
+| **turns** | `react`, `reflection`, `dag_strategy`, `supervisor`, `gist_reader`, `pointer_chase` | cost is set by how often it iterates, and that is **endogenous**: it spends until something stops it |
+| **structural** | `rewoo`, `direct`, `graph_traverse`, `extract_compute`, `streaming_scan` | neither: cost is fixed by the shape of the pattern |
+
+The datum that forces these classes apart from the declared ceilings: **`handoff` has a
+ceiling of 12 calls and spends 131,310 tokens; `dag_strategy` has one of 160 and spends
+105,293.** Nearly the same, with a factor of 13 between the ceilings.
+
+> Counting calls to bound effort is counting containers to bound weight.
+
+And an operational consequence: the **turns** class is the only one a stopping rule can act
+on. Measured in the same record, 46.5% of `react`'s searches surface no new unit at all,
+with streaks of up to 14.
+
+### 7.9.4 The capability space
+
+![The capability space](figuras/espacio-capacidades.svg)
+
+The control-flow taxonomy — "plan-execute", "supervisor", "chain" — does not predict
+performance. What does predict it is which **capabilities** each topology hands the model,
+and there are three:
+
+| axis | what it is | where it comes from |
+|---|---|---|
+| **payload per call** | how many units the model sees at once | read off the code |
+| **adaptivity** | can it revise the plan after seeing a result? | read off the code |
+| **cost law** | what its cost is a function of | measured |
+
+The first two are read off the code, which is why they **place an arm that has never been
+run** — something a table of results cannot do.
+
+The case that validates them is the contradiction question, where the answer is a relation
+between two units and no single unit contains it:
+
+| capabilities | utility |
+|---|---:|
+| payload ≥ 2 units **and** adaptivity | **0.71 – 0.91** |
+| payload only | 0.13 |
+| neither | 0.00 – 0.40 |
+
+`handoff` **reads both relevant units and scores 0.067**, because each sub-agent sees its
+half and no single call ever holds the pair: the capability is not "read them" but "hold
+them together". And `rewoo` scores 0.133 even though it *can* hold them together, because it
+lacks the other one — choosing **which** two requires seeing a result before asking for the
+next.
+
+In the figure, `react`, `dag_strategy` and `reflection` land at essentially the same point.
+That is not a defect of the drawing: **they are the same arm for the purpose of deciding**,
+which is why their utilities sit within 0.05 of each other.
+
+### 7.9.5 Where the margin is
+
+![Each arm's economics](figuras/utilidad-contra-costo.svg)
+
+In the widest band, `react` scores 0.81 at 108,137 tokens per cell and `rewoo` 0.66 at
+10,840: **+0.15 of utility for a factor of 10 in cost**. And the cost is almost entirely
+input — 96.4% to 100.9% depending on the arm, with output between 0% and 3.6% — which says
+that **paradigms do not differ in what they generate but in what they drag into the prompt**.
+That is the same claim the cost law makes, measured from another direction.
+
+## 7.10 Where it fails, and what fixes it
+
+The preceding sections compare arms. This one opens one up: **why the simplest arm wins,
+what variance the mean hides, and what happens when a control decision is taken away from
+the model.** All three are answered over the same record, without spending another token.
+
+### 7.10.1 The funnel: `react` does not win by searching
+
+![Seeing versus using](figuras/embudo-ver-contra-usar.svg)
+
+A cell's utility is the product of two things that fail for different reasons:
+
+    u  ≈  P(saw ALL the bearing units)  ×  P(answered correctly | it saw them)
+
+| arm | u | **saw** | **u \| saw** | u \| did not | units read |
+|---|---:|---:|---:|---:|---:|
+| `react` | 0.843 | 60% | **0.970** | 0.708 | 7.8 |
+| `dag_strategy` | 0.822 | 57% | 0.945 | 0.720 | 11.6 |
+| `gist_reader` | 0.611 | **77%** | **0.594** | 0.667 | 28.8 |
+| `supervisor` | 0.577 | 40% | 0.778 | 0.479 | 6.8 |
+
+**`react` does not see more than anyone** — 60%, while `gist_reader` sees 77%. Its whole
+advantage is in the second stage: with the material in view it scores 0.970, and
+`gist_reader` scores 0.594, *worse than when it had not seen everything*. Paired by task,
+`Δsaw` is small or negative and `Δ(u|saw)` carries the entire gap.
+
+> **The mechanism:** every intermediate representation smaller than the material is a loss
+> that is not recovered downstream. A 180-character gist, a window recut for a sub-agent, an
+> entity index — all three throw information away *before* knowing which part was needed.
+> `react` has none.
+
+Simplicity is not an aesthetic virtue here: it is the **absence of a lossy channel**, and
+that is measurable.
+
+### 7.10.2 `pass^k`: the mean hides the half that matters
+
+> **`pass^k` is NOT `pass@k`, and means nearly the opposite.** In the code literature
+> `pass@k` measures "at least one success in `k` attempts" and **increases** with `k`.
+> `pass^k` measures "all `k` attempts succeeded" and **decreases** with `k`. The name comes
+> from `tau2-bench`; we keep it for consistency with that literature and flag it here because
+> the typographic resemblance invites reading the table backwards.
+
+Everything above is `pass@1` — the mean over replicates — and it answers "how often does it
+get it right". `pass^k` answers **"can it be relied on to get it right"**, which for a system
+promising "same belief base ⟹ same decision" is the half that matters.
+
+| arm | pass@1 | **pass^3** | drop | unstable cells |
+|---|---:|---:|---:|---:|
+| `react` | 0.875 | **0.797** | −0.078 | 17% |
+| `dag_strategy` | 0.874 | 0.763 | −0.112 | 20% |
+| `rewoo` | 0.718 | 0.576 | −0.142 | 27% |
+| `supervisor` | 0.637 | 0.441 | **−0.196** | **34%** |
+
+**Between 17% and 34% of cells change result across replicates**, at `t=0`, with a fixed seed
+and the same fingerprint. That **corrects an earlier claim of ours**: determinism verified
+with one call per model is true *per call* and false *per trajectory* — a tool loop amplifies
+any deviation, because a different choice at step one changes everything after it.
+
+No between-arm noise floor shows this variance: it lives **inside** a cell.
+
+### 7.10.3 The C3 case: the failure mode was not the one it looked like
+
+![C3 failure modes](figuras/c3-modos-de-falla.svg)
+
+`C3_coupled_chain` asks the agent to walk N steps up a reporting line over 60 units and
+report a field of the last one. The chain is deliberately mined: **every unit on the path
+carries a field of the same type sitting next to the name that anchors it**, the link runs
+through anaphora ("The above-named", "That person"), and the hop's destination is abbreviated
+(`A. Vallejos` points to `Agustina Vallejos`).
+
+Classifying answers by mode rather than by score inverts the diagnosis. The dominant mode is
+not skipping the chain (2 cases) but **cutting it one step short** (7): arms return the field
+of an intermediate hop, which is in plain view and indistinguishable from the correct one.
+And `dag_strategy`, which wins the cell, **does not chain better**: 12 correct, 3 abstentions,
+and **zero wrong answers**. The others answer anyway.
+
+> The bench scores "abstained" and "answered wrong" both at 0.000. That is correct for
+> measuring utility and **blind on exactly the axis the decision layer exists to govern.**
+
+### 7.10.4 Replacing a model decision with a deterministic sensor
+
+On that diagnosis `pointer_chase` was fixed — the arm whose mechanism *is* chain-following
+and which scored 0.33 on C3. Four corrections, **all of control flow or typing, none of
+phrasing**:
+
+1. **A belief rule: a named entity is searched with the lexical index, not the hybrid one.**
+   A dense vector encodes *what a text is about*, and sixty documents on the same template
+   are about the same thing; a proper name is precisely the part that is **not** semantic,
+   and fusing the dense branch in adds noise to the only signal that discriminates. Measured:
+   the hybrid returns the wrong unit for `Ramiro Herrera` and leaves `M. Arrieta` outside the
+   top 5; the lexical index puts them first and third.
+2. **A sensor's output is typed before it is used.** The model emitted
+   `'M. Arrieta settlement account'`, and that tail dragged the query into classifying as
+   prose: **the rule was right and the input was dirty.**
+3. **A hop to a unit that does not name whoever is being chased is not a hop**, and among
+   tied candidates the one that names them **earlier** wins — a document *about* an entity
+   names it earlier than one that merely references it in passing. This is resolved with
+   predicates returning a boolean or a position, never text: they cost no tokens.
+4. **The anchor is hop zero, and code resolves it.** It was a model call, and that was where
+   the last control-flow decision remained with the sensor.
+
+![The deterministic sensor](figuras/sensor-determinista.svg)
+
+The left panel plots **every replicate separately**, and it shows what a mean hides: the
+"before" was not worse on average but **unstable** — the same question, the same fingerprint
+and the same search results yielded 1.000 or 0.000 depending on the replicate. The right panel
+shows both axes moving together, which is the whole claim.
+
+**Result: `pointer_chase` goes from 0.33 to 0.89 on C3**, tying the cell's best arm. And
+correction (4) proves the point on its own: **with the same fingerprint and the same search
+results**, replicate 0 picked the right anchor and walked the whole chain (u=1.000) while
+replicates 1 and 2 picked another and scored 0.000. A control decision left in the sensor
+takes determinism with it.
+
+> **The hypothesis, and it is falsifiable:** replacing a model control decision with a
+> deterministic sensor over an environment signal improves **utility and determinism at the
+> same time**. `pass^k` is the metric that was missing to measure the second effect, and
+> without it half the improvement was invisible.
+
+Declared and unresolved: the replicate that still fails **abstains** rather than answering
+wrong, which is the intended behaviour and which the bench scores the same as an error.
+
+### 7.10.5 A measured axis that no decision looks at
+
+![Serial latency](figuras/latencia-serial.svg)
+
+There are **two clocks**, and confusing them invalidates the number. Wall time is useless:
+63-67% of `react` and `dag_strategy` rows sit under half a second because they are replays
+from the on-disk cache — that measures how fast the bench re-reads, not how fast the system
+answers. What does work comes from the provider, inside each response's `usage` object, which
+is why the cache preserves it: it is the latency of the call that was actually made.
+
+| arm | u | first token | **serial latency** | u per second |
+|---|---:|---:|---:|---:|
+| `react` | 0.843 | 265 ms | **1.35 s** | 0.62 |
+| `dag_strategy` | 0.822 | 410 ms | 2.87 s | 0.29 |
+| `rewoo` | 0.677 | 304 ms | **0.77 s** | **0.88** |
+| `supervisor` | 0.577 | 360 ms | 2.66 s | 0.22 |
+
+**Time to first token is practically identical across arms** — 250 to 410 ms; it is one call
+to the same model. What varies by 3.6× is **serial** latency: the sum over all calls, that is,
+the part no amount of tokens-per-second can shorten because each call waits for the previous
+one. It is the `turn-driven` cost law billed in user time rather than in tokens, and it is an
+axis **no routing decision looks at today**.
+
+And it unlocks nothing, which is the thing to say: `react` is simultaneously the highest-utility
+and the lowest serial-latency arm among the contenders. The only arm that buys time is `rewoo`
+— 1.8× faster — and it costs 0.165 of utility. That is an explicit trade, not a free lunch:
+only someone with a declared latency ceiling should take it.
+
+### 7.10.6 Does non-determinism compound with each decision? The simple form is false
+
+The previous section invites a general conjecture, and it is worth writing down because **the
+record refutes its naive form**:
+
+> If an arm delegates `d` control decisions to the model, and each one comes out the same
+> across replicates with probability `q`, then `pass^k ≈ pass@1 · q^d`. More decisions in the
+> sensor ⟹ less determinism, multiplicatively.
+
+It is countable: `d` is measured as iterations per cell, and `pass^3` is already there. Over
+the panel's eight arms:
+
+| arm | decisions | pass@1 | pass^3 | implied `q` |
+|---|---:|---:|---:|---:|
+| `dag_strategy` | 8.9 | 0.822 | 0.703 | 0.983 |
+| `supervisor` | 8.6 | 0.587 | 0.406 | 0.958 |
+| `reflection` | 5.9 | 0.798 | 0.688 | 0.975 |
+| `react` | 4.3 | 0.843 | 0.734 | 0.968 |
+| `pointer_chase` | 3.8 | 0.515 | 0.359 | 0.909 |
+| `rewoo` | 2.0 | 0.688 | 0.531 | 0.879 |
+| `gist_reader` | 1.9 | 0.611 | 0.516 | 0.913 |
+
+**The correlation between decision count and `pass^3` drop is `r = −0.24` at `n = 8`** — weak,
+and with the **opposite** sign to what the conjecture predicts: arms with more decisions lose
+*less*. The explanation the data itself suggests is that a decision adds not only variance but
+also **a chance to correct**: an adaptive arm that turns wrong can turn back, and a two-call
+arm cannot. The two effects nearly cancel in this corpus.
+
+What does hold, and is more useful than the original conjecture, is two things:
+
+1. **`q` is bounded away from 1 for every arm.** The maximum is `0.983` (`dag_strategy`) and
+   the minimum `0.879` (`rewoo`). None of the measured architectures recovers per-decision
+   reproducibility, so **every trajectory with delegated decisions loses determinism**, and
+   the question is not whether but how much.
+2. **Which decision is removed matters more than how many.** The evidence here is not
+   correlational but interventional: removing **one** decision — the anchor — took
+   `pointer_chase` from disagreeing replicates (1.000 / 0.000 / 0.000) to agreeing ones,
+   touching nothing else. Eight points of correlation do not compete with that.
+
+> Non-determinism is not spread evenly across a trajectory's decisions. Counting decisions
+> does not predict; identifying **which one** decides the outcome does.
+
+This is a declared limitation of the analysis, not a result: with eight arms and one corpus,
+the correlational side here can decide almost nothing. What carries it is the intervention.
+
+## 7.11 Why there is no routing prize, even though the interaction is enormous
+
+This is the corpus's central result, and it is negative with a precise mechanism. The usual
+argument for routing — "there is a lot of task-by-method interaction, so choosing per task
+must pay" — **does not hold**, and this record shows exactly where it breaks.
+
+### 7.11.1 There is interaction, and it is large
+
+Decomposing `u(task, arm) = μ + α(task) + β(arm) + γ(interaction) + ε` over the 59-task ×
+8-arm panel:
+
+| component | variance | % |
+|---|---:|---:|
+| α — task difficulty | 0.0632 | 41% |
+| β — arm quality | 0.0160 | 10% |
+| **γ — interaction** | **0.0736** | **48%** |
+| ε — replicate noise | 0.0351 | |
+
+γ net of noise is **0.0619**, at **signal-to-noise 5.30**. Under the usual argument, this is
+where one should route.
+
+### 7.11.2 And a signal explains it, surviving selection correction
+
+![Which signal explains the interaction](figuras/predictores-de-la-interaccion.svg)
+
+The figure ranks ten signals by how much of γ they explain, with **each one's own permutation
+null** drawn as a black tick on its bar. Several beat that tick — and that comparison is
+precisely the fallacy the null existed to prevent, because **nine candidates were tried and
+the best was picked**. The correct bar is the dashed line: the **maximum of the nine nulls in
+each permutation**.
+
+Only `cardinality × literal term` crosses it, at 0.309 with corrected `p < 0.001`, capturing
+**two thirds of the ceiling** set by `the cell` — which appears as an **upper bound**, not a
+candidate: it is the corpus's design label, unknown at decision time, and no real signal can
+beat it.
+
+### 7.11.3 And the net prize is negative
+
+**Large `var(γ)` ≠ large routing prize.** The prize is `E[max_p u] − max_p E[u]`, and γ can be
+enormous because the **bad** arms are bad in different places. That structure is real, it is
+predictable, and it is **worth nothing**: nobody will pick the arm that loses narrowly over
+the one that loses badly.
+
+The only billable part is the interaction **among arms that would actually compete**.
+`gist_reader` contributes 20% of `var(γ)` and `rewoo` 15%; the three leaders, 6-7% each.
+Restricted to those three — the ones within 0.05 of the best fixed arm:
+
+```
+estimated real gamma       0.0046      signal-to-noise  0.38
+oracle among contenders    0.932
+best fixed arm             0.875
+maximum prize             +0.058
+noise floor (bootstrap)   +0.065
+NET prize                 −0.008
+```
+
+And **no signal separates the three contenders from each other**: all with `p > 0.29`. Only
+`the cell` does (`p = 0.007`), and that is not known at decision time.
+
+> The 48% interaction is real and lives **among the arms nobody would choose**. Reporting
+> `var(γ)` as evidence that routing pays measures the wrong structure.
+
+### 7.11.4 Nor at the family level
+
+A natural reply is that the signals may not separate individuals but might separate **groups**:
+a router that picks a family and then takes the cheapest member is a different router with a
+different prize. We tested it, declaring the families **from the code** — by when an arm
+decides its next call — and not from the outcome:
+
+| family | arms | mean u |
+|---|---|---:|
+| `adaptive` | `react`, `reflection` | 0.818 |
+| `fixed-plan` | `dag_strategy`, `rewoo` | 0.750 |
+| `lossy-channel` | `gist_reader`, `handoff`, `pointer_chase`, `supervisor` | 0.571 |
+
+Valuing a family by its **maximum** would cheat twice — it grants a per-task choice the family
+router cannot make, and it rewards the largest family by pure max-selection bias — so each
+family is represented by its best-mean arm, chosen **once** over the whole panel.
+
+```
+adaptive          wins 54 of 64 tasks  (84%)
+fixed-plan                 5 of 64      (8%)
+lossy-channel              5 of 64      (8%)
+
+prize for routing FAMILIES   +0.079   (noise floor +0.065)
+prize for routing ARMS       +0.110
+```
+
+**And here the subtraction the paper just taught must be done**, because both prizes exceed
+the floor: `+0.079 - 0.065 = +0.014` for families and `+0.110 - 0.065 = +0.045` for arms. Both
+nets are **positive**, and neither is billable — for a different reason than in 7.11.3:
+
+> there the prize did not exist; **here it exists and there is nothing to grab it with.** A
+> prize is what an oracle would capture, and an oracle is not a policy: **no signal predicts
+> the winning family.** The best, `cardinality`, yields mutual information `0.092` and **does
+> not survive selection correction** (`p = 0.365`).
+
+A prize with no signal predicting it is an upper bound, not a result.
+
+> **It fails not because the signals are weak but because there is no boundary to cross.** A
+> family that wins 84% of the time is not a cluster to route across — it is a default.
+
+### 7.11.5 What this corpus does reward
+
+On quality the decision has no prize. On **cost at equal utility**, the same record yields a
+large saving at a loss inside the noise, and unlike the quality prize it **survives
+out-of-sample evaluation** (leave-one-task-out):
+
+| signal | utility vs best fixed | saving |
+|---|---:|---:|
+| `cardinality × term` | −0.017 | **42%** |
+| `region` | −0.110 | 74% |
+| `n_units` | +0.000 | 1% |
+
+It is a trade, not an improvement, and it must be stated that way. An earlier measurement of
+ours on a smaller panel gave `+0.008` of utility at 69% saving — a free lunch — and **it
+disappeared once the record was complete**. The question "which paradigm gives the best
+answer" is exhausted in this corpus; the question "which is the cheapest one giving an
+indistinguishable answer" is not.
+
 
 # 8. Failure mechanisms
 

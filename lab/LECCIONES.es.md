@@ -2872,3 +2872,79 @@ shippeado un vocabulario cuyo beneficio no existía.
 
     La regla: cuando se arregla un sensor, re-medir TODO lo que se decidió con él,
     aunque parezca que el arreglo toca otra cosa.
+
+
+### 8.24 La pregunta no pide una topología, pide una capacidad · `HALLAZGO`
+
+Todo el banco estuvo mapeando **ontología → paradigma**, y eso es lo que refutó `P15`: un
+paradigma es un nombre de control de flujo, y una pregunta no tiene opinión sobre control de
+flujo. Falta una escala en el medio.
+
+> **La pregunta determina qué CAPACIDAD hace falta. La capacidad determina qué clase de costo
+> puede tenerla. El paradigma sale al final, y es casi un detalle.**
+
+El caso trabajado es la contradicción (`C5`). Una contradicción es una relación **entre dos
+unidades**: ninguna la contiene. Medido, alcanzar las dos vale `+0,388`. Pero controlando eso,
+la clase de costo **sigue mandando**, y ahí está el refinamiento:
+
+    la capacidad no es «leer las dos». Es TENERLAS EN LA MISMA LLAMADA.
+
+`handoff` lee las dos y saca **0,067**, porque cada sub-agente ve su mitad y ninguna llamada
+tiene el par. Es la costura. Y `rewoo` saca 0,133 aunque *puede* tenerlas juntas, porque le
+falta la otra capacidad: **poder elegir cuáles dos**, que exige ver un resultado antes de
+pedir el siguiente.
+
+| capacidades que tiene | utilidad |
+|---|---:|
+| payload ≥ 2 unidades **y** selección adaptativa | 0,71 – 0,91 |
+| sólo payload | 0,13 |
+| ninguna | 0,00 – 0,40 |
+
+**Por qué esto es mejor que una tabla de paradigmas.** Las capacidades son propiedades
+derivables del código —cuántas unidades entran en una llamada, si el plan se puede corregir—
+así que **predicen sobre brazos que nunca se corrieron**. Una tabla de paradigmas sólo sabe de
+los que se midieron.
+
+**Y una predicción propia refutada en el mismo experimento**, que es lo que le da peso al
+resto: dije que un roster declarado en la pregunta tiene valor de adaptación cero, porque los
+pasos se enumeran antes de empezar. Adaptarse vale `+0,414` ahí — lo mismo que en una cadena.
+La causa ya estaba medida: **el 36,5% de las menciones son invisibles a un keyword del nombre
+completo**. El roster está declarado; **la resolución de cada nombre no**. Un plan fijo busca
+la forma canónica y falla, y adaptarse es lo que lo recupera.
+
+    Declarado no es lo mismo que resuelto, y confundirlos fue mío.
+
+
+### 8.25 Dos canales adentro de una sola permutación · `MÉTODO`
+
+Para decidir si el orden de las herramientas importa monté una intervención: permutar los
+pasos independientes de un plan de `rewoo` y re-ejecutar. El diseño era correcto y el
+resultado fue **causal** —`t=0` + seed, así que cualquier diferencia es real sin necesidad de
+piso de ruido—: 2 de 9 tareas movieron la utilidad, magnitud `0,13`.
+
+**Y casi lo reporto como «el orden importa».** Lo que lo frenó fue una columna que había
+puesto por prolijidad: cuántas secuencias **distintas** produjo cada permutación.
+
+    c9-002-w16   4 secuencias distintas   ->  rango 0,00
+    c9-001-w16   2 secuencias distintas   ->  rango 0,13
+
+La tarea con **más** variación de secuencia fue la que **no se movió**. Y ahí se ve que una
+sola intervención estaba moviendo **dos cosas a la vez**:
+
+| canal | qué mueve | qué lo mide |
+|---|---|---|
+| **A** la secuencia de nombres | lo que un Hebbiano sobre pares aprendería | cuántas secuencias distintas salen |
+| **B** la posición de la evidencia en el prompt | un efecto de posición | siempre cambia al permutar |
+
+Permutar cuatro pasos que **todos** son `search` no cambia ni un nombre — pero sí cambia el
+orden en que sus resultados entran al prompt de solve, porque `evidence` es un dict y su
+orden de inserción es el de ejecución. Así que el experimento midió B creyendo medir A.
+
+> **Una intervención que mueve dos variables no prueba ninguna.** Y la manera de darse cuenta
+> no fue pensarlo mejor: fue tener registrada una magnitud —secuencias distintas— que no
+> hacía falta para el resultado y que resultó ser la que lo desarma.
+
+**Lo que queda**: A sigue sin decidirse, y para decidirlo hace falta una celda cuyo plan use
+herramientas heterogéneas entre los pasos libres. B sí quedó medido, y es accionable por otro
+lado: **la respuesta de `rewoo` depende del orden en que se concatena su evidencia**, lo cual
+es una fragilidad que se cierra ordenándola de forma determinista.
