@@ -87,6 +87,17 @@ disciplina cuando la fuente inventa con forma correcta.
 **Palabras clave**: confinamiento de varianza, agentes LLM, plano de control, procedencia,
 predicción selectiva, aprendizaje plástico, capacidades, reproducibilidad, trazabilidad
 
+![El contrato de garantía, y qué pasa cuando la evidencia no alcanza](figuras/contrato-de-garantia.svg)
+
+**Figura 1.** El request entra por la izquierda y sale por la derecha, y los cuatro pasos del
+riel no gastan un token hasta el último. Dos cosas que el resto del paper desarrolla en prosa
+están acá dibujadas: **la rama de rechazo** —cuando ninguna procedencia alcanza el piso exigido,
+abstenerse es una salida y no un fallo— y **el lazo**, que es la plasticidad: el registro de
+rechazos sube el piso del próximo request, offline y con guarda anti-regresión, sin que nadie
+toque un peso. La flecha punteada que sube del carril de abajo es la única que cruza la
+frontera, y lleva proposiciones tipadas: nunca control de flujo.
+
+
 ## Cómo se decide un request
 
 ![El método determinista: qué decide el código y qué emite el modelo](figuras/metodo-determinista.svg)
@@ -288,14 +299,14 @@ Es la vecindad más cercana a §6.2 y hay cuatro trabajos dentro. Los dos primer
 completos el 2026-08-26; la tabla dice qué aporta cada uno y qué de §6.2 queda afuera de su
 alcance.
 
-> **Cómo leer la columna «qué no tiene».** La primera fila es la **base** de la que §6.2 toma sus
-> invariantes, no un competidor al que se le buscan huecos: esa columna no señala defectos suyos,
+> **Cómo leer la columna «qué no tiene».** La primera fila es el trabajo en el que **§6.2 está
+> inspirado**, no un competidor al que se le buscan huecos: esa columna no señala defectos suyos,
 > enumera **dónde se apoya el incremento**. Lo mismo vale para los tres mecanismos de §2.10.
 
 | trabajo | qué aporta | qué no tiene |
 |---|---|---|
 | **SCL / Soft Symbolic Control** [arXiv:2511.17673] | gobernanza sobre inferencia probabilística, partida en *Regulation* (metaprompt persistente, cuya efectividad el propio paper hace depender de qué tan bien el modelo interprete instrucciones) y *Control* (runtime determinista sobre el historial del turno: llamadas duplicadas, conteo de errores, profundidad de ciclos) más clasificación de riesgo por acción | opera como **un modo global único**: no gradúa la garantía por solicitud, no la deriva de creencias sobre la solicitud, no restringe el espacio de planes por nivel, y no calibra la confianza declarada. Sus reglas leen el historial de ejecución, no el contenido proposicional |
-| **MINERVA / HADD** [Zenodo 10.5281/zenodo.20003407] y su compuerta EVR [Zenodo 10.5281/zenodo.19791686] | el antecedente más cercano, y aporta **mecanismo y no vocabulario**: LLM confinado a sensor tipado sin control de flujo, cognición determinista como función pura de la base de creencias («mismo estado → misma acción», la forma de garantía que §6.2 adopta), compuerta de admisión en la frontera de percepción, historial append-only reproducible, credencia con calibración adaptativa (EMRE), encuadre Kautz Tipo-2 | procedencia como **jerarquía tipada con semántica de admisibilidad** y no campo de trazabilidad; la inadmisibilidad de lo elicitado para acciones irreversibles (su dispositivo más cercano es confirmación humana: consentimiento, no epistémico); garantía **graduada por solicitud** (en HADD es uniforme, con un umbral de escalación por tenant como único dial); patrones **acotados por nivel** (su librería de planes se acota globalmente); calibración **medida** (EMRE aprende confianza y nunca la mide: sin ECE, sin diagramas de confiabilidad). Selección de paradigma, abstención y deferral quedan fuera |
+| **MINERVA / HADD** — Jaime y Errecalde (2026) [Zenodo 10.5281/zenodo.20003407] y su compuerta EVR [Zenodo 10.5281/zenodo.19791686] | el antecedente más cercano, y aporta **mecanismo y no vocabulario**: LLM confinado a sensor tipado sin control de flujo, cognición determinista como función pura de la base de creencias («mismo estado → misma acción», la forma de garantía que §6.2 adopta), compuerta de admisión en la frontera de percepción, historial append-only reproducible, credencia con calibración adaptativa (EMRE), encuadre Kautz Tipo-2 | procedencia como **jerarquía tipada con semántica de admisibilidad** y no campo de trazabilidad; la inadmisibilidad de lo elicitado para acciones irreversibles (su dispositivo más cercano es confirmación humana: consentimiento, no epistémico); garantía **graduada por solicitud** (en HADD es uniforme, con un umbral de escalación por tenant como único dial); patrones **acotados por nivel** (su librería de planes se acota globalmente); calibración **medida** (EMRE aprende confianza y nunca la mide: sin ECE, sin diagramas de confiabilidad). Selección de paradigma, abstención y deferral quedan fuera |
 | **Motores de creencias**: Nous [arXiv:2606.22030], MemIR [arXiv:2605.25869], Eywa [arXiv:2605.30771], HEP [arXiv:2607.09195] | acotar la confiabilidad por procedencia del canal; tipar la memoria para impedir colapso de fuentes; promover hechos sólo tras validadores contra evidencia inmutable; hacer auditable la evolución de hipótesis | en HEP toda evidencia validada mueve la creencia por igual, sin jerarquía que filtre la promoción. El jardín de senderos que se bifurcan —agentes que proponen y puntúan sobre los mismos datos— está diagnosticado empíricamente [arXiv:2607.01507] **sin mecanismo**; la partición proponer/puntuar de §6.3 es uno |
 | **Contratos de delegación e identidad atestiguada** [arXiv:2603.18043] | el vecino más cercano del lado del ruteo, y empírico: rutear sobre calidad **auto-reportada** selecciona a los peores delegados y rinde peor que al azar (`0,55` contra `0,68`). Su remedio es determinista —contratos que acotan autoridad con objetivos, presupuestos y políticas de falla— más identidad **reclamada contra atestiguada**, y el brazo atestiguado llega a ruteo casi óptimo | su procedencia es una propiedad del **reclamo de calidad de un delegado**; el de este trabajo es un orden sobre **tipos de evidencia**, y ese orden es lo que una regla lee. No reportan retículo, ni piso sobre acciones irreversibles, ni curva riesgo-cobertura: miden exactitud de ruteo |
 
@@ -1165,6 +1176,14 @@ gobernar una decisión hasta haber ganado evidencia: **un sueño es una hipótes
 
 Verificado: dado un registro donde la utilidad es independiente de todo atributo, ninguna
 partición sobrevive la validación.
+
+> **Cómo se implementa una política así, a modo de ejemplo.** Una política de control que es
+> «tabla de condiciones sobre features, versionada y firmada, ejecutada como código» tiene una
+> implementación natural en un motor de *policy-as-code* —Open Policy Agent con reglas en Rego, o
+> equivalente—: las reglas quedan como artefacto de texto revisable, la evaluación es
+> determinista y el motor devuelve permitir/denegar junto con la regla que decidió. **Es un
+> ejemplo de realización en producto y no parte de lo medido**: nada de este paper corre sobre
+> OPA, y la capa de decisión no depende de ningún motor externo (§9.1).
 
 ### 6.3.1 El sistema aprende con los pesos del sensor congelados
 
@@ -2575,7 +2594,8 @@ optimización clásica de consultas. · arXiv:2608.00106 — ruteo sobre feature
 
 ### Gobernanza simbólica y motores de creencias
 
-**★ MINERVA/HADD.** Zenodo 10.5281/zenodo.20003407 (leído 2026-08-26); compuerta epistémica de
+**★ Jaime y Errecalde (2026). MINERVA/HADD.** Zenodo 10.5281/zenodo.20003407 (leído
+2026-08-26); compuerta epistémica de
 admisión (EVR): Zenodo 10.5281/zenodo.19791686. **Es la base de la que §6.2 toma sus
 invariantes.** · **SCL / Soft Symbolic Control.** *Structured Cognitive Loop.* arXiv:2511.17673.
 · **Nous.** arXiv:2606.22030 — confiabilidad acotada por la procedencia del canal. · **MemIR.**

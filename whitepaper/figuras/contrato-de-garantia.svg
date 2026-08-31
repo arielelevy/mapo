@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 410" width="980" height="410" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<defs><marker id="punta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7178"/></marker></defs>
+<defs><marker id="punta_v" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2e8b6f"/></marker></defs>
+<defs><marker id="punta_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#b5495b"/></marker></defs>
+<rect width="980" height="410" fill="#ffffff"/>
+<text x="16" y="28" font-size="17" font-weight="600" fill="#22252a">El contrato de garantía, y qué pasa cuando la evidencia no alcanza</text>
+<text x="16" y="45" font-size="11" fill="#6b7178">la abstención es una salida, no un fallo · y el rechazo sube el piso para el próximo request, sin tocar un peso</text>
+<rect x="16" y="58" width="948" height="242" rx="10" fill="#f4f7fa" stroke="#d8dbdf"/>
+<rect x="16" y="316" width="948" height="74" rx="10" fill="#fdf5f6" stroke="#d8dbdf"/>
+<text x="30" y="76" font-size="11.5" font-weight="700" fill="#3b6ea5">LO QUE DECIDE EL CÓDIGO</text>
+<text x="30" y="334" font-size="11.5" font-weight="700" fill="#b5495b">LO QUE EMITE EL MODELO</text>
+<rect x="30" y="100" width="148" height="66" rx="7" fill="#ffffff" stroke="#6b7178" stroke-width="1.8"/>
+<text x="104.0" y="121" text-anchor="middle" font-size="13" font-weight="600" fill="#22252a">request</text>
+<text x="104.0" y="138" text-anchor="middle" font-size="9.5" fill="#6b7178">material · presupuesto</text>
+<text x="104.0" y="151" text-anchor="middle" font-size="9.5" fill="#6b7178">banderas del caller</text>
+<rect x="214" y="100" width="168" height="66" rx="7" fill="#ffffff" stroke="#3b6ea5" stroke-width="1.8"/>
+<text x="298.0" y="121" text-anchor="middle" font-size="13" font-weight="600" fill="#22252a">1 · factibilidad</text>
+<text x="298.0" y="138" text-anchor="middle" font-size="9.5" fill="#6b7178">una desigualdad,</text>
+<text x="298.0" y="151" text-anchor="middle" font-size="9.5" fill="#6b7178">no una estimación</text>
+<rect x="418" y="100" width="168" height="66" rx="7" fill="#ffffff" stroke="#3b6ea5" stroke-width="1.8"/>
+<text x="502.0" y="121" text-anchor="middle" font-size="13" font-weight="600" fill="#22252a">2 · piso exigido</text>
+<text x="502.0" y="138" text-anchor="middle" font-size="9.5" fill="#6b7178">A0–A3, derivado de</text>
+<text x="502.0" y="151" text-anchor="middle" font-size="9.5" fill="#6b7178">creencias del request</text>
+<rect x="622" y="100" width="168" height="66" rx="7" fill="#ffffff" stroke="#3b6ea5" stroke-width="1.8"/>
+<text x="706.0" y="121" text-anchor="middle" font-size="13" font-weight="600" fill="#22252a">3 · admisibles</text>
+<text x="706.0" y="138" text-anchor="middle" font-size="9.5" fill="#6b7178">los que alcanzan</text>
+<text x="706.0" y="151" text-anchor="middle" font-size="9.5" fill="#6b7178">el piso</text>
+<rect x="826" y="100" width="110" height="66" rx="7" fill="#ffffff" stroke="#2e8b6f" stroke-width="1.8"/>
+<text x="881.0" y="121" text-anchor="middle" font-size="13" font-weight="600" fill="#22252a">ejecuta</text>
+<text x="881.0" y="138" text-anchor="middle" font-size="9.5" fill="#6b7178">y responde</text>
+<line x1="178" y1="133" x2="214" y2="133" stroke="#6b7178" stroke-width="1.7" marker-end="url(#punta)"/>
+<line x1="382" y1="133" x2="418" y2="133" stroke="#6b7178" stroke-width="1.7" marker-end="url(#punta)"/>
+<line x1="586" y1="133" x2="622" y2="133" stroke="#6b7178" stroke-width="1.7" marker-end="url(#punta)"/>
+<line x1="790" y1="133" x2="826" y2="133" stroke="#6b7178" stroke-width="1.7" marker-end="url(#punta)"/>
+<rect x="640" y="226" width="250" height="58" rx="7" fill="#ffffff" stroke="#b5495b" stroke-width="1.8"/>
+<text x="765.0" y="247" text-anchor="middle" font-size="13" font-weight="600" fill="#22252a">se abstiene o difiere</text>
+<text x="765.0" y="264" text-anchor="middle" font-size="9.5" fill="#6b7178">ninguna procedencia alcanza el piso</text>
+<path d="M 560 166 L 560 196 L 765 196 L 765 226" fill="none" stroke="#b5495b" stroke-width="1.7" marker-end="url(#punta_g)"/>
+<text x="570" y="190" text-anchor="start" font-size="10" font-style="italic" font-weight="400" fill="#b5495b">procedencia insuficiente</text>
+<path d="M 890 255 L 950 255 L 950 88 L 460 88 L 460 100" fill="none" stroke="#2e8b6f" stroke-width="1.7" stroke-dasharray="5 4" marker-end="url(#punta_v)"/>
+<text x="700" y="82" text-anchor="middle" font-size="10" font-style="italic" font-weight="400" fill="#2e8b6f">el registro de rechazos sube el piso del próximo request — offline, con guarda anti-regresión</text>
+<rect x="418" y="348" width="232" height="42" rx="7" fill="#ffffff" stroke="#b5495b" stroke-width="1.8" stroke-dasharray="5 4"/>
+<text x="534.0" y="369" text-anchor="middle" font-size="13" font-weight="600" fill="#22252a">LLM · sensor estocástico</text>
+<text x="534.0" y="386" text-anchor="middle" font-size="9.5" fill="#6b7178">proposiciones tipadas · pesos congelados</text>
+<path d="M 502 348 L 502 166" fill="none" stroke="#6b7178" stroke-width="1.7" stroke-dasharray="5 4" marker-end="url(#punta)"/>
+<text x="492" y="252" text-anchor="end" font-size="10" font-style="italic" font-weight="400" fill="#6b7178">proposiciones, nunca control de flujo</text>
+<text x="16" y="402" font-size="10.5" fill="#6b7178">La garantía no es «mismo prompt ⟹ misma respuesta», que ningún LLM puede dar. Es «misma base de creencias ⟹ misma decisión», que se verifica repitiéndola.</text>
+</svg>

@@ -80,6 +80,17 @@ predicción selectiva, aprendizaje plástico, capacidades, reproducibilidad
 
 ---
 
+![El contrato de garantía, y qué pasa cuando la evidencia no alcanza](figuras/contrato-de-garantia.svg)
+
+**Figura 1.** El request entra por la izquierda y sale por la derecha, y los cuatro pasos del
+riel no gastan un token hasta el último. Dos cosas que el resto del paper desarrolla en prosa
+están acá dibujadas: **la rama de rechazo** —cuando ninguna procedencia alcanza el piso exigido,
+abstenerse es una salida y no un fallo— y **el lazo**, que es la plasticidad: el registro de
+rechazos sube el piso del próximo request, offline y con guarda anti-regresión, sin que nadie
+toque un peso. La flecha punteada que sube del carril de abajo es la única que cruza la
+frontera, y lleva proposiciones tipadas: nunca control de flujo.
+
+
 # 1. Introducción
 
 Un *arnés* de agentes es la estructura de control que envuelve al modelo: una llamada única, un
@@ -188,18 +199,18 @@ determinista sobre el historial del turno; su garantía es **un modo global úni
 trabajo agrega encima es graduarla por solicitud, derivarla de creencias, acotar con ella el
 espacio de planes admisibles y calibrar la confianza.
 
-**La base de la que parte este trabajo es MINERVA/HADD** —*arquitectura de cognición determinista
-sobre creencias tipadas*, Zenodo 10.5281/zenodo.20003407, con su compuerta epistémica de admisión
-en Zenodo 10.5281/zenodo.19791686—, leída completa el 2026-08-26. §3 adopta sus invariantes **sin
-cambios**: el LLM confinado a **sensor tipado** que nunca toma decisiones de flujo de control; una
-capa de cognición determinista que es **función pura de la base de creencias** —«mismo estado ⟹
-misma acción», que es exactamente la forma de garantía que este paper usa—; una **compuerta
-epistémica de admisión** en la frontera de percepción; un **historial de creencias append-only**
-que un auditor puede reproducir; y credencia numérica por creencia con calibración adaptativa. Su
-alcance es general: generación de metas, selección de planes y control de ejecución, todos
-deterministas sobre creencias de estado concreto. **Este trabajo no los redescubre: los toma.**
+**Este trabajo está inspirado en MINERVA/HADD** (Jaime y Errecalde, 2026) —*arquitectura de
+cognición determinista sobre creencias tipadas*, Zenodo 10.5281/zenodo.20003407, con su compuerta
+epistémica de admisión en Zenodo 10.5281/zenodo.19791686—, leída completa el 2026-08-26. De ahí
+viene la forma general que §3 reconoce como deuda: el LLM confinado a **sensor tipado** que nunca
+toma decisiones de flujo de control; una capa de cognición determinista que es **función de la
+base de creencias** —«mismo estado ⟹ misma acción», que es la forma de garantía que este paper
+usa—; una **compuerta epistémica de admisión** en la frontera de percepción; un **historial de
+creencias append-only** que un auditor puede reproducir; y credencia por creencia con calibración
+adaptativa. Su alcance es general: generación de metas, selección de planes y control de
+ejecución, todos deterministas sobre creencias de estado concreto.
 
-Los **cinco incrementos** que agrega encima, ninguno un reemplazo:
+Sobre esa inspiración, **cinco cosas son propias de este trabajo**:
 
 1. **La procedencia pasa de trazabilidad a admisibilidad** — un retículo tipado con semántica de
    admisión, donde una afirmación elicitada es *inadmisible* para una acción irreversible. El
@@ -254,6 +265,14 @@ El motor decide en cuatro pasos, y los dos primeros no gastan un token:
 
 Cada decisión deja un registro `EXPLAIN` con la creencia que la disparó y su procedencia. El LLM
 emite proposiciones; **jamás maneja flujo de control ni decide compuertas**.
+
+> **Cómo se implementa una política así, a modo de ejemplo.** Una política de control que es
+> «tabla de condiciones sobre features, versionada y firmada, ejecutada como código» tiene una
+> implementación natural en un motor de *policy-as-code* —Open Policy Agent con reglas en Rego, o
+> equivalente—: las reglas quedan como artefacto de texto revisable, la evaluación es
+> determinista y el motor devuelve permitir/denegar con la regla que decidió. **Es un ejemplo de
+> realización en producto, no parte de lo medido**: nada de este paper corre sobre OPA, y la
+> capa de decisión no depende de ningún motor externo.
 
 **Qué es plástico: el sistema aprende con los pesos del sensor congelados.** El sensor tiene
 los pesos congelados: no aprende de este despliegue y dos llamadas idénticas son independientes. Y sin embargo el sistema cambia de comportamiento con la experiencia, por un
@@ -701,8 +720,8 @@ conviene mide la estructura equivocada. Ninguna de las dos correcciones cuesta u
 Los trabajos se identifican por su identificador persistente. Los marcados con **★** se leyeron
 completos en la fecha indicada; de los demás se verificó lo que este paper les atribuye.
 
-**★ MINERVA/HADD.** *Arquitectura de cognición determinista sobre creencias tipadas.*
-Zenodo 10.5281/zenodo.20003407 (leído 2026-08-26). Y su compuerta epistémica de admisión (EVR):
+**★ Jaime y Errecalde (2026). MINERVA/HADD.** *Arquitectura de cognición determinista sobre
+creencias tipadas.* Zenodo 10.5281/zenodo.20003407 (leído 2026-08-26). Y su compuerta epistémica de admisión (EVR):
 Zenodo 10.5281/zenodo.19791686. **Es la base de la que §3 toma sus invariantes (§2).**
 
 **★ Select-then-Solve.** arXiv:2604.06753 (leído 2026-08-26). Selección de paradigma por tarea
