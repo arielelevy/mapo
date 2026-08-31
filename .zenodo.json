@@ -1,0 +1,70 @@
+{
+  "title": "Hardness Over Hope: Policy-as-Code and Deterministic Governance in LLM Agent Orchestration",
+  "upload_type": "publication",
+  "publication_type": "preprint",
+  "language": "spa",
+  "version": "2.0",
+  "creators": [
+    {
+      "name": "Levy, Ariel Edgardo",
+      "orcid": "0009-0007-5426-9864",
+      "affiliation": "Independent Researcher"
+    }
+  ],
+  "license": "cc-by-4.0",
+  "access_right": "open",
+  "keywords": [
+    "LLM agents",
+    "policy-as-code",
+    "deterministic control plane",
+    "variance confinement",
+    "provenance",
+    "selective prediction",
+    "abstention",
+    "agent evaluation",
+    "reproducibility",
+    "retrieval-augmented generation",
+    "neuro-symbolic governance"
+  ],
+  "description": "<p><strong>An agent harness inherits the probabilistic character of the component it wraps &mdash; and so do the guards built to contain it.</strong> A hallucination checker implemented as another model call has the same property it was meant to remove: checking with the material you distrust yields a second estimate correlated with the first, not a guarantee. Stacking instances of the component can raise a probability; it cannot produce a property.</p><p>This work puts the control plane in code and leaves the LLM as a typed sensor: the model is asked what the material says, and what it returns is typed as propositions that enter a belief base, each carrying the unit it came from. A deterministic and plastic engine, not the generated text, decides the flow. The guarantee has a precise form &mdash; <em>same belief base &rArr; same decision</em> &mdash; and it is verified by repetition, never <em>same prompt &rArr; same response</em>, which no LLM can offer. The policy of control <em>is</em> code: a signed, versioned table of conditions over features, consolidated offline with an anti-regression guard.</p><p>Measured over 78 tasks &times; 12 paradigms &times; 3 replicates, 121.4M tokens, zero infrastructure errors, no LLM judge, with the grader audited over 567 zero-utility answers:</p><ul><li><strong>Variance confinement, defined and measured.</strong> An agent confines its variance when no branch of its trajectory depends on the sensor output; Proposition 1 proves that every discrepancy between replicates then has a responsible node, which is what makes it debuggable. Between <strong>17% and 34%</strong> of cells return different answers at temperature zero with a fixed prompt and seed; absorbing four branch points takes one paradigm from <strong>0.33 to 0.89</strong> on the hardest cell, and its replicates converge.</li><li><strong>A verifier with neither oracle nor judge.</strong> Agreement between paradigms predicts correctness with full precision from four matches, over <strong>180 of 180</strong> cells, replicated on a second model family against a criterion registered before the run. It moves credence, never provenance, so it does not authorize an irreversible action.</li><li><strong>A negative result with mechanism.</strong> The task&times;paradigm interaction is <strong>48% of explained variance</strong> (39% of total) at signal-to-noise 5.30, and the net routing prize is between <strong>&minus;0.019 and &minus;0.034</strong> across three held-out strata. Large <em>var(&gamma;)</em> is not a large routing prize: the interaction lives among the paradigms nobody would choose. Reporting interaction variance as evidence that routing pays measures the wrong structure.</li><li><strong>Capabilities as a learnable abstraction.</strong> Ten capabilities declared from code predict an unseen paradigm better than paradigm identity does, even when identity is allowed to see the answer.</li></ul><p><strong>Scope, stated plainly.</strong> The design comes from production work on forensic document analysis. The measurements are on a synthetic corpus whose ground truth is exact and independently re-derived from the documents; the limitations section states what that licenses and what it does not, including one branch of the paper's own partition that this setup structurally cannot exercise. The architecture is inspired by MINERVA/HADD (Jaime and Errecalde, 2026), and the related-work section declares that debt piece by piece.</p><p><strong>Two files.</strong> A conference-length version (16 pages, 4 figures, 2 tables) and the complete record (70+ pages, 14 figures, 3 algorithms, per-cell data). The paper is written in Spanish; this abstract is in English.</p>",
+  "notes": "Written in Spanish. Two theorems and one proposition are machine-checked over synthetic distributions with known answers (573 assertions across two suites). Every empirical claim is reported with its denominator and its per-cell noise floor.",
+  "related_identifiers": [
+    {
+      "identifier": "10.5281/zenodo.20003407",
+      "relation": "references",
+      "resource_type": "publication-preprint",
+      "scheme": "doi"
+    },
+    {
+      "identifier": "10.5281/zenodo.19791686",
+      "relation": "references",
+      "resource_type": "publication-preprint",
+      "scheme": "doi"
+    },
+    {
+      "identifier": "arXiv:2604.06753",
+      "relation": "references",
+      "scheme": "arxiv"
+    },
+    {
+      "identifier": "arXiv:2511.17673",
+      "relation": "references",
+      "scheme": "arxiv"
+    },
+    {
+      "identifier": "arXiv:2605.09487",
+      "relation": "references",
+      "scheme": "arxiv"
+    },
+    {
+      "identifier": "arXiv:2606.31422",
+      "relation": "references",
+      "scheme": "arxiv"
+    },
+    {
+      "identifier": "arXiv:2607.01236",
+      "relation": "references",
+      "scheme": "arxiv"
+    }
+  ]
+}

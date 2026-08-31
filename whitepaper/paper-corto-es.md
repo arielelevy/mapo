@@ -1,6 +1,6 @@
-# Confinamiento de varianza en agentes LLM
+# Hardness Over Hope: Policy-as-Code and Deterministic Governance in LLM Agent Orchestration
 
-## Un plano de control determinista y plástico sobre un sensor estocástico
+## Confinamiento de varianza en agentes LLM mediante un plano de control determinista y plástico
 
 **Versión breve — 2026-08-31** · **Autor**: Ariel Edgardo Levy
 
@@ -266,13 +266,10 @@ El motor decide en cuatro pasos, y los dos primeros no gastan un token:
 Cada decisión deja un registro `EXPLAIN` con la creencia que la disparó y su procedencia. El LLM
 emite proposiciones; **jamás maneja flujo de control ni decide compuertas**.
 
-> **Cómo se implementa una política así, a modo de ejemplo.** Una política de control que es
-> «tabla de condiciones sobre features, versionada y firmada, ejecutada como código» tiene una
-> implementación natural en un motor de *policy-as-code* —Open Policy Agent con reglas en Rego, o
-> equivalente—: las reglas quedan como artefacto de texto revisable, la evaluación es
-> determinista y el motor devuelve permitir/denegar con la regla que decidió. **Es un ejemplo de
-> realización en producto, no parte de lo medido**: nada de este paper corre sobre OPA, y la
-> capa de decisión no depende de ningún motor externo.
+> **La política de control es código**: una tabla de condiciones sobre features, versionada,
+> firmada y evaluada de forma determinista. Un motor de *policy-as-code* —Open Policy Agent con
+> reglas en Rego, o equivalente— es una realización posible de esa tabla, y no es la que este
+> trabajo corre: la capa de decisión no depende de ningún motor externo.
 
 **Qué es plástico: el sistema aprende con los pesos del sensor congelados.** El sensor tiene
 los pesos congelados: no aprende de este despliegue y dos llamadas idénticas son independientes. Y sin embargo el sistema cambia de comportamiento con la experiencia, por un
