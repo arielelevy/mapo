@@ -1,0 +1,13 @@
+/* ── maqueta densa: versión de conferencia ────────────────────────────── */
+@page { size: A4; margin: 17mm 16mm 17mm 16mm; }
+body { font-size: 10.3pt; line-height: 1.47; }
+h1 { font-size: 18pt; margin: 17pt 0 8pt; padding-bottom: 5pt;
+     page-break-before: auto; }
+h2 { font-size: 13.2pt; margin: 15pt 0 6pt; }
+h3 { font-size: 11.2pt; margin: 12pt 0 5pt; }
+p  { margin: 0 0 7pt; }
+pre code { font-size: 8.5pt; line-height: 1.38; }
+table { margin: 8pt 0 11pt; font-size: 8.9pt; }
+figure { margin: 11pt 0 13pt; }
+figure svg { max-width: 84%; }
+hr { margin: 12pt 0; }

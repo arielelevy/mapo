@@ -61,10 +61,11 @@ blockquote p:last-child { margin-bottom: 0; }
 ul, ol { margin: 0 0 9pt; padding-left: 20pt; }
 li { margin-bottom: 3pt; }
 figure { margin: 12pt 0 14pt; text-align: center; page-break-inside: avoid; }
-figure svg { max-width: 100%; height: auto; }
+figure svg { max-width: 82%; height: auto; }
 figcaption { font-size: 8.8pt; color: #6b7178; margin-top: 4pt; font-style: italic; }
 a { color: #2c5c8f; text-decoration: none; }
 hr { border: none; border-top: 1px solid #e4e6ea; margin: 16pt 0; }
+/*__DENSO__*/
 """
 
 _EN_LINEA = [
@@ -220,8 +221,12 @@ def convertir(md: str, base: Path) -> str:
 
 def main() -> None:
     base = Path(__file__).resolve().parent
-    fuente = base / (sys.argv[1] if len(sys.argv) > 1 else "paper-es.md")
-    destino = base / (sys.argv[2] if len(sys.argv) > 2 else fuente.stem + ".pdf")
+    args = [a for a in sys.argv[1:] if a != "--denso"]
+    denso = "--denso" in sys.argv
+    extra = (base / "_denso.css").read_text(encoding="utf-8") if denso else ""
+    css = CSS.replace("/*__DENSO__*/", extra)
+    fuente = base / (args[0] if args else "paper-es.md")
+    destino = base / (args[1] if len(args) > 1 else fuente.stem + ".pdf")
     md = fuente.read_text(encoding="utf-8")
     # `md.count("![")` y no un regex: dentro de una f-string el `\[` se escapa dos veces y
     # la clase de caracteres queda abierta. Contar una subcadena no tiene esa trampa.
@@ -229,7 +234,7 @@ def main() -> None:
 
     cuerpo = convertir(md, base)
     doc = (f'<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">'
-           f"<title>{html.escape(fuente.stem)}</title><style>{CSS}</style></head>"
+           f"<title>{html.escape(fuente.stem)}</title><style>{css}</style></head>"
            f"<body>{cuerpo}</body></html>")
 
     tmp = Path(tempfile.gettempdir()) / f"{fuente.stem}.html"
