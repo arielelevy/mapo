@@ -1492,6 +1492,59 @@ separate — where reading everything is impossible and exhaustive coverage cann
 This section closes the corpus. Twelve paradigms × 78 tasks × 3 replicates, one model, the
 same conditions throughout. No infrastructure failures.
 
+## 7.9 The twelve paradigms, in one table
+
+The sections that follow measure each arm from a different angle — coverage, degradation with
+width, reliability, latency, delegated decisions — and each has its own table. This one joins
+them, because **five tables nobody cross-references are less useful than one that declares its
+denominators**.
+
+| brazo | aplica | u | u × aplica | pass^3 | tok/celda | USD/1k celdas | serie | ley de costo |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| **`react`** | 100% | **0.850** | **0.850** | **0.734** | 108,137 | 22 | **1.35 s** | vueltas |
+| `dag_strategy` | 100% | 0.830 | 0.830 | 0.703 | 105,293 | 22 | 2.87 s | vueltas |
+| `reflection` | 100% | 0.808 | 0.808 | 0.688 | 133,574 | 27 | 1.76 s | vueltas |
+| **`rewoo`** | 100% | 0.678 | 0.678 | 0.531 | **10,840** | **2** | **0.77 s** | estructural |
+| `supervisor` | 100% | 0.591 | 0.591 | 0.406 | 64,079 | 13 | 2.66 s | vueltas |
+| `gist_reader` | 100% | 0.584 | 0.584 | 0.516 | 23,075 | 5 | 0.91 s | vueltas |
+| `handoff` | 96% | 0.583 | 0.557 | 0.438 | 131,310 | 27 | 2.04 s | alcance |
+| `pointer_chase` | 96% | 0.515 | 0.492 | 0.359 | 9,787 | 2 | 1.38 s | vueltas |
+| `graph_traverse` | 56% | 0.511 | 0.288 | — | 21,356 | 4 | — | estructural |
+| `streaming_scan` | 12% | 0.750 | 0.090 | — | 26,380 | 5 | — | estructural |
+| `extract_compute` | 12% | 0.583 | 0.070 | — | 26,184 | 5 | — | estructural |
+| **`direct`** | **6%** | **0.917** | 0.055 | — | 22,822 | 5 | — | estructural |
+
+**There are two denominators.** `aplica`, `u`, `u × aplica`, `tok/celda` and `USD` come from
+the whole record: `aplica` is what fraction of the cells **offered** to that arm passes the
+arithmetic feasibility gate, and `u` averages only those that pass. `pass^3` and `serie` come
+from the **64-task × 8-arm** rectangle — 82% of those measured — because they require every
+arm to have run the same tasks with three replicates each; the four arms with no value are the
+ones feasibility prunes in nearly every cell. Every `u` uses `λ = 0`: pure quality, with cost
+in its own column.
+
+**Four things visible only with the columns side by side:**
+
+1. **`u` and `u × aplica` are two numbers and neither replaces the other.** `direct` is the
+   best in the roster where its mechanism runs — `0.917` — and contributes `0.055` over the
+   corpus because it runs in 6% of cells. It does not fail in the other 94%: it **does not
+   run**, and arithmetic decides that before the first token.
+2. **`pass^3` always sits below `u`, and the gap is not proportional.** `react` loses `0.116`
+   and `supervisor` `0.185`. That difference is variance living *inside* a cell, invisible to
+   any noise floor computed between arms.
+3. **The dollar column is not the token column rescaled.** Input and output are billed 6×
+   differently, and the arms differ in exactly that ratio — `handoff` and `reflection` cost the
+   same in dollars with 2,264 tokens per cell between them.
+4. **The margin is in the last column, not the first.** Between `react` and `rewoo` there is
+   `0.172` of utility, a factor of **11×** in cost and **1.8×** in serial latency. On utility
+   the arms separate by hundredths; on what they cost, by orders of magnitude.
+
+> **`pointer_chase` appears here with its campaign number.** The four corrections in §7.10.4 —
+> which take it from `0.33` to `0.89` on the coupled-chain cell — postdate this run and touch 3
+> of 78 tasks, so their effect on the corpus aggregate is inside the noise and **was not
+> propagated to this table**. We say so here rather than in a footnote because a table mixing
+> two versions of the same arm without declaring it is exactly the defect this paper audits
+> elsewhere.
+
 ### 7.9.1 An arm is measured twice, and the two numbers differ
 
 | arm | applies | u where it applies | u × coverage | tokens/cell |
@@ -1617,6 +1670,37 @@ In the widest band, `react` scores 0.81 at 108,137 tokens per cell and `rewoo` 0
 input — 96.4% to 100.9% depending on the arm, with output between 0% and 3.6% — which says
 that **paradigms do not differ in what they generate but in what they drag into the prompt**.
 That is the same claim the cost law makes, measured from another direction.
+
+### 7.9.6 The cost law, drawn
+
+![The cost law](figuras/ley-de-costo.svg)
+
+El paper afirma desde el principio que el costo de un bucle de herramientas crece como `N²`
+y la cobertura como `N`, porque **la conversación se reenvía entera en cada vuelta**. Hasta
+acá lo sostenían dos números sueltos —«≤2 llamadas dan 9.779 tokens, ≥8 dan 136.432»— y esos
+dos son compatibles con crecimiento lineal si uno no mira el resto.
+
+**Hacen falta dos paneles y no uno**, porque un total creciente no distingue «cada llamada
+cuesta lo mismo y hay más llamadas» de «cada llamada cuesta más». El panel derecho separa las
+dos: si no hubiera reenvío, **esas líneas serían planas**.
+
+| brazo | 3-5 llamadas | 11-12 llamadas | factor |
+|---|---:|---:|---:|
+| `dag_strategy` | 4.002 | 15.592 | **3,9×** |
+| `supervisor` | 6.052 | 12.910 | 2,1× |
+| `pointer_chase` | 1.544 | 4.107 | 2,7× |
+| `reflection` | 9.410 | 35.030 | 3,7× |
+
+**El panel derecho va POR BRAZO, y la primera versión de esta figura no.** Agregado sobre
+todos, el costo por llamada zigzaguea —7.411, 18.654, 29.528, 13.815, 19.113— porque distintos
+brazos dominan distintos conteos de llamadas y sus alcances difieren en un orden de magnitud:
+«más llamadas» y «qué brazo» quedan mezclados, y **el zigzag era la mezcla, no el fenómeno**.
+Condicionado por brazo el trazo sube monótono en los cuatro que tienen puntos suficientes.
+
+No se estima ningún exponente ni se reporta un `R²`: las curvas `N` y `N²` del panel izquierdo
+están ancladas en el primer punto para que el ojo compare, y el hallazgo es cualitativo. Con
+`n` desparejo por punto —de 26 a 540 filas— un exponente ajustado tendría más precisión
+aparente que evidencia.
 
 ## 7.10 Where it fails, and what fixes it
 
@@ -1932,6 +2016,225 @@ ours on a smaller panel gave `+0.008` of utility at 69% saving — a free lunch 
 disappeared once the record was complete**. The question "which paradigm gives the best
 answer" is exhausted in this corpus; the question "which is the cheapest one giving an
 indistinguishable answer" is not.
+
+## 7.12 What is learnable: capability, not paradigm identity
+
+`P15` was refuted by mapping question ontology → **paradigm name**: it lost `−0.087` against
+the best fixed arm. The previous section explains why that prize did not exist; this one
+proposes the missing link and **submits it to the test that can kill it**.
+
+    question ontology  →  capabilities it REQUIRES  →  arms that have them
+
+Ten capabilities declared **from code**, each with the measurement that justifies it and the
+site where it can be seen. The last four were uncovered by solving the coupled-chain cell, and
+none of them is visible from the control-flow taxonomy.
+
+**And the catalogue finds a gap without running anything**: no arm in the roster combines
+`COBERTURA_GARANTIZADA` with `ABSTIENE_SIN_PRUEBA`, which is exactly what an absence question
+requires. That is what declaring capabilities buys over measuring paradigms — it predicts about
+an arm that does not exist yet.
+
+### 7.12.1 The test is leave-one-ARM-out, not leave-one-task-out
+
+![The capability EDA](figuras/eda-capacidades.svg)
+
+The asymmetry is the point: **a model keyed on paradigm identity can say nothing about an arm
+it never saw** — it has no parameter for it, a structural limit rather than a fitting problem.
+One keyed on capabilities can, because a new arm brings its declared vector from the code.
+
+| model | MAE predicting the held-out arm |
+|---|---:|
+| global mean | 0.364 |
+| task difficulty alone | 0.257 |
+| **capabilities** | **0.233** |
+| arm identity *(seeing the held-out arm)* | 0.339 |
+
+Capabilities win **6 of 8 folds** and lower the error against task difficulty alone. The fourth
+row was meant as a ceiling and **is not one**: it does worse than capabilities **despite
+cheating**, because it ignores α — task difficulty, 41% of variance. Knowing which arm it is,
+without knowing which question it is, predicts poorly. That failure is part of the argument:
+**paradigm identity is not a good representation even when allowed to peek at the answer.**
+
+### 7.12.2 And it does not cross its null, so it stands as a suggestion
+
+The correct null is not the global mean: it is **shuffling capabilities between arms**. Same
+vectors, same number of features, same structure, assigned to the wrong arm. If the model with
+real capabilities cannot beat that, what it measures is the ability to **fit**, not to
+**transfer**.
+
+```
+MAE with REAL capabilities      0.2327
+MAE of the null (shuffled)      mean 0.2599 · p5 0.2299
+p = 0.065
+```
+
+**It does not cross.** It stands as a **suggestive, not established** result, and it must be
+said that way: eight arms are eight points, and at that `n` the test cannot decide. What would
+settle it is more arms, not more tasks — a concrete prediction about which run is worth doing.
+
+**And the table already carries its own counterexample.** `EXIGE` declares that a coupled chain
+requires `RESOLVER_REFERENCIA` and `LARGO_GOBERNADO_POR_CODIGO`, and under that rule the only
+candidate is `pointer_chase`. Yet `dag_strategy` scores `0.89` on that cell **with neither**: it
+gets there by another route, using `VERIFICA_Y_REPLANIFICA` to persist and `ABSTIENE_SIN_PRUEBA`
+to refuse when it did not arrive. `EXIGE` lacks a way to express **alternative routes** — today
+it is a conjunction, and reality admits "A and B, or else C and D". We leave it as a conjunction
+with the counterexample written down, because a table that patches itself to hide its own
+counterexample stops being falsifiable.
+
+## 7.13 Emergent knowledge: consensus between paradigms verifies
+
+This result was not sought. The bench runs eight arms on the same question and always compared
+them **against the oracle**, never **against each other** — and the record held eight answers
+per task that nobody had looked at together.
+
+    Does agreement between paradigms predict correctness, with no oracle and no judge?
+
+### 7.13.1 The curve
+
+| k arms agree | cells | P(the answer is correct) |
+|---:|---:|---:|
+| 0 | 208 | 0.424 |
+| 1 | 36 | 0.389 |
+| 2 | 24 | 0.600 |
+| 3 | 64 | 0.812 |
+| **4** | 20 | **1.000** |
+| 5 | 42 | **1.000** |
+| 6 | 70 | **1.000** |
+| 7 | 48 | **1.000** |
+
+**180 of 180 cells correct at `k ≥ 4`**, on exact equality of the normalised string. And it is
+not a smooth slope: there is a **threshold** at 4.
+
+### 7.13.2 Three controls, and one goes against us
+
+**Does agreement merely mark "easy task"?** No. Across the **same 27 tasks** where a consensus
+exists:
+
+```
+arms INSIDE the consensus            n=180   u = 1.000
+arms OUTSIDE, on those SAME tasks    n= 36   u = 0.100
+```
+
+On the same question, being inside or outside the consensus is the whole difference: it
+**discriminates within the task**, not between tasks.
+
+**Is it an artefact of comparing short strings?** Also no. It holds across all four declared
+cardinalities, including enumerative (1.000 on n=28 with consensus, 0.555 without).
+
+**Does it make things cheaper?** **No, and we report it anyway.** It is the obvious commercial
+reading — a cheap committee, escalating only on disagreement — and all 56 two- and three-arm
+cascades were tested: **none saves**. The committee is paid on every task and the expensive arm
+is still paid on most, so the total rises. **Consensus is not a cheap router.**
+
+### 7.13.3 What it is, and what it does NOT authorise
+
+It is a **total-precision, partial-coverage correctness detector** — 27 of 64 tasks — which is
+exactly the shape of an abstention rule: it does not say which arm to use, it says **when
+verification is unnecessary**.
+
+**And there is a temptation to cut off at the root.** The natural reading is "if four arms
+agree, the belief moves up a level". **No.** The provenance ladder — `ASSUMED < ELICITED <
+OBSERVED < COMPUTED` — classifies **how something was obtained**, not **how much confidence** it
+deserves. Four agreeing paradigms are still the model talking: **voting does not touch the
+document**, so nothing can be promoted to `OBSERVED` by consensus. Allowing it would be exactly
+the failure the ladder exists to prevent — a majority of the sensor promoting itself to the rank
+of a computed fact.
+
+What it does authorise is moving **credence** within `ELICITED`, which in the decision layer is
+a separate field from provenance. And there the table above **is the calibration curve**:
+`0.42 · 0.39 · 0.60 · 0.81 · 1.00`. The belief module declares as an open risk that "elicited
+credences may be miscalibrated… until calibration data exists". This is calibration data.
+
+> **provenance = where it came from · credence = how much it is believed.** Consensus moves the
+> second and cannot touch the first, and confusing them turns a useful detector into a licence
+> for the model to accredit itself.
+
+### 7.13.4 The missing experiment, and why the number is not enough without it
+
+**The eight arms are not independent**: they share model, corpus and retriever. Their agreement
+is diversity of **procedure**, not statistically independent evidence, so none of this can be
+read as a vote of independent experts. What was measured is that **different control
+trajectories converge when they are right and diverge when they are not**.
+
+Whether that is the mechanism — rather than an artefact of sharing the model — is what remains
+to be shown. The experiment that would decide it is repeating the measurement with a different
+model underneath, and **it has not been run**. Until then this is a finding about this corpus
+with this model, not a property of paradigms.
+
+## 7.15 Out of sample: the held-out set's first stratum
+
+Everything above is **in sample**. The product's declared success criterion is different — a
+positive net oracle gap on data the system never saw — and until this draft **it did not exist
+as a valid measurement**: the only run of the held-out corpus sat in an archive predating the
+tokeniser change, with no `analyzer`, no fingerprint and no region vocabulary stamped, i.e. not
+replayable.
+
+**This was fixed by running the held-out set through the SAME code path as the campaign.** The
+runner took a corpus argument instead of hard-coding one, and that matters more than it looks:
+the previous script ran 5 arms × 4 tasks × 2 replicates with different logic. **A held-out set
+measured with a different harness does not measure generalisation — it measures two harnesses.**
+
+### 7.15.1 What ran, and what it decided
+
+First stratum: **14 tasks × 12 paradigms × 3 replicates**, 500 rows, **16.0M tokens**, 75
+minutes, zero infrastructure errors. The rectangle lands at **12 tasks × 8 arms** — 86% of
+those measured — under the same mechanical criterion as the rest of the paper.
+
+| arm | u |
+|---|---:|
+| `gist_reader` | 0.833 |
+| `dag_strategy` | 0.806 |
+| `react` | 0.806 |
+| `supervisor` | 0.806 |
+| `reflection` | 0.778 |
+| `pointer_chase` | 0.750 |
+| `rewoo` | 0.648 |
+| `handoff` | 0.472 |
+
+```
+per-task oracle        0.972
+best fixed arm         0.833
+observed gap          +0.139
+noise floor (p95)     +0.167
+NET gap               −0.028
+```
+
+**The gap sits below its own noise floor.** Out of sample, routing on quality has no prize
+either — the same verdict as §7.11 (`−0.008` in sample), reached by an independent path on a
+corpus with a different cell mix.
+
+### 7.15.2 A reading we nearly published, and why it is wrong
+
+Looking only at the `w4` sub-stratum — 6 tasks — the best fixed arm came out as `gist_reader`
+at `0.944` against `react`'s `0.722`, and the tempting conclusion was that **"the best fixed
+paradigm is not stable across corpora"** — a strong, sellable claim.
+
+Over the full stratum's 12 tasks that reading collapses: the top four sit at
+`0.833 · 0.806 · 0.806 · 0.806`, **tied within noise**. The winner did not change: there is no
+winner. The difference between the two readings was looking at 6 tasks instead of 12, and the
+full stratum was available all along.
+
+> It is the same error this paper audits in others and has already made in its own record: **a
+> smaller panel does not give a weaker answer, it gives a different one.**
+
+### 7.15.3 What is missing, with its price
+
+The held-out set has three strata and only the first closed. The other two are planned and not
+run, declared with their cost so that running them is an explicit decision:
+
+| stratum | tasks | mean material | cells | tokens | cost | time |
+|---|---:|---:|---:|---:|---:|---:|
+| `base` + `w4` | 14 | 91k | 500 | **16.0M** | run | 75 min |
+| `w16` | 6 | 150k | 216 | ~11.2M | ~USD 2.25 | ~53 min |
+| `w48` | 6 | 451k | 216 | ~33.4M | ~USD 6.68 | ~159 min |
+
+**The third is not merely bigger**: all 6 `w48` tasks cross the long-context threshold, so they
+pay **double tariff on the whole request**. It is §7.7's cliff applied to our own run.
+
+**And §7.15.1's conclusion is bounded to one width.** §7.9.2 showed paradigms degrade very
+differently with material — from `−0.03` to `−0.49` depending on the arm — so a held-out set
+measured at a single width says nothing about the others. What this draft can sustain is "no
+net routing prize out of sample **in the narrow stratum**", and no more than that.
 
 
 # 8. Failure mechanisms

@@ -14,12 +14,30 @@ Destino: arXiv cs.LG (primario), cs.AI (cross-list).
 
 ## Resumen
 
-Este trabajo empezó preguntando **qué paradigma de orquestación conviene por tarea** y
-termina con una respuesta distinta a la que buscaba. Sobre un registro completo —78 tareas ×
-12 paradigmas × 3 réplicas, sin juez LLM y con el corrector auditado— **el ruteo por calidad
-no tiene premio neto**: `−0,008` contra el mejor paradigma fijo, y el mecanismo del fracaso
-es más informativo que el número. Lo que sí queda en pie, y es lo que el paper sostiene, son
-dos afirmaciones sobre **determinismo** y una sobre **qué es lo aprendible**.
+**Un arnés de agentes no tiene determinismo, y nadie se lo dio.** Un bucle de herramientas
+alrededor de un LLM no repite su trayectoria, no puede decir de dónde salió un número, y no
+sabe cuándo callarse. Este trabajo construye esas tres cosas, las mide, y cuantifica qué
+cuestan y qué compran.
+
+**El resultado central es que el determinismo se pierde y se recupera decisión por decisión.**
+`pass^k` —acertar en las `k` réplicas— cae entre `0,078` y `0,196` por paradigma, con **17% a
+34% de las celdas dando resultados distintos** a temperatura cero, semilla fija y la misma
+huella; ningún paradigma medido alcanza reproducibilidad por decisión mayor a `0,983`. Se
+recupera **sacándole decisiones de control al modelo y devolviéndolas al código**: cuatro
+correcciones estructurales —ninguna de fraseo— llevan un paradigma de `0,33` a `0,89` en la
+celda más difícil *y* hacen coincidir sus réplicas. La intervención decisiva se aísla sola:
+con la misma huella y los mismos resultados de búsqueda, dejar que el modelo elija el ancla de
+una caminata da `1,000 / 0,000 / 0,000`; que la elija el código da `1,000` en las tres.
+
+**Y la plasticidad que un agente puede aprender no está en el nombre del paradigma sino en sus
+capacidades.** Se propone la cadena `ontología de la pregunta → capacidades exigidas → brazos
+que las tienen`, con diez capacidades declaradas desde el código; la prueba correcta es dejar
+un **brazo** afuera, no una tarea, porque un modelo con identidad de paradigma no tiene
+parámetro para un brazo que no vio. Medido, las capacidades predicen un brazo no visto mejor
+que la dificultad de la tarea sola (`MAE 0,233` contra `0,257`) y mejor que la identidad del
+brazo aunque ésta *vea* al brazo dejado afuera (`0,339`).
+
+Sobre eso, tres resultados que acotan qué se puede prometer.
 
 **Primero: la interacción existe, es enorme, y no es cobrable.** Descomponiendo
 `u = μ + α(tarea) + β(brazo) + γ + ε`, la interacción γ explica el **48%** de la varianza con
@@ -98,24 +116,48 @@ mandándola al índice equivocado. **La regla era correcta y la entrada estaba s
 
 # 1. Introducción
 
-## 1.1 Un premio medido que nadie cobra
+## 1.1 Tres cosas que un arnés de agentes no tiene
 
-El *paradigma* de un agente LLM — la estructura de control que envuelve al modelo: una
-llamada única, un bucle de razonamiento, una descomposición, un grafo de
-verificar-replanificar — normalmente se elige una vez en tiempo de diseño y se congela en
-el código. Trabajo reciente mide lo que eso cuesta. Sobre seis paradigmas, cuatro modelos
-frontera y diez benchmarks (~18.000 corridas), la selección oráculo por tarea supera al
-mejor paradigma fijo por **17,1pp** en promedio, con oscilaciones individuales de hasta
-+44pp y −15pp según el emparejamiento [Select-then-Solve, arXiv:2604.06753].
+Un *arnés* de agentes es la estructura de control que envuelve al modelo: una llamada única,
+un bucle de razonamiento, una descomposición, un grafo de verificar-replanificar. Se elige una
+vez en tiempo de diseño y se congela en el código, y sobre él se construyen sistemas que
+firman números, disparan acciones y contestan a usuarios. **Le faltan tres propiedades que
+cualquier otra capa de un sistema de producción da por sentadas.**
 
-El mismo trabajo muestra que el premio no se está cobrando. Un ruteador entrenado sobre
-embeddings recupera aproximadamente un cuarto de la brecha. El auto-ruteo zero-shot —
-pedirle al modelo que elija su propio paradigma — recupera valor *negativo*: dos modelos
-caen por debajo de sus propias líneas base de paradigma único, uno hasta 27,5%.
+**No repite.** Un bucle de herramientas con temperatura cero y semilla fija no reproduce su
+trayectoria. Lo medimos: entre el **17% y el 34%** de las celdas cambian de resultado entre
+réplicas, con la misma huella, según el paradigma (§7.10.2). No es el modelo siendo aleatorio
+— es que cada decisión de control delegada al sensor multiplica la varianza de la anterior.
 
-Entonces: el premio es grande, el mejor intento publicado captura una minoría, y el
-intento ingenuo es peor que no intentar. Ese patrón invita a concluir que hacen falta
-mejores selectores. Nosotros sostenemos que invita a otra conclusión.
+**No dice de dónde.** Una respuesta correcta y una inventada salen del mismo lugar y con la
+misma cara. Sin una base de creencias tipada no hay forma de exigir que un número emitido esté
+implicado por evidencia de cierto nivel, y la promesa se degrada a «el modelo suele acertar».
+
+**No sabe callarse.** En la celda más difícil de nuestro corpus, el paradigma que gana lo hace
+con **12 correctas, 3 abstenciones y cero respuestas equivocadas**; los demás contestan igual y
+devuelven un número plausible y falso (§7.10.3). El banco puntúa las dos con `0,000`, que es
+correcto para medir utilidad y ciego justo sobre el eje que un sistema de producción necesita.
+
+Este trabajo construye las tres, las mide, y dice qué cuestan. **La tesis es que las tres se
+consiguen en el mismo lugar**: moviendo decisiones de flujo de control desde el modelo hacia el
+código, sobre señales del entorno que son contables y verificables.
+
+### Y de paso, una expectativa que el registro no confirma
+
+La motivación habitual para trabajar sobre arneses es que **elegir el paradigma por tarea
+paga**. Trabajo reciente lo mide sobre seis paradigmas, cuatro modelos frontera y diez
+benchmarks (~18.000 corridas): la selección oráculo por tarea supera al mejor paradigma fijo
+por **17,1pp** en promedio [Select-then-Solve, arXiv:2604.06753]. El mismo trabajo muestra que
+el premio no se cobra —un ruteador sobre embeddings recupera un cuarto de la brecha, y el
+auto-ruteo zero-shot recupera valor *negativo*—, y eso invita a concluir que hacen falta
+mejores selectores.
+
+**Nuestro registro dice otra cosa, y es un resultado y no una limitación.** Sobre un corpus
+propio con 78 tareas × 12 paradigmas × 3 réplicas, el premio **neto** del ruteo por calidad es
+`−0,008` contra el mejor fijo, y §7.11 muestra el mecanismo: la interacción tarea×paradigma
+existe y es enorme —48% de la varianza— pero **vive entre los paradigmas que nadie elegiría**.
+Restringida a los que competirían, se desvanece. No hacen falta mejores selectores: hace falta
+medir el premio con el estimador correcto antes de construir uno.
 
 ## 1.2 Tres afirmaciones que preceden al problema de aprendizaje
 
@@ -1532,6 +1574,59 @@ toda conclusión anterior estaba acotada al régimen estrecho sin decirlo.
 Esta sección cierra el corpus. Doce paradigmas × 78 tareas × 3 réplicas, un modelo, mismas
 condiciones. Sin errores de infraestructura.
 
+## 7.9 Los doce paradigmas, en una tabla
+
+Las secciones que siguen miden a cada brazo por un lado distinto —cobertura, degradación con
+el ancho, fiabilidad, latencia, decisiones delegadas— y cada una tiene su tabla. Ésta las
+junta, porque **cinco tablas que nadie cruza son menos útiles que una que declara sus
+denominadores**.
+
+| brazo | aplica | u | u × aplica | pass^3 | tok/celda | USD/1k celdas | serie | ley de costo |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| **`react`** | 100% | **0,850** | **0,850** | **0,734** | 108.137 | 22 | **1,35 s** | vueltas |
+| `dag_strategy` | 100% | 0,830 | 0,830 | 0,703 | 105.293 | 22 | 2,87 s | vueltas |
+| `reflection` | 100% | 0,808 | 0,808 | 0,688 | 133.574 | 27 | 1,76 s | vueltas |
+| **`rewoo`** | 100% | 0,678 | 0,678 | 0,531 | **10.840** | **2** | **0,77 s** | estructural |
+| `supervisor` | 100% | 0,591 | 0,591 | 0,406 | 64.079 | 13 | 2,66 s | vueltas |
+| `gist_reader` | 100% | 0,584 | 0,584 | 0,516 | 23.075 | 5 | 0,91 s | vueltas |
+| `handoff` | 96% | 0,583 | 0,557 | 0,438 | 131.310 | 27 | 2,04 s | alcance |
+| `pointer_chase` | 96% | 0,515 | 0,492 | 0,359 | 9.787 | 2 | 1,38 s | vueltas |
+| `graph_traverse` | 56% | 0,511 | 0,288 | — | 21.356 | 4 | — | estructural |
+| `streaming_scan` | 12% | 0,750 | 0,090 | — | 26.380 | 5 | — | estructural |
+| `extract_compute` | 12% | 0,583 | 0,070 | — | 26.184 | 5 | — | estructural |
+| **`direct`** | **6%** | **0,917** | 0,055 | — | 22.822 | 5 | — | estructural |
+
+**Los denominadores, y son dos.** `aplica`, `u`, `u × aplica`, `tok/celda` y `USD` salen del
+registro entero: `aplica` es qué fracción de las celdas **ofrecidas** a ese brazo pasa el
+portón aritmético de factibilidad, y `u` promedia sólo las que pasan. `pass^3` y `serie` salen
+del rectángulo de **64 tareas × 8 brazos** —el 82% de las medidas— porque exigen que todos los
+brazos hayan corrido las mismas tareas con tres réplicas cada una; los cuatro brazos sin valor
+son los que la factibilidad poda en casi todas las celdas. Toda `u` usa `λ = 0`: calidad pura,
+con el costo en su propia columna.
+
+**Cuatro cosas que sólo se ven con las columnas juntas:**
+
+1. **`u` y `u × aplica` son dos números y ninguno reemplaza al otro.** `direct` es el mejor
+   del plantel donde su mecanismo corre —`0,917`— y aporta `0,055` sobre el corpus porque
+   corre en el 6% de las celdas. No falla en el 94% restante: **no corre**, y eso lo decide la
+   aritmética antes del primer token.
+2. **`pass^3` siempre está por debajo de `u`, y la distancia no es proporcional.** `react`
+   pierde `0,116` y `supervisor` `0,185`. Esa diferencia es varianza que vive *dentro* de una
+   celda, invisible para cualquier piso de ruido calculado entre brazos.
+3. **La columna de dólares no es la de tokens reescalada.** Entrada y salida se cobran 6×
+   distinto, y los brazos se diferencian justo en esa proporción — `handoff` y `reflection`
+   cuestan lo mismo en dólares con 2.264 tokens de diferencia por celda.
+4. **El margen está en la última columna, no en la primera.** Entre `react` y `rewoo` hay
+   `0,172` de utilidad y un factor **11×** de costo y **1,8×** de latencia serial. En utilidad
+   los brazos se separan por centésimas; en lo que cuestan, por órdenes de magnitud.
+
+> **`pointer_chase` figura acá con su número de campaña.** Las cuatro correcciones de §7.10.4
+> —que lo llevan de `0,33` a `0,89` en la celda de cadenas acopladas— son posteriores a esta
+> corrida y tocan 3 de las 78 tareas, así que su efecto sobre el agregado del corpus está
+> dentro del ruido y **no se propagó a esta tabla**. Se dice acá y no al pie porque una tabla
+> que mezcla dos versiones del mismo brazo sin declararlo es exactamente el defecto que este
+> paper audita en otras partes.
+
 ### 7.9.1 Un brazo se mide dos veces, y las dos son distintas
 
 | brazo | aplica | u donde aplica | u × cobertura | tokens/celda |
@@ -1662,6 +1757,37 @@ misma afirmación que la ley de costo, medida por otro lado.
 > del mismo total, así que por encima de 100% no hay una tercera categoría: **es un defecto
 > de contabilidad de ese brazo**, no una propiedad medida. Se excluye del rango y queda
 > anotado como deuda, no como hallazgo.
+
+### 7.9.6 La ley de costo, dibujada
+
+![La ley de costo](figuras/ley-de-costo.svg)
+
+El paper afirma desde el principio que el costo de un bucle de herramientas crece como `N²`
+y la cobertura como `N`, porque **la conversación se reenvía entera en cada vuelta**. Hasta
+acá lo sostenían dos números sueltos —«≤2 llamadas dan 9.779 tokens, ≥8 dan 136.432»— y esos
+dos son compatibles con crecimiento lineal si uno no mira el resto.
+
+**Hacen falta dos paneles y no uno**, porque un total creciente no distingue «cada llamada
+cuesta lo mismo y hay más llamadas» de «cada llamada cuesta más». El panel derecho separa las
+dos: si no hubiera reenvío, **esas líneas serían planas**.
+
+| brazo | 3-5 llamadas | 11-12 llamadas | factor |
+|---|---:|---:|---:|
+| `dag_strategy` | 4.002 | 15.592 | **3,9×** |
+| `supervisor` | 6.052 | 12.910 | 2,1× |
+| `pointer_chase` | 1.544 | 4.107 | 2,7× |
+| `reflection` | 9.410 | 35.030 | 3,7× |
+
+**El panel derecho va POR BRAZO, y la primera versión de esta figura no.** Agregado sobre
+todos, el costo por llamada zigzaguea —7.411, 18.654, 29.528, 13.815, 19.113— porque distintos
+brazos dominan distintos conteos de llamadas y sus alcances difieren en un orden de magnitud:
+«más llamadas» y «qué brazo» quedan mezclados, y **el zigzag era la mezcla, no el fenómeno**.
+Condicionado por brazo el trazo sube monótono en los cuatro que tienen puntos suficientes.
+
+No se estima ningún exponente ni se reporta un `R²`: las curvas `N` y `N²` del panel izquierdo
+están ancladas en el primer punto para que el ojo compare, y el hallazgo es cualitativo. Con
+`n` desparejo por punto —de 26 a 540 filas— un exponente ajustado tendría más precisión
+aparente que evidencia.
 
 ## 7.10 Dónde falla, y qué lo arregla
 
@@ -2009,6 +2135,315 @@ panel más chico daba `+0,008` de utilidad con 69% de ahorro —un almuerzo grat
 registro completo desapareció**. La pregunta «qué paradigma da la mejor respuesta» está
 agotada en este corpus; la pregunta «cuál es el más barato que da una respuesta
 indistinguible» no.
+
+## 7.12 Qué es aprendible: la capacidad, no la identidad del paradigma
+
+`P15` se refutó mapeando ontología de la pregunta → **nombre de paradigma**: perdió `−0,087`
+contra el mejor fijo. La sección anterior explica por qué ese premio no existía; ésta propone
+el eslabón que faltaba y **lo somete a la prueba que lo puede matar**.
+
+    ontología de la pregunta  →  capacidades que EXIGE  →  brazos que las tienen
+
+Diez capacidades declaradas **desde el código**, cada una con la medición que la justifica y
+con el sitio donde se ve: `PAYLOAD_COMPLETO`, `ADAPTA`, `COSTO_NO_ESCALA_CON_ALCANCE`,
+`LECTURA_SIN_PERDIDA`, `COBERTURA_GARANTIZADA`, `VERIFICA_Y_REPLANIFICA`,
+`RESOLVER_REFERENCIA`, `LARGO_GOBERNADO_POR_CODIGO`, `ELIGE_INDICE_POR_CONSULTA` y
+`ABSTIENE_SIN_PRUEBA`. Las cuatro últimas las destapó resolver la celda de cadenas acopladas,
+y ninguna es visible desde la taxonomía de control de flujo.
+
+**Y el catálogo encuentra un hueco sin correr nada**: ningún brazo del plantel junta
+`COBERTURA_GARANTIZADA` con `ABSTIENE_SIN_PRUEBA`, que es exactamente lo que una pregunta de
+ausencia exige. Eso es para lo que sirve declarar capacidades en vez de medir paradigmas —
+predice sobre un brazo que todavía no existe.
+
+### 7.12.1 La prueba es dejar un BRAZO afuera, no una tarea
+
+![El EDA de capacidades](figuras/eda-capacidades.svg)
+
+La asimetría es el punto: **un modelo con la identidad del paradigma no puede decir nada de un
+brazo que no vio** —no tiene parámetro para él, y es un límite estructural, no de ajuste—.
+Uno con capacidades sí, porque el brazo nuevo trae su vector declarado del código.
+
+| modelo | MAE al predecir el brazo dejado afuera |
+|---|---:|
+| media global | 0,364 |
+| dificultad de la tarea sola | 0,257 |
+| **capacidades** | **0,233** |
+| identidad del brazo *(viendo al brazo dejado afuera)* | 0,339 |
+
+Las capacidades ganan **6 de 8 pliegues** y bajan el error contra la dificultad de la tarea
+sola. La cuarta fila la puse creyendo que sería un techo y **no lo es**: sale peor que
+capacidades **pese a hacer trampa**, porque ignora α —la dificultad de la tarea, el 41% de la
+varianza—. Saber qué brazo es, sin saber qué pregunta es, predice mal. Ese fracaso es parte
+del argumento: **la identidad del paradigma no es una buena representación ni cuando se la
+deja mirar la respuesta.**
+
+### 7.12.2 Y no cruza su nulo, así que queda como sugerencia
+
+El nulo correcto no es la media global: es **barajar las capacidades entre brazos**. Mismos
+vectores, mismo número de rasgos, misma estructura, asignados al brazo equivocado. Si el
+modelo con capacidades reales no le gana a ése, lo que mide es la capacidad de **ajustar**, no
+la de **transferir**.
+
+```
+MAE con capacidades REALES      0,2327
+MAE del nulo (barajadas)        media 0,2599 · p5 0,2299
+p = 0,065
+```
+
+**No cruza.** Queda como resultado **sugestivo y no establecido**, y hay que decirlo así: ocho
+brazos son ocho puntos, y con esa `n` la prueba no puede decidir. Lo que la sentenciaría es
+más brazos, no más tareas — que es una predicción concreta sobre qué corrida vale la pena.
+
+**Y la tabla ya tiene su propio contraejemplo anotado.** `EXIGE` declara que una cadena
+acoplada pide `RESOLVER_REFERENCIA` y `LARGO_GOBERNADO_POR_CODIGO`, y bajo esa regla el único
+candidato es `pointer_chase`. Pero `dag_strategy` saca `0,89` en esa celda **sin ninguna de las
+dos**: llega por otra ruta, con `VERIFICA_Y_REPLANIFICA` para insistir y `ABSTIENE_SIN_PRUEBA`
+para no contestar cuando no llegó. A `EXIGE` le falta expresar **rutas alternativas** —hoy es
+una conjunción, y la realidad admite «A y B, o bien C y D»—. Se deja como conjunción y con el
+contraejemplo escrito, porque una tabla que se arregla sola para tapar su propio contraejemplo
+deja de ser falsable.
+
+## 7.13 Conocimiento emergente: el consenso entre paradigmas verifica
+
+Este resultado no se buscó. El banco corre ocho brazos sobre la misma pregunta y siempre los
+comparó **contra el oráculo**, nunca **entre sí** — y en el registro había ocho respuestas por
+tarea que nadie había mirado juntas.
+
+    ¿El acuerdo entre paradigmas predice la corrección, sin oráculo y sin juez?
+
+### 7.13.1 La curva
+
+| k brazos coinciden | celdas | P(la respuesta es correcta) |
+|---:|---:|---:|
+| 0 | 208 | 0,424 |
+| 1 | 36 | 0,389 |
+| 2 | 24 | 0,600 |
+| 3 | 64 | 0,812 |
+| **4** | 20 | **1,000** |
+| 5 | 42 | **1,000** |
+| 6 | 70 | **1,000** |
+| 7 | 48 | **1,000** |
+
+**180 de 180 celdas correctas con `k ≥ 4`**, sobre igualdad exacta de la cadena normalizada. Y
+no es una pendiente suave: hay un **umbral** en 4.
+
+### 7.13.2 Los tres controles, y uno sale en contra
+
+**¿El acuerdo sólo marca «tarea fácil»?** No. En las **mismas 27 tareas** donde existe
+consenso:
+
+```
+brazos DENTRO del consenso        n=180   u = 1,000
+brazos FUERA, en esas MISMAS tareas n= 36   u = 0,100
+```
+
+Sobre la misma pregunta, estar adentro o afuera del consenso es la diferencia entera:
+**discrimina dentro de la tarea**, no entre tareas. Si sólo marcara dificultad, los dos grupos
+rendirían igual.
+
+**¿Es un artefacto de comparar cadenas cortas?** Tampoco. Una cuenta se compara fácil y una
+enumeración de cuatro ítems no, así que el efecto podría vivir sólo en `singular`. No lo hace:
+
+| cardinalidad | con consenso | sin consenso |
+|---|---:|---:|
+| `aggregate` | **1,000** (n=34) | 0,267 |
+| `boolean` | **1,000** (n=41) | 0,000 |
+| `enumerative` | **1,000** (n=28) | 0,555 |
+| `singular` | **1,000** (n=77) | 0,532 |
+
+**¿Sirve para abaratar?** **No, y se reporta igual.** Es la lectura comercial obvia —comité
+barato, escalar sólo al discrepar— y se probaron las 56 cascadas de dos y tres brazos:
+**ninguna ahorra**. El comité se paga en todas las tareas y el brazo caro se paga igual en la
+mayoría, así que el total sube. **El consenso no es un ruteador barato.**
+
+### 7.13.3 Qué es, y qué NO autoriza
+
+Es un **detector de corrección de precisión total y cobertura parcial** —27 de 64 tareas—, que
+es exactamente la forma de una regla de abstención: no dice qué brazo usar, dice **cuándo no
+hace falta verificar**. Hasta acá, la única forma de saber si una respuesta estaba bien era
+tener el gold.
+
+**Y hay una tentación que hay que cortar de raíz.** La lectura natural es «si cuatro brazos
+coinciden, la creencia sube de nivel». **No.** La escalera de procedencia —`ASSUMED < ELICITED
+< OBSERVED < COMPUTED`— clasifica **cómo se obtuvo** algo, no **cuánta confianza** merece.
+Cuatro paradigmas de acuerdo siguen siendo el modelo hablando: **votar no toca el documento**,
+así que nada puede ascender a `OBSERVED` por consenso. Permitirlo sería exactamente la falla
+que la escalera existe para impedir — que una mayoría del sensor se promueva sola al rango de
+un hecho computado.
+
+Lo que sí autoriza es mover la **credencia** dentro de `ELICITED`, que en la capa de decisión
+es un campo distinto del de procedencia. Y ahí la tabla de arriba **es la curva de
+calibración**: `0,42 · 0,39 · 0,60 · 0,81 · 1,00`. El módulo de creencias declara como riesgo
+abierto que «las credencias elicitadas pueden estar mal calibradas… hasta que existan datos de
+calibración». Éstos son datos de calibración.
+
+> **procedencia = de dónde vino · credencia = cuánto se le cree.** El consenso mueve la
+> segunda y no puede tocar la primera, y confundirlas convierte un detector útil en un permiso
+> para que el modelo se autoacredite.
+
+### 7.13.4 El experimento que falta, y por qué el número no alcanza sin él
+
+**Los ocho brazos no son independientes**: comparten modelo, corpus y recuperador. Su acuerdo
+es diversidad de **procedimiento**, no evidencia estadísticamente independiente, así que nada
+de esto se puede leer como un voto de expertos independientes. Lo que se midió es que
+**trayectorias de control distintas convergen cuando aciertan y divergen cuando no**.
+
+Que el mecanismo sea ése —y no un artefacto de compartir el modelo— es lo que falta probar. El
+experimento que lo decidiría es repetir la medición con otro modelo detrás, y **no está
+corrido**. Hasta entonces esto es un hallazgo de este corpus con este modelo, no una propiedad
+de los paradigmas.
+
+## 7.14 Contra una ventana frontera: qué compra el arnés, y qué no
+
+La objeción obvia a todo lo anterior es que un modelo grande con una ventana enorme lee todo
+el material de una vez y se ahorra la orquestación. **Sobre calidad, la objeción es correcta y
+nuestros propios datos la respaldan**: el embudo de §7.10.1 muestra que toda representación
+intermedia más chica que el material es una pérdida, y una ventana grande es el caso extremo
+de *no tener canal con pérdida*. Medido: `direct` —leer todo en una sola llamada— saca
+**0,917**, el mejor del plantel donde corre.
+
+El arnés no le compite ahí. Le compite en otros cuatro ejes, y conviene decirlos con número.
+
+### 7.14.1 El precio
+
+Una tarea de la banda ancha lleva **455.476 tokens** de material. Con los aranceles vigentes,
+y contando que por encima de 272.000 tokens de entrada se cobra tarifa larga **por el request
+entero**:
+
+| leer todo de una | USD por pregunta |
+|---|---:|
+| ventana de 922k, gama media | 0,18 |
+| ventana de 922k, gama alta | 1,82 |
+| ventana de 922k, tope de gama | **4,55** |
+| **`react` sobre el modelo de la campaña (medido)** | **0,0216** |
+
+**211×.** Y el escalón es un acantilado, no una pendiente: cruzar el umbral por un token
+duplica la tarifa del request completo.
+
+### 7.14.2 Lo que no entra, y lo que no es un archivo
+
+El corpus de este trabajo cabe en una ventana de 922k. **Un corpus de producción no.** Y ése
+es el caso fácil: el difícil es que **el material no siempre es un texto que se pueda pegar**.
+Un arnés extiende el alcance a lugares donde una ventana no llega por definición:
+
+  · **búsqueda externa** — un índice que cambia entre una pregunta y la siguiente, o que vive
+    detrás de permisos por usuario. No hay ventana que contenga un índice vivo
+  · **corpus sin cota** — cuando el material crece con el negocio, «entra en la ventana» es una
+    propiedad que vence. La ley de costo de §7.9.6 dice qué pasa cuando no entra
+  · **herramientas con efecto** — una escritura, una transacción, un ticket. Un modelo que lee
+    no ejecuta, y lo que gobierna una acción irreversible es una precondición verificada, no
+    un contexto grande
+
+**Y hay que tomarlo en cuenta con honestidad**: nada de esto está medido acá. El corpus de este
+paper es estático, cabe, y no tiene herramientas con efecto. Son razones por las que un arnés
+existe, no resultados de este trabajo.
+
+### 7.14.3 Los tres ejes donde una ventana no ayuda
+
+Éstos sí están medidos, y son la parte que no depende del tamaño del modelo:
+
+**Abstención.** El paradigma que gana la celda de cadenas acopladas lo hace con **12 correctas,
+3 abstenciones y cero respuestas equivocadas**; los demás contestan igual y se equivocan. No
+gana por razonar mejor: gana porque cuando no llegó, lo dice. Saber *cuándo no contestar* es
+una decisión de flujo de control, y §7.10.4 muestra que sacarla del sensor sube la utilidad y
+el determinismo a la vez.
+
+**Procedencia.** Un contexto grande no dice **de qué unidad salió un número**. El Teorema 2
+—soundness del ensamblador— garantiza que si se emite, todo valor emitido está implicado por
+la base de creencias al piso pedido; eso exige una base de creencias tipada, no una ventana.
+
+**Determinismo.** `pass^3` mide 17-34% de celdas inestables con temperatura cero y semilla
+fija, y esa varianza **no es del tamaño del modelo**: es la trayectoria componiéndola. Un
+modelo más grande con las mismas decisiones delegadas al sensor tiene el mismo problema.
+
+> El arnés no existe para ganarle a un modelo grande en calidad. Existe para que la respuesta
+> cueste dos órdenes de magnitud menos, para alcanzar material que ninguna ventana contiene, y
+> para poder decir **de dónde salió** y **cuándo no la hay** — que es lo único que un dial de
+> garantía puede prometer.
+
+**La comparación directa no está corrida.** Nunca medimos un modelo de ventana frontera sobre
+las celdas anchas: el precio de §7.14.1 sale de los aranceles y del tamaño del material, y la
+calidad de `direct` sale de las celdas donde la factibilidad lo dejó correr. Es una inferencia
+bien apoyada, no una medición, y sería una corrida acotada —18 tareas de banda ancha, unos
+USD 82— que decidiría el punto de una vez.
+
+## 7.15 Fuera de muestra: el primer estrato del held-out
+
+Todo lo anterior es **en muestra**. El criterio de éxito declarado del producto es otro
+—brecha de oráculo neta positiva sobre datos que el sistema nunca vio— y hasta este borrador
+**no existía como medición válida**: la única corrida del corpus held-out estaba en un archivo
+anterior al cambio de tokenizador, sin `analyzer`, sin huella y sin vocabulario de región
+estampados, o sea no replayable.
+
+**Se corrigió corriendo el held-out por el MISMO camino de código que la campaña.** El runner
+tomó un argumento de corpus en vez de tenerlo clavado, y eso importa más de lo que parece: el
+script anterior corría 5 brazos × 4 tareas × 2 réplicas con otra lógica. **Un held-out medido
+con otro arnés no mide generalización — mide dos arneses.**
+
+### 7.15.1 Lo que corrió, y lo que decidió
+
+Primer estrato: **14 tareas × 12 paradigmas × 3 réplicas**, 500 filas, **16,0M tokens**, 75
+minutos, cero errores de infraestructura. El rectángulo queda en **12 tareas × 8 brazos** —el
+86% de las medidas— con el mismo criterio mecánico que todo el resto del paper.
+
+| brazo | u |
+|---|---:|
+| `gist_reader` | 0,833 |
+| `dag_strategy` | 0,806 |
+| `react` | 0,806 |
+| `supervisor` | 0,806 |
+| `reflection` | 0,778 |
+| `pointer_chase` | 0,750 |
+| `rewoo` | 0,648 |
+| `handoff` | 0,472 |
+
+```
+oráculo por tarea       0,972
+mejor fijo              0,833
+brecha observada       +0,139
+piso de ruido (p95)    +0,167
+brecha NETA            −0,028
+```
+
+**La brecha está por debajo de su piso de ruido.** Fuera de muestra el ruteo por calidad
+tampoco tiene premio, que es el mismo veredicto de §7.11 —`−0,008` en muestra— alcanzado por
+un camino independiente y sobre un corpus con otra mezcla de celdas.
+
+### 7.15.2 Una lectura que casi publico, y por qué está mal
+
+Mirando sólo el sub-estrato `w4` —6 tareas— el mejor fijo salía `gist_reader` con `0,944`
+contra `0,722` de `react`, y la conclusión tentadora era que **«el mejor paradigma fijo no es
+estable entre corpus»**, que es una afirmación fuerte y vendible.
+
+Sobre las 12 tareas del estrato completo esa lectura se cae: los cuatro primeros están en
+`0,833 · 0,806 · 0,806 · 0,806`, **empatados dentro del ruido**. No cambió el ganador: no hay
+ganador. La diferencia entre las dos lecturas era mirar 6 tareas en vez de 12, y el estrato
+completo estaba disponible desde el principio.
+
+> Es el mismo error que este paper audita en otros y que ya cometió antes en su propio
+> registro: **un panel más chico no da una respuesta más débil, da una respuesta distinta.**
+
+### 7.15.3 Qué falta, con su precio
+
+El held-out tiene tres estratos y sólo cerró el primero. Los otros dos están planificados y no
+corridos, y se declaran con su costo para que la decisión de correrlos sea explícita:
+
+| estrato | tareas | material medio | celdas | tokens | costo | tiempo |
+|---|---:|---:|---:|---:|---:|---:|
+| `base` + `w4` | 14 | 91k | 500 | **16,0M** | corrido | 75 min |
+| `w16` | 6 | 150k | 216 | ~11,2M | ~USD 2,25 | ~53 min |
+| `w48` | 6 | 451k | 216 | ~33,4M | ~USD 6,68 | ~159 min |
+
+**El tercero no es sólo más caro por tamaño**: las 6 tareas de `w48` pasan el umbral de
+contexto largo, así que pagan **el doble de tarifa por el request entero**. Es el acantilado
+de §7.7 aplicado a nuestra propia corrida.
+
+**Y la conclusión de §7.15.1 está acotada a un ancho.** §7.9.2 mostró que los paradigmas se
+degradan de forma muy distinta con el material —de `−0,03` a `−0,49` según el brazo—, así que
+un held-out medido a un solo ancho no dice nada sobre los otros. La afirmación que este
+borrador puede sostener es «no hay premio neto de ruteo fuera de muestra **en el estrato
+angosto**», y no más que eso.
 
 
 # 8. Mecanismos de falla

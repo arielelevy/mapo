@@ -182,6 +182,13 @@ lee igual que un efecto nulo medido. `test_science.py` §59 lo impide estructura
 
 ## Modelos: los tres corren con herramientas (medido 2026-08-29)
 
+> **QUIÉN MIDE, contra el registro y no contra la intención (2026-08-30).** La campaña es
+> **`luna`** — 2.478 filas de `gold_h1`—, `terra` corre **sólo C3** (90 filas) porque cuesta
+> 10× la entrada, y **`nano` no tiene ninguna fila**: `results/nano/gold_h1_rows.jsonl` no
+> existe. `luna` reemplazó a `nano` como modelo de medición y `nano` quedó como base
+> histórica. La tabla de abajo sigue siendo válida —es el smoke de capacidades de los tres—
+> pero no hay que leerla como que los tres midieron.
+
 `nano` (`gpt-5.4-nano`), `luna` (`gpt-5.6-luna`) y `terra` (`gpt-5.6-terra`), todos en
 `foundryopencode`. **Smoke con una llamada real por modelo, con un prompt que obliga a usar
 la tool** — no leído de documentación, que ya costó dos conclusiones equivocadas (`X-5p`):

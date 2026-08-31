@@ -96,6 +96,15 @@ def ejes_de(t: dict) -> set[str]:
 
 
 def main() -> None:
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--json", default="",
+                    help="además, escribir el resultado a este archivo para que la figura "
+                         "lo lea en vez de transcribirlo — un número copiado a mano es un "
+                         "número que se puede desincronizar del que lo produjo")
+    args = ap.parse_args()
+
     docs = json.loads((CORPUS / "documents.json").read_text(encoding="utf-8"))
     tareas = {t["task_id"]: t for t in json.loads(
         (CORPUS / "tasks.json").read_text(encoding="utf-8"))}
@@ -262,7 +271,20 @@ def main() -> None:
         print("      ganan a la dificultad de la tarea sola. O sea: la representación tiene")
         print("      algo, y ese algo todavía no compra nada por encima de saber qué tan")
         print("      difícil es la pregunta.")
-    else:
+    if args.json:
+        import json as _json
+        Path(args.json).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.json).write_text(_json.dumps({
+            "panel": panel.descripcion(),
+            "brazos": bs,
+            "por_pliegue": [{"fuera": f, **e} for f, e in detalle],
+            "medias": medias,
+            "nulos": nulos,
+            "p": p_val,
+        }, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"\n  -> {args.json}")
+
+    if not (p_val < 0.05):
         print("  >>> NO TRANSFIEREN en este corpus. Las capacidades barajadas predicen igual")
         print("      de bien, así que lo que ayuda es tener rasgos, no tener LOS rasgos.")
         print("      La tabla es vocabulario hasta que esto dé distinto.")

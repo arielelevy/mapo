@@ -137,9 +137,16 @@ paradigma es el caso medido primero, no el alcance del producto.
   anterior queda archivado FUERA, con su v1. NO hacer push sin confirmación.
 - Aval arXiv vía Errecalde/Jaime: **CANCELADO**. Se busca otro endorser o se publica en
   **Zenodo con DOI**. §14 del PLAN es histórico.
-- Modelo de medición (2026-08-26): **`gpt-5.4-nano`** en adelante (t=0 + seed,
-  determinismo casi al token verificado, cuota propia); la grilla `gpt-5-chat` queda
-  CONGELADA como primer modelo. Detalle completo en `lab/CLAUDE.md`.
+- **Modelo de medición: `luna` (`gpt-5.6-luna`) — REEMPLAZÓ a `nano` (corregido
+  2026-08-30).** Esta entrada decía «`gpt-5.4-nano` en adelante» y era falsa contra el
+  registro: `results/nano/gold_h1_rows.jsonl` **no existe**, la campaña entera son las
+  2.478 filas de `luna`, y `terra` corre sólo C3 (90 filas) por costar 10× la entrada.
+  `nano` queda como base histórica, no como modelo de medición.
+  Y hay que corregir una segunda cosa de la misma línea: decía «determinismo casi al token
+  verificado», que salió de **un smoke de una llamada por modelo**. Es cierto **por llamada**
+  y falso **por trayectoria**: `pass^3` mide 17-34% de celdas inestables con `t=0` y semilla
+  fija (paper §7.10.2). La grilla `gpt-5-chat` sigue CONGELADA como primer modelo.
+  Detalle en `lab/CLAUDE.md`.
 - `lab` YA vive en `D:\Apps\MAPO\lab` (mudado 2026-08-27, corridas
   terminadas, conteos verificados). Los veredictos P10–P14 y P13a-c están en
   `lab/historico/BITACORA-PREDICCIONES.es.md` y `lab/notes/` — la cronología salió de

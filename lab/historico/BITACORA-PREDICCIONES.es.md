@@ -1589,3 +1589,51 @@ dice, y con eso el mecanismo deja de ser una inferencia.
 Correr `accounting` cerraría `P30c` —si `coverage` cambia la decisión de pedir todo— y
 `dag_strategy`/`reflection` dirían si esto generaliza fuera de `react`. Ninguno es urgente:
 lo que el mecanismo tenía para decir, ya lo dijo.
+
+---
+
+## P29 — ¿el consenso entre paradigmas es convergencia de trayectorias, o el mismo modelo repitiéndose?
+
+**Registrada 2026-08-30, ANTES de correr.**
+
+**El hallazgo que la motiva** (`bench/analysis/_consenso.py`, sobre `luna`): la probabilidad de
+que una respuesta sea correcta dado que `k` brazos coinciden con ella —igualdad exacta de la
+cadena normalizada— sube `0,42 · 0,39 · 0,60 · 0,81` y llega a **`1,000` en `k >= 4`**, con
+**180 de 180 celdas**. Sobrevive los dos controles que lo podían matar: no marca «tarea fácil»
+—en las mismas 27 tareas, los brazos fuera del consenso sacan `0,100` contra `1,000`— y no es
+un artefacto de comparar cadenas cortas —aguanta en las cuatro cardinalidades, incluida
+enumerativa—.
+
+**LO QUE NO PUEDE DISTINGUIR, y por eso existe esta predicción.** Los ocho brazos comparten
+modelo, corpus y recuperador. Hay dos mecanismos compatibles con el número:
+
+  · **convergencia de trayectorias** — estructuras de control distintas llegan al mismo lugar
+    cuando ese lugar es el correcto, y se dispersan cuando no. Si es esto, el efecto es una
+    propiedad de los paradigmas y debería reproducirse con otro modelo debajo
+  · **el mismo modelo repitiéndose** — ocho envoltorios alrededor del mismo sensor producen
+    la misma salida por la misma razón, y el acuerdo no es evidencia de nada. Si es esto, el
+    efecto es del modelo y cambiar de modelo lo borra
+
+**LA CORRIDA.** `terra` (`gpt-5.6-terra`, la otra familia) sobre **24 tareas × 8 brazos × 1
+réplica** = 192 celdas, ~13,6M tokens, **~USD 27**. Una réplica y no tres porque el análisis de
+consenso usa sólo `trial 0`: el consenso se forma entre RESPUESTAS, y promediar réplicas
+produce un número, no una cadena comparable. Las 24 tareas se eligieron **estratificadas por
+cardinalidad** con semilla 23 —las cuatro representadas, 10 de las 11 celdas del corpus— y
+están fijas en `bench/runs/_tareas_control_terra.txt`.
+
+**LA PREDICCIÓN, con los tres desenlaces escritos de antemano:**
+
+| `P(correcta \| k>=4)` en `terra` | veredicto |
+|---|---|
+| **>= 0,90** | CONVERGENCIA. El consenso es una propiedad de los paradigmas y el detector se puede usar |
+| **<= 0,65** (tasa base ~0,53) | EL MISMO MODELO. El acuerdo no es evidencia y §7.13 se retira del paper |
+| entre 0,65 y 0,90 | NO DISTINGUE. Haría falta un tercer modelo, y el hallazgo queda como «de este corpus con este modelo» |
+
+**Y una guarda contra mi propio sesgo:** el umbral `k >= 4` se eligió mirando los datos de
+`luna`, así que sobre `terra` hay que reportar **la curva entera** y no sólo ese punto. Si el
+umbral se mueve —digamos que en `terra` el salto está en 3 o en 5— eso ya es información:
+diría que el umbral es del modelo y no de la estructura.
+
+**Cobertura esperada:** en `luna`, 27 de 64 tareas (42%) alcanzan `k >= 4`. Sobre 24 tareas
+eso proyecta ~10 tareas y ~60-70 celdas en el umbral. Si salen muchas menos, el resultado no
+concluye por falta de `n` y hay que decirlo en vez de leer el promedio.

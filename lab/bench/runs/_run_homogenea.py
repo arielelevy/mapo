@@ -158,6 +158,11 @@ def main() -> None:
     ap.add_argument("--anchos", default=",".join(ORDEN),
                     help="que estratos correr, en orden. Por defecto los tres.")
     ap.add_argument("--repeat", type=int, default=REPEAT)
+    ap.add_argument("--tareas-de", default="",
+                    help="archivo con un task_id por linea. SOLO esas se corren, y ademas "
+                         "LEVANTA el tope de celdas del modelo — es la unica forma de sacar "
+                         "a `terra` de C3, y tiene que ser explicita porque `terra` entero "
+                         "cuesta USD 554")
     ap.add_argument("--corpus", default=CORPUS_POR_OMISION,
                     help="que corpus corre. `gold_holdout` es el held-out del producto: "
                          "MISMO harness, datos que el sistema nunca vio")
@@ -243,9 +248,26 @@ def main() -> None:
             raise SystemExit(
                 f"celdas desconocidas: {desconocidas}. Las del corpus: {sorted(conocidas)}"
             )
+    # UNA LISTA EXPLICITA LEVANTA EL TOPE DEL MODELO, y esa es la unica puerta. El tope de
+    # `terra` —solo C3— no es una preferencia: es lo que impide que una corrida distraida
+    # cueste USD 554 en vez de 51. Nombrar las tareas a mano, en un archivo versionado, es
+    # una declaracion; un flag que dijera «corre todo» no lo seria.
+    pedidas: list[str] = []
+    if args.tareas_de:
+        pedidas = [x.strip() for x in
+                   Path(args.tareas_de).read_text(encoding="utf-8").splitlines() if x.strip()]
+        conocidas = {t["task_id"] for t in runner._tasks}  # noqa: SLF001
+        faltan = [x for x in pedidas if x not in conocidas]
+        if faltan:
+            raise SystemExit(f"--tareas-de nombra tareas que el corpus no tiene: {faltan}")
+        print(f"[!] LISTA EXPLICITA de {len(pedidas)} tareas ({args.tareas_de}). "
+              f"LEVANTA el tope de celdas del modelo ({prefijos}).")
+        prefijos = None
+
     tareas_del_modelo = [
         t["task_id"] for t in runner._tasks  # noqa: SLF001
-        if (prefijos is None or t["task_id"].startswith(prefijos))
+        if (not pedidas or t["task_id"] in set(pedidas))
+        and (prefijos is None or t["task_id"].startswith(prefijos))
         and t["cell"] not in excluidas
     ]
 
