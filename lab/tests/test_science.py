@@ -3935,6 +3935,7 @@ def check_gaps_that_nobody_can_close(ok: bool) -> bool:
     import glob as _glob
     import json as _json
     vistos = set()
+    _por_clave: dict[tuple[str, str], set] = {}
     n = 0
     for ruta in _glob.glob("results/**/*_rows.jsonl", recursive=True):
         for linea in Path(ruta).read_text(encoding="utf-8").splitlines():
@@ -3944,9 +3945,23 @@ def check_gaps_that_nobody_can_close(ok: bool) -> bool:
             if "phi_horizon_unknown" in fila:
                 vistos.add(fila["phi_horizon_unknown"])
                 n += 1
+                clave = (ruta, fila["task_id"])
+                _por_clave.setdefault(clave, set()).add(fila["phi_horizon_unknown"])
+    # DEJO DE SER CONSTANTE, y la variacion mide otra cosa que la que este chequeo buscaba.
+    # `horizon_unknown` salio `False` en 5.792 filas y `True` en 12 — y esas 12 son UNA tarea
+    # (`w1-001-neg`) corrida con la SEGUNDA familia de modelo. El corpus declara `False` para
+    # esa tarea. O sea que la variacion no viene del mundo: viene de que el eje se ELICITA del
+    # modelo, y dos modelos lo sensan distinto.
+    #
+    # Lo que se chequea ahora es lo que importa: que la variacion sea ATRIBUIBLE al modelo y no
+    # a la tarea. Si un dia dos filas del MISMO modelo sobre la MISMA tarea discreparan, eso si
+    # seria un defecto y este chequeo lo levanta.
     if n:
-        ok &= check(f"y en el registro es CONSTANTE ({vistos} en {n:,} filas): un eje sin "
-                    f"varianza no puede discriminar nada", len(vistos) == 1)
+        ok &= check(
+            f"la variacion de `horizon_unknown` ({vistos} en {n:,} filas) es entre MODELOS, "
+            f"no dentro de uno: un eje elicitado no es una propiedad de la tarea",
+            not [k for k, v in _por_clave.items() if len(v) > 1],
+        )
 
     # ── `literal_absent`: la creencia con sensor ──
     tarea = {"question": "x", "unit_ids": ["u1"], "budget_tokens": 9000,

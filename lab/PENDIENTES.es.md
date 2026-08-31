@@ -17,12 +17,11 @@
 > exactamente la operación que borra la contradicción. `_sanity.py` tiene las cotas y
 > **levanta**: un aviso al lado de un número imposible sigue publicando el número.
 >
-> **Y una regla que estaba mal puesta como pendiente**: toda edición del paper va a
-> `paper-en.md` **y** a `paper-es.md`, en la **misma posición** de cada uno. No es una tarea
-> que se pueda terminar — es una disciplina, y tenerla en la lista con una casilla que nunca
-> se marca la vuelve ruido. Está acá porque ya se rompió: un bloque quedó antes del párrafo
-> de verificación en un archivo y después en el otro. **Dos archivos que dicen lo mismo en
-> distinto lugar empiezan a decir cosas distintas.**
+> **Y una regla que dejó de existir (2026-08-30)**: la disciplina de espejar cada edición en
+> `paper-en.md` y `paper-es.md` valía mientras hubiera dos archivos vivos. Ya no los hay —
+> `paper-es.md` es el único mantenido y el inglés quedó congelado en `whitepaper/historico/`.
+> Se sacó por la misma razón por la que existía: **dos archivos que dicen lo mismo empiezan a
+> decir cosas distintas**, y mantener el espejo costaba más que el valor que daba.
 
 ---
 
@@ -3162,7 +3161,7 @@ después: el mecanismo de P17 no se movió (cascada 2/26, catorce esperando la s
 | # | Qué |
 |---|---|
 | ~~W-1~~ | **HECHO 2026-08-28.** El teorema es una identidad y no se puede falsar; los terminos nunca se separaron porque el margen fue 0 en todas las tareas. Escrito en `paper-en.md` y `paper-es.md`, en la misma posicion de cada uno |
-| W-2 | Toda edición va a **los dos** archivos: `paper-en.md` (canónico) y `paper-es.md` (espejo) |
+| ~~W-2~~ | **CERRADO 2026-08-30**: ya no hay dos archivos. `paper-es.md` es la única versión mantenida y el inglés quedó congelado en `whitepaper/historico/`. La disciplina de espejar dejó de existir porque dejó de haber espejo |
 | W-3 | Integrar el hallazgo de nano (P13) — «la estructura rescata al modelo barato, los loops abiertos no» — que es el resultado más publicable y está huérfano de tesis |
 | W-4 | Endorser de arXiv, o publicar en **Zenodo con DOI**. §14 del `PLAN.md` es histórico |
 

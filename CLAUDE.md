@@ -79,7 +79,10 @@ mata cada unidad antes de gastar nada. Detalle en `ui/README.md`.
    mide paradigmas en proceso, y si el ejecutor necesitara un runtime para correr,
    dejaría de medir lo que producción ejecuta.
 2. **El paper documenta y valida el producto**, no al revés. Vive en `whitepaper/`
-   (`paper-en.md` canónico, `paper-es.md` espejo — toda edición va a los DOS).
+   **`paper-es.md` es la ÚNICA versión mantenida** (decisión del autor, 2026-08-30). La
+   redacción inglesa quedó congelada en `whitepaper/historico/paper-en-congelado.md`, anterior
+   al recorte que sacó la grilla superada, y **no se edita**: dejarla viva obligaba a espejar
+   cada cambio en dos archivos, y el que nadie mantiene es el que miente.
    `GATE.md` manda sobre qué se puede afirmar; `PLAN.md` es arqueología, no tesis.
    `MAP.md` es la única herencia de v1 (plasticidad Hebbiana para decisiones); el v1
    completo quedó fuera de MAPO, en su repo de origen.

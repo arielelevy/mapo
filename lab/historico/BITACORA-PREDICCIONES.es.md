@@ -1637,3 +1637,41 @@ diría que el umbral es del modelo y no de la estructura.
 **Cobertura esperada:** en `luna`, 27 de 64 tareas (42%) alcanzan `k >= 4`. Sobre 24 tareas
 eso proyecta ~10 tareas y ~60-70 celdas en el umbral. Si salen muchas menos, el resultado no
 concluye por falta de `n` y hay que decirlo en vez de leer el promedio.
+
+### P29 — VEREDICTO: **CONVERGENCIA** (2026-08-30)
+
+**Corrido**: `terra` sobre 23 de las 24 tareas del control (una no produjo panel), 209 celdas
+factibles, réplica 0, cero `infra_error`.
+
+**Y se lee restringido a los 8 brazos del panel de `luna`, no a los 12 que corrieron.** Es un
+defecto de diseño que aparecio al mirar el resultado: `k` acuerdos no significan lo mismo sobre
+planteles de distinto tamaño. `k=4` sobre 8 brazos son 4 de 7 otros (57%); sobre 12 son 4 de 11
+(36%). Comparar el umbral crudo entre corridas con planteles distintos habria dado un veredicto
+falso — pareceria que el umbral «se corrio». Los 8 estan adentro de los 12, asi que la corrida
+sirve igual y solo hay que filtrar al analizar.
+
+| `terra`, 8 brazos | celdas | `P(correcta)` | cobertura |
+|---|---:|---:|---:|
+| `k >= 4` | 99 | **1,000** | 14 de 23 tareas |
+| `k >= 3` | 115 | **1,000** | 18 de 23 tareas |
+
+**El criterio registrado era `P(correcta | k>=4) >= 0,90` para declarar CONVERGENCIA. Dio
+`1,000`.** El consenso entre paradigmas se reproduce sobre otra familia de modelo, asi que no
+es el mismo modelo repitiendose: es lo que la prediccion llamo **convergencia de trayectorias**.
+
+**El control dentro de la tarea tambien se reproduce**, y es la parte que descarta que el
+consenso solo marque «tarea facil»: en las tareas donde existe consenso a `k>=3`, los brazos que
+quedan AFUERA sacan `0,272` (n=29) contra `1,000` de los que estan adentro.
+
+**Y el umbral se movio hacia abajo, no hacia arriba: 4 en `luna`, 3 en `terra`.** La guarda que
+deje escrita anticipaba justo esto —«si el umbral se mueve, eso ya es informacion»—. Lo que
+dice es que **el umbral exacto es del modelo y el fenomeno no**: sobre un modelo mejor hacen
+falta menos acuerdos para la misma precision, lo cual es coherente con que la senal sea
+convergencia y no coincidencia.
+
+**La cobertura tambien sube**: 18 de 23 tareas (78%) en `terra` a `k>=3`, contra 27 de 64 (42%)
+en `luna` a `k>=4`. El detector es mas util sobre el modelo mejor, no menos.
+
+**Lo que sigue sin estar probado.** Dos familias no son la poblacion de los modelos, y los dos
+comparten corpus y recuperador. Lo que se descarto es la explicacion mas barata —«es el mismo
+modelo»—; no se probo que valga para cualquier modelo ni para cualquier corpus.

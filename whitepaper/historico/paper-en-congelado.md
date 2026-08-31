@@ -1,3 +1,15 @@
+> **CONGELADO EL 2026-08-30. NO es el paper.**
+>
+> `paper-es.md` pasó a ser la única versión mantenida, por decisión del autor. Este archivo
+> quedó **antes** del recorte que sacó 444 líneas: todavía trae la grilla preliminar de `n=1`
+> por celda —superada por la campaña homogénea— y una sección de mecanismos de falla cuyos
+> números salen de esa misma grilla. Sus §7.9 a §7.15 corresponden a §7.1 a §7.7 del español.
+>
+> Se conserva porque contiene la redacción inglesa de la teoría y del trabajo relacionado, que
+> es trabajo que no hay que rehacer si algún día se retoma. **No se cita, no se compara con el
+> español, y no se edita**: dos archivos que dicen lo mismo empiezan a decir cosas distintas, y
+> éste ya lo hace.
+
 # Determinism before selection: what is learnable in LLM agent orchestration
 
 **Draft 0.2 — 2026-08-30**
@@ -12,12 +24,44 @@ Destination: arXiv cs.LG (primary), cs.AI (cross-list).
 
 ## Abstract
 
-This work began by asking **which orchestration paradigm to pick per task** and ends with a
-different answer than it sought. Over a complete record — 78 tasks × 12 paradigms × 3
-replicates, with no LLM judge and an audited grader — **routing on quality has no net prize**:
-`−0.008` against the best fixed paradigm, and the mechanism of that failure is more
-informative than the number. What does stand, and what this paper argues, is two claims about
-**determinism** and one about **what is learnable**.
+**An agent harness has no determinism, and nobody gave it any.** A tool loop around an LLM
+does not repeat its trajectory, cannot say where a number came from, and does not know when to
+stay quiet. This work builds those three things, measures them, and quantifies what they cost
+and what they buy.
+
+**The central result is that determinism is lost and recovered decision by decision.** `pass^k`
+— succeeding on all `k` replicates — drops between `0.078` and `0.196` per paradigm, with **17%
+to 34% of cells returning different results** at temperature zero, fixed seed and identical
+fingerprint; no measured paradigm reaches per-decision reproducibility above `0.983`. It is
+recovered by **taking control decisions away from the model and giving them back to code**:
+four structural corrections — none of phrasing — take one paradigm from `0.33` to `0.89` on the
+hardest cell *and* make its replicates agree. The decisive intervention isolates itself: with
+the same fingerprint and the same search results, letting the model choose a walk's anchor
+gives `1.000 / 0.000 / 0.000`; letting code choose it gives `1.000` three times.
+
+**And the plasticity an agent can learn is not in the paradigm's name but in its
+capabilities.** We propose the chain `question ontology → required capabilities → arms that
+have them`, with ten capabilities declared from code; the correct test is leave-one-**arm**-out,
+not leave-one-task-out, because a model keyed on paradigm identity has no parameter for an arm
+it never saw. Measured, capabilities predict an unseen arm better than task difficulty alone
+(`MAE 0.233` vs `0.257`) and better than arm identity even when the latter *sees* the held-out
+arm (`0.339`).
+
+**And a verifier turns up that nobody put in the bench.** Eight paradigms answer the same
+question and until now they were only ever compared against the oracle, never against each
+other. Measured: the probability that an answer is correct given that `k` paradigms agree with
+it rises `0.42 · 0.39 · 0.60 · 0.81` and reaches **`1.000` at `k >= 4`** over 180 of 180 cells —
+**with no oracle and no judge**. It survives all three controls that could have killed it: it
+does not merely mark "easy task" — on the same tasks, paradigms outside the consensus score
+`0.100`; it is not an artefact of comparing short strings — it holds across all four
+cardinalities; and **it does not make things cheaper**: all 56 two- and three-paradigm cascades
+raise cost. It is a total-precision, partial-coverage correctness detector — an abstention rule.
+And it **reproduces on a second model family** — `1.000` against a registered `0.90` criterion,
+with the prediction written before running — which rules out its being the same model repeating
+itself. What it authorises is moving **credence**, never provenance: voting does not touch the
+document.
+
+On top of that, three results that bound what can be promised.
 
 **First: the interaction exists, it is enormous, and it is not billable.** Decomposing
 `u = μ + α(task) + β(arm) + γ + ε`, the interaction γ explains **48%** of variance at
@@ -94,24 +138,48 @@ sending it to the wrong index. **The rule was right and the input was dirty.**
 
 # 1. Introduction
 
-## 1.1 A measured prize that nobody captures
+## 1.1 Three things an agent harness does not have
 
-An LLM agent's *paradigm* — the control structure wrapped around the model, such as a
-single call, a reasoning loop, a decomposition, or a verify-replan graph — is normally
-chosen once at design time and frozen in code. Recent work measures what that costs.
-Across six paradigms, four frontier models and ten benchmarks (~18,000 runs), oracle
-per-task selection beats the best fixed paradigm by **17.1pp** on average, with individual
-swings as large as +44pp and −15pp depending on the pairing [Select-then-Solve,
-arXiv:2604.06753].
+An agent *harness* is the control structure wrapped around the model: a single call, a
+reasoning loop, a decomposition, a verify-replan graph. It is chosen once at design time and
+frozen into the code, and systems that sign numbers, trigger actions and answer users get built
+on top of it. **It lacks three properties every other layer of a production system takes for
+granted.**
 
-The same work shows the prize is not being collected. A trained embedding router recovers
-roughly a quarter of the gap. Zero-shot self-routing — asking the model to pick its own
-paradigm — recovers *negative* value: two models fall below their own single-paradigm
-baselines, one to 27.5%.
+**It does not repeat.** A tool loop at temperature zero with a fixed seed does not reproduce its
+trajectory. We measure it: between **17% and 34%** of cells change result across replicates,
+same fingerprint, depending on the paradigm (§7.10.2). It is not the model being random — it is
+that every control decision delegated to the sensor multiplies the variance of the previous one.
 
-So: the prize is large, the best published attempt captures a minority of it, and the naive
-attempt is worse than not trying. That pattern invites the conclusion that better selectors
-are needed. We argue it invites a different one.
+**It does not say where from.** A correct answer and an invented one come from the same place
+wearing the same face. Without a typed belief base there is no way to require that an emitted
+number be entailed by evidence at some level, and the promise degrades to "the model is usually
+right".
+
+**It does not know when to stay quiet.** On the hardest cell of our corpus, the winning paradigm
+gets there with **12 correct, 3 abstentions and zero wrong answers**; the others answer anyway
+and return a plausible, false number (§7.10.3). The bench scores both at `0.000`, which is
+correct for measuring utility and blind on exactly the axis a production system needs.
+
+This work builds all three, measures them, and says what they cost. **The thesis is that all
+three are obtained in the same place**: by moving control-flow decisions from the model into the
+code, over environment signals that are countable and verifiable.
+
+### And in passing, an expectation the record does not confirm
+
+The usual motivation for working on harnesses is that **choosing the paradigm per task pays**.
+Recent work measures it over six paradigms, four frontier models and ten benchmarks (~18,000
+runs): per-task oracle selection beats the best fixed paradigm by **17.1pp** on average
+[Select-then-Solve, arXiv:2604.06753]. The same work shows the prize is not being collected — a
+router over embeddings recovers about a quarter of the gap, and zero-shot self-routing recovers
+*negative* value — which invites the conclusion that better selectors are needed.
+
+**Our record says otherwise, and that is a result rather than a limitation.** Over our own
+corpus of 78 tasks × 12 paradigms × 3 replicates, the **net** prize of routing on quality is
+`−0.008` against the best fixed arm, and §7.11 shows the mechanism: the task×paradigm
+interaction exists and is enormous — 48% of variance — but **it lives among the paradigms nobody
+would choose**. Restricted to those that would compete, it vanishes. Better selectors are not
+what is missing: measuring the prize with the right estimator before building one is.
 
 ## 1.2 Three claims that precede the learning problem
 
@@ -2149,17 +2217,129 @@ credences may be miscalibrated… until calibration data exists". This is calibr
 > second and cannot touch the first, and confusing them turns a useful detector into a licence
 > for the model to accredit itself.
 
-### 7.13.4 The missing experiment, and why the number is not enough without it
+### 7.13.4 The experiment that could have killed it, run
 
-**The eight arms are not independent**: they share model, corpus and retriever. Their agreement
-is diversity of **procedure**, not statistically independent evidence, so none of this can be
-read as a vote of independent experts. What was measured is that **different control
-trajectories converge when they are right and diverge when they are not**.
+**The eight arms are not independent**: they share model, corpus and retriever. Two mechanisms
+are compatible with §7.13.1's curve, and only one makes it usable:
 
-Whether that is the mechanism — rather than an artefact of sharing the model — is what remains
-to be shown. The experiment that would decide it is repeating the measurement with a different
-model underneath, and **it has not been run**. Until then this is a finding about this corpus
-with this model, not a property of paradigms.
+  · **trajectory convergence** — different control structures reach the same place when that
+    place is correct, and scatter when it is not. That would be a property of paradigms, and
+    should reproduce with a different model underneath
+  · **the same model repeating itself** — eight wrappers around one sensor produce the same
+    output for the same reason, and agreement is evidence of nothing
+
+Prediction `P29` was registered **before running**, with all three outcomes written down:
+`P(correct | k>=4) >= 0.90` would mean convergence; `<= 0.65` — near the base rate — the same
+model; in between, no verdict. It was run on **a different model family**, 23 tasks × 8 arms ×
+1 replicate, 209 cells, zero infrastructure errors.
+
+| second model family | cells | `P(correct)` | coverage |
+|---|---:|---:|---:|
+| `k >= 4` | 99 | **1.000** | 14 of 23 tasks |
+| `k >= 3` | 115 | **1.000** | 18 of 23 tasks |
+
+**`1.000` against a `0.90` criterion: convergence.** The consensus reproduces on another family,
+so the cheap explanation — the same model repeating itself — is ruled out. **And the within-task
+control reproduces too**: where a consensus exists at `k>=3`, the arms left outside score
+`0.272` (n=29) against `1.000` for those inside.
+
+### 7.13.5 The threshold belongs to the model; the phenomenon does not
+
+The threshold moved, and **downward**: `k>=4` on the first model, `k>=3` on the second. The
+guard registered in `P29` anticipated exactly this — "if the threshold moves, that is already
+information" — and what it says is that **the exact number of agreements is a property of the
+model and the signal is not**. On the better model fewer agreements are needed for the same
+precision, which is what one would expect if the signal were convergence rather than
+coincidence.
+
+Coverage rises too: **18 of 23 tasks (78%)** on the second model against 27 of 64 (42%) on the
+first. The detector is **more** useful on the better model, not less — which rules out reading
+consensus as a crutch for weak models.
+
+**And how to compare had to be corrected, because the control's design had a flaw.** The second
+run used twelve paradigms and the first one's panel has eight, and `k` agreements **do not mean
+the same thing across rosters of different size**: `k=4` over 8 arms is 4 of 7 others (57%),
+over 12 it is 4 of 11 (36%). Comparing the raw threshold would have produced a false verdict —
+it would have looked as if the threshold moved upward — when what changed was the denominator.
+The eight are inside the twelve, so the run is fine and only the analysis needs filtering; we
+say so here because it is the kind of error a reader cannot detect from the result.
+
+**What remains unproven.** Two families are not the population of models, and both share corpus
+and retriever. The cheapest explanation was ruled out; it was not shown to hold for any model or
+any corpus.
+
+## 7.14 Against a frontier context window: what the harness buys, and what it does not
+
+The obvious objection to everything above is that a large model with a huge window reads all
+the material at once and saves the orchestration. **On quality the objection is correct, and our
+own data supports it**: the funnel in §7.10.1 shows that every intermediate representation
+smaller than the material is a loss, and a large window is the extreme case of *having no lossy
+channel*. Measured: `direct` — reading everything in a single call — scores **0.917**, the best
+in the roster where it runs.
+
+The harness does not compete there. It competes on four other axes, and they are worth stating
+with numbers.
+
+### 7.14.1 The price
+
+A wide-band task carries **455,476 tokens** of material. At current tariffs, and counting that
+above 272,000 input tokens the long-context rate applies **to the whole request**:
+
+| read everything at once | USD per question |
+|---|---:|
+| 922k window, mid tier | 0.18 |
+| 922k window, high tier | 1.82 |
+| 922k window, top tier | **4.55** |
+| **`react` on the campaign model (measured)** | **0.0216** |
+
+**211×.** And the step is a cliff, not a slope: crossing the threshold by one token doubles the
+tariff on the entire request.
+
+### 7.14.2 What does not fit, and what is not a file
+
+This work's corpus fits in a 922k window. **A production corpus does not.** And that is the easy
+case: the hard one is that **material is not always text you can paste**. A harness extends
+reach to places a window cannot go by definition:
+
+  · **external search** — an index that changes between one question and the next, or that lives
+    behind per-user permissions. No window contains a live index
+  · **unbounded corpus** — when material grows with the business, "it fits in the window" is a
+    property with an expiry date. §7.9.6's cost law says what happens when it does not
+  · **tools with effects** — a write, a transaction, a ticket. A model that reads does not
+    execute, and what governs an irreversible action is a verified precondition, not a large
+    context
+
+**And this must be taken honestly**: none of it is measured here. This paper's corpus is static,
+it fits, and it has no tools with effects. These are reasons a harness exists, not results of
+this work.
+
+### 7.14.3 The three axes where a window does not help
+
+These *are* measured, and they are the part that does not depend on model size:
+
+**Abstention.** The paradigm that wins the coupled-chain cell does so with **12 correct, 3
+abstentions and zero wrong answers**; the others answer anyway and get it wrong. It does not win
+by reasoning better: it wins because when it did not arrive, it says so. Knowing *when not to
+answer* is a control-flow decision, and §7.10.4 shows that taking it out of the sensor raises
+utility and determinism at once.
+
+**Provenance.** A large context does not say **which unit a number came from**. Theorem 2 — the
+assembler's soundness — guarantees that if it emits, every emitted value is entailed by the
+belief base at the requested floor; that requires a typed belief base, not a window.
+
+**Determinism.** `pass^3` measures 17-34% of cells unstable at temperature zero with a fixed
+seed, and that variance **is not about model size**: it is the trajectory compounding it. A
+larger model with the same decisions delegated to the sensor has the same problem.
+
+> The harness does not exist to beat a large model on quality. It exists so the answer costs two
+> orders of magnitude less, to reach material no window contains, and to be able to say **where
+> it came from** and **when there is none** — which is the only thing an assurance dial can
+> promise.
+
+**The direct comparison has not been run.** We never measured a frontier-window model on the
+wide cells: §7.14.1's price comes from tariffs and material size, and `direct`'s quality comes
+from the cells feasibility let it run. It is a well-supported inference, not a measurement, and
+it would be a bounded run — 18 wide-band tasks, roughly USD 82 — that would settle the point.
 
 ## 7.15 Out of sample: the held-out set's first stratum
 
@@ -2176,30 +2356,41 @@ measured with a different harness does not measure generalisation — it measure
 
 ### 7.15.1 What ran, and what it decided
 
-First stratum: **14 tasks × 12 paradigms × 3 replicates**, 500 rows, **16.0M tokens**, 75
-minutes, zero infrastructure errors. The rectangle lands at **12 tasks × 8 arms** — 86% of
-those measured — under the same mechanical criterion as the rest of the paper.
+Two strata of three: **20 tasks × 12 paradigms × 3 replicates**, 711 rows, **29.7M tokens**,
+102 minutes, **zero infrastructure errors**. The rectangle lands at **18 tasks × 8 arms** — 90%
+of those measured — under the same mechanical criterion as the rest of the paper.
 
 | arm | u |
 |---|---:|
-| `gist_reader` | 0.833 |
-| `dag_strategy` | 0.806 |
-| `react` | 0.806 |
-| `supervisor` | 0.806 |
-| `reflection` | 0.778 |
-| `pointer_chase` | 0.750 |
-| `rewoo` | 0.648 |
-| `handoff` | 0.472 |
+| `dag_strategy` | 0.813 |
+| `gist_reader` | 0.798 |
+| `react` | 0.796 |
+| `reflection` | 0.741 |
+| `supervisor` | 0.722 |
+| `rewoo` | 0.651 |
+| `pointer_chase` | 0.643 |
+| `handoff` | 0.518 |
 
 ```
-per-task oracle        0.972
-best fixed arm         0.833
-observed gap          +0.139
-noise floor (p95)     +0.167
-NET gap               −0.028
+                       base+w4        + w16
+panel tasks                 12           18
+per-task oracle          0.972        0.981
+best fixed arm           0.833        0.813
+observed gap            +0.139       +0.168
+noise floor (p95)       +0.167       +0.187
+NET gap                 −0.028       −0.019
 ```
 
-**The gap sits below its own noise floor.** Out of sample, routing on quality has no prize
+**And a prediction of ours failed, which says something about the estimator.** Planning the
+second stratum we noted that doubling the panel would lower the noise floor "from `+0.167` to
+~`+0.136`", by the usual `1/√n` argument. **It rose to `+0.187`.** The floor here is not the
+standard error of a mean: it is `E[max_p u] − max_p E[u]` under resampling — the **bias of the
+maximum** — and that grows with dispersion between arms and with how many compete, rather than
+shrinking with tasks. Adding tasks at a new width added dispersion. The lesson is that **the
+floor of a max-prize is not planned with the intuition of a mean**; recompute it rather than
+project it.
+
+**The gap sits below its own noise floor in both strata.** Out of sample, routing on quality has no prize
 either — the same verdict as §7.11 (`−0.008` in sample), reached by an independent path on a
 corpus with a different cell mix.
 
