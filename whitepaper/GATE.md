@@ -349,6 +349,22 @@ abstención y deferral quedan fuera del alcance de HADD.
 Corrección de cita: **HYDRA-A (Zenodo 19792074) no es "verificación conductual"** de
 agentes — es un paper adversarial de AML. Relevancia marginal; no usar como fundamento.
 
+## Adenda 2026-09-01: HADD baja de «base» a «antecedente de vocabulario», y EVR no está
+
+Verificado en vivo contra Zenodo. El registro de MINERVA (20003407) es un preprint de
+**arquitectura**: seis contribuciones declaradas, invariantes, patrones, EMRE, holones, y como
+única validación la frase «validated in production with real regulated-sector documents», sin
+corpus, réplica ni número. Y el companion EVR (19791686), que §2.4 y las referencias citaban
+como «compuerta de admisión como mecanismo», **devuelve HTTP 410 Gone** por tres rutas
+distintas (record, DOI y API): fue retirado o borrado.
+
+Decisión del autor (v2 del paper): HADD se acredita por las tres palabras que se comparten
+—sensor, decisión determinista, estabilidad de decisión— y deja de llamarse «la base de la que
+§6.2 toma sus invariantes». La diferencia que el paper reclama contra él es que **cada invariante
+tiene un costo medido y la política aprende**. La cita a EVR se retira hasta que el registro
+reaparezca. La adenda del 2026-08-26 de arriba queda como historia de por qué se había
+acreditado más.
+
 ---
 
 # 9. VEREDICTO

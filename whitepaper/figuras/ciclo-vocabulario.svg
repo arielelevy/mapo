@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 460" width="1180" height="460" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+  <defs>
+    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3b4046"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1180" height="460" fill="#ffffff"/>
+  <text x="590" y="34" text-anchor="middle" font-size="19" font-weight="600" fill="#1f2328">El ciclo que repara el vocabulario: tres mundos, tres refutaciones, tres sensores COMPUTED</text>
+  <text x="590" y="56" text-anchor="middle" font-size="12" fill="#6b7178" font-style="italic">el lazo lo ejecutan personas; el sistema consume el sensor que el lazo produce. Decisión reproducida 26/26 en cada vuelta</text>
+
+  <!-- lazo: cuatro cajas en anillo -->
+  <!-- 1 predicción -->
+  <rect x="60" y="100" width="250" height="90" rx="8" fill="#f7f8fa" stroke="#3b6ea5" stroke-width="1.6"/>
+  <text x="185" y="128" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">1. predicción registrada</text>
+  <text x="185" y="150" text-anchor="middle" font-size="12" fill="#3b4046">fecha, criterio numérico,</text>
+  <text x="185" y="168" text-anchor="middle" font-size="12" fill="#3b4046">script de veredicto congelado en el commit</text>
+
+  <line x1="310" y1="145" x2="380" y2="145" stroke="#3b4046" stroke-width="1.6" marker-end="url(#ar2)"/>
+
+  <!-- 2 corrida -->
+  <rect x="380" y="100" width="250" height="90" rx="8" fill="#f7f8fa" stroke="#3b6ea5" stroke-width="1.6"/>
+  <text x="505" y="128" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">2. mundo nuevo, semilla nueva</text>
+  <text x="505" y="150" text-anchor="middle" font-size="12" fill="#3b4046">la política no lo vio; verificado independiente</text>
+  <text x="505" y="168" text-anchor="middle" font-size="12" fill="#3b4046">390 celdas, 0 infra_error, gpt-5.4-nano</text>
+
+  <line x1="630" y1="145" x2="700" y2="145" stroke="#3b4046" stroke-width="1.6" marker-end="url(#ar2)"/>
+
+  <!-- 3 refutación -->
+  <rect x="700" y="100" width="250" height="90" rx="8" fill="#fbf3f1" stroke="#b5533c" stroke-width="1.6"/>
+  <text x="825" y="128" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">3. refutación con mecanismo</text>
+  <text x="825" y="150" text-anchor="middle" font-size="12" fill="#3b4046">qué eje faltaba en la clave,</text>
+  <text x="825" y="168" text-anchor="middle" font-size="12" fill="#3b4046">verificado contra el registro, no conjeturado</text>
+
+  <!-- bajada -->
+  <line x1="825" y1="190" x2="825" y2="250" stroke="#3b4046" stroke-width="1.6" marker-end="url(#ar2)"/>
+
+  <!-- 4 sensor nuevo -->
+  <rect x="700" y="250" width="250" height="90" rx="8" fill="#eef7f0" stroke="#3a8a5c" stroke-width="1.6"/>
+  <text x="825" y="278" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">4. sensor nuevo, COMPUTED</text>
+  <text x="825" y="300" text-anchor="middle" font-size="12" fill="#3b4046">función de (q, M), sin modelo en el medio</text>
+  <text x="825" y="318" text-anchor="middle" font-size="12" fill="#3b4046">entra a la clave sin romper la Prop. 5.7</text>
+
+  <!-- vuelta -->
+  <line x1="700" y1="295" x2="310" y2="295" stroke="#3b4046" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <text x="505" y="285" text-anchor="middle" font-size="11" fill="#6b7178">la próxima predicción se registra sobre el vocabulario reparado</text>
+  <rect x="60" y="250" width="250" height="90" rx="8" fill="#f7f8fa" stroke="#3b6ea5" stroke-width="1.6"/>
+  <text x="185" y="278" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">5. consolidación con guarda</text>
+  <text x="185" y="300" text-anchor="middle" font-size="12" fill="#3b4046">θ se reajusta offline sobre la clave nueva;</text>
+  <text x="185" y="318" text-anchor="middle" font-size="12" fill="#3b4046">entra sólo si no regresa. Nada aprende en un request</text>
+  <line x1="185" y1="250" x2="185" y2="190" stroke="#3b4046" stroke-width="1.6" marker-end="url(#ar2)"/>
+
+  <!-- episodios concretos -->
+  <line x1="60" y1="372" x2="1120" y2="372" stroke="#e4e6ea" stroke-width="1"/>
+  <text x="60" y="396" font-size="12" font-weight="600" fill="#3b4046">P15 · semilla 47</text>
+  <text x="60" y="414" font-size="12" fill="#3b4046">−0,087 vs mejor fijo. Faltaba el horizonte.</text>
+  <text x="60" y="432" font-size="12" fill="#3a8a5c">→ eje de continuidad (6/6, 0 falsos positivos)</text>
+
+  <text x="420" y="396" font-size="12" font-weight="600" fill="#3b4046">P16 · semilla 61</text>
+  <text x="420" y="414" font-size="12" fill="#3b4046">+0,121 a λ=0, dentro del ruido a λ=0,02.</text>
+  <text x="420" y="432" font-size="12" fill="#3a8a5c">→ acción real puntuada; detector separado del gold</text>
+
+  <text x="790" y="396" font-size="12" font-weight="600" fill="#3b4046">P17 · semilla 73 → vocabulario vigente</text>
+  <text x="790" y="414" font-size="12" fill="#3b4046">cascada 22 → 2; la sonda no resuelve.</text>
+  <text x="790" y="432" font-size="12" fill="#3a8a5c">→ eje literal (0,951 / 46% LOO) → ontología por eje</text>
+</svg>
