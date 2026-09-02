@@ -61,5 +61,5 @@
 
   <text x="790" y="396" font-size="12" font-weight="600" fill="#3b4046">P17 · semilla 73 → vocabulario vigente</text>
   <text x="790" y="414" font-size="12" fill="#3b4046">cascada 22 → 2; la sonda no resuelve.</text>
-  <text x="790" y="432" font-size="12" fill="#3a8a5c">→ eje literal (0,951 / 46% LOO) → ontología por eje</text>
+  <text x="790" y="432" font-size="12" fill="#3a8a5c">→ corpus con detector declarado → eje literal (58% a utilidad igual, LOTO)</text>
 </svg>

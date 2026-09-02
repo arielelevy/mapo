@@ -77,6 +77,31 @@ CATALOGO: tuple[Capacidad, ...] = (
         "0,594 — peor que cuando no lo vio todo",
     ),
     Capacidad(
+        "CONTEXT_VISION",
+        "cada llamada ve TODO lo que el request leyó hasta ahí, en crudo o compactado: ninguna "
+        "vuelta pierde lo que trajo la anterior",
+        "es distinta de PAYLOAD_COMPLETO (una llamada puede tener todo el alcance) y de ADAPTA "
+        "(puede cambiar lo que pide): `supervisor` adapta y no la tiene, porque cada sub-agente "
+        "arranca con una ventana de 8; `rewoo` tiene el payload en el solver y no la tiene, "
+        "porque sus pasos no se ven entre sí. Compactar el hilo NO la quita: una nota o un stub "
+        "que apunta a lo leído sigue siendo visión del hilo entero, en otra forma. Es la "
+        "propiedad que la ley de costo mide desde la factura: el costo POR LLAMADA de `react` "
+        "sube 3,7-3,9× entre 3 y 12 llamadas porque reenvía el hilo entero (§6.4.3), y la que "
+        "explica que el paradigma determine cuánta evidencia llega a la llamada que responde",
+    ),
+    Capacidad(
+        "AUTOCOMPACTA",
+        "el arnés reduce el hilo por su cuenta, de forma determinista, sin pedirle disciplina al "
+        "modelo: lo ya leído y anotado se reemplaza por una referencia",
+        "es la única forma medida de tener CONTEXT_VISION sin pagar el hilo entero en cada "
+        "vuelta. Ofrecida como herramienta opcional (`cognitive`), el modelo escribió 1 nota, "
+        "compactó una vez y nunca planificó en 28 filas: la disciplina voluntaria no ocurre. "
+        "`manage_history` (`managed`) la hace incondicional desde el código. Está implementada "
+        "y NO corrió en la campaña: ningún brazo del rectángulo la tiene, así que hoy es un "
+        "hueco del catálogo del mismo tipo que `ausencia`, y el brazo que la tendría es "
+        "`react` sobre la superficie `managed`",
+    ),
+    Capacidad(
         "COBERTURA_GARANTIZADA",
         "puede garantizar que tocó todas las unidades del alcance",
         "una pregunta con cobertura exhaustiva declarada no la puede contestar un brazo que "
@@ -126,11 +151,12 @@ NOMBRES = tuple(c.nombre for c in CATALOGO)
 # `None` en `PAYLOAD_COMPLETO` del espacio de tres ejes significaba «todas las unidades»; acá
 # se vuelve un booleano explícito porque una capacidad se tiene o no se tiene.
 TIENE: dict[str, set[str]] = {
-    "direct": {"PAYLOAD_COMPLETO", "LECTURA_SIN_PERDIDA", "COBERTURA_GARANTIZADA"},
-    "react": {"PAYLOAD_COMPLETO", "ADAPTA", "LECTURA_SIN_PERDIDA"},
-    "reflection": {"PAYLOAD_COMPLETO", "ADAPTA", "LECTURA_SIN_PERDIDA"},
-    "dag_strategy": {"PAYLOAD_COMPLETO", "ADAPTA", "LECTURA_SIN_PERDIDA",
-                     "VERIFICA_Y_REPLANIFICA", "ABSTIENE_SIN_PRUEBA"},
+    "direct": {"PAYLOAD_COMPLETO", "LECTURA_SIN_PERDIDA", "COBERTURA_GARANTIZADA",
+               "CONTEXT_VISION"},                  # una sola llamada: trivialmente ve todo
+    "react": {"PAYLOAD_COMPLETO", "ADAPTA", "LECTURA_SIN_PERDIDA", "CONTEXT_VISION"},
+    "reflection": {"PAYLOAD_COMPLETO", "ADAPTA", "LECTURA_SIN_PERDIDA", "CONTEXT_VISION"},
+    "dag_strategy": {"PAYLOAD_COMPLETO", "ADAPTA", "LECTURA_SIN_PERDIDA", "CONTEXT_VISION",
+                     "VERIFICA_Y_REPLANIFICA", "ABSTIENE_SIN_PRUEBA"},   # via blackboard
     "rewoo": {"COSTO_NO_ESCALA_CON_ALCANCE", "LECTURA_SIN_PERDIDA"},
     "gist_reader": {"COBERTURA_GARANTIZADA"},          # el gist ES la pérdida
     "handoff": {"COBERTURA_GARANTIZADA"},              # cada sub-agente ve su mitad
@@ -154,6 +180,15 @@ EVIDENCIA: dict[tuple[str, str], str] = {
     ("rewoo", "COSTO_NO_ESCALA_CON_ALCANCE"): "rewoo: dos llamadas, pase lo que pase",
     ("graph_traverse", "RESOLVER_REFERENCIA"): "modern: índice de entidades del grafo",
     ("supervisor", "ADAPTA"): "supervisor: despacha tras ver lo que volvió",
+    ("react", "CONTEXT_VISION"): "paradigms.react: `messages.append` sin compactar en `basic`",
+    ("reflection", "CONTEXT_VISION"): "paradigms.reflection: la revisión arrastra la conversación entera",
+    ("dag_strategy", "CONTEXT_VISION"): "blackboard: cada hallazgo se renderiza en cada prompt",
+    ("direct", "CONTEXT_VISION"): "paradigms.direct: una llamada con el material entero",
+    # Y dónde se ve que NO la tienen los que adaptan o tienen payload: `supervisor` recorta a
+    # 8 unidades por sub-agente en `_sub_surface`; `rewoo` fija el plan antes y sus pasos no
+    # se ven entre sí. Van como comentario y no como entradas: EVIDENCIA declara lo que se tiene.
+    # AUTOCOMPACTA no la tiene ningún brazo de la campaña: vive en `cognitive.manage_history`
+    # y entra a TIENE cuando un brazo corra sobre la superficie `managed`.
 }
 
 # ── QUÉ EXIGE CADA EJE DE LA ONTOLOGÍA ──────────────────────────────────────────
