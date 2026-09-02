@@ -2,7 +2,7 @@
 
 ## Confinamiento de varianza en agentes LLM mediante un plano de control determinista y plástico
 
-Versión breve, v2, 2026-09-02. Autor: Ariel Edgardo Levy.
+Versión breve, v2, 2026-09-01. Autor: Ariel Edgardo Levy.
 
 > Versión de conferencia. La extensa (trece figuras, tres algoritmos en pseudocódigo, los dos
 > teoremas con sus demostraciones completas, el registro por celda y la cronología de
@@ -13,33 +13,86 @@ Versión breve, v2, 2026-09-02. Autor: Ariel Edgardo Levy.
 ## Resumen
 
 Un arnés de agentes es la estructura de control que envuelve a un LLM y decide qué llamada
-viene después. Hecho de llamadas al modelo, hereda su varianza. Apilar instancias del componente
-sube una probabilidad; no produce una propiedad.
+viene después: un bucle de razonamiento, una descomposición en sub-tareas, un grafo de
+verificar-replanificar. La práctica moderna de arneses arrastra una deficiencia de diseño.
+Hereda las propiedades probabilísticas del componente que envuelve. El arnés está hecho de
+llamadas al modelo, así que toda propiedad que se le quiera exigir al sistema (reproducibilidad,
+trazabilidad, cobertura) queda condicionada a la salida de algo que no la tiene.
 
-Interponemos entre el modelo y el flujo un motor determinista y plástico. Al LLM sólo se le
-pregunta qué dice el material; lo que devuelve se tipa como proposiciones con procedencia, y
-reglas en código deciden sobre ellas. Misma base de creencias, misma decisión. Lo que aprende
-son políticas, consolidadas offline en un artefacto firmado con guarda anti-regresión, sobre qué
-exige un request y qué puede hacer cada brazo (paradigma), nunca sobre nombres. El banco corre
-doce paradigmas sobre análisis forense de hechos, sin juez LLM. Contribuimos:
+El caso más claro son las guardas. Un verificador de alucinación implementado como otra llamada
+al modelo padece la misma deficiencia que vino a corregir. Verificar con el mismo material del
+que se desconfía no produce una garantía. Produce una segunda estimación correlacionada con la
+primera. La forma general es la premisa de este trabajo:
 
-1. La máquina. Un agente confina su varianza cuando ninguna ramificación de su trayectoria
-   depende del LLM, y entonces toda discrepancia tiene un nodo responsable (Proposición 1).
-   Sacarle al LLM una sola decisión lleva un paradigma de 0,33 a 0,89 y hace coincidir sus
-   réplicas.
+> Apilar instancias del componente puede subir una probabilidad. No puede producir una
+> propiedad.
+
+Así que la garantía tiene que venir de un componente de otra clase. Interponemos entre el
+modelo y el flujo un motor determinista y plástico que decide sobre creencias tipadas, y le
+dejamos al modelo un solo papel. Se le pregunta qué dice el material y lo que devuelve se tipa
+como proposiciones («esta cuenta figura a nombre de X») que entran a una base de creencias, cada
+una con la unidad de la que salió. Por eso se lo llama LLM, y estocástico, porque la misma
+pregunta sobre el mismo material puede devolver otra cosa. El motor separa dos funciones que la
+práctica corriente colapsa:
+
+```
+    decisión  = f(creencias)          f determinista, tipada, auditable
+    creencias = g(mundo, sensor)      g estocástica
+```
+
+La garantía que eso compra tiene una forma precisa. Misma base de creencias, misma decisión. Y
+`f` es determinista dentro de un request y plástica entre requests. Lo que aprende son
+políticas, que consolidan offline con guarda anti-regresión en un artefacto firmado y se
+ejecutan como código. El LLM tiene los pesos congelados. El que aprende es el sistema.
+
+Lo que aprende es qué exige un request, qué puede hacer cada brazo, y qué predice su
+comportamiento. El banco que sostiene este trabajo corre doce paradigmas sobre las mismas
+tareas, y es la fuente de episodios de la que el sistema extrae eso. Los paradigmas son un
+repertorio de capacidades, y la política aprende sobre las capacidades: entre los tres brazos
+que comparten las mismas, la brecha de oráculo apenas se separa del piso de ruido, y sobre el
+catálogo entero el premio que el oráculo muestra lo capturará una clave que vea capacidades.
+
+Sobre un corpus de análisis forense de hechos, con doce paradigmas medidos bajo condiciones
+idénticas y sin juez LLM (el modelo y el panel de cada medición están declarados en §5),
+contribuimos:
+
+1. La máquina, con su costo medido. Un agente confina su varianza cuando ninguna ramificación
+   de su trayectoria depende del LLM, y entonces toda discrepancia entre réplicas tiene un
+   nodo responsable (Proposición 1). Al menos entre el 12% y el 28% de las celdas cambian de
+   resultado a temperatura cero con semilla fija; sacarle al LLM una sola decisión, el ancla
+   de una cadena, lleva un paradigma de 0,33 a 0,89 y hace coincidir sus réplicas. El dial de
+   garantía es gratis hasta A2 y en A3 se lleva el 60% del catálogo y el 31% de la utilidad.
 2. La interfaz aprendible. Un paradigma es un paquete de capacidades auditables contra su
-   código, y la pregunta exige capacidades, no nombres. Así declaradas predicen un paradigma
-   nunca visto mejor que la dificultad de la tarea sola, sin cruzar su nulo (`p` exacto 0,066).
-3. Lo que madura solo y lo que se diseña. Sin que nadie tocara una regla, θ pasó de gobernar
-   cero tareas a 36 de 78 y la guarda frenó el único paso que no se separaba del ruido. Los
-   medidores nuevos los agregaron personas, en tres refutaciones preregistradas con cada
-   decisión reproducida 26 de 26.
-4. Lo que la política compra. Entre brazos capaces, el desempate por costo con una señal
-   computada ahorra 58% de tokens a utilidad igual al mejor fijo, fuera de muestra. El paradigma
-   explica el 60% de la varianza del recall de evidencia y la región menos del 1%.
+   propio código, y la pregunta exige capacidades, no nombres. Declaradas así, predicen un
+   paradigma nunca visto mejor que la dificultad de la tarea sola, sobre ocho brazos, sin cruzar
+   su nulo (`p` exacto 0,066 sobre las 40.320 permutaciones) y por debajo de la identidad
+   aditiva que sí ve al brazo (MAE 0,229 contra 0,225): sugestivo, y más brazos lo sentencian.
+   El catálogo encuentra un hueco sin correr nada, y queda como predicción registrada hasta que
+   ese brazo se construya. La ontología de la pregunta, con cinco segmentos, separa a los brazos
+   casi tanto como la región vigente con trece y le saca al azar más que ella, medido con nulo
+   por permutación; dos ejes que el caller declara ya capturan parte de eso (§5.3).
+3. Lo que madura solo y lo que se diseña. Sobre el registro de la campaña, sin que nadie
+   tocara una regla, θ pasó de cuatro regiones sin evidencia a catorce con once pares confiados
+   y de gobernar cero tareas a 36 de 78, reproducible en cada ciclo, y la guarda frenó el único
+   paso cuya ganancia no se separaba del ruido (§5.4). Del otro lado de la frontera, los
+   medidores nuevos los agregaron personas en tres refutaciones preregistradas sobre tres mundos
+   que la política nunca vio, cada una con su decisión reproducida 26 de 26. La primera
+   produjo un medidor `COMPUTED` nuevo, la continuidad; la segunda una corrección de la
+   valuación; la tercera un corpus con detector declarado por tarea. El eje literal salió de una
+   medición comparativa
+   y la ontología es mayormente `ELICITED`. El ciclo lo
+   corrieron personas, leyendo cada refutación y agregando lo que faltaba. El sistema consume lo
+   que el ciclo produjo, y la automatización de ese paso está diseñada y no medida. Lo que el
+   ciclo establece es el método y su condición.
+4. Lo que la política aprende, y qué compra. Entre brazos capaces, el desempate por costo con
+   una señal computada ahorra 58% de tokens a utilidad igual al mejor fijo, leave-one-task-out
+   sobre el rectángulo. Y los predictores que el registro entrega, sobre `nano`. El paradigma explica el
+   60% de la varianza del recall de evidencia con R² ajustado y la región menos del 1%, y
+   ofrecer una herramienta cambia la conducta del agente aunque no la use.
 
-Una clave de política tiene que ser `COMPUTED` (Proposición 2), porque sólo se aprende sobre lo
-que se sensa sin el modelo. El determinismo habilita al aprendizaje.
+Lo que une las cuatro es que una clave de política tiene que ser `COMPUTED`, y la Proposición 2
+lo enuncia. Sólo se puede aprender sobre lo que se puede sensar sin el modelo. Por eso
+determinismo y aprendizaje no compiten. El primero es la condición del segundo.
 
 Palabras clave: confinamiento de varianza, agentes LLM, plano de control, procedencia,
 capacidades, ontología de la pregunta, aprendizaje plástico, reproducibilidad.
@@ -48,12 +101,12 @@ capacidades, ontología de la pregunta, aprendizaje plástico, reproducibilidad.
 
 ![El contrato de garantía, y qué pasa cuando la evidencia no alcanza](figuras/contrato-de-garantia.svg)
 
-**Figura 1.** El request entra por la izquierda y sale por la derecha, y los cuatro pasos del
-riel no gastan un token hasta el último. Cuando ninguna procedencia alcanza el piso exigido,
-abstenerse es una salida y no un fallo (la rama de rechazo). El lazo es la plasticidad. El
-registro sube el piso del próximo request, offline y con guarda anti-regresión, sin que nadie
-toque un peso. La flecha punteada que sube del carril de abajo es la única que cruza la
-frontera, y lleva proposiciones tipadas, nunca control de flujo.
+Figura 1. El request entra por la izquierda y sale por la derecha, y los cuatro pasos del riel
+no gastan un token hasta el último. La rama de rechazo: cuando ninguna procedencia alcanza el
+piso exigido, abstenerse es una salida y no un fallo. El lazo es la plasticidad. El registro
+sube el piso del próximo request, offline y con guarda anti-regresión, sin que nadie toque un
+peso. La flecha punteada que sube del carril de abajo es la única que cruza la frontera, y lleva
+proposiciones tipadas. Nunca control de flujo.
 
 
 # 1. Introducción
@@ -66,17 +119,15 @@ construirlas.
 1. El flujo de control vive en el código. El modelo es aleatorio y va a seguir siéndolo. Lo que
 un arnés decide es cuánto del sistema depende de esa aleatoriedad. Delegarle ramificaciones
 (qué buscar después, cuántas vueltas dar, cuándo parar) vuelve aleatoria la trayectoria misma.
-Su precio está medido. Al menos entre el 12% y el 28% de las celdas (una celda es un par
-tarea × paradigma) cambian de resultado entre réplicas, corridas repetidas de la misma celda, a
-temperatura cero con el mismo prompt y la misma semilla (§5.2).
+Su precio está medido. Al menos entre el 12% y el 28% de las celdas cambian de resultado entre
+réplicas a temperatura cero con el mismo prompt y la misma semilla (§5.2).
 
 2. Cada valor emitido exhibe de dónde salió. Una respuesta correcta y una inventada llegan con
 la misma cara, así que la fuente tiene que viajar con el valor.
 
 3. El sistema puede callarse. En el modo más difícil del corpus, las cadenas acopladas medidas
-con el modelo `gpt-5.6-terra`, el paradigma que gana lo hace con 8 correctas y 1 abstención
-sobre 9 celdas, sin una respuesta equivocada, y los brazos que fallan se abstienen más de lo que
-inventan.
+con `terra`, el paradigma que gana lo hace con 8 correctas y 1 abstención sobre 9 celdas, sin
+una respuesta equivocada, y los brazos que fallan se abstienen más de lo que inventan.
 
 Las tres se consiguen en el mismo lugar. Moviendo decisiones de flujo de control desde el
 modelo hacia el código, sobre señales del entorno que son contables y verificables.
@@ -89,18 +140,15 @@ modelos frontera y diez benchmarks [arXiv:2604.06753], y los ruteadores reales r
 cuarto de esa brecha, lo que invita a concluir que hacen falta mejores selectores.
 
 Este registro reordena esa expectativa. Los paradigmas son paquetes distintos de capacidades, y
-el premio alcanzable aparece sobre los ejes donde las capacidades difieren (costo, cobertura,
-abstención). Una señal computada ahorra 58% a utilidad igual al mejor fijo (§5.5). Sobre el eje
-que los tres contendientes comparten, la calidad, la brecha de oráculo es +0,058 y apenas se
-separa de su piso (+0,028 contra el calibrado, +0,011 contra su p95), porque tienen las mismas
-capacidades (§5.3). Los contendientes son los tres brazos que compiten por la calidad (§5.6); la
-brecha de oráculo es lo que ganaría elegir por tarea el mejor brazo sobre el mejor brazo fijo, y
-el piso de ruido es la brecha que ese oráculo mostraría por azar entre brazos idénticos. La
-interacción tarea×paradigma es grande y vive sobre todo entre los paradigmas que nadie elegiría.
-Sobre el catálogo entero el oráculo sí muestra premio neto, +0,07 a +0,15, y lo que ese premio
-pide es una clave que lo vea, porque ninguna señal por identidad de paradigma lo predice (§5.4,
-§5.6). El banco existe para que el sistema aprenda qué exige cada request y qué le puede dar
-cada brazo, y ahí es donde el premio se cobra.
+el premio alcanzable aparece sobre los ejes donde las capacidades difieren, costo, cobertura,
+abstención: una señal computada ahorra 58% a utilidad igual al mejor fijo (§5.5). Sobre el eje
+que los contendientes comparten, la calidad, la brecha de oráculo entre los tres es +0,058 y
+apenas se separa de su piso (+0,028 contra el calibrado, +0,011 contra su p95), porque tienen
+las mismas capacidades (§5.3). La interacción tarea×paradigma es grande y vive sobre todo entre
+los paradigmas que nadie elegiría. Sobre el catálogo entero el oráculo sí muestra premio neto,
++0,07 a +0,15, y lo que ese premio pide es una clave que lo vea: ninguna señal por identidad de
+paradigma lo predice (§5.4, §5.6). El banco existe para que el sistema aprenda qué exige cada
+request y qué le puede dar cada brazo, y ahí es donde el premio se cobra.
 
 ## 1.2 Dominio y alcance
 
@@ -121,12 +169,10 @@ Medido: 78 tareas, 12 paradigmas y 3 réplicas que dan 2.511 filas y 123,3M toke
 sobre 67 tareas, tres sobre 78), cero errores de infraestructura, sin juez LLM y con el
 corrector auditado, más un held-out por el mismo camino de código y una réplica del consenso
 sobre una segunda familia de modelo. Todo panel comparativo es el rectángulo mecánico del
-registro, las 64 tareas × 8 brazos donde todos los brazos corrieron las mismas tareas con tres
-réplicas. Los tres episodios de §5.4 son anteriores a la campaña y corrieron sobre
-`gpt-5.4-nano`; transfiere el mecanismo, no las magnitudes. Las cadenas acopladas de §5.2
-corrieron sobre `gpt-5.6-terra`, con los números de `gpt-5.6-luna`, el modelo de la campaña, al
-lado. Fuera de alcance: un selector validado, benchmarks públicos, y un clasificador que recupere
-los ejes de la ontología desde un request real.
+registro, 64 tareas × 8 brazos. Los tres episodios de §5.4 son anteriores a la campaña y
+corrieron sobre `gpt-5.4-nano`; transfiere el mecanismo, no las magnitudes. Las cadenas acopladas
+de §5.2 corrieron sobre `gpt-5.6-terra`, con los números de `luna` al lado. Fuera de alcance: un selector validado, benchmarks públicos, y un clasificador que
+recupere los ejes de la ontología desde un request real.
 
 ## 1.3 Organización
 
@@ -183,9 +229,8 @@ control es del programa» es DSPy [arXiv:2310.03714], que optimiza el fraseo de 
 el fraseo es control nulo y lo que se aprende es qué exige la pregunta. Y las tarjetas de
 habilidades de agentes (Agent2Agent y antecesores) son texto que el agente escribe sobre sí
 mismo, `ELICITED`; una capacidad de §5.3 es un booleano declarado desde el código y auditado
-contra el registro. En una búsqueda fechada 2026-09-01 no se encontró trabajo que declare
-capacidades de control de flujo desde el código y las someta a leave-one-arm-out, la prueba de
-predecir un brazo que el ajuste nunca vio.
+contra el registro. Búsqueda fechada 2026-09-01: no se encontró trabajo que declare capacidades
+de control de flujo desde el código y las someta a leave-one-arm-out.
 
 MINERVA/HADD (Jaime y Errecalde, 2026, Zenodo 10.5281/zenodo.20003407) es el antecedente de
 vocabulario más cercano. Una arquitectura declarada donde el LLM queda confinado a sensor tipado
@@ -220,13 +265,6 @@ Y los tres paradigmas que gobiernan los resultados tienen dueño: ReAct, Reflexi
 
 ![El método determinista: qué decide el código y qué emite el modelo](figuras/metodo-determinista.svg)
 
-**Figura 2.** El método determinista: qué decide el código y qué emite el modelo. El carril de
-arriba es determinista y auditable: medidores de forma cerrada, creencias tipadas con
-procedencia, una compuerta aritmética, las capacidades que la pregunta exige, y recién ahí una
-elección entre los brazos capaces o una abstención. El carril de abajo es el modelo, y sólo
-emite proposiciones: qué dice una unidad, hacia dónde sigue un rastro. Nunca decide cuántas
-vueltas dar, qué índice usar ni cuándo parar.
-
 Un request declara su material, su presupuesto y sus banderas de riesgo (`irreversible`,
 `shared_writes`, `regulated`), siempre declaradas por el caller y jamás inferidas del texto. El
 motor decide en cuatro pasos, y los dos primeros no gastan un token.
@@ -242,8 +280,7 @@ motor decide en cuatro pasos, y los dos primeros no gastan un token.
    solicitud y acota el espacio de paradigmas admisibles. Una acción irreversible exige piso
    `COMPUTED` u `OBSERVED`. La opinión del modelo no es evidencia admisible para apretar un
    botón. El nivel efectivo es el `max` del pedido, el piso de creencias y el piso aprendido, y
-   `max` es la única composición bajo la cual cada fuente sólo puede endurecer. En el registro
-   el dial es gratis hasta A2, y en A3 se lleva el 60% del catálogo y el 31% de la utilidad.
+   `max` es la única composición bajo la cual cada fuente sólo puede endurecer.
 4. Selección sobre capacidades, con abstención. Sobre lo que sobrevivió, la política decide qué
    exige la pregunta y qué brazos lo tienen, elige entre esos, o se abstiene y difiere.
 
@@ -253,28 +290,26 @@ emite proposiciones. Jamás maneja flujo de control ni decide compuertas.
 Un request real del registro, de punta a punta. La tarea `d1-002-w48` pregunta en qué fecha una
 persona transfirió una cuenta a su sucesora, sobre 60 unidades y 483 mil tokens de material con
 un presupuesto de 40 mil; la respuesta correcta es que no hay transferencia registrada. La
-aritmética poda tres de los doce brazos sin gastar un token. La clave de la política se arma con
-cuatro ejes `COMPUTED` y uno, el acoplamiento, `ELICITED`; el valor de esa clave es la región de
-la tarea, acá `many/no_oracle/loose/flat/no_lit`, la más poblada del corpus. Sin banderas de
-riesgo ni piso aprendido, el dial queda en A1 y no excluye nada. θ en su versión 6, firmada,
-tiene 24 episodios por brazo en esa región y gobierna con `dag_strategy` (`0,833` contra `0,775`
-del fallback, margen sobre el umbral). Los nueve brazos factibles contestaron que no hay
-transferencia y sacaron `1,000`; lo que los separa es el costo, de 14.641 tokens en `rewoo` a
-427.975 en `react`, y con objetivo de costo la señal computada elegiría `rewoo`. El artefacto
-lleva región, exclusiones y por qué, nivel del dial, versión y firma de θ; con él y la base de
-creencias, la decisión se re-deriva sin llamar al modelo.
+aritmética poda tres de los doce brazos sin gastar un token. La clave se arma con cuatro ejes
+`COMPUTED` y uno, el acoplamiento, `ELICITED`: región `many/no_oracle/loose/flat/no_lit`, la más
+poblada del corpus. Sin banderas de riesgo ni piso aprendido, el dial queda en A1 y no excluye
+nada. θ en su versión 6, firmada, tiene 24 episodios por brazo en esa región y gobierna con
+`dag_strategy` (`0,833` contra `0,775` del fallback, margen sobre el umbral). Los nueve brazos
+factibles contestaron que no hay transferencia y sacaron `1,000`; lo que los separa es el costo,
+de 14.641 tokens en `rewoo` a 427.975 en `react`, y con objetivo de costo la señal computada
+elegiría `rewoo`. El artefacto lleva región, exclusiones y por qué, nivel del dial, versión y firma
+de θ; con él y la base de creencias, la decisión se re-deriva sin llamar al modelo.
 
-Aprender, acá, significa que el sistema madura. Cambia lo que hace con la experiencia, cada
-cambio es un artefacto legible y comparable con el anterior, y ninguno rompe la garantía. Lo que
-se acumula son creencias, proposiciones y tablas; lo que las gobierna son reglas y medidores que
-no aprenden. Un medidor es una función que computa un eje desde el material o el request, sin
-modelo. Las reglas y los medidores (qué puede medir el sistema, compuerta, retículo, `max`,
-guarda, partición) los escribe una persona con versión y test. Lo demás se acumula solo y nadie
-lo define al principio. Las creencias entran cuando un medidor las emite y la vigente reemplaza
-a la anterior sin borrarla, las proposiciones aparecen la primera vez que se emiten, y la
-calibración por proposición, qué brazo admite cada región, los pisos por región y las particiones
-de la clave se llenan desde el registro, offline y con guarda. La frontera está ahí a propósito.
-Un sentido que el sistema pudiera darse solo sería uno que nadie puede prometer.
+Qué significa aprender acá, antes de decir cómo. Que el sistema madura: cambia lo que hace con la experiencia, cada cambio es un artefacto legible y
+comparable con el anterior, y ninguno rompe la garantía. Lo que se acumula son creencias,
+proposiciones y tablas; lo que las gobierna son reglas y medidores que no aprenden. Las reglas y
+los medidores (qué puede medir el sistema, compuerta, retículo, `max`, guarda, partición) los
+escribe una persona con versión y test. Lo demás se acumula solo y nadie lo define al principio:
+las creencias entran cuando un medidor las emite y la vigente reemplaza a la anterior sin
+borrarla, las proposiciones aparecen la primera vez que se emiten, la calibración por
+proposición, qué brazo admite cada región, los pisos por región y las particiones de la clave se
+llenan desde el registro, offline y con guarda. La frontera está ahí a propósito: un sentido que
+el sistema pudiera darse solo sería uno que nadie puede prometer.
 
 Qué es plástico. El LLM tiene los pesos congelados y sin embargo el sistema cambia de
 comportamiento con la experiencia, por tres pasos. Uno, cada decisión deja su huella epistémica
@@ -331,16 +366,13 @@ y ese nodo es el testigo. ∎
 Lo que compra y lo que no. Una discrepancia localizable es depurable, auditable y corregible. Una
 repartida sobre una historia entera, no. El confinamiento no reduce la varianza del LLM ni
 mejora la calidad. Reordena dónde puede manifestarse. Que además suba la utilidad (§5.2) es un
-resultado de este corpus.
-
-Una ramificación delegada es de dominio tipado si la salida del LLM se proyecta, antes de usarse,
-sobre un conjunto finito de candidatos que el código computa desde el índice. El algoritmo de
-§5.2 tiene `d = n` ramificaciones, todas tipadas; no cumple la Definición 3 y el paper no afirma
-que la cumpla. Lo que las correcciones hicieron fue sacar una del LLM, el ancla, y volver tipadas
-las demás.
-
-La consecuencia observable es `pass^k`, la probabilidad de que las `k` réplicas acierten todas.
-Decrece con `k`, al revés de `pass@k`, que crece. Nombre y métrica vienen de τ-bench. Con tres
+resultado de este corpus. Y una definición más: una ramificación
+delegada es de dominio tipado si la salida del LLM se proyecta, antes de usarse, sobre un
+conjunto finito de candidatos que el código computa desde el índice. El algoritmo de §5.2 tiene
+`d = n` ramificaciones, todas tipadas; no cumple la Definición 3 y el paper no afirma que la
+cumpla. Lo que las correcciones hicieron fue sacar una del LLM, el ancla, y volver tipadas las
+demás. Consecuencia observable: `pass^k`, la probabilidad de que las `k` réplicas acierten todas.
+No es `pass@k`, que crece con `k`. `pass^k` decrece. Nombre y métrica vienen de τ-bench. Con tres
 réplicas la potencia para detectar una celda que se da vuelta una de cada diez veces es 0,27,
 así que toda fracción de celdas inestables es una cota inferior.
 
@@ -366,9 +398,9 @@ sin ningún supuesto de independencia.
 partiendo cada esperanza según el signo de `Δ_j`. `S₊ʲ` pesa `π_j α_j` con media `G_j`, `S₋ʲ` pesa
 `ν_j β_j` con media `−L_j`, y `S₀ʲ` aporta exactamente cero. ∎
 
-El empate importa. En este catálogo un brazo es el más barato al empatar en 46 de 96 celdas, y
-definir `β` sobre el complemento de `S₊` le cobraría al ruteador haber ruteado sobre un empate,
-un acto que no cuesta nada.
+El empate no es un tecnicismo. En este catálogo un brazo es el más barato al empatar en 46 de
+96 celdas, y una versión anterior que definía `β` sobre el complemento de `S₊` le cobraba al
+ruteador haber ruteado sobre un empate, un acto que no cuesta nada.
 
 > Es una identidad contable, no un resultado empírico, y se usa como instrumento. No afirma que
 > rutear convenga. Descompone el valor de rutear en términos medibles por separado, y por eso
@@ -399,7 +431,7 @@ sobre `(q, M)`, así que la elección del brazo es delegada por la Definición 2
 
 Es la exigencia que §5.6 mide. El vocabulario de región tenía un eje elicitado y ese eje
 cambió de valor en el 27% de las tareas según qué modelo las sensó. Y explica por qué cada
-medidor del ciclo de §5.4 tuvo que ser `COMPUTED`. Lo que no afirma es que una clave `COMPUTED`
+LLM del ciclo de §5.4 tuvo que ser `COMPUTED`. Lo que no afirma es que una clave `COMPUTED`
 sea informativa. Una clave puede ser determinista e inútil, y §5.4 mide ese caso.
 
 ---
@@ -418,13 +450,13 @@ para toda comparación entre brazos. Cada comparación lleva su piso de ruido. E
 sobre toda respuesta de utilidad cero. De 567 ceros, ninguno presenta señal fuerte de defecto de
 emparejamiento.
 
-Ocho preguntas de investigación (PI), con criterio fijado antes de mirar el dato. PI1, cuánta
-varianza de trayectoria hay y si confinarla cambia el resultado (§5.2). PI5, si las capacidades
-declaradas transfieren a un paradigma no visto, y PI6, si la ontología de la pregunta separa
-mejor que la partición estructural (§5.3). PI7, si cada refutación produjo un medidor nuevo sin
-romper la reproducibilidad (§5.4). PI8, qué aprende la política que pague fuera de muestra y qué
-predice el comportamiento (§5.5). PI2, si elegir por identidad captura brecha neta positiva, y
-PI3, si alguna señal explica la interacción (§5.6). PI4, si el acuerdo entre paradigmas predice
+Ocho preguntas, con criterio fijado antes de mirar el dato. PI1, cuánta varianza de trayectoria
+hay y si confinarla cambia el resultado (§5.2). PI5, si las capacidades declaradas transfieren a
+un paradigma no visto, y PI6, si la ontología de la pregunta separa mejor que la partición
+estructural (§5.3). PI7, si cada refutación produjo un medidor nuevo sin romper la
+reproducibilidad (§5.4). PI8, qué aprende la política que pague fuera de muestra y qué predice el
+comportamiento (§5.5). PI2, si elegir por identidad captura brecha neta positiva, y PI3, si
+alguna señal explica la interacción (§5.6). PI4, si el acuerdo entre paradigmas predice
 corrección sin oráculo ni juez (§5.7).
 
 ## 5.1 El plantel
@@ -447,12 +479,12 @@ Tabla 2. Los doce paradigmas, con sus denominadores.
 | `direct` | 6% | 0,917 | 0,055 | — | 22.822 | 5 | — |
 
 `aplica` es qué fracción de las celdas ofrecidas a ese brazo pasa la compuerta de factibilidad, y
-`u` promedia sólo las que pasan, con `λ = 0`. Las cuatro primeras columnas están recomputadas
-contra el registro (2026-09-01); `pass^3`, `serie` y USD son del cierre de campaña (2026-08-30).
-`pass^3` y `serie` salen del rectángulo de 64 tareas × 8 brazos porque exigen que todos hayan
-corrido las mismas tareas con tres réplicas. Las cuatro correcciones de §5.2 sobre
-`pointer_chase` son posteriores a esta corrida, tocan 3 de 78 tareas y no se propagaron a esta
-tabla.
+`u` promedia sólo las que pasan, con `λ = 0`; las cuatro primeras columnas se recomputaron
+contra el registro el 2026-09-01. `pass^3`, `serie` y USD son del cierre de campaña del
+2026-08-30. `pass^3` y `serie` salen del rectángulo de 64 tareas × 8 brazos porque exigen que
+todos hayan corrido las mismas tareas con tres réplicas. Las
+cuatro correcciones de §5.2 sobre `pointer_chase` son posteriores a esta corrida, tocan 3 de 78
+tareas y no se propagaron a esta tabla.
 
 Tres regularidades. `u` y `u × aplica` son dos números. `direct` es el mejor del plantel donde
 corre y aporta 0,055 porque corre en el 6% de las celdas. En el resto no corre, y eso lo decide
@@ -465,45 +497,35 @@ lo que generan. Se diferencian en lo que arrastran al prompt.
 
 ## 5.2 PI1. La varianza de trayectoria, y confinarla
 
-Al menos entre el 12% y el 28% de las celdas del rectángulo cambian de resultado entre réplicas,
-con `t = 0`, semilla fija y el mismo prompt. Una celda es inestable si sus tres réplicas no son
-idénticas.
+```
+brazo            pass@1   pass^3    caída   inestables
+react             0,843    0,734   −0,109          23%
+dag_strategy      0,822    0,703   −0,119          20%
+rewoo             0,688    0,531   −0,157          28%
+supervisor        0,587    0,406   −0,181          28%
+```
 
-| brazo | pass@1 | pass^3 | caída | inestables |
-|---|---:|---:|---:|---:|
-| `react` | 0,843 | 0,734 | −0,109 | 23% |
-| `dag_strategy` | 0,822 | 0,703 | −0,119 | 20% |
-| `rewoo` | 0,688 | 0,531 | −0,157 | 28% |
-| `supervisor` | 0,587 | 0,406 | −0,181 | 28% |
-
-Sobre una llamada la varianza del LLM es un token distinto. Sobre una trayectoria, una elección
-distinta en el paso uno cambia qué documento se lee en el paso dos. La varianza no se promedia.
-Se ramifica.
+Una celda es inestable si sus tres réplicas no son idénticas; la definición anterior de este
+paper contaba como inestable una celda con tres réplicas iguales y parciales, y se corrigió. Al
+menos entre el 12% y el 28% de las celdas del rectángulo cambian de resultado entre réplicas,
+con `t = 0`, semilla fija y el mismo prompt. Sobre una llamada la varianza del LLM es un token distinto. Sobre una
+trayectoria, una elección distinta en el paso uno cambia qué documento se lee en el paso dos. La
+varianza no se promedia. Se ramifica.
 
 ![Una ramificación delegada, resuelta por código](figuras/sensor-determinista.svg)
 
-**Figura 3.** Una ramificación delegada, resuelta por código. El panel izquierdo dibuja cada
-réplica por separado, y ahí se ve lo que un promedio esconde. El «antes» no era peor en
-promedio; era inestable, y la misma pregunta con la misma huella y los mismos resultados de
-búsqueda daba la respuesta correcta o una equivocada según la réplica. El panel derecho muestra
-utilidad y consistencia moviéndose juntas.
-
-La intervención llevó a `pointer_chase` de 0,33 a 0,89 sobre las cadenas acopladas, 8 de 9
-celdas, empatando al mejor brazo. Ese modo se midió sobre `gpt-5.6-terra`, nueve celdas por
-brazo (sobre `nano` daba cero en toda la grilla; sobre `luna` el registro tiene seis celdas por
-brazo, donde `pointer_chase` da 0,167 y `dag_strategy` 0,667). Fueron cuatro correcciones, todas
-de flujo de control o de tipado y ninguna de prompt. Una entidad nombrada se busca con el índice
-léxico y no con el híbrido. La salida del LLM se tipa a entidad antes de usarse. Un salto a una
-unidad que no nombra a quien se persigue no es un salto, y entre empatados gana el que la nombra
-antes. Y el ancla la resuelve el código.
-
-La cuarta corrección prueba el punto sola. Con el mismo prompt y los mismos resultados de
+La intervención. El modo de cadenas acopladas se midió sobre `gpt-5.6-terra` (sobre `nano` daba
+cero en toda la grilla; sobre `luna` el registro tiene seis celdas por brazo, donde
+`pointer_chase` da 0,167 y `dag_strategy` 0,667). Sobre `terra`, nueve celdas por brazo, un
+brazo estaba en 0,33. Cuatro correcciones, todas de flujo de control o de tipado y ninguna de
+prompt, desarrolladas y probadas sobre esas mismas nueve celdas en cuatro estados sucesivos del
+registro: es un ajuste en muestra sobre tres tareas, y medirlo sobre celdas nuevas está en §7. Una entidad nombrada se busca con el
+índice léxico y no con el híbrido. La salida del LLM se tipa a entidad antes de usarse. Un
+salto a una unidad que no nombra a quien se persigue no es un salto, y entre empatados gana el
+que la nombra antes. Y el ancla la resuelve el código. De 0,33 a 0,89, 8 de 9 celdas,
+empatando al mejor brazo. La cuarta corrección prueba el punto sola. Con el mismo prompt y los mismos resultados de
 búsqueda, la réplica 0 elegía el ancla correcta (`u = 1,000`) y las réplicas 1 y 2 otra (0,000).
 Una decisión de flujo delegada al LLM se lleva el determinismo.
-
-La salvedad. Las correcciones se desarrollaron y probaron sobre esas mismas nueve celdas, en
-cuatro estados sucesivos del registro. Es un ajuste en muestra sobre tres tareas, y medirlo
-sobre celdas nuevas está en §7.
 
 Y la varianza no crece con el número de ramificaciones. La conjetura ingenua
 `pass^k ≈ pass@1 · q^d` se refuta. La correlación entre `d` y la caída de `pass^3` es `r = −0,24`.
@@ -511,8 +533,8 @@ Importa cuál se absorbe, y eso convierte el diseño de un arnés en un problema
 
 ## 5.3 PI5 y PI6. La interfaz aprendible: capacidades y ejes de la pregunta
 
-La primera predicción registrada del ciclo, `P15` (§5.4), mapeaba la ontología de la pregunta a
-un nombre de paradigma y se refutó. Perdió −0,087 contra el mejor fijo. El eslabón que faltaba:
+`P15` se refutó mapeando ontología de la pregunta a nombre de paradigma. Perdió −0,087 contra el
+mejor fijo (§5.4). El eslabón que faltaba:
 
     ontología de la pregunta  →  capacidades que EXIGE  →  brazos que las tienen  →  el barato
 
@@ -530,9 +552,8 @@ costo que no escala con el alcance, lectura sin pérdida, visión de contexto (c
 hilo entero, crudo o compactado; es lo que la ley de costo cobra en cada vuelta de `react`),
 autocompacta (el arnés reduce ese hilo de forma determinista; implementada, sin brazo en la
 campaña), cobertura garantizada, verifica y replanifica, resuelve referencia, largo gobernado por
-código, elige índice por consulta, abstiene sin prueba. Una auditoría contrasta lo declarado
-contra lo corrido. Un brazo que declara abstenerse y nunca se abstuvo tiene una declaración
-falsa, y eso se ve.
+código, elige índice por consulta, abstiene sin prueba. Una auditoría contrasta lo declarado contra lo corrido. Un brazo que
+declara abstenerse y nunca se abstuvo tiene una declaración falsa, y eso se ve.
 
 | eje de la pregunta | capacidades que exige |
 |---|---|
@@ -550,48 +571,40 @@ capacidades. Predice sobre un brazo que todavía no existe.
 
 ![El EDA de capacidades](figuras/eda-capacidades.svg)
 
-**Figura 4.** El EDA de capacidades. Cada fila entrena con siete brazos y predice el octavo, que
-el modelo nunca vio. Un modelo con la identidad del paradigma no puede decir nada de ese brazo,
-porque no tiene parámetro para él; uno con capacidades sí, porque el brazo nuevo trae su vector
-declarado desde el código. A la derecha, el error del mismo modelo con las capacidades barajadas
-entre brazos, que es su nulo: la figura usa 400 barajadas al azar y da `p` 0,058; sobre las
-40.320 permutaciones exactas el `p` es 0,066.
+PI5. La prueba es dejar un brazo afuera, no una tarea. Un modelo con la identidad del paradigma
+no puede decir nada de un brazo que no vio. Uno con capacidades sí, porque el brazo nuevo trae
+su vector del código.
 
-PI5. La prueba es dejar un brazo afuera y predecirlo con los otros siete (leave-one-arm-out),
-no dejar una tarea afuera.
+```
+modelo                                          MAE
+media global                                  0,364
+dificultad de la tarea sola                   0,257
+CAPACIDADES                                   0,229
+identidad del brazo (viendo al que falta)     0,339
+```
 
-| modelo | MAE |
-|---|---:|
-| media global | 0,364 |
-| dificultad de la tarea sola | 0,257 |
-| capacidades | 0,229 |
-| identidad aditiva (dificultad de la tarea más efecto del brazo, viendo al que falta) | 0,225 |
-| identidad del brazo sin término de tarea (viendo al que falta) | 0,339 |
+Las capacidades ganan 6 de 8 pliegues, y los dos que pierden son `gist_reader` y
+`pointer_chase`, los dos brazos con el canal con pérdida más marcado: ahí la dificultad de la
+tarea predice mejor, y eso dice que al catálogo le falta una capacidad o tiene una mal
+declarada. La cuarta fila compara un modelo sin término de tarea contra uno con él, y eso no es
+una comparación; el baseline correcto es la identidad aditiva,
+dificultad de la tarea más efecto del brazo, viendo al brazo dejado afuera, MAE 0,225. Gana a las
+capacidades (0,229). Lo que las capacidades tienen que la identidad no tiene es que existen para
+un brazo que no corrió; lo que no tienen hoy es mejor precisión que saber cuál es el brazo.
+Contra capacidades barajadas, `p` exacto `0,066`. Sugestivo y no establecido, porque ocho brazos son
+ocho puntos. Lo que lo sentencia son más brazos, no más tareas. Y la tabla tiene su
+contraejemplo escrito. `dag_strategy` saca 0,89 en la cadena acoplada sin dos de las tres
+capacidades exigidas, por otra ruta. A la tabla le falta expresar «A y B, o bien C y D», y se
+deja como conjunción para que siga siendo falsable.
 
-Las capacidades ganan 6 de 8 pliegues. Los dos que pierden son `gist_reader` y `pointer_chase`,
-los dos brazos con el canal con pérdida más marcado; ahí la dificultad de la tarea predice
-mejor, y eso dice que al catálogo le falta una capacidad o tiene una mal declarada.
-
-Contra la identidad aditiva, pierden. La fila de identidad sin término de tarea no es el
-baseline correcto; el correcto suma dificultad de la tarea y efecto del brazo, viendo al brazo
-dejado afuera, y da MAE 0,225 contra 0,229. Lo que las capacidades tienen y la identidad no es
-que existen para un brazo que no corrió. Lo que no tienen hoy es mejor precisión que saber cuál
-es el brazo.
-
-Contra capacidades barajadas, `p` exacto `0,066` sobre las 40.320 permutaciones. Sugestivo y no
-establecido, porque ocho brazos son ocho puntos. Lo que lo sentencia son más brazos, no más
-tareas.
-
-La tabla de exigencias tiene su contraejemplo escrito. `dag_strategy` saca 0,89 en la cadena
-acoplada sin dos de las tres capacidades exigidas, por otra ruta. A la tabla le falta expresar
-«A y B, o bien C y D», y se deja como conjunción para que siga siendo falsable.
-
-PI6. La ontología separa más con menos segmentos. La salvedad va antes del número. La
+PI6. La ontología separa más con menos segmentos. La salvedad va antes del número: la
 segmentación se mide con la etiqueta de diseño, el modo del que salió cada tarea, que se conoce
-al construir el corpus y no al decidir. La cantidad es la varianza entre brazos dentro de cada
-segmento, descontado el ruido de réplica, relativa a la partición trivial, sobre el registro ya
-pagado; el control es el nulo por permutación de cada segmentación, barajando las etiquetas
-entre las 64 tareas con los tamaños de segmento fijos.
+al construir el corpus y no al decidir. Dentro de cada segmento, varianza entre brazos contra
+ruido entre réplicas, sobre el registro ya pagado.
+
+La cantidad es la varianza entre brazos dentro de cada segmento, descontado el ruido de
+réplica, relativa a la partición trivial; el control es el nulo por permutación de cada
+segmentación, barajando las etiquetas entre las 64 tareas con los tamaños de segmento fijos.
 
 | segmentación | segmentos | `S/R` | nulo p95 | exceso sobre la media del nulo |
 |---|---:|---:|---:|---:|
@@ -604,20 +617,19 @@ entre las 64 tareas con los tamaños de segmento fijos.
 
 La ontología con cinco segmentos separa casi lo que la región con trece, y le saca al azar más
 que ella. Una clave `COMPUTED` de dos ejes declarados por el caller ya supera a la región en
-exceso sobre su nulo. Tres de los siete ejes del eje principal usan la etiqueta de diseño.
-
-El caso concreto. Horizonte desconocido y vigencia son idénticos en los seis campos computables
-de la región y tienen efecto opuesto. Lo que los separa es si la pregunta pide el valor vigente
-o el valor a una fecha. Esto establece que hay estructura ontológica y que la política debería
-segmentar por ella. No establece que se la pueda detectar en un request real. Dos ejes ya son
-`COMPUTED` desde lo que el caller declara. Los demás tienen a `ELICITED` como techo, y ése es el
-experimento que sigue.
+exceso sobre su nulo. Tres de los siete ejes del eje principal usan la etiqueta de diseño. El `p`
+exacto del nulo de capacidades, sobre las 40.320 permutaciones, es 0,066. El caso concreto. Horizonte desconocido y vigencia son
+idénticos en los seis campos computables de la región y tienen efecto opuesto. Lo que los separa
+es si la pregunta pide el valor vigente o el valor a una fecha. Esto establece que hay
+estructura ontológica y que la política debería segmentar por ella. No establece que se la pueda
+detectar en un request real. Dos ejes ya son `COMPUTED` desde lo que el caller declara. Los demás
+tienen a `ELICITED` como techo, y ése es el experimento que sigue.
 
 ## 5.4 PI7. El ciclo que repara su propio vocabulario
 
-Tres refutaciones preregistradas sobre tres mundos nuevos, y cada una produjo un medidor. El
-registro que sostiene esta sección es la cronología de predicciones del laboratorio, cada una
-anotada antes de correr y con su script de veredicto congelado en el mismo commit.
+El registro que sostiene esta sección es la cronología de predicciones del laboratorio, cada
+una anotada antes de correr y con su script de veredicto congelado en el mismo commit. Tres
+refutaciones sobre tres mundos nuevos, y cada una produjo un medidor.
 
 Primero, lo que el sistema hizo solo sobre el registro de la campaña. Los 616 episodios se le
 dieron a θ en seis lotes por orden de tarea, con la guarda de promoción evaluada sobre el lote
@@ -632,41 +644,33 @@ siguiente y cada bundle construido dos veces:
 
 θ maduró en evidencia, cobertura y seguridad sin que nadie tocara una regla, y la guarda frenó
 el único paso cuya ganancia cruzaba cero. No maduró en premio de calidad, porque en este corpus
-no lo hay entre contendientes (§5.6).
-
-Los medidores nuevos, en cambio, los agregaron personas. Cada episodio agregó un medidor, un eje
-que el sistema no sabía medir, y un medidor es código, así que agregarlo es diseño. Cada
+no lo hay entre contendientes (§5.6). Segundo, en qué capa ocurre lo que sigue: cada episodio
+agregó un medidor, un eje que el sistema no sabía medir, y un medidor es código, así que agregarlo
+es diseño y lo hicieron personas. Cada
 refutación la leyeron el autor y su asistente, diagnosticaron el eje que faltaba y lo agregaron.
-Que la etapa de abstracción proponga ejes sola está en el diseño y no corrió.
-
-Los tres episodios son anteriores a la campaña y corrieron sobre `gpt-5.4-nano`, con 390 filas y
-unos 13 a 14M tokens cada uno, en tres mundos de 26 tareas. Transfiere el mecanismo, que a la
-clave le faltaba un eje, y la reproducibilidad. No transfieren las magnitudes. Ninguna
-estadística mezcla los dos modelos.
+Que la etapa de abstracción proponga ejes sola está en el diseño y no corrió. Y sobre qué modelo: los tres episodios son anteriores a la campaña y corrieron
+sobre `gpt-5.4-nano`, con 390 filas y unos 13 a 14M tokens cada uno, en tres mundos de 26
+tareas. Transfiere el mecanismo, que a la clave le faltaba un eje, y la reproducibilidad. No
+transfieren las magnitudes. Ninguna estadística mezcla los dos modelos.
 
 Primer episodio, semilla 47. La política ruteó por región hacia un nombre de paradigma y perdió
 −0,087 contra el mejor fijo, más allá del piso de ruido de 0,057, reproduciendo cada decisión 26
-de 26.
-
-El mecanismo, verificado. Las tareas de horizonte desconocido caían en las mismas regiones que
-las de cobertura porque el vocabulario no tenía eje para «no se sabe cuántos saltos hay». La
-política mandó ahí al brazo que gana en cobertura, contra su propio veredicto registrado de que
-ese brazo falla en horizonte, porque ninguna etiqueta le dijo en qué caso estaba. Donde el
-registro sí tenía la señal funcionó, +0,121 sobre cobertura.
-
-Dos incertidumbres, y el criterio registrado llevaba una. Contra el piso de ruido por celda,
-−0,087 está fuera de ±0,057 y la predicción falla su propio test. El intervalo de muestreo sobre
-26 tareas, bootstrap pareado, incluye al cero, [−0,228, +0,037], `p = 0,19`. Se reportan las
-dos, y bajo Benjamini-Hochberg ningún contraste de ese episodio sobrevive.
-
-Lo que produjo el ciclo fue el eje de continuidad, recurrencia de una clave literal entre
-unidades, función pura del material. Separa el horizonte 6 de 6 en tres corpus, con cero falsos
-positivos. Agregarlo sin más fragmentó las regiones por debajo del piso de confianza, de 12
-tareas con margen a 0; con retroceso jerárquico a la región padre, 16 de 26.
+de 26. El mecanismo, verificado. Las tareas de horizonte desconocido caían en las mismas
+regiones que las de cobertura porque el vocabulario no tenía eje para «no se sabe cuántos saltos
+hay». La política mandó ahí al brazo que gana en cobertura, contra su propio veredicto
+registrado de que ese brazo falla en horizonte, porque ninguna etiqueta le dijo en qué caso
+estaba. Donde el registro sí tenía la señal, funcionó. +0,121 sobre cobertura. Dos
+incertidumbres, y el criterio registrado llevaba una: contra el piso de ruido por celda, −0,087
+está fuera de ±0,057 y la predicción falla su propio test; el intervalo de muestreo sobre 26
+tareas, bootstrap pareado, incluye al cero, [−0,228, +0,037], `p = 0,19`. Se reportan las dos, y
+bajo Benjamini-Hochberg ningún contraste de ese episodio sobrevive. Lo que produjo el ciclo fue
+el eje de continuidad, recurrencia de una clave literal entre unidades, función pura del
+material. Separa el horizonte 6 de 6 en tres corpus, con cero falsos positivos. Y agregarlo sin
+más fragmentó las regiones por debajo del piso de confianza, de 12 tareas con margen a 0. Con
+retroceso jerárquico a la región padre, 16 de 26.
 
 Segundo episodio, semilla 61. Con el eje nuevo, la acción real puntuada y el costo cobrado, la
-medición preregistrada como decisiva fue el barrido sobre λ, el peso del costo en la utilidad
-neta.
+medición preregistrada como decisiva fue el barrido sobre λ.
 
 | λ | neto contra el mejor fijo | neto contra siempre-`react` |
 |---:|---:|---:|
@@ -674,29 +678,27 @@ neta.
 | 0,02 | −0,404 | +0,000 |
 | 0,05 | −1,289 | −0,265 |
 
-Con el costo a cero, rutear por identidad captura +0,121. A λ = 0,02 ya está dentro del ruido.
-La selección por nombre compra calidad sólo cuando los tokens son gratis.
-
-Lo que produjo el ciclo es la corrección de la valuación, y un hallazgo sobre el corpus. En un
-corpus de coincidencia exacta la cascada precede a la selección en 20 de 22 tareas, porque la
-propiedad que hace gradeable a una tarea es la que hace correcta a la escalación.
-
-El tercer mundo (semilla 73) se generó con detectores declarados por tarea y la cascada bajó de
-22 a 2 de 26. La sonda disparó en 14 y no resolvió ninguna, así que la decisión fue diferir. Su
-número, neto −0,146 contra el mejor fijo a λ = 0 y −1,04 a λ = 0,05; 0,000 contra
-siempre-`react`, porque 20 de 22 tareas terminaron en el fallback. Reproducibilidad, 26 de 26 en
-los tres.
-
-Dos salvedades. El piso de 0,057 del primer episodio se estimó sobre las 112 tareas de
+Con el costo a cero, rutear por identidad captura +0,121. A λ = 0,02 ya está dentro del ruido. La
+oración se escribió antes del número. La selección por nombre compra calidad sólo cuando los
+tokens son gratis. Lo que produjo el ciclo es la corrección de la valuación, y el hallazgo de
+que en un corpus de coincidencia exacta la cascada precede a la selección en 20 de 22 tareas, porque la propiedad que hace gradeable a una
+tarea es la que hace correcta a la escalación. El tercer mundo se generó con detectores
+declarados por tarea y la cascada bajó de 22 a 2 de 26. La sonda disparó en 14 y no resolvió
+ninguna, así que la decisión fue diferir. Su número:
+neto −0,146 contra el mejor fijo a λ = 0 y −1,04 a λ = 0,05; 0,000 contra siempre-`react`,
+porque 20 de 22 tareas terminaron en el fallback. Reproducibilidad, 26 de 26 en los tres. Dos
+salvedades: el piso de 0,057 del primer episodio se estimó sobre las 112 tareas de
 entrenamiento y no sobre el mundo held-out, y los netos a λ > 0 se compararon contra un piso
 computado a λ = 0, con el costo entre dos y cinco veces más disperso que la utilidad.
 
-Después de los tres episodios, el eje literal. El vocabulario vigente agrega en cuántas unidades aparece el
+Tercer episodio, el literal. El vocabulario vigente agrega en cuántas unidades aparece el
 literal que la pregunta cita. Forma de token cerrada, sin modelo, y no es un disparador léxico
 porque cambia de valor si cambia el material. Medido leave-one-task-out sobre el rectángulo con
-objetivo de costo, la señal `cardinalidad × término literal` ahorra 58% a utilidad igual al
-mejor fijo (§5.5). Midiendo apareció un defecto del medidor. Una pregunta booleana cita sus
-opciones de respuesta, no un término, y la guarda usa la cardinalidad que el caller declara.
+objetivo de costo: la señal `cardinalidad × término literal` ahorra 58% a utilidad igual al
+mejor fijo, contra 76% a −0,079 de la región vigente (§5.5). Una comparación de vocabularios sobre 41 × 7 que un borrador
+anterior citaba acá no la reproduce ningún script y se retiró. Y midiendo apareció un defecto del
+LLM. Una pregunta booleana cita sus opciones de respuesta, no un término, y la guarda usa la
+cardinalidad que el caller declara.
 
 | episodio | qué faltaba | qué se agregó | procedencia | reproducida |
 |---|---|---|---|---:|
@@ -709,32 +711,31 @@ opciones de respuesta, no un término, y la guarda usa la cardinalidad que el ca
 De los tres episodios, uno produjo un medidor `COMPUTED` nuevo, el segundo una corrección de
 valuación y el tercero un corpus; el literal salió de una medición y la ontología es mayormente
 `ELICITED`. Lo que entró a la clave o al método fue `COMPUTED` o fue código, nunca una salida
-del modelo, y por eso ninguno rompió la garantía ni la reproducibilidad.
-
-Lo que el ciclo produjo es el vocabulario sobre el que una política puede aprender, y no una
-política sobre paradigmas. La consolidación aprende la política sobre el vocabulario que tiene;
-el vocabulario lo repararon personas, y esa reparación es el método que este registro muestra.
-Lo que lo separa de un ajuste post hoc es la disciplina de §5.6. Piso de ruido por sesgo del
-máximo, corrección por selección, partición por tarea, y predicciones escritas antes del número.
+del modelo, y por eso ninguno rompió la garantía. La reproducibilidad no se perdió en ningún
+episodio. Y lo que el ciclo produjo no es una política sobre paradigmas. Es el vocabulario sobre el que una política puede
+aprender. Qué parte es del sistema: la consolidación aprende la
+política sobre el vocabulario que tiene; el vocabulario lo repararon personas, y esa reparación
+es lo que este registro muestra como método. La disciplina que lo separa de un ajuste post hoc
+es la de §5.6. Piso de ruido por sesgo del máximo, corrección por selección,
+partición por tarea, y predicciones escritas antes del número.
 
 ## 5.5 PI8. Lo que la política aprende, y lo que predice
 
 Entre brazos capaces, el desempate por costo paga fuera de muestra. Sobre el rectángulo, la
 señal `cardinalidad × término` da 58% de ahorro a utilidad igual al mejor fijo,
-leave-one-task-out; la región vigente da 76% a −0,079. Sobre un panel de 59 tareas con cinco
-exclusiones a mano la misma señal daba 42% a −0,017, y por eso se declara el panel.
+leave-one-task-out; la región vigente da 76% a −0,079. Sobre un panel de 59 tareas con cinco exclusiones a mano la misma señal daba 42% a −0,017, y
+por eso se declara el panel. La política entera sobre la misma pregunta, con el script que sí
+existe: con la clave completa ahorra 68% a −0,063 [−0,139, +0,002], y con la clave `COMPUTED`
+sola ahorra 31% a −0,104 [−0,181, −0,030]. Una tabla de 41 × 7 con 0,951 y 46% que un borrador
+anterior traía acá no la reproduce ningún script y se retiró. La señal suelta computada hace
+mejor que la política sobre la misma clave, y esa brecha es del sistema, no del corpus.
 
-La política entera, sobre la misma pregunta, hace peor que la señal suelta. Con la clave
-completa ahorra 68% a −0,063 [−0,139, +0,002], y con la clave `COMPUTED` sola ahorra 31% a
-−0,104 [−0,181, −0,030]. Esa brecha es del sistema, no del corpus. Una comparación de
-vocabularios sobre 41 × 7, con 0,951 y 46%, no tiene script que la reproduzca y no se cita.
-
-El paradigma determina cuánta evidencia se lee, y eso pesa más que el paradigma mismo. Sobre el
-corpus fuera de ventana del primer episodio (semilla 47, `gpt-5.4-nano`, 90 celdas), las celdas
-que leyeron toda la evidencia portadora dan 0,869 y las que no, 0,336. Una brecha de +0,533,
-2,5 veces la distancia entre el mejor y el peor brazo, y máxima en horizonte desconocido,
-+0,721, el modo donde el primer episodio más perdió. Quién la determina, con R² ajustado por
-grados de libertad, porque 21 grupos sobre 90 celdas esperan 22% bajo el nulo:
+El paradigma determina cuánta evidencia se lee, y eso vale más que el paradigma. Sobre el corpus
+fuera de ventana del primer episodio (semilla 47, `gpt-5.4-nano`, 90 celdas), las celdas que
+leyeron toda la evidencia portadora dan 0,869 y las que no, 0,336. Una brecha de +0,533, 2,5 veces la distancia entre el mejor y el peor brazo, y máxima en
+horizonte desconocido, +0,721, el modo donde el primer episodio más perdió. Quién la determina,
+con R² ajustado por grados de libertad, porque 21 grupos sobre 90 celdas esperan 22% bajo el
+nulo:
 
 | qué determina el recall | grupos | R² crudo | R² ajustado |
 |---|---:|---:|---:|
@@ -742,22 +743,19 @@ grados de libertad, porque 21 grupos sobre 90 celdas esperan 22% bajo el nulo:
 | el paradigma, lo que la decisión elige | 5 | 62,2% | 60,4% |
 | la tarea | 21 | 10,5% | 0 |
 
-El paradigma explica el 60% ajustado; región y tarea nada por encima de su nulo. Fuera de
+El paradigma explica el 60% ajustado; región y tarea nada por encima de su nulo. Y fuera de
 muestra, entrenando en 119 celdas de otros corpus y probando en estas 90, el error de predecir
 el recall es 0,41 con una constante, 0,39 por región y 0,21 por paradigma. Rutear es la palanca
 principal sobre la variable dominante, y se la tira casi a ciegas porque la región apenas la ve.
+Cinco brazos, sobre `nano`, incluido `map_reduce`, que no corrió la campaña. Reencuadra qué es rutear.
+No la estructura que razona mejor. La estructura que va a leer la evidencia. Son participaciones
+marginales sobre grupos desbalanceados, y el recall es consecuencia del paradigma y no covariable
+previa. La magnitud se sostiene sola. La causalidad fina no.
 
-Esto reencuadra qué es rutear. No la estructura que razona mejor. La estructura que va a leer la
-evidencia.
-
-Las salvedades. Son cinco brazos, sobre `nano`, incluido `map_reduce`, que no corrió la
-campaña. Son participaciones marginales sobre grupos desbalanceados, y el recall es consecuencia
-del paradigma y no covariable previa. La magnitud se sostiene sola. La causalidad fina no.
-
-Ofrecer una herramienta cambia la conducta, aunque no se use. La prueba se registró antes de
-correr, sobre el modelo de la campaña. Se le ofreció a `react` una herramienta para leer todo el
-material en una llamada, sobre 63 celdas pareadas. La predicción era que la usaría. Se refutó al
-revés, y el ahorro apareció igual.
+Ofrecer una herramienta cambia la conducta, aunque no se use. Registrado antes de correr, sobre
+el modelo de la campaña. Ofrecerle a `react` leer todo el material en una llamada, 63 celdas
+pareadas. La predicción era
+que la usaría. Se refutó al revés y el ahorro apareció igual.
 
 | | tokens por celda | `u` | caracteres releídos |
 |---|---:|---:|---:|
@@ -765,14 +763,14 @@ revés, y el ahorro apareció igual.
 | con la herramienta ofrecida | 87.495 | 0,825 | 322.094 |
 
 1,57× más barato con la utilidad media igual (7 de 63 celdas cambian, 4 suben y 3 bajan;
-utilidades del registro re-puntuado), la herramienta llamada en 3 de 63 celdas, y el releído
-8,8 veces menor. El efecto está en la oferta, no en el uso. La especificación de herramientas es
-parte de la política.
+utilidades del registro re-puntuado), la herramienta llamada en
+3 de 63 celdas, y el releído 8,8 veces menor. El efecto está en la oferta, no en el uso. La especificación de
+herramientas es parte de la política.
 
-El costo de una vuelta es reenvío, medido por llamada sobre la primera corrida con traza. El
-prompt del turno 2 es 55,3× el del turno 0 y el del turno 8, 110,8×. El primer turno consume el
-1% de la entrada. El 99% es material ya pagado viajando otra vez. Y el registro da la señal para
-una regla de parada. Entre réplicas de la misma celda con la misma utilidad, el 33% de los tokens
+El costo de una vuelta es reenvío, medido por llamada. Primera corrida con traza. El prompt del
+turno 2 es 55,3× el del turno 0 y el del turno 8, 110,8×. El primer turno consume el 1% de la
+entrada. El 99% es material ya pagado viajando otra vez. Y el registro da la señal para una
+regla de parada. Entre réplicas de la misma celda con la misma utilidad, el 33% de los tokens
 son evitables (49% en `dag_strategy`, 0% donde el abanico lo fija el código), y la racha máxima
 de búsquedas estériles es 1,17 en la réplica barata contra 2,28 en la cara. La regla que la
 consume está registrada como factor y no corrió.
@@ -789,48 +787,40 @@ Ninguno es un nombre de paradigma. Todos son cosas que una regla puede leer al d
 
 ## 5.6 PI2 y PI3. Por qué no hay premio de calidad entre brazos capaces
 
-La interacción tarea×paradigma es tan grande como la dificultad de la tarea, y aun así no hay
-premio de calidad entre los brazos que compiten. Descomponiendo `u = μ + α(tarea) + β(brazo) +
-γ + ε` sobre el rectángulo de 64 tareas × 8 brazos, con varianzas insesgadas y el ruido de
-réplica descontado de cada componente:
+Descomponiendo `u = μ + α(tarea) + β(brazo) + γ + ε` sobre el rectángulo de 64 tareas × 8
+brazos, con varianzas insesgadas y el ruido de réplica descontado de cada componente:
 
-| componente | varianza | % crudo | % descontado |
-|---|---:|---:|---:|
-| α, dificultad de la tarea | 0,0759 | 45% | 50% |
-| β, calidad del brazo | 0,0158 | 9% | 11% |
-| γ, interacción | 0,0754 | 45% | 39% (34% del total con ε) |
-| ε, ruido entre réplicas | 0,0563 | | |
+```
+α  dificultad de la tarea     0,0759    45% crudo   50% descontado
+β  calidad del brazo          0,0158     9%         11%
+γ  INTERACCIÓN                0,0754    45%         39%    (34% del total con ε)
+ε  ruido entre réplicas       0,0563
+```
 
 γ descontado el ruido da 0,0566, señal/ruido 3,02. Bajo el argumento habitual, correspondería
-rutear.
-
-PI3. Se probaron nueve señales y se eligió la mejor, así que la vara es el máximo de los nueve
-nulos por permutación, el maxT de Westfall y Young, la corrección por selección que casi nunca
-se hace. Sólo `cardinalidad × término literal` la cruza, con 0,309 y `p` corregido `< 0,001`, con
+rutear. PI3, con la corrección que casi nunca se hace. Se probaron nueve señales y se eligió la
+mejor, así que la vara es el máximo de los nueve nulos por permutación, el maxT de Westfall y
+Young. Sólo `cardinalidad × término literal` la cruza, con 0,309 y `p` corregido `< 0,001`, con
 la salvedad de que esa candidata se construyó después de descubrir el eje literal midiendo.
 
 ![El rectángulo entero, celda por celda](figuras/mapa-de-calor-rectangulo.svg)
 
-**Figura 5.** El rectángulo 64 × 8 celda por celda. A la izquierda, `u(tarea, brazo)`, con las
-filas agrupadas por región y las columnas ordenadas por media; a la derecha, el residuo γ una vez
-descontadas la dificultad de la tarea y la calidad del brazo. El punto negro es el mejor brazo de
-cada fila y el marco punteado encierra a los tres contendientes. El punto cae dentro del marco en
-56 de 64 tareas, y el color de γ está casi todo fuera de él. La interacción es grande y vive
-entre los brazos que nadie elegiría.
+El rectángulo 64 × 8 celda por celda. A la izquierda, `u(tarea, brazo)`, con las filas agrupadas por región y las columnas ordenadas por media; a la derecha, el residuo γ una vez descontadas la dificultad de la tarea y la calidad del brazo. El punto negro es el mejor brazo de cada fila y el marco punteado encierra a los tres contendientes. El punto cae dentro del marco en 56 de 64 tareas, y el color de γ está casi todo fuera de él: la interacción es grande y vive entre los brazos que nadie elegiría.
 
 PI2. `var(γ)` grande no es premio grande. El premio es `E[max_p u] − max_p E[u]`, y γ puede ser
 enorme porque los brazos malos son malos en lugares distintos. Sobre los tres que competirían,
 los que están a menos de 0,05 del mejor fijo, y sobre los ocho:
 
-| | tres contendientes | ocho brazos |
-|---|---:|---:|
-| oráculo por tarea | 0,901 | 0,953 |
-| mejor fijo (`react`) | 0,843 | 0,843 |
-| brecha observada | +0,058 | +0,110 |
-| IC95 pareado (tareas) | [+0,021, +0,090] | [+0,052, +0,161] |
-| piso calibrado (medias), media / p95 | 0,030 / 0,047 | 0,042 / 0,065 |
-| piso conservador (réplicas sueltas) | 0,069 | 0,052 |
-| brecha neta (media / p95 / conservador) | +0,028 / +0,011 / −0,010 | +0,068 / +0,045 / +0,058 |
+```
+                                 tres contendientes    ocho brazos
+oráculo por tarea                          0,901          0,953
+mejor fijo (react)                         0,843          0,843
+brecha observada                          +0,058         +0,110
+IC95 pareado (tareas)             [+0,021, +0,090] [+0,052, +0,161]
+piso calibrado (medias), media / p95   0,030 / 0,047   0,042 / 0,065
+piso conservador (réplicas sueltas)        0,069          0,052
+brecha NETA (media / p95 / conservador)  +0,028 / +0,011 / −0,010   +0,068 / +0,045 / +0,058
+```
 
 Entre los tres contendientes la brecha es chica y apenas se separa del piso. Sobre los ocho
 brazos es neta y positiva con cualquier estimador.
@@ -842,61 +832,57 @@ brazos es neta y positiva con cualquier estimador.
 > como brazos compara el panel, cada uno con la media de tres réplicas remuestreadas, porque la
 > brecha se computa sobre medias de celda; la brecha entre pseudo-brazos es ruido por
 > construcción, y se reporta media y p95 sobre 400 corridas. El estimador que usa réplicas
-> sueltas como brazos es conservador en raíz de tres, y va al lado, junto con el intervalo
-> pareado de la brecha misma. Y una advertencia sobre un estimador que parece natural y no
-> sirve. Remuestrear las réplicas de cada celda real y recalcular la brecha es el bootstrap del
-> propio estadístico, y da piso igual o mayor que la brecha con cualquier dato; sobre un
-> sintético con premio real +0,50 devuelve neto +0,005. Usarlo vuelve negativo cualquier premio.
+> sueltas como brazos es conservador en raíz de tres, y va al lado. Al lado, el intervalo pareado de la brecha misma. Y
+> una advertencia sobre un estimador que parece natural y no sirve: remuestrear las réplicas
+> de cada celda real y recalcular la brecha es el bootstrap del propio estadístico, y da piso
+> igual o mayor que la brecha con cualquier dato; sobre un sintético con premio real +0,50
+> devuelve neto +0,005. Usarlo vuelve negativo cualquier premio.
 
-Ninguna señal separa a los tres contendientes entre sí, `p > 0,29`. Tienen las mismas
+Y ninguna señal separa a los tres contendientes entre sí, `p > 0,29`. Tienen las mismas
 capacidades (§5.3). En la figura del espacio de capacidades caen en el mismo punto, y son el
 mismo brazo para decidir. La clave de la política hereda la varianza del LLM. De los cinco
 ejes del vocabulario de región, el único `ELICITED` cambia de valor en el 27% de las tareas
-según qué modelo las sensó (registro anterior a la campaña, sin script publicado). De ahí la
-exigencia de que las condiciones sean `COMPUTED`.
+según qué modelo las sensó (dato del registro anterior a la campaña, sin script publicado). De
+ahí la exigencia de que las condiciones sean `COMPUTED`.
 
-Fuera de muestra la brecha entre ocho también es positiva y neta. Sobre un mundo held-out con
-semilla nueva por el mismo camino de código (26 tareas × 12 paradigmas × 3 réplicas, 936 filas,
-48,5M tokens, rectángulo 24 × 8), en los tres estratos de ancho:
+Fuera de muestra, mundo con semilla nueva por el mismo camino de código, 26 tareas × 12
+paradigmas × 3 réplicas, 936 filas, 48,5M tokens, rectángulo 24 × 8:
 
-| | base+w4 | + w16 | + w48 |
-|---|---:|---:|---:|
-| mejor fijo | 0,833 | 0,813 | 0,802 |
-| brecha observada | +0,139 | +0,168 | +0,128 |
-| IC95 pareado | [+0,000, +0,194] | [+0,034, +0,222] | [+0,029, +0,221] |
-| piso calibrado (8), media | 0,018 | 0,023 | 0,026 |
-| piso calibrado (8), p95 | 0,083 | 0,074 | 0,071 |
-| brecha neta (media / p95) | +0,121 / +0,056 | +0,145 / +0,094 | +0,102 / +0,057 |
+```
+                                base+w4          + w16          + w48
+mejor fijo                        0,833          0,813          0,802
+brecha observada                 +0,139         +0,168         +0,128
+IC95 pareado            [+0,000, +0,194] [+0,034, +0,222] [+0,029, +0,221]
+piso calibrado (8), media         0,018          0,023          0,026
+piso calibrado (8), p95           0,083          0,074          0,071
+brecha NETA (media / p95)  +0,121 / +0,056  +0,145 / +0,094  +0,102 / +0,057
+```
 
-Positiva también contra el estimador conservador, y sin ganador estable entre los contendientes;
-los dos primeros quedan a 0,025 contra un piso p95 de 0,071. El oráculo entre ocho tiene premio
-fuera de muestra; ninguna política medida lo captura (§5.4) y ninguna señal predice la familia
-ganadora.
+Positiva y neta en los tres estratos, también contra el estimador conservador, y sin ganador
+estable entre los contendientes: los dos primeros quedan a 0,025 contra un piso p95 de 0,071. El oráculo entre ocho tiene premio fuera de
+muestra; ninguna política medida lo captura (§5.4) y ninguna señal predice la familia ganadora.
 
 ## 5.7 PI4. El acuerdo entre paradigmas es una curva de calibración
 
-Cuando cuatro o más brazos coinciden en la respuesta, la respuesta es correcta en 180 de 180
-celdas.
+```
+k brazos coinciden    celdas    P(la respuesta es correcta)
+        0                208               0,424
+        1                 36               0,389
+        2                 24               0,600
+        3                 64               0,812
+       ≥ 4               180               1,000
+```
 
-| brazos que coinciden (`k`) | celdas | P(la respuesta es correcta) |
-|---:|---:|---:|
-| 0 | 208 | 0,424 |
-| 1 | 36 | 0,389 |
-| 2 | 24 | 0,600 |
-| 3 | 64 | 0,812 |
-| ≥ 4 | 180 | 1,000 |
-
-La coincidencia es igualdad exacta de la cadena normalizada. Cota inferior de Wilson al 95%,
+180 de 180 con `k ≥ 4`, igualdad exacta de la cadena normalizada. Cota inferior de Wilson al 95%,
 0,980. Tres controles. En las mismas 27 tareas, los brazos fuera del consenso sacan 0,100 contra
 1,000, así que discrimina dentro de la tarea. Aguanta en las cuatro cardinalidades. Y no
-abarata. Las 56 cascadas probadas suben el costo.
-
-Replicado sobre una segunda familia de modelo, `terra`, contra un criterio registrado antes de
-correr. 26 tareas, 350 filas, 200 celdas de los ocho brazos en réplica 0; 1,000 con `k ≥ 4`
-sobre 104 celdas en 15 de 26 tareas y con `k ≥ 3` sobre 120 celdas en 19 de 26; fuera del
-consenso, 0,263 (n = 30). La curva entera va en el paper largo, y en `k` bajo no es monótona con
-esos `n`. Es la idea de Self-Consistency con votantes heterogéneos; lo que se agrega es la
-réplica y la epistemología. El umbral es del modelo. El fenómeno no.
+abarata. Las 56 cascadas probadas suben el costo. Replicado sobre una segunda familia de modelo,
+`terra`, contra un criterio registrado antes de correr: 26 tareas, 350 filas, 200 celdas de los
+ocho brazos en réplica 0; 1,000 con `k ≥ 4` sobre 104 celdas en 15 de 26 tareas y con `k ≥ 3`
+sobre 120 celdas en 19 de 26; fuera del consenso, 0,263 (n = 30). La curva entera va en el paper
+largo, y en `k` bajo no es monótona con esos `n`. Es la idea de Self-Consistency con votantes
+heterogéneos; lo que se agrega es la réplica y la epistemología. El umbral es del modelo. El
+fenómeno no.
 
 Qué autoriza y qué no. Mueve credencia, nunca procedencia. Cuatro paradigmas de acuerdo siguen
 siendo el modelo hablando, y nada asciende a `OBSERVED` por votar. La tabla es la curva de
@@ -914,46 +900,45 @@ Interna. El régimen en-ventana es casi tautológico donde el corpus mide 16k to
 ventana está medido a 483k con `repeat = 3`. Hasta 1,27M sólo por factibilidad. Hay un
 confundente de PI1 que este montaje no separa. La varianza a `t = 0` puede venir de la
 ramificación delegada o del no-determinismo del stack de servicio, y separarlo exige un servidor
-de un solo request por lote. La Proposición 1 no depende de cuál domine.
-
-Hay dos modelos en el paper. La campaña y el held-out corrieron sobre `gpt-5.6-luna`; los
-episodios de §5.4 y el recall de §5.5, sobre `gpt-5.4-nano`. Ninguna estadística los mezcla.
-Cruza la inferencia cualitativa, que a la clave le faltaba un eje y que la decisión se
-reproduce. No cruzan las magnitudes de esas dos secciones. Repetir los tres episodios sobre
-`luna` cerraría esa costura y no está hecho.
+de un solo request por lote. La Proposición 1 no depende de cuál domine. Y hay dos modelos en el
+paper: la campaña y el held-out sobre `gpt-5.6-luna`, los episodios de §5.4 y el recall de §5.5
+sobre `gpt-5.4-nano`. Ninguna estadística los mezcla. Cruza la inferencia cualitativa, que a la
+clave le faltaba un eje y que la decisión se reproduce. No cruzan las magnitudes de esas dos
+secciones. Repetir los tres episodios sobre `luna` cerraría esa costura y no está hecho.
 
 Externa. El corpus es sintético con ground truth re-derivado independientemente, y la
 distribución de tareas reales sobre sus diales es desconocida. La corrección de §5.2 se
-desarrolló sobre las celdas en que se la mide, y transferirla exige celdas nuevas. La ontología
-separa a los brazos sobre la etiqueta de diseño, que no se conoce al decidir. Recuperarla desde
-el request está sin medir (§5.3). El leave-one-arm-out tiene ocho puntos. Y una rama de la propia
-teoría no se pudo ejercitar. Un benchmark que corrige por coincidencia exacta tiene un detector
-barato en cada tarea por construcción, así que la cascada precede a la selección. El tercer
-episodio de §5.4 es el primer corpus donde la selección pudo disparar, y no disparó por falta de
-evidencia con procedencia, no por falta de señal.
+desarrolló sobre las celdas en que se la mide, y transferirla exige celdas nuevas. La ontología separa a los brazos
+sobre la etiqueta de diseño, que no se conoce al decidir. Recuperarla desde el request está sin
+medir (§5.3). El leave-one-arm-out tiene ocho puntos. Y una rama de la propia teoría no se pudo
+ejercitar. Un benchmark que corrige por coincidencia exacta tiene un detector barato en cada
+tarea por construcción, así que la cascada precede a la selección. El tercer episodio de §5.4 es
+el primer corpus donde la selección pudo disparar, y no disparó por falta de evidencia con
+procedencia, no por falta de señal.
 
 De constructo. La plasticidad medida es la de lo que se acumula, creencias y tablas, no la de
-los sentidos. θ madura solo (§5.4); los medidores nuevos los agregaron personas porque un
-medidor es código. Quien lea «plasticidad» como que el sistema descubrió qué sensar lee algo que
-el registro no sostiene. Lo que sostiene es que la frontera entre lo que aprende el sistema y lo
-que diseña una persona está declarada, justificada y respetada. La superficie de acciones es
-arquitectura declarada y no está ejercitada. Las doce herramientas son internas al proceso, y la
-compuerta que existe para lo irreversible nunca tuvo un acto irreversible que filtrar. §4 se
-afirma para agentes en general y está verificado como tal. §5 se afirma para extracción de
-respuesta exacta sobre documentos y se midió ahí.
+los sentidos. θ madura solo (§5.4); los medidores nuevos los agregaron personas porque un LLM
+es código. Quien lea
+«plasticidad» como que el sistema descubrió qué sensar lee algo que el registro no sostiene. Lo
+que sostiene es que la frontera entre lo que aprende el sistema y lo que diseña una persona está
+declarada, justificada y respetada. La superficie de acciones es arquitectura
+declarada y no está ejercitada. Las doce herramientas son internas al proceso, y la compuerta
+que existe para lo irreversible nunca tuvo un acto irreversible que filtrar. §4 se afirma para
+agentes en general y está verificado como tal. §5 se afirma para extracción de respuesta exacta
+sobre documentos y se midió ahí.
 
-Impacto más amplio, en cuatro puntos. Un sistema que se abstiene traslada la decisión a una
-persona cuando la evidencia no alcanza, y su modo de falla es un registro impecable que se calló
-en las preguntas que importaban; por eso la curva riesgo-cobertura se reporta con la utilidad.
-Un piso de garantía que sube solo, aun con guarda y artefacto firmado, es una decisión de
-gobierno que nadie tomó; el diseño la hace legible, y falta quien tenga la obligación de leerla.
-
-Si la ontología se recupera con un clasificador elicitado, un error puede mandar una pregunta de
-acción irreversible por el camino de una consulta; por eso las banderas de riesgo las declara el
-caller y la Proposición 2 exige que lo que gobierna sea `COMPUTED`. Y un valor superado
-encontrado en un documento real, con procedencia correcta, sale con una credencial que una
-respuesta sin procedencia no tiene; el Teorema de soundness lo deja pasar porque es sound y
-falso, y eso obliga a que la vigencia sea un eje de la clave.
+Impacto más amplio. Cuatro cosas del otro lado de la norma que §1.1 invoca. Un sistema que se
+abstiene traslada la decisión a una persona cuando la evidencia no alcanza, y su modo de falla
+es un registro impecable que se calló en las preguntas que importaban; por eso la curva
+riesgo-cobertura se reporta con la utilidad. Un piso de garantía que sube solo, aun con guarda
+y artefacto firmado, es una decisión de gobierno que nadie tomó; el diseño la hace legible, y
+falta quien tenga la obligación de leerla. Si la ontología se recupera con un clasificador
+elicitado, un error puede mandar una pregunta de acción irreversible por el camino de una
+consulta; por eso las banderas de riesgo las declara el caller y la Proposición 2 exige que lo
+que gobierna sea `COMPUTED`. Y un valor superado encontrado en un documento real, con
+procedencia correcta, sale con una credencial que una respuesta sin procedencia no tiene; el
+Teorema de soundness lo deja pasar porque es sound y falso, y eso obliga a que la vigencia sea
+un eje de la clave.
 
 Reproducibilidad. Una semilla sola no fija un corpus. Los manifiestos estampan versión de
 generador, analizador léxico y superficie de herramientas, y el cargador levanta si un archivo

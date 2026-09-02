@@ -38,12 +38,13 @@ CSS = """
 @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
 body { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
        font-size: 10.5pt; line-height: 1.52; color: #1f2328; max-width: 100%; }
-h1 { font-size: 20pt; margin: 26pt 0 10pt; padding-bottom: 5pt;
-     border-bottom: 2px solid #d8dbdf; page-break-before: always; }
-h1:first-of-type { page-break-before: avoid; }
+h1 { font-size: 20pt; margin: 34pt 0 10pt; padding-bottom: 5pt;
+     border-bottom: 2px solid #d8dbdf; }
+/* Sin salto de pagina forzado antes de cada h1: dejaba paginas a medio llenar. */
 h2 { font-size: 14.5pt; margin: 20pt 0 7pt; color: #22252a; }
 h3 { font-size: 11.8pt; margin: 15pt 0 5pt; color: #3b4046; }
 h4 { font-size: 10.8pt; margin: 12pt 0 4pt; color: #3b4046; }
+h1, h2, h3, h4 { page-break-after: avoid; }
 p { margin: 0 0 8pt; }
 code { font-family: Consolas, "SF Mono", Menlo, monospace; font-size: 9.2pt;
        background: #f2f3f5; padding: 1px 4px; border-radius: 3px; }
@@ -61,9 +62,14 @@ blockquote p:last-child { margin-bottom: 0; }
 ul, ol { margin: 0 0 9pt; padding-left: 20pt; }
 li { margin-bottom: 3pt; }
 figure { margin: 12pt 0 14pt; text-align: center; page-break-inside: avoid; }
-figure svg { max-width: 82%; height: auto; }
+figure svg { max-width: 100%; height: auto; }
+/* matplotlib pide DejaVu Sans, que Windows no tiene; sin esto el visor cae a serif */
+figure svg text, figure svg tspan { font-family: Arial, "Helvetica Neue", sans-serif !important; }
 figcaption { font-size: 8.8pt; color: #6b7178; margin-top: 4pt; font-style: italic; }
 a { color: #2c5c8f; text-decoration: none; }
+.cita { font-family: Consolas, "SF Mono", Menlo, monospace; font-size: 8.6pt; color: #5b6b7f;
+        white-space: nowrap; }
+.refs li { margin-bottom: 4pt; font-size: 9.6pt; }
 hr { border: none; border-top: 1px solid #e4e6ea; margin: 16pt 0; }
 /*__DENSO__*/
 """
@@ -72,6 +78,10 @@ _EN_LINEA = [
     (re.compile(r"`([^`]+)`"), lambda m: f"<code>{html.escape(m.group(1))}</code>"),
     (re.compile(r"\*\*([^*]+)\*\*"), lambda m: f"<strong>{m.group(1)}</strong>"),
     (re.compile(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])"), lambda m: f"<em>{m.group(1)}</em>"),
+    (re.compile(r"\[arXiv:(\d{4}\.\d{4,5})(v\d+)?\](?!\()"),
+     lambda m: f'<a class="cita" href="https://arxiv.org/abs/{m.group(1)}">[arXiv:{m.group(1)}]</a>'),
+    (re.compile(r"\[((?:Zenodo|DOI|OpenAI|Thinking Machines|Anthropic|Google|Microsoft|Meta)[^\]]{0,60})\](?!\()"),
+     lambda m: f'<span class="cita">[{m.group(1)}]</span>'),
     (re.compile(r"\[([^\]]+)\]\(([^)]+)\)"),
      lambda m: f'<a href="{html.escape(m.group(2), quote=True)}">{m.group(1)}</a>'),
 ]
@@ -134,8 +144,13 @@ def convertir(md: str, base: Path) -> str:
                 # El prologo XML y el DOCTYPE no van adentro de un HTML.
                 svg = re.sub(r"<\?xml[^>]*\?>", "", svg)
                 svg = re.sub(r"<!DOCTYPE[^>]*>", "", svg, flags=re.I)
-                salida.append(f"<figure>{svg}"
-                              f"<figcaption>{en_linea(m.group(1))}</figcaption></figure>")
+                # Si la linea siguiente es el pie «**Figura N.**», el alt no se repite debajo.
+                j = i + 1
+                while j < len(lineas) and not lineas[j].strip():
+                    j += 1
+                con_pie = j < len(lineas) and (lineas[j].startswith("**Figura") or lineas[j].startswith("Figura "))
+                pie = "" if con_pie else f"<figcaption>{en_linea(m.group(1))}</figcaption>"
+                salida.append(f"<figure>{svg}{pie}</figure>")
             i += 1
             continue
 
@@ -194,12 +209,28 @@ def convertir(md: str, base: Path) -> str:
                 cerrar_lista()
                 salida.append(f"<{tipo}>")
                 en_lista = tipo
-            salida.append(f"<li>{en_linea(m.group(2))}</li>")
+            # Un item sigue en las lineas de continuacion (no vacias, sin abrir otro
+            # bloque) hasta el corte: un item que se corta a los 100 caracteres no son
+            # dos items.
+            item = [m.group(2)]
             i += 1
+            while i < len(lineas) and lineas[i].strip() and not re.match(
+                    r"^(#{1,4}\s|>|```|\||!\[|\s*([-*·]|\d+\.)\s|-{3,}$)", lineas[i]):
+                item.append(lineas[i].strip())
+                i += 1
+            valor = f' value="{m.group(1)[:-1]}"' if tipo == "ol" else ""
+            salida.append(f"<li{valor}>{en_linea(' '.join(item))}</li>")
             continue
 
         if not L.strip():
-            cerrar_lista()
+            # Una linea vacia entre dos items del mismo tipo no cierra la lista: es una
+            # lista espaciada, y numerarla de nuevo desde 1 seria inventar tres listas.
+            j = i
+            while j < len(lineas) and not lineas[j].strip():
+                j += 1
+            sig = re.match(r"^\s*([-*·]|\d+\.)\s+", lineas[j]) if j < len(lineas) else None
+            if not (en_lista and sig and ("ol" if re.match(r"\d", sig.group(1)) else "ul") == en_lista):
+                cerrar_lista()
             i += 1
             continue
 

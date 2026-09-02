@@ -358,6 +358,34 @@ corpus, réplica ni número. Y el companion EVR (19791686), que §2.4 y las refe
 como «compuerta de admisión como mecanismo», **devuelve HTTP 410 Gone** por tres rutas
 distintas (record, DOI y API): fue retirado o borrado.
 
+## Adenda 2026-09-01, segunda: el piso de ruido estaba mal construido, y G5 vuelve a ⚠️
+
+Dos revisores externos de contexto limpio (`paper-es_REVIEW-A-2026-09-01.md` y `-B-`)
+encontraron que el número que el paper llamaba piso de ruido en §7.3.3 y §7.7.1 salía de
+`_predictores.py` remuestreando las réplicas de cada celda real y recalculando la brecha: la
+distribución bootstrap del propio estadístico, con media ≥ la brecha observada por
+construcción. Sobre un sintético con premio real +0,50 devolvía neto +0,005. **Toda brecha
+neta negativa del paper era un artefacto del estimador.** Corregido en `_predictores.py` y
+recomputado en `bench/analysis/_recomputo_revision.py` con el estimador que el texto siempre
+describió (pseudo-brazos del mismo paradigma, emparejados por número de brazos) más el IC
+pareado de la brecha: entre los tres contendientes la brecha sigue dentro del piso; sobre
+ocho brazos y en el held-out es positiva y neta. El veredicto del held-out cambió de signo.
+
+Mismo día, otros defectos de sustento corregidos: los números de C3 eran de `terra` y se
+presentaban como campaña `luna`; el panel 59 × 8 excluía cinco tareas a mano; «inestable» se
+definía como `0 < media < 1`; el baseline de identidad no tenía término de tarea; la tabla de
+política 41 × 7 no tenía script; P30 traía utilidades anteriores al re-puntuado. Todo declarado
+en el paper con el número anterior al lado.
+
+**G5 pasa de ✅ a ⚠️ condicional** hasta que los tres episodios de §7.8 se repitan sobre el
+modelo de la campaña. El test del estimador ya está: §60 de `test_science.py` verifica sobre
+un sintético de premio +0,29 que el bootstrap del estadístico devuelve piso ≈ brecha, que el
+piso calibrado (pseudo-brazos con medias de réplicas) queda en 0,037, y que sobre brazos
+idénticos el calibrado queda a menos de 0,03 de la brecha observada. El mismo test encontró
+un segundo defecto en la primera corrección del día: un pseudo-brazo hecho de una réplica
+suelta infla el piso en raíz de k; `Study.noise_floor` tiene ese sesgo y queda declarado como
+cota conservadora. **G3 sigue ⚠️.**
+
 Decisión del autor (v2 del paper): HADD se acredita por las tres palabras que se comparten
 —sensor, decisión determinista, estabilidad de decisión— y deja de llamarse «la base de la que
 §6.2 toma sus invariantes». La diferencia que el paper reclama contra él es que **cada invariante

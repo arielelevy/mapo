@@ -12,10 +12,39 @@
 > declarado), bootstrap y Benjamini-Hochberg de P15, agencia del ciclo corregida en §7.8, §8.1
 > mezcla de modelos, §8.2 ontología y n=8, §8.3 amenaza de constructo del ciclo, §8.5 impacto
 > amplio, §9 y §9.1 alineados con dos pasos nuevos, y dos figuras (interfaz aprendible, ciclo).
-> Las acciones CORRIDA siguen pendientes y están en §9.1 del paper. Lo que no se hizo: el
+> Segunda ronda (revisores externos A y B, mismo día): aplicado todo lo editorial y lo que se
+> recomputa sin modelo. Piso de ruido corregido dos veces y con test (§60); único panel 64 × 8;
+> C3 declarado como `terra`; identidad aditiva; inestabilidad redefinida; P30, terra, held-out,
+> descomposición y recall recomputados; tabla 41 × 7 retirada; ontología con nulo por
+> permutación (`_ontologia_nulo.py`) y `p` exacto de capacidades (0,080); 31 citas verificadas
+> contra arXiv, siete corregidas; el 59,4% atribuido a OpenAI sobre SWE-bench Verified.
+> Pendiente por falta de modelo (`luna`, `terra`): la corrección de `pointer_chase` sobre celdas
+> nuevas, los tres episodios sobre `luna`, el brazo de ausencia, el clasificador de ejes desde el
+> request, la ventana frontera, y una política que aprenda el desempate por costo sobre la clave
+> computada. Lo que no se hizo: el
 > identificador del estudio del 59,4% en §7.0.1 (no se pudo verificar y no se inventó) y la
 > relectura completa de las citas nuevas, que quedan marcadas «citadas por sus afirmaciones de
 > portada». Los dos puntos de revelación del texto heredado siguen sin revisar uno por uno.
+>
+> Segunda ronda, mismo día, con dos revisores externos de contexto limpio (informes A y B en
+> este directorio). Aplicado: piso de ruido corregido en `_predictores.py` y recomputado en
+> `bench/analysis/_recomputo_revision.py` (el held-out cambia de signo); un solo panel 64 × 8;
+> inestabilidad redefinida en `bench/fiabilidad.py` (12 a 28%); identidad aditiva como
+> baseline (gana a capacidades); C3 declarado como `terra` con los números de `luna` al lado y
+> la iteración sobre las celdas de prueba dicha; tabla 41 × 7 retirada y reemplazada por
+> `_plasticidad.py`; §7.4.3 rebajada a exploratoria; P30 re-puntuado; terra con curva completa
+> y conteos actuales; P17 con su neto; piso de P15 declarado sobre 112 tareas; Definición 5.3b
+> (dominio tipado) y Observación 5.5; Proposición 5 con su binomial; Proposición 6 con
+> hipótesis y prueba; dial declarado `nano` y cinco brazos; §8.1 y §8.2 sin texto heredado;
+> R² ajustado en §7.9.1; 2,5× en vez de 4,2×; conteos de campaña y held-out corregidos;
+> glosario y sonda en §3; §3.1 con los doce paradigmas en una línea; consolidación en cinco
+> pasos en §6.3; τ-bench, Adaptive-RAG, Self-RAG, FLARE, Self-Route, AutoMix, SayCan, LLM+P,
+> CoALA, NeMo Guardrails, LMQL, AgentSpec, GuardAgent, Voyager, AWM, El-Yaniv, Geifman, Madras,
+> Mao-Mohri-Zhong, Verma, Wen, Ouyang, Atil, He, Bouthillier, Westfall-Young, ReAct,
+> Reflexion, ReWOO en §2 y referencias; todas las figuras numeradas. Lo que sigue sin hacer
+> exige medir: `pointer_chase` sobre celdas C3 nuevas, los tres episodios sobre `luna`, el
+> brazo de ausencia, ONT-1 con nulo por permutación, y el test del estimador de piso en
+> `test_science.py`.
 
 Fecha: 2026-09-01. Fase 1: análisis y plan. No se tocó el paper.
 El plan anterior (borrador 2.0, puntaje autodeclarado 4,76) quedó en
