@@ -614,6 +614,95 @@ def check_decision_cycle(ok: bool) -> bool:
 #
 # Lo que un ratchet SI necesita que se le acote es cuanto dano acumulado puede hacer antes
 # de detenerse, y eso es un conteo. Derivacion completa en `COTA_RATCHET.es.md`.
+def check_noise_floor_detects_a_real_prize(ok: bool) -> bool:
+    """El piso de ruido tiene que dejar pasar un premio que existe.
+
+    LA FALLA QUE ESTO IMPIDE (revision externa, 2026-09-01). `_predictores.py` estimaba el
+    piso remuestreando las replicas de cada celda REAL y recalculando la brecha: eso es la
+    distribucion bootstrap del propio estadistico, cuya media es >= la brecha observada por
+    construccion. Con ese "piso", brecha - piso salia <= 0 con CUALQUIER dato, y el paper
+    reporto como negativo un held-out que con el estimador correcto es positivo.
+
+    El estimador correcto (`metrics.noise_floor`, y su version emparejada por numero de
+    brazos) construye pseudo-brazos con replicas del MISMO brazo: toda brecha entre ellos es
+    ruido. Sobre un sintetico con premio real conocido, el piso correcto tiene que quedar
+    muy por debajo del premio, y el bootstrap del estadistico tiene que quedar pegado a la
+    brecha observada. Las dos cosas se comprueban aca.
+    """
+    import random
+    import statistics
+
+    from app.metrics import Study
+
+    print("\n--- 60. el piso de ruido deja pasar un premio real ---")
+    rng = random.Random(2026)
+    n_tasks, n_arms, n_rep, sd = 60, 3, 3, 0.15
+    # tres brazos con premio real de oraculo: cada tarea la resuelve uno solo (u=1), los
+    # otros dan 0,5. El mejor fijo vale ~0,667 y el oraculo ~1,0: premio real ~+0,33.
+    truth = {}
+    for t in range(n_tasks):
+        ganador = t % n_arms
+        for p in range(n_arms):
+            truth[(t, p)] = 1.0 if p == ganador else 0.5
+    reps = {k: [min(1.0, max(0.0, v + rng.gauss(0, sd))) for _ in range(n_rep)]
+            for k, v in truth.items()}
+    U = {k: statistics.mean(v) for k, v in reps.items()}
+    tids, brazos = range(n_tasks), range(n_arms)
+    ora = statistics.mean(max(U[(t, p)] for p in brazos) for t in tids)
+    fijo = max(statistics.mean(U[(t, p)] for t in tids) for p in brazos)
+    brecha = ora - fijo
+
+    # (a) el estimador defectuoso: bootstrap del estadistico
+    sesgos = []
+    for _ in range(200):
+        falso = {(t, p): statistics.mean(rng.choice(reps[(t, p)]) for _ in range(n_rep))
+                 for t in tids for p in brazos}
+        o = statistics.mean(max(falso[(t, p)] for p in brazos) for t in tids)
+        f_ = max(statistics.mean(falso[(t, p)] for t in tids) for p in brazos)
+        sesgos.append(o - f_)
+    piso_malo = statistics.mean(sesgos)
+
+    # (b) el estimador correcto: pseudo-brazos del MISMO brazo, tantos como brazos compara el
+    # panel, y cada uno vale la MEDIA de n_rep replicas remuestreadas, porque la brecha
+    # observada se computa sobre medias de celda. Una replica suelta por pseudo-brazo tiene
+    # sqrt(n_rep) mas desvio e infla el piso (eso hace `Study.noise_floor`, que por eso es
+    # una cota conservadora y no el estimador calibrado).
+    def piso_pseudo(rep_dict):
+        vals = []
+        for p in brazos:
+            for _ in range(150):
+                pseudo = {t: [statistics.mean(rng.choice(rep_dict[(t, p)]) for _ in range(n_rep))
+                              for _ in range(n_arms)] for t in tids}
+                o = statistics.mean(max(pseudo[t]) for t in tids)
+                f_ = max(statistics.mean(pseudo[t][j] for t in tids) for j in range(n_arms))
+                vals.append(o - f_)
+        return statistics.mean(vals)
+
+    piso_bueno = piso_pseudo(reps)
+    piso_conservador = statistics.mean(
+        Study.noise_floor({t: reps[(t, p)] for t in tids})["noise_oracle_gap"] for p in brazos)
+
+    ok &= check("el premio real del sintetico es grande (>= 0,25)", brecha >= 0.25,
+                f"brecha {brecha:+.3f}")
+    ok &= check("el bootstrap del estadistico NO sirve de piso: queda pegado a la brecha",
+                abs(piso_malo - brecha) < 0.05,
+                f"piso_bootstrap {piso_malo:+.3f} vs brecha {brecha:+.3f}")
+    ok &= check("el estimador por pseudo-brazos deja pasar el premio: piso < brecha/3",
+                piso_bueno < brecha / 3,
+                f"piso {piso_bueno:+.3f} -> neto {brecha - piso_bueno:+.3f}")
+    ok &= check("Study.noise_floor es mas conservador que el calibrado (replicas sueltas)",
+                piso_conservador >= piso_bueno, f"{piso_conservador:+.3f} >= {piso_bueno:+.3f}")
+    # y sobre brazos identicos el piso calibrado tiene que estar cerca de la brecha observada
+    reps0 = {(t, p): [0.5 + rng.gauss(0, sd) for _ in range(n_rep)] for t in tids for p in brazos}
+    U0 = {k: statistics.mean(v) for k, v in reps0.items()}
+    brecha0 = (statistics.mean(max(U0[(t, p)] for p in brazos) for t in tids)
+               - max(statistics.mean(U0[(t, p)] for t in tids) for p in brazos))
+    piso0 = piso_pseudo(reps0)
+    ok &= check("sobre brazos identicos, brecha - piso queda dentro de +-0,03",
+                abs(brecha0 - piso0) < 0.03, f"brecha {brecha0:+.3f} piso {piso0:+.3f}")
+    return ok
+
+
 def check_ratchet_bound(ok: bool) -> bool:
     from math import comb
 
@@ -5983,6 +6072,7 @@ def main() -> int:
     ok = check_gaps_that_nobody_can_close(ok)
     ok = check_hyde_branch_is_separable(ok)
     ok = check_surfacing_is_recorded_apart_from_reading(ok)
+    ok = check_noise_floor_detects_a_real_prize(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

@@ -107,7 +107,12 @@ def perfil(
     for p, celdas_p in por_brazo.items():
         p1 = statistics.mean(statistics.mean(us) for us in celdas_p)
         pk = sum(1 for us in celdas_p if all(u >= ACIERTO for u in us)) / len(celdas_p)
-        inest = sum(1 for us in celdas_p if 0.0 < statistics.mean(us) < 1.0)
+        # INESTABLE = LAS RÉPLICAS DIFIEREN ENTRE SÍ. La definición anterior, `0 < media < 1`,
+        # contaba como inestable una celda con tres réplicas idénticas y parciales (por
+        # ejemplo 0,5 / 0,5 / 0,5), que es lo contrario de inestable. La revisión externa del
+        # 2026-09-01 lo señaló; con la definición correcta el rango del paper bajó de 17-34%
+        # a 12-28% sobre el mismo rectángulo.
+        inest = sum(1 for us in celdas_p if len(set(us)) > 1)
         salida.append(Fiabilidad(p, p1, pk, k, len(celdas_p), inest))
     return sorted(salida, key=lambda f: -f.pass_1)
 

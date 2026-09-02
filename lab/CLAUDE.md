@@ -104,6 +104,16 @@ sobre 41 tareas × 7 brazos, contra el mejor fijo (`reflection`, u=0,930, 125.16
 **El anterior sigue siendo recomputable** (`Features.region_previa()`): 5.932 filas lo
 llevan estampado y `load_rows` levanta si un archivo mezcla dos.
 
+> **Corrección 2026-09-01.** La tabla de arriba (0,951 / 46% contra 0,928 / 37%) **no la
+> reproduce ningún script del repo**: la revisión externa del paper lo buscó y no lo encontró,
+> y el paper la retiró. Lo que sí produce un script es `_plasticidad.py` sobre el rectángulo
+> 64 × 8 con objetivo de costo: θ región completa −0,063 [−0,139, +0,002] con 68% de ahorro;
+> θ región COMPUTADA −0,104 [−0,181, −0,030] con 31%. Y `_predictores.py` da para la señal
+> suelta `cardinalidad × término` −0,017 con 42% (LOTO). Hasta que exista el script, el 0,951
+> no se cita. Mismo día: el piso de ruido de `_predictores.py` era el bootstrap del propio
+> estadístico y se corrigió; `fiabilidad.perfil` definía inestable como `0 < media < 1` y se
+> corrigió a réplicas distintas. Recómputo completo: `bench/analysis/_recomputo_revision.py`.
+
 **Y el sensor tenía un defecto que sólo se vio midiendo** (`EP-5`): una pregunta booleana
 cita **sus opciones de respuesta**, no un término de búsqueda —`C7` pregunta «Answer
 'escalate' or 'no escalation'»— y esos literales no están en el material por construcción.

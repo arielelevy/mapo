@@ -170,7 +170,9 @@ def main() -> None:
     from bench.panel import rectangulo
     panel = rectangulo(
         [{"task_id": t, "paradigm": p, "infeasible": False} for t, p in reps],
-        roster=roster, excluir=CONTAMINADAS)
+        roster=roster, excluir=set())  # 2026-09-01: sin exclusiones a mano; el panel es el
+                                       # rectángulo mecánico. CONTAMINADAS queda declarado
+                                       # arriba como registro de lo que se excluía y por qué.
     tids, brazos = panel.tareas, panel.brazos
     print(f"  panel: {panel.descripcion()}")
     tmap = {t["task_id"]: t for t in tareas}
@@ -190,12 +192,12 @@ def main() -> None:
              for tid in tids for p in brazos}
 
     # RUIDO: varianza DENTRO de (tarea, brazo), entre replicas. Es la vara de todo.
-    dentro = [statistics.pvariance(reps[(tid, p)])
+    dentro = [statistics.variance(reps[(tid, p)])
               for tid in tids for p in brazos if len(reps[(tid, p)]) > 1]
     var_eps = statistics.mean(dentro) if dentro else 0.0
-    var_a = statistics.pvariance(list(alpha.values()))
-    var_b = statistics.pvariance(list(beta.values()))
-    var_g = statistics.pvariance(list(gamma.values()))
+    var_a = statistics.variance(list(alpha.values()))
+    var_b = statistics.variance(list(beta.values()))
+    var_g = statistics.variance(list(gamma.values()))
 
     total = var_a + var_b + var_g
     print(f"\n  {'componente':38s} {'varianza':>10s} {'% del total':>12s}")
@@ -248,7 +250,7 @@ def main() -> None:
                 for tid in gtids:
                     pred[(tid, p)] = m
         resid = [gamma[k] - pred[k] for k in gamma]
-        return 1.0 - statistics.pvariance(resid) / var_g if var_g else 0.0
+        return 1.0 - statistics.variance(resid) / var_g if var_g else 0.0
 
     filas = []
     for nombre, fn in SENALES.items():
@@ -335,10 +337,10 @@ def main() -> None:
         b2 = {p: statistics.mean(U[(t, p)] for t in tids) - mu2 for p in contendientes}
         g2 = {(t, p): U[(t, p)] - mu2 - a2[t] - b2[p]
               for t in tids for p in contendientes}
-        d2 = [statistics.pvariance(reps[(t, p)])
+        d2 = [statistics.variance(reps[(t, p)])
               for t in tids for p in contendientes if len(reps[(t, p)]) > 1]
         eps2 = statistics.mean(d2)
-        vg2 = statistics.pvariance(list(g2.values()))
+        vg2 = statistics.variance(list(g2.values()))
         vg2_limpio = max(0.0, vg2 - eps2 / n_rep)
         sn2 = vg2_limpio / (eps2 / n_rep) if eps2 else float("inf")
 
@@ -355,26 +357,49 @@ def main() -> None:
 
         # Y cuanto de ESE premio es ruido: el oraculo por maximo esta sesgado hacia
         # arriba, porque max de estimaciones ruidosas > max de las verdades.
+        #
+        # CORREGIDO 2026-09-01. La version anterior remuestreaba las replicas de cada celda
+        # REAL y recalculaba la brecha: eso es la distribucion bootstrap del propio
+        # estadistico, cuya media es >= la brecha observada por construccion, asi que
+        # "brecha - piso" salia <= 0 con cualquier dato (la revision externa lo probo con
+        # un sintetico de premio +0,50 que daba neto +0,005). El piso correcto es el que
+        # describe `metrics.noise_floor`: replicas del MISMO brazo tratadas como brazos
+        # distintos, con tantos pseudo-brazos como brazos compara el panel. Se imprime
+        # tambien el IC bootstrap pareado (por tarea) de la brecha misma.
         import random as _r
         rr = _r.Random(SEMILLA + 1)
-        sesgos = []
-        for _ in range(400):
-            falso = {(t, p): statistics.mean(
-                rr.choice(reps[(t, p)]) for _ in range(int(n_rep)))
-                for t in tids for p in contendientes}
-            o = statistics.mean(max(falso[(t, p)] for p in contendientes) for t in tids)
-            f_ = max(statistics.mean(falso[(t, p)] for t in tids) for p in contendientes)
-            sesgos.append(o - f_)
-        piso = statistics.mean(sesgos)
-        print(f"  {'PISO DE RUIDO de ese premio':34s} {piso:+.3f}"
-              f"   (bootstrap sobre replicas)")
+        n_arms = len(contendientes)
+        pisos_c = []
+        for p in contendientes:
+            for _ in range(400):
+                # cada pseudo-brazo vale la MEDIA de n_rep replicas remuestreadas: la brecha
+                # observada se computa sobre medias de celda, y un pseudo-brazo de una replica
+                # suelta tendria sqrt(n_rep) mas desvio y inflaria el piso.
+                pseudo = {t: [statistics.mean(rr.choice(reps[(t, p)]) for _ in range(int(n_rep)))
+                              for _ in range(n_arms)] for t in tids}
+                o = statistics.mean(max(pseudo[t]) for t in tids)
+                f_ = max(statistics.mean(pseudo[t][j] for t in tids) for j in range(n_arms))
+                pisos_c.append(o - f_)
+        piso = statistics.mean(pisos_c)
+        piso_p95 = sorted(pisos_c)[int(0.95 * len(pisos_c))]
+        bs = []
+        tl = list(tids)
+        for _ in range(2000):
+            s = [rr.choice(tl) for _ in tl]
+            o = statistics.mean(max(U[(t, p)] for p in contendientes) for t in s)
+            f_ = max(statistics.mean(U[(t, p)] for t in s) for p in contendientes)
+            bs.append(o - f_)
+        bs.sort()
+        print(f"  {'PISO DE RUIDO (pseudo-brazos, media)':34s} {piso:+.3f}"
+              f"   p95 {piso_p95:+.3f}   ({n_arms} pseudo-brazos por brazo real)")
+        print(f"  {'IC95 pareado de la brecha':34s} [{bs[50]:+.3f}, {bs[1949]:+.3f}]")
         print(f"\n  >>> premio NETO = {ora2 - fijo2:+.3f} - {piso:+.3f} = "
-              f"**{ora2 - fijo2 - piso:+.3f}**")
-        print(f"  {'>>> HAY premio neto' if ora2 - fijo2 - piso > 0 else '>>> NO hay premio neto: el maximo por tarea es el sesgo del maximo, no una eleccion mejor'}")
+              f"**{ora2 - fijo2 - piso:+.3f}**  (contra el p95: {ora2 - fijo2 - piso_p95:+.3f})")
+        print(f"  {'>>> HAY premio neto' if ora2 - fijo2 - piso_p95 > 0 else '>>> el premio no se separa del piso al p95'}")
 
         # ¿Alguna feature separa a los contendientes entre si?
         print(f"\n  ¿alguna senal separa a los {len(contendientes)} contendientes ENTRE SI?\n")
-        vg2_base = statistics.pvariance(list(g2.values()))
+        vg2_base = statistics.variance(list(g2.values()))
 
         def explica2(etq):
             gr = collections.defaultdict(list)
@@ -387,7 +412,7 @@ def main() -> None:
                     for t in gt:
                         pred[(t, p)] = m
             res = [g2[k] - pred[k] for k in g2]
-            return 1.0 - statistics.pvariance(res) / vg2_base if vg2_base else 0.0
+            return 1.0 - statistics.variance(res) / vg2_base if vg2_base else 0.0
 
         print(f"  {'senal':26s} {'explica':>8s} {'nulo p95':>9s} {'p':>7s}")
         for nombre, fn in SENALES.items():
