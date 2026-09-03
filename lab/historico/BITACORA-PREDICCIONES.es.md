@@ -1675,3 +1675,159 @@ en `luna` a `k>=4`. El detector es mas util sobre el modelo mejor, no menos.
 **Lo que sigue sin estar probado.** Dos familias no son la poblacion de los modelos, y los dos
 comparten corpus y recuperador. Lo que se descarto es la explicacion mas barata —«es el mismo
 modelo»—; no se probo que valga para cualquier modelo ni para cualquier corpus.
+
+## P31 a P36 — las seis apuestas del paper (registradas 2026-09-03, ANTES de correr)
+
+El paper v3.2 pone en §9.1 una apuesta por contribución, con criterio numérico y con lo que se
+retira si falla. Se registran acá para que el veredicto se lea contra lo escrito hoy y no contra
+lo que convenga después. Ninguna corrió.
+
+### P31 — el brazo de ausencia (contribución 2: la interfaz aprendible)
+
+Construir el brazo que junta `COBERTURA_GARANTIZADA` y `ABSTIENE_SIN_PRUEBA`: recorrido
+exhaustivo con estado acotado, y abstención explícita cuando ninguna unidad sostiene la
+respuesta. Correrlo sobre las celdas de ausencia del rectángulo (y presuposición falsa como
+control), 3 réplicas, `gpt-5.6-luna`, mismas condiciones que la campaña.
+
+| resultado | veredicto |
+|---|---|
+| `u` en ausencia >= mejor brazo del plantel en ausencia + piso p95 calibrado (8 brazos), Y leave-one-arm-out con nueve brazos con `p` exacto <= 0,05 | LAS CAPACIDADES PREDICEN. La tabla de exigencias diseñó un brazo que no existía y el brazo cumplió |
+| `u` en ausencia >= mejor fijo en ausencia pero el LOAO no cruza 0,05 | la tabla predice este caso; la transferencia general sigue sugestiva, y hacen falta más brazos |
+| `u` en ausencia < mejor fijo en ausencia | la tabla está MAL DECLARADA. Se anota qué capacidad faltó o cuál estaba mal, y se retira del resumen «predice un brazo que nunca corrió» |
+
+Costo estimado: ~7 tareas de ausencia + ~7 de presuposición, 3 réplicas, un brazo: ~42 celdas,
+del orden de 1M tokens.
+
+### P32 — la corrección de `pointer_chase` transfiere (contribución 1: la condición estructural)
+
+Generar seis tareas de cadena acoplada con semilla nueva (dos por largo: 1, 2 y 3 saltos). Correr
+`pointer_chase` corregido (las cuatro correcciones de §6.1.4) y `dag_strategy` como referencia,
+3 réplicas, sobre `terra`, y `luna` al lado.
+
+| `pointer_chase` sobre las 18 celdas de `terra` | veredicto |
+|---|---|
+| `u >= 0,75` y `pass^3 >= 0,60` | EL MECANISMO TRANSFIERE. §6.1.4 deja de ser ajuste en muestra |
+| `u` entre 0,50 y 0,75 | transfiere en parte; se reporta la clase de falla dominante y se busca la quinta corrección |
+| `u <= 0,50` | FUE AJUSTE EN MUESTRA sobre tres tareas. §6.1.4 y la contribución 1 se reescriben con ese rótulo |
+
+Guarda: las celdas se generan ANTES de tocar una línea de `pointer_chase`, y la corrida es una sola.
+Costo: ~36 celdas `terra` + 36 `luna`, ~3M tokens.
+
+### P33 — el ciclo sobre el modelo de la campaña (contribución 3: la frontera)
+
+Repetir `P15`, `P16` y `P17` sobre `gpt-5.6-luna`, mismos mundos (semillas 47, 61, 73), mismo
+vocabulario de cada etapa.
+
+| resultado | veredicto |
+|---|---|
+| el signo de `P15` se conserva (neto contra el mejor fijo <= −piso por celda), la continuidad separa el horizonte >= 5 de 6, decisión reproducida 26/26 en los tres | EL MECANISMO ERA DEL VOCABULARIO. La costura de modelo se cierra |
+| `P15` sobre `luna` da neto positivo > piso | lo que faltaba no era el eje sino el modelo. §6.5 se reescribe y la contribución 3 pierde su primer episodio |
+| reproducibilidad < 26/26 en algún mundo | hay una ramificación delegada en la política que el registro no vio; se busca y se tipa antes de seguir |
+
+Costo: ~40M tokens (lo que costaron sobre `nano`, ×1 en filas).
+
+### P34 — la consolidación aprende el desempate por costo (contribución 4: el premio)
+
+Darle a la consolidación el objetivo de costo sobre la clave `COMPUTED` que incluye
+`cardinalidad × término`, leave-one-task-out sobre el rectángulo 64 × 8. Hoy la clave computada
+sola da 31% de ahorro a −0,104, y la señal suelta 58% a +0,000.
+
+| resultado | veredicto |
+|---|---|
+| ahorro >= 50% con `Δu` cuyo IC95 incluye cero | LA POLÍTICA APRENDE LO QUE LA SEÑAL MUESTRA. La contribución 4 pasa de «señal» a «política» |
+| ahorro entre 40% y 50%, o IC95 que excluye cero por poco | aprende en parte; se reporta qué regiones pierden |
+| ahorro < 40% o `Δu` significativamente negativo | LA BRECHA ES DEL ALGORITMO. Se diagnostica dónde: partición, piso de episodios (hoy ocho) u homeostasis, y se anota como deuda del sistema |
+
+Costo: cero tokens (replay sobre el registro).
+
+### P35 — la ontología se recupera desde el request (contribución 2)
+
+Un clasificador con el modelo de la campaña, una llamada por tarea, recupera el eje principal de
+la ontología desde el texto del request, contra la etiqueta de diseño, sobre las 64 tareas del
+rectángulo.
+
+| precisión contra la etiqueta de diseño | veredicto |
+|---|---|
+| >= 0,85 | LA INTERFAZ SIRVE AFUERA DEL BANCO, con la salvedad de que el eje recuperado es `ELICITED` y sólo informa el costo, nunca el piso (Prop. 5) |
+| entre 0,70 y 0,85 | sirve para el desempate por costo y no para excluir brazos; se dice así |
+| < 0,70 | la ontología queda como etiqueta de diseño y la clave se limita a cardinalidad y cobertura, que el caller declara |
+
+Costo: 64 llamadas.
+
+### P36 — el sistema propone el eje (contribución 3)
+
+Darle a la etapa de abstracción de la consolidación el registro de `P15` con sus features crudos
+(sin el eje de continuidad) y medir si propone sola una partición equivalente.
+
+| resultado | veredicto |
+|---|---|
+| propone una función del material que separa el horizonte desconocido 6 de 6 sin falsos positivos | EL LAZO SE CIERRA SIN PERSONAS en los pasos 3 y 4. La reparación del vocabulario pasa de método a plasticidad |
+| propone una partición que separa parcialmente (4 o 5 de 6) | plasticidad parcial; se reporta qué le faltó ver |
+| no propone nada que separe | la reparación del vocabulario queda como método de desarrollo, que es lo que el paper afirma hoy |
+
+Costo: cero tokens.
+
+Orden: P34 y P36 primero (gratis). Después P32 y P31. Después P35. P33 último, por costo.
+
+### Veredicto P34 (2026-09-03, `bench/analysis/_p34_costo.py`, cero tokens): **PARCIAL**, y destapó un eje que falta
+
+Leave-one-task-out sobre el rectángulo 64 × 8 con la θ REAL (`Plasticity.candidate`, piso de 8
+episodios, `hierarchical=True`), objetivo de costo, contra la constante que no aprende (0,817 ·
+120.976 tok/tarea).
+
+| clave de θ | utilidad | Δu vs constante | IC95 | tok/tarea | ahorro | tareas gobernadas |
+|---|---:|---:|---|---:|---:|---:|
+| región completa (con el eje ELICITED) | 0,789 | −0,027 | [−0,078, +0,021] | 58.489 | 52% | 24 |
+| región COMPUTADA, 4 ejes, jerárquica | 0,770 | −0,047 | [−0,115, +0,022] | 78.621 | 35% | 64 |
+| card. de UNIDADES × literal(región) | 0,848 | +0,031 | [−0,005, +0,078] | 92.076 | 24% | 64 |
+| **card. de RESPUESTA × término(regex)** | **0,875** | **+0,058** | [−0,014, +0,132] | 71.070 | **41%** | 50 |
+| card. de RESPUESTA × literal(región) | 0,875 | +0,058 | [−0,016, +0,136] | 71.070 | 41% | 50 |
+
+**Primera corrida, sólo con las claves de la región: FRACASO** (35% a −0,047). Y midiendo
+apareció por qué la señal del 58% no era alcanzable desde la región: **el eje `card` de la región
+es cardinalidad de UNIDADES (`single/few/many`), y la señal de `_predictores.py` usa la
+cardinalidad de la RESPUESTA que el caller declara (`boolean/singular/enumerative/aggregate`)**.
+Son ejes distintos, los dos `COMPUTED`, y el vocabulario de región no tiene el segundo. Se agregó
+al script la clave que la apuesta nombra (la señal de §6.4.1 como clave de θ) y se volvió a
+correr; las dos corridas quedan reportadas.
+
+**Con la clave correcta: 41% con Δu +0,058, IC95 que cruza cero → PARCIAL** contra el criterio
+registrado (>= 50%). La utilidad queda POR ENCIMA de la constante, casi significativa.
+
+**Dónde vive la brecha con el 58%**: 14 de las 64 tareas caen a la constante (react, ~121k
+tokens) porque su clave no tiene 8 episodios en ningún nivel. Sobre las 50 gobernadas el costo
+medio es ~57k, que sería ~53% de ahorro. **El piso de episodios es el mecanismo**, que es el
+segundo de los tres que la apuesta nombraba (partición, piso, homeostasis).
+
+**Qué cambia**: el paper §6.4.1 reporta el número; el vocabulario de región tiene un eje
+candidato, `answer_cardinality` (declarado por el caller, `COMPUTED`), y cambiarlo es decisión
+del autor (`CP-8` ya anotaba la tensión con la sonda). **No se toca el piso de 8 mirando este
+resultado**: bajarlo ahora sería ajustar contra el dato que lo sugirió.
+
+### Veredicto P36 (2026-09-03, `bench/analysis/_p36_abstraccion.py`, cero tokens): **FRACASO**, con una pista
+
+Registro de `P15` (`gold_transfer`, 336 filas aprendibles, 5 brazos, 26 tareas; el material es
+el mismo que corrió P15: el cambio K-6 fue del tokenizador, no del generador). Quince
+estadísticas crudas de `(pregunta, material)` sin sensor tipado. `discover_partitions` tal como
+corre en `sleep_cycle`.
+
+**Partición canónica** (orden de `task_id`, 50/25): 8 candidatas, 3 sobreviven (`n_units`,
+`total_chars`, `unit_len_cv`), **ninguna aísla el horizonte**; la más cercana, `unit_len_cv`,
+da 6/6 con 10 falsos positivos. **200 particiones al azar**: ninguna sobreviviente aísla 6/6 con
+0 fp salvo `raw_units_touching_question > 0,99` (la fracción de unidades que contienen algún
+término de la pregunta), que lo hace en **8 de 200** y sobrevive en 49.
+
+**Veredicto contra lo registrado: FRACASO.** La reparación del vocabulario queda como método de
+desarrollo, que es lo que el paper afirma.
+
+**La pista, dicha entera**: existe una estadística genérica del material que aísla las seis
+tareas de horizonte sin falsos positivos, y la etapa la encuentra en el 4% de las particiones y
+no la retiene. El límite está en la selección (winner-flip + retención sobre 26 tareas), no en
+el espacio de features. Es una hipótesis para el diseño de la etapa, no un resultado.
+
+**Y un recuento que corrige al paper**: `measure_continuation`, el sensor humano, sobre
+`gold_transfer` da **6/6 con 2 falsos positivos**, las dos tareas `-pos` de C7 (acción
+irreversible). La bitácora original (P15) decía «zero false positives on C1/C2/C4», que es
+cierto; el paper había generalizado a «sobre las demás celdas», que no lo es. Corregido en
+§6.5.2 del largo y §5.4 del corto. El criterio de P36 (0 fp) era más exigente que lo que el
+sensor humano cumple.

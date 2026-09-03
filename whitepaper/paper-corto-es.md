@@ -12,10 +12,15 @@ Versión breve, v2, 2026-09-02. Autor: Ariel Edgardo Levy.
 
 ## Resumen
 
-Un arnés de agentes es la estructura de control que envuelve a un LLM. Decide qué llamada
-viene después, qué buscar, cuántas vueltas dar, cuándo verificar, cuándo reintentar y cuándo
-parar. Cuando esas decisiones las toma el propio modelo, o cuando el arnés verifica llamando al
-mismo LLM o a otro, el arnés hereda la varianza de lo que quería controlar. El guard que le
+Un arnés de agentes es todo lo que rodea a un LLM y lo convierte en un sistema. Arma el prompt
+y decide qué entra al contexto y qué se compacta. Expone las herramientas y ejecuta las llamadas
+que el modelo pide. Parsea y valida lo que el modelo devuelve. Guarda el estado entre llamadas.
+Decide qué llamada viene después, qué buscar, cuántas vueltas dar, cuándo reintentar y cuándo
+parar. Verifica la salida antes de entregarla. Impone presupuesto y permisos, y registra lo que
+pasó. De todas esas funciones, este trabajo estudia las que ramifican el flujo, las que deciden
+qué pasa después, porque son las que fijan de quién depende la trayectoria. Cuando esas
+decisiones las toma el propio modelo, o cuando el arnés verifica llamando al mismo LLM o a
+otro, el arnés hereda la varianza de lo que quería controlar. El guard que le
 pregunta a un modelo si la respuesta de un modelo es correcta es el caso típico: apila una
 segunda llamada estocástica sobre la primera. Apilar instancias del componente sube una
 probabilidad. No produce una propiedad.
@@ -27,8 +32,11 @@ verifica repitiéndola: misma base de creencias, misma decisión. Lo que el moto
 políticas, tablas de decisión sobre qué exige un request y qué puede hacer cada brazo (así
 llamamos a cada paradigma que el motor puede correr), consolidadas offline en un artefacto
 firmado con guarda anti-regresión, nunca sobre nombres de paradigma. Todo se mide sobre una
-ejecución real: un banco que corre doce paradigmas sobre análisis forense de hechos, sin juez
-LLM, y que es la fuente de episodios de la que el sistema aprende. Contribuimos:
+ejecución real y en un dominio acotado: agentes que leen material para contestar, RAG sobre
+documentos con búsqueda léxica e híbrida sobre un índice. El banco corre doce paradigmas sobre
+análisis forense de hechos, sin juez LLM, y es la fuente de episodios de la que el sistema
+aprende. La teoría (§4) se enuncia para agentes en general; los números (§5) valen para ese
+dominio. Contribuimos:
 
 1. Una condición estructural sobre la varianza. Un agente confina su varianza cuando ninguna
    ramificación de su trayectoria depende del LLM, y entonces toda discrepancia entre corridas
@@ -45,8 +53,8 @@ LLM, y que es la fuente de episodios de la que el sistema aprende. Contribuimos:
    refutación preregistrada con la decisión reproducida (§5.4).
 4. Dónde está el premio de elegir. Entre brazos con las mismas capacidades no hay premio de
    calidad que se separe del ruido. El premio vive en los ejes donde las capacidades difieren,
-   costo, cobertura y abstención, y la variable que domina el resultado es cuánta evidencia
-   lee el paradigma, no cómo razona (§5.5, §5.6).
+   costo, cobertura y abstención, y en este dominio la variable que domina el resultado es
+   cuánta evidencia lee el paradigma, no cómo razona (§5.5, §5.6).
 
 Las cuatro descansan en una exigencia sobre la política. Una política, acá, es una tabla que
 mira una clave, una tupla de ejes medidos sobre el request y el material, y devuelve una
@@ -54,7 +62,8 @@ decisión. Esa clave tiene que ser `COMPUTED`, el nivel de procedencia que signi
 por código desde el request y el material sin pasar por el modelo (Proposición 2). Si un eje de
 la clave lo emite el LLM, la misma pregunta puede caer en filas distintas de la tabla en dos
 réplicas, y la decisión hereda la varianza que el motor existía para confinar. Sólo se aprende
-sobre lo que se sensa sin el modelo. El determinismo habilita al aprendizaje.
+sobre lo que se sensa sin el modelo. El determinismo habilita al aprendizaje. Y cada una de las
+cuatro lleva una apuesta registrada, con criterio numérico y fecha, que puede refutarla (§7).
 
 Palabras clave: confinamiento de varianza, agentes LLM, plano de control, procedencia,
 capacidades, ontología de la pregunta, aprendizaje plástico, reproducibilidad.
@@ -63,18 +72,20 @@ capacidades, ontología de la pregunta, aprendizaje plástico, reproducibilidad.
 
 ![El contrato de garantía, y qué pasa cuando la evidencia no alcanza](figuras/contrato-de-garantia.svg)
 
-**Figura 1.** El contrato de garantía, nodo por nodo. El request entra con tres cosas que
-declara quien llama: el material, el presupuesto y las banderas de riesgo. El nodo 1,
-factibilidad, es una desigualdad y no una estimación: cada paradigma declara cuántas unidades
-lee y cuántas llamadas emite, y los que no entran en el presupuesto se podan sin gastar un
-token. El nodo 2 deriva el piso de garantía exigido, A0 a A3, desde creencias sobre el request
-y no desde su texto. El nodo 3 deja pasar sólo a los paradigmas admisibles, los que alcanzan
-ese piso. Recién el nodo final ejecuta al elegido y responde, y es el único que gasta tokens.
-Cuando ninguna procedencia alcanza el piso exigido, la rama de rechazo se abstiene o difiere, y
-eso es una salida del sistema y no un fallo. El lazo que vuelve desde el rechazo es la
-plasticidad: el registro de rechazos sube el piso del próximo request, offline y con guarda
-anti-regresión, sin que nadie toque un peso. El carril de abajo es el LLM, un sensor
-estocástico con pesos congelados. La única flecha que cruza la frontera entre carriles lleva
+**Figura 1.** El contrato de garantía. El request entra como tres cosas que declara quien
+llama, apiladas a la izquierda: el material, el presupuesto y las banderas de riesgo. Siguen
+tres pasos en fila. Factibilidad (1) es una desigualdad y no una estimación: cada paradigma
+declara cuántas unidades lee y cuántas llamadas emite, y los que no entran en el presupuesto se
+podan sin gastar un token. Piso exigido (2) deriva el nivel de garantía, A0 a A3, desde
+creencias sobre el request y no desde su texto. Admisibles (3) deja pasar sólo a los paradigmas
+que alcanzan ese piso. La llave de la derecha abre a las dos únicas salidas: ejecuta y
+responde, cuando alguna procedencia alcanzó el piso, y se abstiene o difiere, cuando ninguna lo
+alcanzó. Toda decisión termina en una de las dos, y la segunda es una salida y no un fallo. El
+lazo punteado que vuelve desde la salida roja hasta el piso exigido es la plasticidad: el
+registro de rechazos sube el piso del próximo request, offline y con guarda anti-regresión, sin
+que nadie toque un peso. La caja rayada es el bucle, cuántas vueltas, qué índice, cuándo parar,
+qué unidad es el ancla, y está rayada porque el modelo nunca lo toca. En el carril de abajo el
+LLM es un sensor estocástico con pesos congelados, y la única flecha que cruza la frontera lleva
 proposiciones tipadas hacia arriba, nunca control de flujo hacia abajo. La garantía que la
 figura dibuja es «misma base de creencias, misma decisión», y se verifica repitiéndola. «Mismo
 prompt, misma respuesta» no la puede dar ningún LLM, y el motor no la promete.
@@ -82,9 +93,11 @@ prompt, misma respuesta» no la puede dar ningún LLM, y el motor no la promete.
 
 # 1. Introducción
 
-Un arnés de agentes es la estructura de control que envuelve al modelo: una llamada única, un
-bucle de razonar y actuar, una descomposición en sub-tareas, un grafo de verificar y
-replanificar. Se elige una vez en tiempo de diseño y se congela en el código, y sobre él se
+Un arnés de agentes es lo que rodea al modelo y lo convierte en un sistema: contexto,
+herramientas, parseo, estado, verificación, presupuesto y registro. La parte que este trabajo
+estudia es su estructura de control, que toma una de pocas formas: una llamada única, un bucle
+de razonar y actuar, una descomposición en sub-tareas, un grafo de verificar y replanificar. Se
+elige una vez en tiempo de diseño y se congela en el código, y sobre él se
 sostienen sistemas agentivos que firman números, disparan acciones y contestan a usuarios. Las
 demás capas de un sistema de producción dan tres propiedades por sentadas. Una base de datos
 ejecuta la misma consulta igual cada vez, un log dice de dónde salió cada registro, y un
@@ -272,20 +285,21 @@ Y los tres paradigmas que gobiernan los resultados tienen dueño: ReAct, Reflexi
 
 ![El método determinista: qué decide el código y qué emite el modelo](figuras/metodo-determinista.svg)
 
-**Figura 2.** Cómo se decide un request, nodo por nodo. En el carril de arriba decide el
-código. Los sensores (1) computan ejes de la pregunta y del material en forma cerrada, sin
-modelo. Las creencias tipadas (2) guardan cada proposición con su procedencia, de menor a mayor
-`ASSUMED`, `ELICITED`, `OBSERVED`, `COMPUTED`. El portón de factibilidad (3) es aritmética pura:
-qué paradigmas entran en el presupuesto. Las capacidades exigidas (4) traducen la ontología de
-la pregunta a capacidades, no a nombres de paradigma. Los brazos candidatos (5) son los que
-tienen todas las capacidades exigidas. El dial de garantía (6) lo declara el caller y jamás se
-infiere del texto. Elegir o abstenerse (7) toma, entre los candidatos que empatan, el más
-barato. Y `EXPLAIN` (8) registra qué se creyó, con qué procedencia y qué se podó. En el carril
-de abajo el modelo contesta sólo dos preguntas: qué dice esta unidad, y hacia dónde sigue el
-rastro. Su salida se tipa antes de usarse (una cola de texto como «settlement account» se
-reduce a la entidad que nombra). El código lleva el bucle: cuántas vueltas, qué índice, cuándo
-parar. Una decisión que cruza al carril de abajo se lleva el determinismo con ella, y §5.2 lo
-mide.
+**Figura 2.** Cómo se decide un request, en tres grupos y una fila. En el carril de arriba
+decide el código. Sensar: los sensores (1) computan ejes de la pregunta y del material en forma
+cerrada, sin modelo, y las creencias tipadas (2) guardan cada proposición con su procedencia,
+de `ASSUMED` a `COMPUTED`. Acotar: el portón de factibilidad (3) es aritmética pura, qué
+paradigmas entran en el presupuesto; las capacidades exigidas (4) traducen la ontología de la
+pregunta a capacidades, no a nombres; los brazos candidatos (5) son los que tienen todas las
+exigidas; y el dial de garantía (6) lo declara el caller y jamás se infiere del texto. Decidir:
+elegir o abstenerse (7) toma, entre los que empatan, el más barato, y `EXPLAIN` (8) registra
+qué se creyó y con qué procedencia. El brazo elegido ejecuta, y dentro de él va rayado el
+bucle, cuántas vueltas, qué índice, cuándo parar, porque es del código. En el carril de abajo
+el modelo contesta sólo dos preguntas: qué dice esta unidad, y hacia dónde sigue el rastro. Su
+salida se tipa antes de usarse (una cola de texto como «settlement account» se reduce a la
+entidad que nombra). Las dos flechas que cruzan la frontera están rotuladas: pregunta hacia
+abajo, proposición hacia arriba. Una decisión que cruza al carril de abajo se lleva el
+determinismo con ella, y §5.2 lo mide.
 
 Un request declara su material, su presupuesto y sus banderas de riesgo (`irreversible`,
 `shared_writes`, `regulated`), siempre declaradas por el caller y jamás inferidas del texto. El
@@ -718,7 +732,9 @@ no lo hay entre contendientes (§5.6).
 Los medidores nuevos, en cambio, los agregaron personas. Cada episodio agregó un medidor, un eje
 que el sistema no sabía medir, y un medidor es código, así que agregarlo es diseño. Cada
 refutación la leyeron el autor y su asistente, diagnosticaron el eje que faltaba y lo agregaron.
-Que la etapa de abstracción proponga ejes sola está en el diseño y no corrió.
+Que la etapa de abstracción proponga ejes sola se corrió el 2026-09-03 como `P36`, sobre el
+registro del primer episodio con quince estadísticas crudas del material: ninguna partición
+sobreviviente aísla el horizonte, y la frontera queda donde está.
 
 Los tres episodios son anteriores a la campaña y corrieron sobre `gpt-5.4-nano`, con 390 filas y
 unos 13 a 14M tokens cada uno, en tres mundos de 26 tareas. Transfiere el mecanismo, que a la
@@ -742,7 +758,8 @@ dos, y bajo Benjamini-Hochberg ningún contraste de ese episodio sobrevive.
 
 Lo que produjo el ciclo fue el eje de continuidad, recurrencia de una clave literal entre
 unidades, función pura del material. Separa el horizonte 6 de 6 en tres corpus, con cero falsos
-positivos. Agregarlo sin más fragmentó las regiones por debajo del piso de confianza, de 12
+positivos sobre las celdas de hecho único, enumeración y cobertura; sobre el primer mundo marca
+también dos de las cuatro tareas de acción irreversible (recontado el 2026-09-03). Agregarlo sin más fragmentó las regiones por debajo del piso de confianza, de 12
 tareas con margen a 0; con retroceso jerárquico a la región padre, 16 de 26.
 
 Segundo episodio, semilla 61. Con el eje nuevo, la acción real puntuada y el costo cobrado, la
@@ -808,8 +825,13 @@ exclusiones a mano la misma señal daba 42% a −0,017, y por eso se declara el 
 
 La política entera, sobre la misma pregunta, hace peor que la señal suelta. Con la clave
 completa ahorra 68% a −0,063 [−0,139, +0,002], y con la clave `COMPUTED` sola ahorra 31% a
-−0,104 [−0,181, −0,030]. Esa brecha es del sistema, no del corpus. Una comparación de
-vocabularios sobre 41 × 7, con 0,951 y 46%, no tiene script que la reproduzca y no se cita.
+−0,104 [−0,181, −0,030]. Esa brecha es del sistema, no del corpus. La apuesta `P34`, corrida el
+2026-09-03 con la θ real en leave-one-task-out, la achicó y la explicó: el eje de cardinalidad de
+la región es de unidades, y la señal usa la cardinalidad de la respuesta que el caller declara,
+que la región no tiene; con esa clave θ ahorra 41% con Δu +0,058 [−0,014, +0,132], parcial
+contra el criterio de 50%, y las 14 tareas que caen a la constante por el piso de ocho episodios
+explican lo que falta. Una comparación de vocabularios sobre 41 × 7, con 0,951 y 46%, no tiene
+script que la reproduzca y no se cita.
 
 El paradigma determina cuánta evidencia se lee, y eso pesa más que el paradigma mismo. Sobre el
 corpus fuera de ventana del primer episodio (semilla 47, `gpt-5.4-nano`, 90 celdas), las celdas
@@ -1071,18 +1093,24 @@ mismas capacidades. Sobre los ocho y en el held-out la brecha es neta y positiva
 medida la captura, ni por identidad ni por familia. Ese resultado no cierra el ruteo. Cierra la
 pregunta mal formulada, y deja abierta sobre qué clave se cobra un premio que existe.
 
-Lo que sigue, en orden. Medir la corrección de `pointer_chase` sobre celdas de cadena acoplada
-con otra semilla, sobre `luna` y `terra`. Construir el brazo que el catálogo predice (cobertura
-garantizada más abstención sin prueba) y correrlo en las celdas de ausencia. Un paradigma diseñado desde la tabla
-y medido después, que además sube el `n` que el leave-one-arm-out necesita. Medir si un
-clasificador recupera los ejes de la ontología desde un request real. La celda de vigencia,
-treinta y dos tareas sobre las enmiendas que el corpus ya tiene y ninguna pregunta interroga. Que
-las exigencias admitan rutas alternativas aprendidas del registro, que es, literalmente,
-extraer el motivo del comportamiento. Que el sistema proponga el eje: darle a la etapa de
-abstracción el registro del primer episodio y medir si propone sola una partición equivalente a
-la continuidad; eso convertiría el ciclo en plasticidad del sistema. Y repetir los tres
-episodios sobre el modelo de la campaña, unos 40M tokens, para cerrar la única costura de modelo
-que el paper tiene.
+Lo que se apuesta. Cada contribución lleva una apuesta que la puede refutar, registrada en la
+bitácora del laboratorio el 2026-09-03, antes de correr, con criterio numérico y con lo que se
+retira si falla.
+
+| apuesta | contribución | éxito si | si falla, se retira |
+|---|---|---|---|
+| `P31` construir el brazo de ausencia que la tabla predice (`COBERTURA_GARANTIZADA` + `ABSTIENE_SIN_PRUEBA`) y correrlo en las celdas de ausencia | 2 | supera al mejor brazo en ausencia más el piso p95, y el leave-one-arm-out con nueve brazos da `p` ≤ 0,05 | que las capacidades predicen un brazo que no existe |
+| `P32` la corrección de `pointer_chase` sobre seis cadenas acopladas con semilla nueva | 1 | `u ≥ 0,75` y `pass^3 ≥ 0,60` sobre `terra` | §5.2 se reescribe como ajuste en muestra |
+| `P33` los tres episodios sobre `luna` | 3 | el signo de `P15` se conserva y la decisión se reproduce 26/26 | lo que faltaba era el modelo, no el eje |
+| `P34` la consolidación aprende el desempate por costo sobre la clave `COMPUTED` | 4 | ahorro ≥ 50% con `Δu` cuyo IC95 incluye cero | la brecha es del algoritmo de consolidación |
+| `P35` un clasificador recupera el eje principal de la ontología desde el request | 2 | precisión ≥ 0,85 contra la etiqueta de diseño | la clave se limita a lo que el caller declara |
+| `P36` la etapa de abstracción propone sola el eje de continuidad desde el registro de `P15` | 3 | separa el horizonte 6 de 6 sin falsos positivos | la reparación del vocabulario queda como método, no como plasticidad |
+
+`P34` y `P36` costaban cero tokens y corrieron el mismo día: `P34` parcial (41% con la utilidad
+por encima de la constante, y un eje que le falta al vocabulario, §5.5), `P36` fracaso (§5.4).
+`P32` y `P31` son una fracción de la campaña y deciden las dos contribuciones que más pesan;
+`P33` cierra la costura de modelo y es la más cara, unos 40M tokens. Quedan sin apuesta numérica la celda de vigencia, las exigencias con rutas
+alternativas y la comparación directa contra una ventana frontera.
 
 Una corrección gratis para cómo se evalúan agentes. Un banco que reporta `pass@1` sin `pass^k`
 no distingue un sistema que acierta de uno con el que se puede contar, y la diferencia llega a

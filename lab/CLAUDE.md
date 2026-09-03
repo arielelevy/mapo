@@ -341,3 +341,20 @@ gold_deep (~483k), gold_xl (~1.272k tokens).
 Repo git desde 2026-08-27 (primer commit `76c8b8e`, confirmado por el autor;
 .gitignore cubre .env/cache/results). Remote: `origin` = github.com/arielelevy/mapo
 (PRIVADO), rama `main`. Nunca push sin confirmación del autor.
+
+## Las apuestas del paper (2026-09-03)
+
+`P31` a `P36` registradas en `historico/BITACORA-PREDICCIONES.es.md`, una por contribución del
+paper, con criterio numérico y lo que se retira si fallan. Las dos gratis corrieron el mismo día:
+**`P34` PARCIAL** (`bench/analysis/_p34_costo.py`: 41% de ahorro a Δu +0,058 con la clave
+cardinalidad de la RESPUESTA × término; destapó que el eje `card` de la región es cardinalidad
+de UNIDADES y que el vocabulario no tiene la cardinalidad de la respuesta, que el caller declara)
+y **`P36` FRACASO** (`bench/analysis/_p36_abstraccion.py`: la etapa de abstracción no aísla el
+horizonte desde estadísticas crudas; una lo aísla en 8 de 200 particiones y la selección no la
+retiene). **No bajar `MIN_EPISODES_FOR_CONFIDENCE` ni agregar `answer_cardinality` al
+vocabulario mirando estos números**: las dos son decisiones del autor y cada una pide su propia
+predicción registrada antes de correr. Quedan `P32`, `P31`, `P35` y `P33`, en ese orden de costo.
+
+> **Cierre del 2026-09-03**: `historico/CIERRE-2026-09-03.es.md`. Es lo que hay que leer para
+> retomar: qué se hizo en los papers y las figuras, qué destaparon `P34` y `P36`, y qué decide
+> el autor antes de la próxima corrida.
