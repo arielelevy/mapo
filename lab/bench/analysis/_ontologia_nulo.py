@@ -39,6 +39,7 @@ from bench.panel import rectangulo
 
 REGISTRO = Path("results/luna/gold_h1_rows.jsonl")
 CORPUS = Path("corpus/gold_h1")
+SALIDA = Path("results/luna/ontologia_nulo_exacto.json")
 PERMS = 2000
 SEMILLA = 20260901
 
@@ -177,6 +178,17 @@ def main() -> None:
     print(f"  nulo exacto ({len(nulos)} permutaciones)  media {nulos.mean():.4f} · "
           f"p5 {nulos[int(0.05 * len(nulos))]:.4f} · mín {nulos[0]:.4f}")
     print(f"  p exacto = {p_exacto:.4f}   (la asignación real incluida entre las {len(nulos)})")
+
+    SALIDA.write_text(json.dumps({
+        "panel": panel.descripcion(),
+        "permutaciones": len(nulos),
+        "mae_capacidades": round(real, 6),
+        "nulo_media": round(float(nulos.mean()), 6),
+        "nulo_p5": round(float(nulos[int(0.05 * len(nulos))]), 6),
+        "nulo_min": round(float(nulos[0]), 6),
+        "p_exacto": round(p_exacto, 6),
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"  -> {SALIDA}")
 
 
 if __name__ == "__main__":

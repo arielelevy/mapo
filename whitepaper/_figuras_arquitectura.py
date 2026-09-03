@@ -180,7 +180,7 @@ def metodo():
     s = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" font-family="{FONT}">',
          defs(), f'<rect width="{W}" height="{H}" fill="#ffffff"/>',
          t(16, 30, "Cómo se decide un request", 17, TXT, w=600),
-         t(16, 46, "la frontera entre los dos carriles es la única decisión de diseño que el registro muestra que importa", 11)]
+         t(16, 46, "la frontera entre percepción estocástica y control determinista organiza toda la decisión", 11)]
 
     s.append(f'<rect x="16" y="58" width="948" height="260" rx="10" fill="{PANEL_AZUL}" stroke="{BORDE}"/>')
     s.append(t(30, 336, "LO QUE DECIDE EL CÓDIGO · determinista, contable, auditable", 11, AZUL, w=700))
@@ -194,7 +194,7 @@ def metodo():
         ("embudo", "portón de factibilidad", "aritmética pura: ¿entra en el presupuesto?", 3),
         ("etiqueta", "capacidades exigidas", "ontología de la pregunta → capacidades", 4),
         ("check", "brazos candidatos", "los que tienen TODAS las exigidas", 5),
-        ("dial", "dial de garantía", "A0–A3 · lo declara el caller, no el texto", 6),
+        ("dial", "dial de garantía", "max(caller, request, piso aprendido)", 6),
     ], "acotar", alto_fila=42)
     c3, h3 = contenedor(556, y, 200, [
         ("bifurca", "elegir o abstenerse", "entre los que empatan, el más barato", 7),
@@ -242,7 +242,7 @@ def metodo():
     s.append(t(ex + ew - 36, 300, "proposición", 9.5, ROJO, italic=True, anchor="end"))
     s.append(flecha(148, yb + 50, 174, yb + 50, ROJO, "pr"))
 
-    s.append(t(16, H - 8, "Una decisión que cruza al carril de abajo se lleva el determinismo con ella: medido, el ancla de una caminata elegida por el modelo dio u=1,000 / 0,000 / 0,000 con la misma huella.", 9.5))
+    s.append(t(16, H - 8, "Una decisión delegada puede abrir un canal desde el modelo hacia el control: en muestra, el ancla elegida por el modelo dio u=1,000 / 0,000 / 0,000 con la misma huella.", 9.5))
     s.append("</svg>")
     return "\n".join(s)
 

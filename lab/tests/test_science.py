@@ -3328,10 +3328,9 @@ def check_the_code_draws_the_graph(ok: bool) -> bool:
 def check_who_sets_the_dial(ok: bool) -> bool:
     """§47: T-5, quien fija el dial. Tres fuentes y una regla: el MAXIMO gana.
 
-    `max` no es conveniencia: es la unica composicion que hace que cada fuente solo pueda
-    ENDURECER. Con `min` o un promedio, agregar una fuente podria ablandar el resultado, y
-    entonces una fuente nueva seria un riesgo en vez de una garantia. Enunciado completo en
-    `EL_DIAL.es.md`.
+    `max` no es la unica funcion monotona: es la composicion punto a punto menos restrictiva
+    entre las que dominan cada fuente. Con `min` o un promedio, una fuente podria ablandar el
+    resultado. Enunciado completo en `EL_DIAL.es.md`.
     """
     from app.assurance import Assurance, PROFILES, required_floor, resolve
     from app.beliefs import Belief, BeliefBase, Provenance
@@ -3391,6 +3390,18 @@ def check_who_sets_the_dial(ok: bool) -> bool:
     ok &= check("MONOTONO en cada fuente: bajar lo pedido nunca sube el nivel efectivo "
                 f"({len(list(product(Assurance, Assurance)))} combinaciones)", not fallas)
 
+    fuentes = list(product(Assurance, repeat=3))
+    contraejemplos = []
+    for valores in fuentes:
+        minimo_admisible = max(valores)
+        for candidato in Assurance:
+            domina_cada_fuente = all(candidato >= valor for valor in valores)
+            if domina_cada_fuente and candidato < minimo_admisible:
+                contraejemplos.append((valores, candidato))
+    ok &= check("el maximo es el MENOR nivel que domina cada fuente, no la unica "
+                "funcion monotona", not contraejemplos,
+                f"{len(fuentes)} ternas exhaustivas")
+
     # LA CUARTA FUENTE, que no es un nivel: A2 sin calibracion endurece la PROCEDENCIA
     # dentro del nivel en vez de bajar el nivel.
     sin_cal = resolve(vacia, requested=Assurance.ACCOUNTABLE,
@@ -3418,6 +3429,55 @@ def check_who_sets_the_dial(ok: bool) -> bool:
     floor, razones = required_floor(irr)
     ok &= check("el piso viene con su motivo escrito, no como un numero pelado",
                 floor is Assurance.CERTIFIED and any("irreversible" in r for r in razones))
+    return ok
+
+
+def check_stochasticity_confinement(ok: bool) -> bool:
+    """Instancia finita de las Proposiciones 4 y 5 del paper."""
+    from itertools import product
+
+    print("\n--- 47b. confinamiento de estocasticidad ---")
+
+    emissions = ("alpha", "beta", "gamma")
+
+    def disagreement(values) -> float:
+        pairs = list(product(values, repeat=2))
+        return sum(left != right for left, right in pairs) / len(pairs)
+
+    confined_trajectories = [
+        ("sense", "route", "read", "answer")
+        for _emission in emissions
+    ]
+    stochastic_outputs = [f"answer:{emission}" for emission in emissions]
+    ok &= check("d(T)=0: la emision no cambia la secuencia de nodos y V_T=0",
+                disagreement(confined_trajectories) == 0.0)
+    ok &= check("V_T=0 no fuerza V_Y=0: el contenido puede seguir variando",
+                disagreement(stochastic_outputs) > 0.0)
+
+    delegated_trajectories = [
+        ("sense", "route", f"read:{emission}", "answer")
+        for emission in emissions
+    ]
+    ok &= check("delegar el proximo nodo abre un canal y puede dar V_T>0",
+                disagreement(delegated_trajectories) > 0.0)
+
+    collapsed_branch = {emission: "read:fixed" for emission in emissions}
+    constant_delegated = [
+        ("sense", "route", collapsed_branch[emission], "answer")
+        for emission in emissions
+    ]
+    ok &= check("d(T)>0 no fuerza V_T>0 si la rama delegada coincide de hecho",
+                disagreement(constant_delegated) == 0.0)
+
+    computed_keys = [(12, True, False) for _emission in emissions]
+    computed_decisions = ["dag" if key[0] > 8 and key[1] else "react"
+                          for key in computed_keys]
+    elicited_decisions = ["dag" if emission == "alpha" else "react"
+                          for emission in emissions]
+    ok &= check("una clave COMPUTED conserva la decision respecto de Z",
+                disagreement(computed_decisions) == 0.0)
+    ok &= check("una clave ELICITED puede reabrir el canal hacia la politica",
+                disagreement(elicited_decisions) > 0.0)
     return ok
 
 
@@ -6037,6 +6097,7 @@ def main() -> int:
     ok = check_absence_and_presupposition(ok)
     ok = check_assembler_soundness(ok)
     ok = check_who_sets_the_dial(ok)
+    ok = check_stochasticity_confinement(ok)
     ok = check_the_code_draws_the_graph(ok)
     ok = check_retrieval_is_a_factor(ok)
     ok = check_board_is_a_tool_for_everyone(ok)

@@ -14,11 +14,11 @@ py tests\test_consolidation.py
 
 ---
 
-## `test_science.py` — 67 chequeos, 670 aserciones
+## `test_science.py` — 136 comprobaciones reportadas
 
-> El número sale de contar `ok = check_...(ok)` en `main()` y `[PASS]` en la corrida,
-> no de acordarse. Decía «33 secciones» y hacía rato que no era cierto — un conteo a
-> mano en un README es la primera cosa que se queda vieja.
+> El número sale de contar `[PASS]` en la corrida completa, no de acordarse. Decía
+> «33 secciones» y hacía rato que no era cierto — un conteo a mano en un README es la
+> primera cosa que se queda vieja.
 
 Cubre la capa de medición y las guardas que impiden que dos experimentos se promedien.
 Las que más se tocan:
@@ -28,7 +28,8 @@ Las que más se tocan:
 | **álgebra** | brecha de oráculo, selección, cascada, riesgo-cobertura, grading exacto |
 | **el registro** | que sea autodescriptivo: con qué modelo, qué brazo, qué tokenizador, qué vocabulario de región |
 | **las cinco guardas de mezcla** (§42, §49, §64) | `load_rows` **levanta** si un archivo mezcla decodificaciones, brazos, analizadores léxicos, vocabularios de región o **versiones de superficie**. La del analizador es la única que ningún otro campo puede detectar; la de superficie es la única que es **por brazo**, porque el cambio que la motiva toca a dos de los doce |
-| **el dial** (§27, §47) | que imponga lo que declara, y que `max(pedido, piso, aprendido)` sea la única composición donde cada fuente sólo endurece |
+| **el dial** (§27, §47) | que imponga lo que declara, y que `max(pedido, piso, aprendido)` sea la composición punto a punto menos restrictiva entre las que ninguna fuente puede bajar |
+| **confinamiento** (§47b) | en una instancia finita, que `d(T)=0` dé `V_T=0` aunque `V_Y>0`, que el recíproco no valga, y que una clave `COMPUTED` no reabra el canal hacia la política |
 | **soundness** (§46) | el teorema del ensamblador: si `fill` emite, toda ranura viene de una creencia vigente con procedencia ≥ piso |
 | **la plata** (§41, §52, §53) | que sea una unidad y no un número; un cliente por modelo; los aranceles son datos |
 | **el catálogo** (§39, §58, §59) | que los 15 paradigmas corran de punta a punta sin gastar, y que **ningún factor quede inalcanzable** |

@@ -1,20 +1,20 @@
 cff-version: 1.2.0
 message: "Si este trabajo te sirve, citalo asi."
-title: "Hardness Over Hope: Policy-as-Code and Deterministic Governance in LLM Agent Orchestration"
+title: "Hard Guarantees over Hope: Deterministic Control for LLM Agents"
 abstract: >-
-  Un arnes de agentes hereda las propiedades probabilisticas del componente que envuelve, y
-  tambien lo hacen las guardas construidas para contenerlo. Este trabajo pone el plano de
-  control en codigo y deja al LLM como sensor tipado: la garantia es "misma base de creencias
-  implica misma decision", verificada por repeticion. Medido sobre 78 tareas x 12 paradigmas x
-  3 replicas, sin juez LLM.
+  Este trabajo separa un plano de percepcion estocastico de un plano de control determinista:
+  el LLM propone contenido y el codigo tipa, admite y decide. Formaliza el desacuerdo de
+  trayectoria y de salida, y demuestra que, bajo un stack determinista, eliminar ramificaciones
+  delegadas hace la trayectoria independiente de la aleatoriedad del modelo. Se evalua sobre un
+  benchmark sintetico controlado de 78 tareas x 12 paradigmas x 3 replicas, sin juez LLM.
 authors:
   - family-names: Levy
     given-names: Ariel Edgardo
     orcid: "https://orcid.org/0009-0007-5426-9864"
     affiliation: "Independent Researcher"
 type: article
-version: "2.0"
-date-released: 2026-08-31
+version: "2.1"
+date-released: 2026-09-03
 license: CC-BY-4.0
 keywords:
   - LLM agents

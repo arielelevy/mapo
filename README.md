@@ -66,14 +66,14 @@ producto nunca sabe que el banco existe.**
 
 ---
 
-## Lo vigente (2026-08-30)
+## Lo vigente (2026-09-03)
 
 > **Esta sección es sólo el estado de hoy.** La cronología —qué se predijo, qué se refutó y
 > cuándo— vive en `lab/historico/`. Un README que acumula historia deja de decir dónde está
 > el proyecto y pasa a decir por dónde pasó, que es otra pregunta.
 
 **El registro está completo y el plantel corrió entero.** 78 tareas × 12 paradigmas × 3
-réplicas sobre `gold_h1`, 121,4M tokens. `bench/_listo.py` pasa 9/9 y la auditoría de
+réplicas sobre `gold_h1`, 2.511 filas y 123,3M tokens. `bench/_listo.py` pasa 9/9 y la auditoría de
 plomería reporta por primera vez que **todo brazo que llama a una herramienta obtiene su
 efecto**.
 
@@ -194,7 +194,7 @@ antes**: hoy no hay servicio que trazar.
 ## Antes de gastar un token
 
 ```powershell
-py tests\test_science.py            # 67 chequeos, 670 aserciones
+py tests\test_science.py            # 136 comprobaciones reportadas
 py tests\test_consolidation.py
 py corpus\verify.py --corpus corpus\<nombre>
 py bench\_listo.py                  # las nueve condiciones de lanzamiento

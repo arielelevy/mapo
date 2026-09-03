@@ -10,9 +10,8 @@ POR QUÉ ES UNA FIGURA Y NO UNA TABLA, y son dos razones distintas por panel:
   · **izquierda** — ocho pliegues × tres modelos son 24 números, y lo que importa no es
     ninguno sino **cuántas veces gana cada modelo**. Un dumbbell por pliegue lo muestra de
     un vistazo; una tabla de 8×3 obliga a comparar de a filas
-  · **derecha** — el veredicto es `p = 0,065`, y un `p` solo no dice si quedó cerca o lejos.
-    La distribución del nulo con el valor real marcado sí: se ve que cae **adentro** de la
-    cola, no del otro lado del histograma
+  · **derecha** — el veredicto exacto viene de las 40.320 permutaciones; el histograma usa la
+    muestra guardada por el EDA sólo para visualizar la forma del nulo
 
 LOS NÚMEROS SE LEEN DE `results/eda_capacidades.json`, que produce el propio EDA. No se
 transcriben: un número copiado a mano es un número que se puede desincronizar del que lo
@@ -44,6 +43,7 @@ import matplotlib.pyplot as plt
 from bench.analysis._estilo import COLOR, GRIS, SUAVE, TINTA, aplicar, guardar, titular
 
 FUENTE = Path("results/eda_capacidades.json")
+FUENTE_EXACTA = Path("results/luna/ontologia_nulo_exacto.json")
 MODELOS = [
     ("media_global", GRIS, "media global"),
     ("dificultad_tarea", COLOR["vueltas"], "dificultad de la tarea"),
@@ -56,7 +56,12 @@ def main() -> None:
         raise SystemExit(
             f"falta {FUENTE}. Corré primero:\n"
             f"  py bench/analysis/_eda_capacidades.py --json {FUENTE}")
+    if not FUENTE_EXACTA.exists():
+        raise SystemExit(
+            f"falta {FUENTE_EXACTA}. Corré primero:\n"
+            "  py bench/analysis/_ontologia_nulo.py")
     d = json.loads(FUENTE.read_text(encoding="utf-8"))
+    exacta = json.loads(FUENTE_EXACTA.read_text(encoding="utf-8"))
     aplicar()
 
     fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11.0, 5.2),
@@ -116,15 +121,15 @@ def main() -> None:
     ax2.set_ylabel("permutaciones")
     ax2.grid(axis="y", alpha=0.5, zorder=0)
     ax2.set_axisbelow(True)
-    titular(ax2, f"Pero no cruzan su nulo: p = {d['p']:.3f}",
-            f"{len(nulos)} permutaciones · mismos vectores, asignados al brazo equivocado")
+    titular(ax2, f"Pero no cruzan su nulo: p exacto = {exacta['p_exacto']:.3f}",
+            f"p sobre {exacta['permutaciones']:,} permutaciones · histograma: muestra de {len(nulos)}")
 
     fig.subplots_adjust(wspace=0.30, bottom=0.20)
     guardar(fig, "eda-capacidades")
 
     print(f"  panel: {d['panel']}")
     print(f"  capacidades {real:.4f} · dificultad {d['medias']['dificultad_tarea']:.4f} "
-          f"· nulo medio {statistics.mean(nulos):.4f} · p {d['p']:.3f}")
+          f"· nulo medio exacto {exacta['nulo_media']:.4f} · p exacto {exacta['p_exacto']:.3f}")
 
 
 if __name__ == "__main__":

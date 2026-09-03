@@ -1,9 +1,8 @@
-# El paper — v2, activa (agosto 2026)
+# El paper — v2.1 activa (septiembre de 2026)
 
-**Dos archivos, un solo paper.** `paper-en.md` es el canónico —destino arXiv `cs.LG`— y
-`paper-es.md` es su espejo. **Toda edición va a los dos, en la misma posición**, y
-`../lab/bench/audits/_audit_documentos.py` lo hace cumplir comparando la secuencia de
-encabezados: hoy da **49 = 49**.
+`paper-es.md` es la única versión extensa mantenida. `paper-corto-es.md` es la versión de
+conferencia y se sincroniza cuando cambia la tesis, una definición o un resultado central. La
+redacción inglesa quedó congelada en `historico/paper-en-congelado.md`; no se edita.
 
 ---
 
@@ -12,10 +11,11 @@ encabezados: hoy da **49 = 49**.
 | # | archivo | por qué en ese orden |
 |---|---|---|
 | 1 | **`GATE.md`** | antes que nada. Ocho criterios binarios y su veredicto. Dice qué falta y, sobre todo, **qué no se puede afirmar todavía** |
-| 2 | **`paper-en.md`** | el paper. `paper-es.md` para leer en castellano |
-| 3 | **`PATTERNS.md`** | el catálogo de patrones. Es el producto separable: sirve sin el paper |
-| 4 | **`ANALYSIS.md`** | dónde falla cada paradigma y por qué, con la traza |
-| 5 | **`PLAN.md`** | sólo si interesa por qué la tesis cambió dos veces. Es arqueología, no tesis |
+| 2 | **`paper-corto-es.md`** | el argumento principal en versión de conferencia |
+| 3 | **`paper-es.md`** | el registro completo, con demostraciones y apéndices |
+| 4 | **`PATTERNS.md`** | el catálogo de patrones. Es el producto separable: sirve sin el paper |
+| 5 | **`ANALYSIS.md`** | dónde falla cada paradigma y por qué, con la traza |
+| 6 | **`PLAN.md`** | sólo si interesa por qué cambió la tesis. Es arqueología, no tesis |
 
 **Y `MAP.md`** es la única herencia de v1 que quedó: plasticidad Hebbiana para decisiones.
 
@@ -23,36 +23,27 @@ encabezados: hoy da **49 = 49**.
 
 ## Qué afirma el paper, en una frase por sección
 
-**§4 — la factibilidad es aritmética.** Qué topología *puede* correr una tarea se computa
-de cantidades declaradas, sin una llamada al modelo. Poda tres de siete candidatas antes de
-gastar un token, y separa dos modos de falla que se confunden de rutina: `map_reduce` está
-acotado por **cardinalidad**, no por tamaño total.
+**§3 — el motor.** Ejecuta `proponer → tipar → verificar/admitir → decidir`: factibilidad
+aritmética, base de creencias con procedencia y alcance, dial efectivo por `max`, policy-as-code
+y abstención.
 
-**§5 — la teoría, y es lo único no condicionado a una corrida.** Cinco resultados
-estructurales, verificados con test:
+**§4 — la teoría mínima.** Distingue desacuerdo de trayectoria `V_T` y de salida `V_Y`. Bajo un
+stack no-modelo determinista, `d(T)=0` implica `V_T=0` e independencia entre la trayectoria y la
+aleatoriedad del modelo. Una clave `COMPUTED` conserva esa propiedad.
 
-| | |
-|---|---|
-| **§5.1** | el Teorema del Valor de Selección: una descomposición **por destino** sobre `k` brazos, con `ρ` —la selectividad de la pérdida— como parámetro del umbral de imposibilidad |
-| **§5.2** | dominancia de cascada, y la partición por **verificabilidad**: `v=1` va a cascada, `v=0` a router |
-| **§5.3** | soundness del ensamblador: si emite, todo número emitido está implicado por la base de creencias al piso pedido |
-| **§5.4** | la cota nativa del ratchet: `≤ 2R` endurecimientos en toda la vida del sistema |
-| **§5.5** | quién fija el dial: `max` es la **única** composición donde toda fuente sólo puede endurecer |
-| **§5.6** | lo que la teoría **no** supone — ninguno de los cinco menciona recuperación, y eso **es** la afirmación |
+**§5 — el método.** Fija corrector sin juez LLM, paneles mecánicos, pisos de ruido y preguntas de
+investigación antes de leer resultados.
 
-**§6 — el diseño**, y §6.5 dice algo que el paper no decía: el mismo producto cruzado que
-mide los paradigmas **ajusta la capa que los elige**, a costo marginal cero.
-
-**§7 y §8 — lo medido**, y su afirmación más fuerte no es sobre topologías: decirle a un
-bucle iterativo que su retriever dejó de producir cortó su costo **3,05×** contra una
-dispersión de réplica de 1,62×.
+**§6 — lo medido.** El 12–28% es desacuerdo de utilidad entre réplicas, no una medición directa
+de `V_T`. La intervención sobre control es en muestra. Capacidades y adaptación de política son
+evidencia secundaria; θ de costo ahorra 41% contra una constante con IC95 que cruza cero.
 
 ---
 
 ## El estado del gate
 
-**Sin bloqueantes, dos condicionales** — `G2` (novedad) y `G3` (soporte de afirmaciones).
-`G1` se cerró el 2026-08-23; `G5` y `G7` pasaron de FAIL a PASS. El detalle y el historial
+**Sin bloqueantes, un condicional** — `G3` (soporte de afirmaciones). `G2` quedó cerrado tras la
+verificación fechada de literatura. El detalle y el historial
 están en `GATE.md`, que es la única fuente: este README no lo repite porque **dos lugares
 que dicen el estado del gate empiezan a decir cosas distintas**.
 
@@ -91,18 +82,17 @@ de exact-match puede ejercitar la rama que necesita un router.
 decisiones sobre la brecha **neta**. La grilla original de `gpt-5-chat` quedó congelada
 como primer modelo y ya no es referencia.
 
-**Los mecanismos son más firmes que las magnitudes**, y eso no cambió: descansan en trazas
-de uso de herramientas y no en tamaños de efecto. Una réplica accidental obligó a retirar
-un efecto reportado y a partir otro al medio — está en `GATE.md` §8bis, y es la disciplina
-funcionando, no fallando.
+**Los mecanismos son más firmes que las magnitudes.** La intervención de control es en muestra;
+el desacuerdo entre réplicas mezcla ramificación y stack de servicio; y el leave-one-arm-out
+tiene ocho puntos. El paper los declara como límites, no como notas al pie.
 
 ---
 
 ## Figuras
 
-Las 6 de `diagrams/` están sólo en inglés (`_en`). Las dos de resultados llevan una banda
-roja **PRELIMINARY** con la `n` **adentro del SVG**, para que la advertencia no se pueda
-separar de la figura al copiarla.
+Los SVG activos están en `figuras/`. `contrato-de-garantia.svg` y
+`metodo-determinista.svg` se regeneran con `py _figuras_arquitectura.py`; las versiones previas
+viven en `historico/`.
 
 `artefactos/` versiona los documentos visuales del estado vivo.
 
