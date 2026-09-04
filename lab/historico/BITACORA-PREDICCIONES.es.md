@@ -1831,3 +1831,139 @@ irreversible). La bitácora original (P15) decía «zero false positives on C1/C
 cierto; el paper había generalizado a «sobre las demás celdas», que no lo es. Corregido en
 §6.5.2 del largo y §5.4 del corto. El criterio de P36 (0 fp) era más exigente que lo que el
 sensor humano cumple.
+
+## P37 y P38 — las dos apuestas que agregó la revisión C (registradas 2026-09-03, ANTES de correr)
+
+La revisión externa del 2026-09-03 (`whitepaper/paper-es_REVIEW-C-2026-09-03.md`) pidió dos
+experimentos que el paper no tenía: un conjunto externo chico y el factorial que separa la
+ramificación delegada del stack de servicio. Los dos cuestan corridas, así que entran como
+apuestas y no como resultados. Ninguna corrió.
+
+### P37 — el mecanismo sobrevive fuera del generador (capa empírica principal)
+
+Armar a mano 24 tareas sobre documentos reales, no generados, seis por modo: hecho único
+verificable, ausencia, presuposición falsa y cadena acoplada de dos saltos. El oráculo se deriva
+a mano y se registra antes de correr. Correr `direct`, `react`, `dag_strategy` y `pointer_chase`,
+3 réplicas, `gpt-5.6-luna`, mismas condiciones que la campaña.
+
+| resultado | veredicto |
+|---|---|
+| el brazo ganador por modo en el sintético queda a <= piso p95 del ganador externo en 3 de 4 modos, y en ausencia los brazos se abstienen más de lo que inventan | EL MECANISMO SOBREVIVE AL GENERADOR. §6 conserva la palabra «mecanismo» |
+| 2 de 4 modos, o la abstención en ausencia se invierte | sobrevive en parte; se reporta qué modo no transfiere y por qué |
+| 1 de 4 o menos | §6 se rotula como propiedad del corpus sintético y el resumen deja de decir «mecanismo» |
+
+Costo: 4 brazos × 24 tareas × 3 réplicas = 288 celdas, del orden de 5M tokens, más el armado a
+mano de las 24 tareas, que es lo caro.
+
+### P38 — la atribución causal del 12–28% (capa empírica principal)
+
+El factorial de §8.1 del paper: ramificación en código contra ramificación en LLM, cruzado con
+servidor local reproducible (un request por lote, pesos abiertos) contra la API ordinaria.
+Modelo, prompts, recuperación, evidencia y máximo de saltos fijos; 24 tareas, 3 réplicas, y las
+secuencias de nodos registradas para medir `V_T` además de `V_Y`.
+
+| resultado | veredicto |
+|---|---|
+| `B − A` da `V_T` mayor que el piso por celda en el stack reproducible, y `D − C` conserva el signo | LA RAMIFICACIÓN DELEGADA CAUSA DESACUERDO DE TRAYECTORIA. §6.1.2 pasa de «inestabilidad observada» a evidencia de la Proposición 4 |
+| `B − A` mayor que el piso pero `D − C` no conserva el signo | el efecto existe y el stack ordinario lo tapa; se reporta así |
+| `B − A` dentro del piso | el 12–28% es del stack de servicio. §6.1.2 deja de citarse como evidencia de la Proposición 4, que queda con su instancia de la suite (§47b) y nada más |
+
+Costo: ~2M tokens de API para las celdas C y D, más el servidor local para A y B.
+
+Orden actualizado: P32 y P31 siguen primero entre las pagas. P38 antes que P37, porque decide
+qué puede afirmar §6.1 y porque las tareas sintéticas ya existen. P37 después, porque su costo
+real es armar las 24 tareas a mano. P33 último.
+
+## P39 — ¿rutear por capacidades cobra el premio entre los ocho? (registrada 2026-09-03, ANTES de correr)
+
+La conclusión del paper dejaba el ruteo abierto: sobre los ocho brazos la brecha de oráculo es neta
+(+0,110 contra piso p95 0,065) y ninguna política medida la captura, «y deja abierta sobre qué
+clave se cobra un premio que existe». El autor objetó que la clave candidata está en el propio
+paper: la ontología exige capacidades, los brazos las tienen, y se puede puntuar y elegir por
+capacidad. Se mide, a cero tokens, con `bench/analysis/_p39_ruteo_capacidades.py`: cuatro
+políticas leave-one-task-out (capaces → mejor promedio; capaces → más barato que empata; mismos
+ejes → mejor promedio; puntuar por capacidades con ridge) y dos vocabularios de ejes (con la
+etiqueta de diseño, que es cota superior, y sólo `COMPUTED`, que es lo que un request real tiene
+hoy). La vara es el piso p95 por pseudo-brazos de los ocho, el mismo estimador de §6.2.3.
+
+| resultado | veredicto |
+|---|---|
+| alguna política con ejes sólo `COMPUTED` da Δ contra el mejor fijo mayor que el piso p95 | LA CLAVE QUE COBRA EL PREMIO ES CAPACIDADES. La conclusión deja de estar abierta y §6.4 gana una política |
+| sólo con la etiqueta de diseño alguna cruza el piso | es cota superior: el ruteo por capacidades es alcanzable si `P35` recupera la ontología desde el request; la conclusión lo dice así |
+| ninguna cruza el piso, ni con la etiqueta | las capacidades podan y no eligen; la conclusión queda como está, y se agrega este número |
+
+Costo: cero tokens (replay sobre el registro). Se corre a continuación del registro.
+
+### Veredicto P39 (2026-09-03, `bench/analysis/_p39_ruteo_capacidades.py`, cero tokens): **FRACASO**, con mecanismo
+
+Ninguna de las ocho combinaciones cruza el piso p95 de los ocho brazos (0,067) ni supera al mejor
+fijo leave-one-task-out (0,843). Con la etiqueta de diseño: capaces → mejor promedio +0,000 (rutea
+1 tarea), mismos ejes −0,015 [−0,093, +0,064], ridge −0,013 [−0,071, +0,045]. Con sólo `COMPUTED`:
+capaces → mejor promedio −0,027 [−0,094, +0,036], capaces → más barato −0,037 [−0,109, +0,031],
+mismos ejes −0,047 [−0,088, −0,010], ridge −0,069 [−0,119, −0,026].
+
+El mecanismo es `EXIGE`: conjunción sobre todos los ejes activos, con dos filas que dejan un solo
+brazo capaz (`material_mayor_que_ventana ⇒ COSTO_NO_ESCALA_CON_ALCANCE`, sólo `rewoo`;
+`entidad_nombrada ⇒ ELIGE_INDICE_POR_CONSULTA`, sólo `pointer_chase`). Con la etiqueta de diseño
+63 de 64 tareas quedan sin brazo capaz; con los ejes computables, 25 de 64. La primera fila la
+contradice el registro: `react` gana el ancho de 60 unidades leyendo por recuperación, así que es
+una exigencia de costo, no de capacidad. Lo que sigue no es otra política: es arreglar la tabla
+(rutas alternativas, y la fila de material mayor que la ventana pasa de exigencia a costo), que
+cae en `P31`, y recuperar los ejes desde el request, `P35`. Los dos papers lo dicen en la
+conclusión con el número; el largo lo detalla en §6.3.6.
+
+## P40 — ¿alguna señal computable cobra el premio? Y cuánto se puede errar (2026-09-04)
+
+Registrada y corrida el mismo día, a cero tokens, con `bench/analysis/_eda_ruteo_profunda.py`.
+Viene de la objeción del autor a `P39`: que el fracaso de la tabla de capacidades no cierra la
+pregunta, porque quizá falten capacidades, estén mal puntuadas, o la señal esté en la pregunta y
+en la exploración del índice. Dos partes.
+
+### Parte 1, exploratoria: qué hay en la pregunta
+
+Dieciocho features `COMPUTED` sobre el rectángulo, ninguna del gold, incluida una **sonda de
+índice** que corre el recuperador léxico sobre el alcance sin gastar un token (hits, cobertura,
+concentración del puntaje, entropía). Objetivo: el margen de cada brazo contra el fallback.
+
+| feature | `∣r∣` máx | brazo |
+|---|---:|---|
+| cardinalidad enumerativa (caller) | 0,529 | `handoff` |
+| pregunta enumerativa (léxico) | 0,458 | `handoff` |
+| `ausencia` del gold, no existe al decidir | 0,433 | `handoff` |
+| concentración de la sonda | 0,408 | `pointer_chase` |
+| entropía de la sonda | 0,344 | `pointer_chase` |
+
+Tres hallazgos. **La cardinalidad declarada por el caller predice mejor que el eje de ontología
+que necesita la respuesta** (0,529 contra 0,433). **La sonda de índice es la única familia que
+aparece arriba en los dos paneles** (0,408 rectángulo, 0,482 held-out). Y **el eje `ausencia` de
+`ejes_de` sale de `relevant_units == []`, que es el gold**, y ahí vive el 80% de la brecha
+ruteable: rutear por ese eje es rutear con la respuesta. Eso sube a `P35` de experimento
+pendiente a condición de que la ontología signifique algo en producción.
+
+Ninguna transfiere. Ajustando en el rectángulo y evaluando en el held-out: cardinalidad −0,026,
+cardinalidad + sonda −0,028, sonda sola −0,042. En muestra y LOTO la mejor de cuatro políticas
+da +0,027 contra un piso p95 de 0,067.
+
+### Parte 2, medición limpia: el Teorema 1 instanciado. **Es el resultado**
+
+Los términos de `V(r) − V(p⋆) = Σⱼ (π_j α_j G_j − ν_j β_j L_j)` leídos del registro, sin ajustar
+nada y sin elegir nada:
+
+| panel | `Σ π·G` | `Σ ν·L` | `β_max` con α=1 |
+|---|---:|---:|---:|
+| rectángulo 64 × 8, fallback `react` | 0,242 | 1,536 | **0,157** |
+| held-out 24 × 8, fallback `dag_strategy` | 0,286 | 1,538 | **0,186** |
+
+Un ruteador perfecto donde el brazo gana puede equivocarse en el 16% de donde pierde, y nada
+más. La asimetría por tarea es la misma cuenta de cerca: `+0,110` de media para ganar contra
+`−0,608` para perder, razón `5,5×`. Y `pointer_chase` tiene `π = 0,000` sobre el rectángulo: no
+le gana al fallback en ninguna tarea, así que `β_max = 0` y rutearle nunca se justifica.
+
+**Veredicto: fracaso de política y hallazgo de cota.** Ninguna señal cobra el premio y ahora se
+sabe por qué, con un número replicado en dos paneles. La consecuencia no es buscar otra clave: es
+que el premio se agranda subiendo `π` (brazos que ganen donde hoy nadie gana, `P31`) o bajando
+`L` (abstenerse en vez de correr un brazo que pierde, que es lo que el dial ya hace y no se midió
+como política de ruteo). La parte 1 es exploratoria y se eligió mirando el rectángulo; lo único
+que se afirma de ella es el negativo de transferencia y la salvedad del eje de ausencia. La parte
+2 no elige nada y por eso se afirma como medición.
+

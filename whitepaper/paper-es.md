@@ -4,8 +4,9 @@
 
 Borrador 3.2 (v2 de la tesis), 2026-09-03
 Autor: Ariel Edgardo Levy
-Estado: borrador de trabajo. Los dos teoremas están verificados por máquina; toda
-afirmación empírica lleva su tamaño de muestra y su piso de ruido, y §1.3 declara el alcance.
+Estado: borrador de trabajo. Los dos teoremas se demuestran bajo sus premisas y la suite ejecuta
+sus identidades e instancias; toda afirmación empírica lleva su tamaño de muestra y su piso de
+ruido, y §1.3 declara el alcance.
 Destino: arXiv cs.LG (primario), cs.AI (cross-list).
 
 > Ésta es la única versión mantenida. La redacción inglesa quedó congelada en
@@ -18,12 +19,19 @@ Destino: arXiv cs.LG (primario), cs.AI (cross-list).
 
 ## Resumen
 
-Un arnés de agentes transforma un LLM en un sistema y, entre otras funciones, decide qué
-llamada viene después, qué buscar, cuándo reintentar y cuándo parar. Si esas decisiones dependen
-directamente de una emisión estocástica del modelo, la trayectoria hereda la variación del
-componente que el arnés intenta gobernar. Este trabajo estudia una tesis única: separar un plano
-de percepción estocástico de un plano de control determinista. El modelo propone contenido; el
-código tipa, admite y decide. Una decisión cuya invariancia se promete no depende de una salida
+Un arnés de agentes es todo lo que rodea a un LLM y lo convierte en un sistema. Arma el prompt y
+administra el contexto, qué entra y qué se compacta. Expone herramientas y ejecuta las llamadas
+que el modelo pide. Guarda estado entre llamadas y entre rollouts. Impone presupuesto, permisos y
+guardas de seguridad, verifica la salida antes de entregarla y registra lo que pasó. Y decide qué
+llamada viene después, qué buscar, cuándo reintentar y cuándo parar. Cada una de esas funciones
+es una decisión, y cada decisión tiene un dueño: la toma el código o la toma el modelo. Si
+depende directamente de una emisión estocástica del modelo, hereda la variación del componente
+que el arnés intenta gobernar, y eso vale igual para una guarda, una compactación de memoria,
+una vuelta más del bucle o una rama. El motor de este trabajo aplica a cualquiera de esas
+decisiones; lo que el banco mide son las que ramifican el flujo, porque son las que fijan de
+quién depende la trayectoria. La tesis es una sola: separar un plano de percepción estocástico
+de un plano de control determinista. El modelo propone contenido; el código tipa, admite y
+decide. Una decisión cuya invariancia se promete no depende de una salida
 estocástica no canonizada del modelo.
 
 Formalizamos esa tesis con puntos de ramificación delegados y dos cantidades distintas:
@@ -234,8 +242,8 @@ separa para que una cifra local no se lea como propiedad universal:
 
 | afirmación | alcance | estado |
 |---|---|---|
-| independencia de trayectoria cuando `d(T)=0` | estructural, agentes en general, bajo stack determinista | demostrada; instancia finita cubierta por la suite (§4.1) |
-| política determinista sobre clave `COMPUTED` | arquitectura general | demostrada; instancia finita cubierta por la suite (§4.2) |
+| independencia de trayectoria cuando `d(T)=0` | estructural, agentes en general, bajo stack determinista | demostrada; instancia operativa en la suite: cinco brazos del catálogo recorren los mismos nodos bajo dos sensores que responden distinto (§4.1) |
+| política determinista sobre clave `COMPUTED` | arquitectura general | demostrada; instancia finita abstracta en la suite (§4.2) |
 | contrato de procedencia, alcance y abstención | arquitectura general | implementado; soundness condicionado a sus premisas (Apéndice B.6) |
 | inestabilidad, utilidad y costo | RAG forense documental | medido en este benchmark, panel y modelos (§6) |
 | representación por capacidades | catálogo y benchmark de este trabajo | evidencia sugestiva; ocho brazos, nulo no cruzado (§6.3) |
@@ -270,7 +278,7 @@ vigente, si alguien debía escalar y no lo hizo.
 Se usa un **benchmark sintético controlado** porque el experimento necesita ausencia conocida,
 presuposiciones falsas, cadenas entre documentos y procedencia exacta, propiedades difíciles de
 establecer sin ambigüedad en un corpus público. El costo de ese control es validez externa: este
-trabajo no muestra todavía que el mecanismo sobreviva fuera del generador.
+trabajo no muestra todavía que el mecanismo sobreviva fuera del generador (`P37`, §9.1).
 
 El corpus es heterogéneo por construcción, y sus once modos son los modos de falla de ese
 dominio, no una muestra de dificultad: hecho único verificable, enumeración independiente,
@@ -321,55 +329,12 @@ concluye y registra las apuestas que siguen.
 
 # 2. Trabajo relacionado
 
-Cuatro tramos, en el orden en que el argumento los necesita. Las líneas que el cuerpo sólo cita, búsqueda de workflows, modelos de costo, deferral y agentes que aprenden sin pesos, y la tabla de posicionamiento, están completas en el Apéndice D.
+Cuatro vecindades, en el orden en que el argumento las usa: quién elige el paradigma, quién
+gobierna la inferencia, de dónde vienen las creencias, y cuándo no contestar. El linaje clásico
+línea por línea, los mecanismos con antecedente directo y las líneas que el cuerpo sólo cita
+están completos en el Apéndice D.
 
-## 2.1 El linaje clásico, y qué supuesto rompe un LLM estocástico
-
-Las piezas del motor no son nuevas. Cada una viene de una línea con décadas de trabajo, y cada
-línea asume algo sobre su fuente de creencias que un LLM viola. Lo que sigue es el catálogo de
-supuestos que hubo que reemplazar.
-
-| línea | qué aporta | qué asume sobre la fuente | qué rompe un LLM |
-|---|---|---|---|
-| Revisión de creencias, AGM (Alchourrón, Gärdenfors y Makinson, 1985) | qué se retracta cuando entra evidencia contradictoria | el postulado de éxito: la creencia entrante se acepta | una fuente que puede equivocarse vuelve inadmisible aceptar por defecto; de ahí la compuerta de admisión |
-| Mantenimiento de verdad con justificaciones: Doyle (1979), ATMS de de Kleer (1986) | cada creencia exhibe la justificación que la sostiene | que la justificación existe y es recuperable | fabrica justificaciones plausibles y sintácticamente bien formadas |
-| Procedencia de primera clase: Buneman, Khanna y Tan (2001); semianillos de Green, Karvounarakis y Tannen (2007) | de dónde vino un valor, separado de cuánto se le cree | que la procedencia se deriva de la operación, no se declara | no hay operación: hay una emisión, y su procedencia no está en la salida |
-| Arquitectura BDI (Rao y Georgeff, 1995) | deliberación separada de ejecución | sensores que no alucinan, un sensor roto se detecta por inconsistencia | alucina consistentemente, así que la inconsistencia no lo delata |
-| Políticas como datos, aprendidas offline: Soar (Laird, Newell y Rosenbloom, 1987), ACT-R | la política es un artefacto inspeccionable, no un peso | que las condiciones de las reglas son observables | las condiciones interesantes las emite el LLM, y entonces la clave de la política hereda su varianza (§6.2.5) |
-| Plasticidad hebbiana (Hebb, 1949) | una asociación entre pares tiene contenido propio sobre sus marginales | que los eventos asociados son eventos, no descripciones de eventos | la traza es lo que el LLM pidió, no lo que ocurrió |
-| Opción de rechazo (Chow, 1970) y predicción selectiva | cubrir menos a cambio de errar menos | que hay una puntuación de confianza calibrada | la confianza declarada por el modelo no está calibrada, y §6.4.2 tuvo que construir una |
-| Argumentación abstracta (Dung, 1995) | una conclusión vale si su prueba sobrevive a los ataques disponibles | el marco se define sobre una relación de ataque dada; instanciarlo exige construirla | el espacio de respuestas plausibles y falsas no es construible, así que la admisión se decide por procedencia y no por supervivencia |
-
-La lectura crítica, en una línea por columna. Las tres primeras líneas aportan la
-maquinaria de creencias y las tres suponen sinceridad, existencia de justificación o
-derivabilidad de procedencia, y las tres suposiciones caen a la vez cuando la fuente puede
-inventar con forma correcta. BDI aporta la separación que este trabajo hereda y su detección de
-sensores rotos no funciona sobre un LLM que alucina de forma consistente. Soar aporta la
-política como dato y su supuesto de condiciones observables es lo que §6.2.5 mide
-que falla. Chow aporta la abstención y su supuesto de confianza calibrada es el que §6.4.2
-reemplaza por una curva medida.
-
-Qué se hizo con cada supuesto roto, línea por línea. Donde AGM asume que la creencia entrante
-se acepta, el motor pone una compuerta de admisión: una proposición entra a la base sólo con su
-procedencia declarada, y la procedencia decide qué puede gobernar. Donde el mantenimiento de
-verdad asume que la justificación existe, el motor no le pide al modelo que justifique; exige
-que el código pueda exhibir de qué unidad del material salió el valor, y si no puede, el valor
-no se emite (Teorema 2). Donde la procedencia clásica se deriva de la operación que produjo el
-dato, acá el dato llega como una emisión del modelo, sin operación de la que derivar nada, así
-que la procedencia se declara en el punto de entrada y se verifica contra el índice. Donde BDI
-detecta un sensor roto por inconsistencia, acá el sensor alucina de forma consistente, y la
-detección se reemplaza por tipar la salida antes de usarla y por el acuerdo entre estructuras
-de control distintas (§6.4.2). Donde Soar asume condiciones observables, las condiciones de la
-política pasan a exigirse `COMPUTED`, porque una clave elicitada convierte la tabla de decisión
-en una variable aleatoria (§6.2.5). Donde Hebb asocia eventos, el motor asocia lo que ocurrió,
-contado por el arnés, y no lo que el modelo dijo que pedía. Donde Chow asume una confianza
-calibrada, la confianza deja de leerse del modelo y pasa a calibrarse contra el registro, y
-§6.4.2 construye esa curva. Y donde Dung necesita el espacio de ataques, la admisión se decide
-por procedencia y no por supervivencia a ataques que nadie puede enumerar.
-
----
-
-## 2.2 Selección de paradigma en tiempo de inferencia
+## 2.1 Selección de paradigma y ruteo
 
 Select-then-Solve entrena un ruteador sobre embeddings para elegir un paradigma por tarea
 [arXiv:2604.06753]; FlowBank selecciona por consulta desde un portafolio offline
@@ -377,11 +342,7 @@ Select-then-Solve entrena un ruteador sobre embeddings para elegir un paradigma 
 aprende descomposición y despacho juntos [arXiv:2605.05007]. Todos operan a cobertura uno y
 ninguno reporta una curva riesgo-cobertura. El oráculo de Select-then-Solve es un máximo
 empírico por tarea sobre una muestra fija sin re-muestreo entre seeds (verificado contra el
-paper completo), que es el caso para el que el piso de ruido de §6.2.3 existe. La maquinaria de
-deferral existe al lado sin haber cruzado: eDAct [arXiv:2604.07036], el ruteo por descomposición
-de incertidumbre [arXiv:2605.07805] y el meta-ruteo composicional, que nombra un confidence gate
-como trabajo futuro [arXiv:2608.00106]. Nadie aplica abstención tasada a la selección entre
-topologías de control (buscado 2026-08-26 y 2026-09-01).
+paper completo), que es el caso para el que el piso de ruido de §6.2.3 existe.
 
 Rutear entre paradigmas de recuperación por request existe (Adaptive-RAG, Self-RAG, FLARE,
 Self-Route, AutoMix), siempre con selector elicitado o entrenado sobre el texto y sin
@@ -392,39 +353,15 @@ medir el premio contra un piso de sesgo del máximo, poder no elegir, y la parti
 verificabilidad de §B.5: cuándo la cascada precede a la selección porque existe un detector
 barato.
 
-## 2.3 Capacidades declaradas contra descripciones de habilidades
+Del lado de la ingeniería, el vecino de §6.3 son las tarjetas de habilidades (Agent2Agent y sus
+antecesores): texto `ELICITED` que el agente o su autor escriben sobre sí mismos y que nada
+verifica contra la conducta. Una capacidad de §6.3 es un booleano declarado desde el código del
+brazo y auditado contra lo corrido, `COMPUTED`, y la tabla de exigencias va del eje de la
+pregunta a la capacidad, nunca al nombre. En una búsqueda fechada 2026-09-01 no se encontró
+trabajo que declare capacidades de control de flujo desde el código y las someta a
+leave-one-arm-out (§D.9).
 
-El vecino de §6.3 del lado de la ingeniería es el ruteo por tarjetas de habilidades (Agent2Agent
-y sus antecesores multiagente): texto que el agente o su autor escriben sobre sí mismos, leído
-con un modelo o un matcher semántico, que nada verifica contra la conducta. Es `ELICITED` sobre
-el propio agente, la clase de evidencia que los contratos de delegación de §2.5 midieron que
-selecciona a los peores. Una capacidad de §6.3 es un booleano declarado desde el código del
-brazo, con el sitio donde se ve y una auditoría contra lo corrido, `COMPUTED`; y la tabla de
-exigencias va del eje de la pregunta a la capacidad, nunca al nombre, así que predice sobre un
-brazo que todavía no existe. Búsqueda fechada 2026-09-01: no se encontró trabajo que declare
-capacidades de control de flujo desde el código y las someta a leave-one-arm-out.
-
-## 2.4 Tres mecanismos con antecedente
-
-Tres mecanismos que este trabajo usa tienen antecedente directo (leídos completos el 2026-08-28)
-y se acreditan:
-
-| trabajo | qué establece |
-|---|---|
-| EnvProbe, *Ask the World Before Acting: Budgeted Environment Probing for World-Model Calibration* (arXiv 2606.31422) | un operador de sondeo con presupuesto cuyo único propósito es reparar una tabla de creencias estructurada. Es la sonda de §3.4, mecanismo por mecanismo |
-| Kintsugi, *Learning Policies by Repairing Executable Knowledge Bases* (arXiv 2605.09487) | ediciones a un artefacto ejecutable tipado, filtradas por un verificador, con las fallas diagnosticadas y localizadas en ediciones candidatas. Es la consolidación de §3.5 con su guarda de promoción |
-| ProvenanceGuard, *Safeguarding LLM Agents from Misalignment through Provenance Analysis* (arXiv 2607.01236) | la desalineación como si una llamada propuesta está sostenida por evidencia trazable en el contexto. Es el piso de procedencia de §3.4.1 sobre las acciones |
-
-El área tiene survey: *From Agent Traces to Trust* (arXiv 2606.04990). Lo que queda libre es una
-conjunción, enunciada por lo que excluye: una capa de decisión que (a) elige qué topología de
-control correr, por request, con una clave `COMPUTED`; (b) puede abstenerse, con la curva
-riesgo-cobertura reportada; y (c) poda por aritmética antes de cualquier inferencia. Sacando
-cualquiera de las tres, el resto queda cubierto. Y una corroboración externa desde un lugar al
-que no llegamos: Trace2Policy (arXiv 2606.10457) reporta, en producción sobre 3.349 casos y
-cinco escalas de modelo, que la varianza atribuible a la versión de la regla supera a la de la
-elección de modelo. La estructura decide más que el modelo.
-
-## 2.5 Gobernanza simbólica sobre inferencia probabilística
+## 2.2 Gobernanza determinista sobre inferencia probabilística
 
 Es la vecindad más cercana a §3.4. Los dos primeros se leyeron completos el 2026-08-26.
 
@@ -435,14 +372,46 @@ Es la vecindad más cercana a §3.4. Los dos primeros se leyeron completos el 20
 | Motores de creencias: Nous [arXiv:2606.22030], MemIR [arXiv:2605.25869], Eywa [arXiv:2605.30771], HEP [arXiv:2607.09195] | acotar la confiabilidad por procedencia del canal; tipar la memoria para impedir colapso de fuentes; promover hechos sólo tras validadores contra evidencia inmutable; hacer auditable la evolución de hipótesis | la jerarquía de procedencia que filtra la promoción, y la partición proponer/puntuar de §3.5 como mecanismo para el jardín de senderos que se bifurcan que [arXiv:2607.01507] diagnostica |
 | Contratos de delegación e identidad atestiguada [arXiv:2603.18043] | el vecino más cercano del lado del ruteo, y empírico: rutear sobre calidad auto-reportada selecciona a los peores delegados y rinde peor que al azar (`0,55` contra `0,68`); el remedio son contratos que acotan autoridad más identidad reclamada contra atestiguada, y el brazo atestiguado llega a ruteo casi óptimo | la procedencia como orden sobre tipos de evidencia que una regla lee, el piso sobre acciones irreversibles, y la abstención tasada como curva riesgo-cobertura |
 
-Dos observaciones salen de la tabla. Los contratos de delegación llegan a la misma prohibición de
-la auto-evaluación por otro camino (un delegado tiene incentivo a inflar; acá, una afirmación
-sobre la propia suficiencia no supera `ELICITED`), y `reclamada`/`atestiguada` es
-`ELICITED`/`OBSERVED` restringido a una proposición. Y «procedencia + ruteo + contratos» ya está
-ocupado como frase, así que la conjunción propia se enuncia por lo que excluye: un retículo de
-procedencia sobre evidencia, un piso que filtra acciones irreversibles con él, la abstención
-tasada como curva riesgo-cobertura medida, y el mismo cálculo sobre factibilidad, control y
-contenido. Cualquier término suelto tiene antecedentes.
+La conjunción propia se enuncia por lo que excluye, porque «procedencia + ruteo + contratos» ya
+está ocupado como frase: un retículo de procedencia sobre evidencia, un piso que filtra acciones
+irreversibles con él, la abstención tasada como curva riesgo-cobertura medida, y el mismo cálculo
+sobre factibilidad, control y contenido. Cualquier término suelto tiene antecedentes, y §D.11
+dice cuáles y por qué camino llegan a la misma prohibición de la auto-evaluación.
+
+## 2.3 Procedencia y creencias tipadas
+
+Las piezas del motor de creencias vienen de líneas con décadas de trabajo: revisión de creencias
+(AGM, 1985), mantenimiento de verdad con justificaciones (Doyle, 1979; de Kleer, 1986),
+procedencia de primera clase (Buneman, Khanna y Tan, 2001; los semianillos de Green,
+Karvounarakis y Tannen, 2007), la separación entre deliberación y ejecución de BDI (Rao y
+Georgeff, 1995) y la política como dato inspeccionable de Soar y ACT-R. Cada línea asume algo
+sobre su fuente que un LLM viola: que la creencia entrante se acepta, que la justificación
+existe y es recuperable, que la procedencia se deriva de una operación, que un sensor roto se
+delata por inconsistencia, que las condiciones de las reglas son observables. Las tres primeras
+suposiciones caen a la vez cuando la fuente puede inventar con forma correcta. De ahí la
+compuerta de admisión de §3.4, donde una proposición entra sólo con su procedencia declarada, y
+la exigencia `COMPUTED` sobre la clave de la política de §4.2. La tabla completa, con qué se hizo
+con cada supuesto roto, es §D.8.
+
+Los motores de creencias contemporáneos son la vecindad directa de §3.4 y están en la tabla de
+§2.2: Nous, MemIR, Eywa y HEP acotan la confiabilidad por canal, tipan la memoria y promueven
+hechos sólo tras validadores. Y tres mecanismos que este trabajo usa tienen antecedente directo,
+leído completo, y se acreditan en §D.10: el sondeo con presupuesto sobre una tabla de creencias
+tipada (EnvProbe), las ediciones a un artefacto ejecutable filtradas por un verificador
+(Kintsugi) y el piso de procedencia sobre acciones propuestas (ProvenanceGuard).
+
+## 2.4 Predicción selectiva y abstención
+
+La opción de rechazo es de Chow (1970) y la curva riesgo-cobertura de El-Yaniv y Wiener. Las dos
+asumen una puntuación de confianza calibrada, y la que declara el modelo no lo está, así que
+§6.4.2 construye una contra el registro y §D.3 recorre la línea de aprender a diferir. La maquinaria de
+deferral existe al lado sin haber cruzado: eDAct [arXiv:2604.07036], el ruteo por descomposición
+de incertidumbre [arXiv:2605.07805] y el meta-ruteo composicional, que nombra un confidence gate
+como trabajo futuro [arXiv:2608.00106]. Nadie aplica abstención tasada a la selección entre
+topologías de control (buscado 2026-08-26 y 2026-09-01).
+La argumentación abstracta de Dung (1995) admite una conclusión si su prueba sobrevive a los
+ataques disponibles; acá el espacio de respuestas plausibles y falsas no es construible, y la
+admisión se decide por procedencia y no por supervivencia (§D.8).
 
 # 3. El motor
 
@@ -709,8 +678,8 @@ para declinar en lugar de fallar.
 ## 3.4 Creencias, procedencia y garantía por solicitud
 
 El determinismo de salida no está disponible con un LLM, y perseguirlo excluyendo al modelo de la
-percepción descarta información que el modelo tiene. La inversión tiene el vocabulario que §2.5
-acredita y el linaje que §2.1 tabula: el LLM sólo emite proposiciones tipadas, una capa simbólica
+percepción descarta información que el modelo tiene. La inversión tiene el vocabulario que §2.2
+acredita y el linaje que §D.8 tabula: el LLM sólo emite proposiciones tipadas, una capa simbólica
 determinista decide sobre la base de creencias, y la garantía adopta una forma verificable:
 
 > *La misma base de creencias da la misma decisión*, con la base registrada. Es la
@@ -927,7 +896,7 @@ otra:
 > versionado y revertible, y su instalación pasa por una guarda. Se puede preguntar *qué* aprendió
 > el sistema y contestarlo mostrando dos versiones de una tabla.
 
-La forma hereda de §2.1: consolidar episodios en reglas ejecutables es el *chunking* de Soar y
+La forma hereda del linaje de §D.8: consolidar episodios en reglas ejecutables es el *chunking* de Soar y
 ACT-R, y que un par de decisiones tenga contenido propio sobre sus marginales es plasticidad
 hebbiana llevada a decisiones. Lo que se agrega es sostenerla cuando quien emite las creencias
 puede inventar con forma correcta.
@@ -974,7 +943,7 @@ ensamblador, están en el Apéndice B con sus demostraciones; el cuerpo los cita
 enunciados se rotulan como teoremas y proposiciones por consistencia con los tests que los
 verifican, no porque su demostración sea difícil.
 
-## 4.1 Confinamiento de varianza
+## 4.1 Confinamiento estructural de la estocasticidad
 
 El título de este trabajo nombra una propiedad, así que la propiedad necesita definición antes
 que evidencia.
@@ -1031,6 +1000,18 @@ hipótesis. Dado `nᵢ` idéntico en ambas ejecuciones, `nᵢ₊₁` es función
 Así, `T` es constante respecto de `Z`, lo que implica `V_T = 0` e independencia condicional.
 Una discrepancia de salida exige entonces que algún nodo común haya recibido contenido distinto,
 y ese nodo es el testigo. ∎
+
+La suite ejecuta la proposición sobre el catálogo (`test_science.py` §47b). Dos sensores falsos
+responden distinto, otro número y otra unidad cuando se les deja elegir, y la trayectoria es la
+secuencia de nodos que la superficie registra: cada lectura que hace el código y cada llamada
+del modelo con sus argumentos. Los cinco brazos cuyo flujo fija el código, `direct`, `cot`,
+`map_reduce`, `extract_compute` y `streaming_scan`, recorren los mismos nodos y contestan
+distinto: `V_T = 0` con `V_Y > 0`. Los tres que delegan la lectura, `react`, `reflection` y
+`dag_strategy`, divergen cuando el sensor elige otra unidad, y `react` con la misma elección y
+otra respuesta no diverge, que es el recíproco que la proposición no afirma. Y `pointer_chase`,
+tras la intervención de §6.1.4, hace la misma búsqueda y la misma lectura bajo los dos
+sensores. Es la instancia operativa de la proposición; cuánto `V_T` hay en la campaña real es
+otra pregunta (§8.2).
 
 Lo que la proposición compra. Sin confinamiento, dos réplicas
 que difieren pueden diferir porque leyeron material distinto, y no hay forma de localizar la
@@ -1109,7 +1090,7 @@ tabla sabe algo. La primera es esta sección; la segunda es §6.3 y §6.5.
 > afirma que rutear convenga: descompone exactamente el valor de rutear en términos que se
 > pueden medir por separado, y por eso permite que una evaluación de ruteo sea falsable.
 > §B.4 desarrolla la distinción. Un teorema presentado como evidencia del sistema sería el
-> error que §2.5 le audita a otros.
+> error que §2.2 le audita a otros.
 
 Sea `p⋆` el fallback y `p_1 … p_k` los especialistas. Sea `Δ_j(t) = u(t,p_j) − u(t,p⋆)`.
 Para cada brazo, partir el espacio de tareas en tres, la tercera parte no es un
@@ -1261,10 +1242,10 @@ denominadores.
 | `gist_reader` | 100% | 0,584 | 0,584 | 0,516 | 23.075 | 5 | 0,91 s | vueltas |
 | `handoff` | 96% | 0,604 | 0,581 | 0,438 | 120.500 | 27 | 2,04 s | alcance |
 | `pointer_chase` | 96% | 0,515 | 0,492 | 0,359 | 9.787 | 2 | 1,38 s | vueltas |
-| `graph_traverse` | 52% | 0,511 | 0,266 | — | 21.356 | 4 | — | estructural |
-| `streaming_scan` | 12% | 0,750 | 0,090 | — | 26.380 | 5 | — | estructural |
-| `extract_compute` | 12% | 0,583 | 0,070 | — | 26.184 | 5 | — | estructural |
-| `direct` | 6% | 0,917 | 0,055 | — | 22.822 | 5 | — | estructural |
+| `graph_traverse` | 52% | 0,511 | 0,266 | | 21.356 | 4 | | estructural |
+| `streaming_scan` | 12% | 0,750 | 0,090 | | 26.380 | 5 | | estructural |
+| `extract_compute` | 12% | 0,583 | 0,070 | | 26.184 | 5 | | estructural |
+| `direct` | 6% | 0,917 | 0,055 | | 22.822 | 5 | | estructural |
 
 Los denominadores son tres. `aplica`, `u`, `u × aplica` y `tok/celda` salen del registro entero
 (2.511 filas, cero `infra_error`): `aplica` es qué fracción de las celdas ofrecidas a ese brazo
@@ -1398,12 +1379,12 @@ cambia según cuál. La caja lo fija de una vez; las secciones lo citan.
 
 > DOS PANELES Y NADA MÁS, y por eso `u` toma dos valores según qué se compare. `react` figura
 > con `0,850` en el panel de §5.2 y §5.2.1, y con `0,843` en todo lo demás.
->
-> | sección | panel | por qué ése |
-> |---|---|---|
-> | §5.2, §5.2.1, §5.2.1 | 78 tareas × 12 brazos, cada brazo sobre las celdas donde CORRIÓ | mide cobertura y aporte, que exigen incluir a los brazos podados |
-> | §6.1 a §6.4.2 | 64 × 8, el rectángulo mecánico | toda comparación entre brazos exige que todos hayan corrido las mismas tareas con tres réplicas; las 64 tareas del rectángulo las tienen |
->
+
+| sección | panel | por qué ése |
+|---|---|---|
+| §5.2, §5.2.1, §5.2.1 | 78 tareas × 12 brazos, cada brazo sobre las celdas donde CORRIÓ | mide cobertura y aporte, que exigen incluir a los brazos podados |
+| §6.1 a §6.4.2 | 64 × 8, el rectángulo mecánico | toda comparación entre brazos exige que todos hayan corrido las mismas tareas con tres réplicas; las 64 tareas del rectángulo las tienen |
+
 > La regla del rectángulo se aplica desde un solo lugar, `bench.panel`, sin exclusiones a
 > mano, y devuelve también lo descartado: un panel que se achica sin declarar cuánto miente
 > por omisión. Toda `u` reportada usa `λ = 0` (calidad pura, con el costo en su propia
@@ -1427,7 +1408,7 @@ es el mismo en todas.
 | **PI3** | el ciclo | ¿Existe una señal disponible al decidir que explique la interacción tarea×paradigma? | fracción de `γ` explicada, contra el máximo de los nulos por permutación (corrección por selección) | §6.2.2 | `luna`, 64 × 8 |
 | **PI7** | el ciclo | ¿Cada refutación del ruteo produjo un medidor nuevo que la siguiente corrida pudo usar, sin romper la reproducibilidad? | por episodio: el eje que faltaba, si es `COMPUTED`, y decisión reproducida desde la base registrada | §6.5 | `nano`, tres mundos de 26 tareas, anteriores a la campaña |
 | **PI8** | el premio | ¿Qué aprende la política que pague fuera de muestra, y qué predice el comportamiento de un brazo antes de correrlo? | desempate por costo leave-one-task-out; participación del paradigma en la varianza del recall; efecto de una herramienta ofrecida sobre el releído | §6.4.1, §6.4.3 | `luna` en §6.4.1 y §6.4.3; `nano` en §6.4.3 |
-| **PI4** | el premio | ¿El acuerdo entre paradigmas predice corrección sin oráculo ni juez? | `P(correcta \| k coinciden)`, con tres controles: dificultad de tarea, largo de respuesta y costo | §6.4.2 | `luna`, con réplica en `terra` |
+| **PI4** | el premio | ¿El acuerdo entre paradigmas predice corrección sin oráculo ni juez? | `P(correcta ∣ k coinciden)`, con tres controles: dificultad de tarea, largo de respuesta y costo | §6.4.2 | `luna`, con réplica en `terra` |
 
 Dos secciones de §6, §6.5 y §6.4.3, salen del registro anterior a la campaña, sobre
 `gpt-5.4-nano`, y no de ella. Se incluyen porque miden algo que la campaña no puede
@@ -1465,7 +1446,7 @@ La utilidad de una celda es el producto de dos cosas que fallan por razones dist
 
     u  ≈  P(vio TODAS las unidades portadoras)  ×  P(contestó bien | las vio)
 
-| brazo | u | vio | u \| vio | u \| no vio | leídas |
+| brazo | u | vio | u ∣ vio | u ∣ no vio | leídas |
 |---|---:|---:|---:|---:|---:|
 | `react` | 0,843 | 60% | 0,970 | 0,708 | 7,8 |
 | `dag_strategy` | 0,822 | 57% | 0,945 | 0,720 | 11,6 |
@@ -1719,6 +1700,16 @@ cantidad de iteraciones no predice la estabilidad de salida. La intervención de
 que importa la identidad de la decisión absorbida, pero sus cuatro cambios y su evaluación en
 muestra impiden atribuir el efecto completo sólo al ancla.
 
+![Estabilidad contra ramificación](figuras/estabilidad-contra-ramificacion.svg)
+
+**Figura 12.** Estabilidad contra ramificación. Cada punto es un brazo del rectángulo: el eje
+horizontal es el proxy de `d(T)` que el registro tiene, las iteraciones medias por celda, y el
+vertical la fracción de celdas cuyas tres réplicas dieron la misma utilidad. Si más decisiones
+delegadas compraran menos estabilidad, los puntos bajarían hacia la derecha; no lo hacen, y el
+título trae la correlación. `handoff` va hueco porque su conteo es de sub-agentes y no compara.
+Lo que la figura no puede mostrar es `V_T`: las secuencias de nodos no están comparadas en el
+registro (§8.2).
+
 ## 6.2 Por qué rutear por nombre no tiene premio, aunque la interacción sea grande
 
 Ésta es la sección que reordenó el programa, y lo hizo con un mecanismo preciso. La forma
@@ -1755,7 +1746,7 @@ correspondería rutear.
 
 ![El rectángulo entero, celda por celda](figuras/mapa-de-calor-rectangulo.svg)
 
-**Figura 12.** El rectángulo 64 × 8 celda por celda. El panel izquierdo es `u(tarea, brazo)`,
+**Figura 13.** El rectángulo 64 × 8 celda por celda. El panel izquierdo es `u(tarea, brazo)`,
 la utilidad de cada tarea con cada brazo, con las filas agrupadas por región y las columnas
 ordenadas por la media del brazo, de `react` a `pointer_chase`. El panel derecho es el residuo
 γ, lo que queda de esa utilidad una vez descontadas la dificultad de la tarea y la calidad del
@@ -1769,7 +1760,7 @@ y vive entre los brazos que nadie elegiría.
 
 ![Qué señal explica la interacción](figuras/predictores-de-la-interaccion.svg)
 
-**Figura 13.** Qué señal explica la interacción. Una barra por señal candidata, ordenadas por
+**Figura 14.** Qué señal explica la interacción. Una barra por señal candidata, ordenadas por
 la fracción de γ que explican: si el material cabe, la cobertura exigida, las banderas de
 riesgo, el número de unidades, el término literal, el acoplamiento, la región vigente, la
 cardinalidad, y `cardinalidad × término`. La raya negra sobre cada barra es su propio nulo por
@@ -2023,7 +2014,7 @@ apuesta `P31` de §9.1, y el brazo no está construido.
 
 ![El espacio de capacidades](figuras/espacio-capacidades.svg)
 
-**Figura 14.** El espacio de capacidades. Cada brazo es un punto en tres ejes: cuántas
+**Figura 15.** El espacio de capacidades. Cada brazo es un punto en tres ejes: cuántas
 unidades ve el modelo en una llamada (el payload), si puede corregir el plan tras ver un
 resultado (la adaptabilidad), y de qué es función su costo. Los dos primeros se leen del
 código, y por eso ubican a un brazo que todavía no corrió; el tercero se mide. `react`,
@@ -2067,7 +2058,7 @@ utilidades quedan dentro de 0,05 entre sí.
 
 ![La interfaz aprendible: de la pregunta a los brazos capaces](figuras/interfaz-aprendible.svg)
 
-**Figura 15.** La interfaz aprendible en una imagen. El carril de arriba es `COMPUTED` de punta
+**Figura 16.** La interfaz aprendible en una imagen. El carril de arriba es `COMPUTED` de punta
 a punta: los ejes de la pregunta salen de lo que el caller declara o de lo que se mide sobre el
 material, la tabla de exigencias va del eje a la capacidad y nunca al nombre, y la salida es un
 conjunto de brazos capaces entre los que decide el costo. El carril de abajo es lo que cada
@@ -2137,7 +2128,7 @@ los capaces decide el costo, la utilidad esperada o lo que la política diga. Me
 
 ![El EDA de capacidades](figuras/eda-capacidades.svg)
 
-**Figura 16.** El EDA de capacidades, en dos paneles. El izquierdo tiene una fila por brazo:
+**Figura 17.** El EDA de capacidades, en dos paneles. El izquierdo tiene una fila por brazo:
 cada fila entrena con los otros siete y predice al octavo, que el modelo nunca vio, y muestra
 el error absoluto medio de tres predictores, la media global, la dificultad de la tarea sola y
 las capacidades. Las capacidades ganan 6 de 8 filas. El derecho es el nulo: el error del mismo
@@ -2294,10 +2285,10 @@ brazo más barato que empata dentro del ruido y lo aplica a la tarea dejada afue
 
 | política o cota | utilidad | tokens por tarea | Δ vs mejor fijo | ahorro vs mejor fijo |
 |---|---:|---:|---:|---:|
-| mejor fijo, `react` | 0,843 | 112.851 | — | 0% |
+| mejor fijo, `react` | 0,843 | 112.851 | | 0% |
 | señal `cardinalidad × término` | 0,796 | 42.907 | −0,047 | 62% |
 | señal `región` | 0,764 | 27.137 | −0,079 | 76% |
-| oráculo de costo, no es política | 0,974 | 10.146 | +0,131 | 91% |
+| oráculo de costo, no es política | 0,951 | 36.673 | +0,108 | 68% |
 
 La versión vigente ya no reproduce «58% sin pérdida»: el control estático ahorra 62% con una
 caída de 0,047. El oráculo muestra margen, no alcanzabilidad. La pregunta «qué paradigma da la
@@ -2309,7 +2300,7 @@ leave-one-task-out (`_p34_costo.py`, cero llamadas):
 
 | política sobre el objetivo de costo | utilidad | Δ vs constante, IC95 | tokens por tarea | ahorro |
 |---|---:|---|---:|---:|
-| constante, no aprende | 0,817 | — | 120.976 | 0% |
+| constante, no aprende | 0,817 | | 120.976 | 0% |
 | θ, región completa con eje `ELICITED` | 0,789 | −0,027 `[−0,078, +0,021]` | 58.489 | 52% |
 | θ, región `COMPUTED` | 0,770 | −0,047 `[−0,115, +0,022]` | 78.621 | 35% |
 | θ, respuesta × término `COMPUTED` | 0,875 | +0,058 `[−0,014, +0,132]` | 71.070 | 41% |
@@ -2319,6 +2310,16 @@ criterio preregistrado de 50%. La región completa ahorra más usando un eje eli
 reproduce entre modelos (§6.2.5), así que no conserva la garantía de la clave. El resultado es
 evidencia de una decisión de costo aprendible y, a la vez, de que el piso de evidencia actual
 deja margen sin capturar.
+
+![La frontera de costo y utilidad, con las políticas encima](figuras/frontera-costo-utilidad.svg)
+
+**Figura 18.** La frontera de costo y utilidad, con las políticas encima. Los círculos son los
+ocho brazos fijos del rectángulo, coloreados por la clase de su costo y unidos por la frontera
+de Pareto en punteado. Los rombos son las políticas y las cotas de §6.4.1, leídas de los JSON
+que las producen: la constante que no aprende, la regla estática por señal, la región, θ sobre
+la clave computada y el oráculo de costo, que conoce la respuesta y no es política. Lo que se ve
+es que θ queda arriba de su constante y a la izquierda del mejor fijo, y cuánto camino queda
+hasta el oráculo.
 
 La apuesta `P34` se corrió el 2026-09-03 sobre esa deuda. Al medir apareció la causa: el eje
 `card` de la región es cardinalidad de unidades, mientras la señal útil usa la cardinalidad de
@@ -2363,6 +2364,15 @@ pendiente suave. Dos salvedades que un `1,000` invita a
 saltear: sobre 180 casos la cota inferior de Wilson al 95% es `0,980`, así que lo afirmable es
 «≥ 0,98»; y el 4 es el punto donde la perfección aparece en este registro, no un umbral
 derivado de nada.
+
+![Riesgo contra cobertura del consenso](figuras/riesgo-cobertura-consenso.svg)
+
+**Figura 19.** Riesgo contra cobertura del consenso como regla de abstención. Cada punto exige
+que `k` o más brazos del rectángulo coincidan con la respuesta para dejarla pasar; el eje
+horizontal es qué fracción de las celdas pasa y el vertical el riesgo, uno menos la utilidad
+media de las que pasaron. A `k ≥ 4` el riesgo es cero y la cobertura cae a la fracción que el
+título dice. La curva es sobre la réplica 0 del rectángulo 64 × 8 e igualdad exacta de la
+cadena normalizada, y la regla mueve credencia, nunca procedencia.
 
 #### Tres controles: no marca dificultad, no depende del largo, y no abarata
 
@@ -2684,7 +2694,7 @@ declara. Recomputado con el medidor corregido, el vocabulario sobrevive.
 
 ![El ciclo que repara el vocabulario](figuras/ciclo-vocabulario.svg)
 
-**Figura 17.** El lazo, con los tres episodios debajo. Predicción registrada con veredicto
+**Figura 20.** El lazo, con los tres episodios debajo. Predicción registrada con veredicto
 congelado, mundo nuevo, refutación con mecanismo, medidor `COMPUTED`, consolidación con guarda,
 y la próxima predicción sobre el vocabulario reparado. Los pasos 3 y 4 los ejecutaron personas;
 los pasos 1, 2 y 5 son código. Ésa es la frontera que §8.3 declara.
@@ -2692,10 +2702,10 @@ los pasos 1, 2 y 5 son código. Ésa es la frontera que §8.3 declara.
 | episodio | qué faltaba | qué se agregó | procedencia | decisión reproducida |
 |---|---|---|---|---:|
 | `P15` | eje de horizonte | continuidad entre unidades | `COMPUTED` | 26/26 |
-| `P16` | valuación de la acción real | costo de la escalera cobrado; detector separado del gold | — | 26/26 |
+| `P16` | valuación de la acción real | costo de la escalera cobrado; detector separado del gold | | 26/26 |
 | `P17` | vía para que la selección dispare | corpus con detector declarado por tarea | `COMPUTED` | 26/26 |
-| vocabulario vigente | separación entre brazos capaces | eje literal | `COMPUTED` | — |
-| §6.3.5 | segmentación que la región no ve | ontología de la pregunta | dos ejes `COMPUTED`, el resto `ELICITED` | — |
+| vocabulario vigente | separación entre brazos capaces | eje literal | `COMPUTED` | |
+| §6.3.5 | segmentación que la región no ve | ontología de la pregunta | dos ejes `COMPUTED`, el resto `ELICITED` | |
 
 Uno produjo un medidor `COMPUTED` nuevo, el segundo una corrección de la valuación y el tercero un
 corpus con detector declarado; el eje literal salió de una medición comparativa y la ontología es
@@ -2892,12 +2902,12 @@ recuperación, evidencia y máximo de saltos:
 `B − A` estima el efecto de delegar control dentro del mismo stack reproducible; `D − C` verifica
 si el efecto sobrevive al stack ordinario. El protocolo debe registrar secuencias de nodos para
 estimar `V_T`, además de `V_Y`, `pass^k`, tokens y abstención. No está ejecutado y, por eso, este
-paper no hace esa atribución causal.
+paper no hace esa atribución causal. Es `P38` (§9.1).
 
 El corpus es sintético con ground truth re-derivado de forma independiente; la distribución de
 tareas reales sobre sus diales es desconocida y no hay benchmarks públicos. Un conjunto externo,
 aun pequeño, debe probar que el mecanismo sobrevive fuera del generador antes de reclamar validez
-de dominio. La ontología se midió
+de dominio; es `P37` (§9.1). La ontología se midió
 en parte sobre la etiqueta de diseño (tres de los siete ejes del eje principal), y recuperarla
 desde un request es `P35`. El leave-one-arm-out tiene ocho puntos y no cruza su nulo (`p` exacto
 `0,066`); lo decide `P31`. La transferencia de veredictos por modo entre mundos es parcial: sobre
@@ -2942,7 +2952,7 @@ evidencia queda ordenada por fuerza, no como cuatro contribuciones equivalentes:
 
 | nivel | qué se sostiene | evidencia |
 |---|---|---|
-| formal | bajo stack determinista, `d(T)=0` corta el canal entre `Z` y la trayectoria: `V_T=0`; una clave `COMPUTED` conserva esa propiedad | Proposiciones 4 y 5; instancias operativas cubiertas por §47b de la suite |
+| formal | bajo stack determinista, `d(T)=0` corta el canal entre `Z` y la trayectoria: `V_T=0`; una clave `COMPUTED` conserva esa propiedad | Proposiciones 4 y 5; §47b de la suite corre cinco brazos del catálogo bajo dos sensores que responden distinto y verifica la misma secuencia de nodos con salidas distintas, más una instancia finita de la clave |
 | arquitectónico | `proponer → tipar → verificar/admitir → decidir` separa procedencia, credencia y alcance, aplica pisos y permite abstenerse | motor ejecutable, contratos y Teorema 2 |
 | empírico principal | absorber control puede estabilizar y mejorar, pero la intervención actual es en muestra y el 12–28% mide desacuerdo de utilidad, no `V_T` | `pointer_chase`, `terra`, 0,33 → 0,89 y `pass^3` 0,33 → 0,67; §6.1 |
 | evidencia secundaria | capacidades permiten extrapolar por estructura, y la política se adapta sin actualizar pesos | leave-one-arm-out sugestivo (`p=0,066`); θ gobierna 36 de 78 tareas; θ de costo ahorra 41% con IC95 que cruza cero |
@@ -2957,17 +2967,19 @@ Dos resultados más quedan medidos y en su lugar. El consenso entre paradigmas e
 calibración de credencia que se reproduce sobre una segunda familia de modelo y no abarata, así
 que su lugar es el dial, como regla de abstención.
 
-Sobre el ruteo, lo que el registro dice tiene dos mitades. Entre los tres brazos que compiten
-por la calidad la brecha de oráculo apenas se separa del piso, porque tienen las mismas
-capacidades. Sobre los ocho brazos y en el held-out la brecha de oráculo es neta y positiva
-(`+0,07` en muestra, `+0,10` a `+0,15` held-out), y ninguna política medida la captura, ni por
-identidad de paradigma (§6.5, tres mundos) ni por familia (§6.2.4, sin señal que la prediga).
-Ese resultado cierra la pregunta mal formulada y deja abierta la que el sistema puede aprender,
-que es sobre qué clave se cobra un premio que existe.
+Sobre el ruteo el registro dice dónde vive el premio. Entre los tres brazos que compiten por la
+calidad la brecha de oráculo apenas se separa del piso, porque tienen las mismas capacidades.
+Sobre los ocho brazos y en el held-out la brecha es neta y positiva (`+0,07` en muestra, `+0,10`
+a `+0,15` held-out), y el eje donde se cobra es el costo: entre brazos capaces, θ sobre una clave
+`COMPUTED` ahorra 41% con la utilidad por encima de su constante (§6.4.1). Ese resultado cierra
+la pregunta mal formulada, cuál paradigma da la mejor respuesta, y deja la que el sistema puede
+aprender, cuál es el más barato que conserva la utilidad.
+
+Limitación actual: la brecha de calidad sigue sin capturarse.
 
 ## 9.1 Lo que se apuesta, en orden
 
-Cada capa de evidencia lleva una apuesta que la puede refutar. Las seis están registradas
+Cada capa de evidencia lleva una apuesta que la puede refutar. Las ocho están registradas
 en la bitácora del laboratorio el 2026-09-03, antes de correr, con criterio numérico y con lo que
 se retira si fallan. El costo va al lado porque decide el orden.
 
@@ -2979,6 +2991,8 @@ se retira si fallan. El costo va al lado porque decide el orden.
 | `P34` la consolidación aprende el costo | secundaria | consolidación con objetivo de costo sobre la clave `COMPUTED` que incluye `cardinalidad × término`, leave-one-task-out sobre el rectángulo | ahorro ≥ 50% con `Δu` cuyo IC95 incluye cero | la brecha es del algoritmo de consolidación, y se diagnostica dónde: partición, piso de episodios u homeostasis | cero tokens |
 | `P35` la ontología se recupera del request | secundaria | un clasificador sobre el request recupera el eje principal contra la etiqueta de diseño, 64 tareas, `luna`, una llamada por tarea | precisión ≥ 0,85 | la ontología queda como etiqueta de diseño y la clave se limita a los dos ejes que el caller declara | ~64 llamadas |
 | `P36` el sistema propone el eje | secundaria | la etapa de abstracción recibe el registro de `P15` con sus features crudos | propone sola una partición equivalente a la continuidad: separa el horizonte 6 de 6 sin falsos positivos | la reparación del vocabulario queda como método de desarrollo, no como plasticidad | cero tokens |
+| `P37` el mecanismo sobrevive fuera del generador | empírica principal | 24 tareas a mano sobre documentos reales, seis por modo (hecho único, ausencia, presuposición falsa, cadena de dos saltos), oráculo derivado a mano, `direct`, `react`, `dag_strategy` y `pointer_chase`, 3 réplicas, `luna` | el brazo ganador por modo en el sintético queda a ≤ piso p95 del ganador externo en 3 de 4 modos, y en ausencia los brazos siguen absteniéndose más de lo que inventan | §6 se rotula como propiedad del corpus sintético y el resumen deja de decir «mecanismo» | ~5M tokens |
+| `P38` la atribución causal del 12–28% | empírica principal | el factorial de §8.1: ramificación en código contra en LLM, sobre un servidor local reproducible y sobre la API, 24 tareas, 3 réplicas, secuencias de nodos registradas | `B − A` da `V_T` mayor que el piso por celda en el stack reproducible, y `D − C` conserva el signo | el 12–28% se atribuye al stack y §6.1.2 deja de citarse como evidencia de la Proposición 4 | ~2M tokens de API, más el servidor local |
 
 Las dos de costo cero corrieron el mismo día del registro. `P34` dio parcial: 41% de ahorro con
 la utilidad por encima de la constante sobre la clave cardinalidad de la respuesta × término, y
@@ -3028,7 +3042,8 @@ dos de ellos contra predicciones registradas de antemano.
 
 # Apéndice B, Resultados formales auxiliares
 
-Lo que §4 cita y no necesita en el cuerpo. Los enunciados están verificados por máquina en `tests/test_science.py`.
+Lo que §4 cita y no necesita en el cuerpo. Cada enunciado tiene su chequeo ejecutable en
+`tests/test_science.py`: identidades exhaustivas donde el dominio es finito, instancias donde no.
 
 ## B.1 El umbral de imposibilidad, y contra qué pérdida se mide
 
@@ -3391,6 +3406,95 @@ degrada, dependiendo de la tarea.
 
 ---
 
+## D.8 El linaje clásico, línea por línea
+
+Es la tabla que §2.3 resume. Cada línea aporta una pieza del motor y asume algo sobre su fuente
+de creencias que un LLM viola; los dos párrafos que siguen a la tabla dicen qué se hizo con cada
+supuesto roto.
+
+| línea | qué aporta | qué asume sobre la fuente | qué rompe un LLM |
+|---|---|---|---|
+| Revisión de creencias, AGM (Alchourrón, Gärdenfors y Makinson, 1985) | qué se retracta cuando entra evidencia contradictoria | el postulado de éxito: la creencia entrante se acepta | una fuente que puede equivocarse vuelve inadmisible aceptar por defecto; de ahí la compuerta de admisión |
+| Mantenimiento de verdad con justificaciones: Doyle (1979), ATMS de de Kleer (1986) | cada creencia exhibe la justificación que la sostiene | que la justificación existe y es recuperable | fabrica justificaciones plausibles y sintácticamente bien formadas |
+| Procedencia de primera clase: Buneman, Khanna y Tan (2001); semianillos de Green, Karvounarakis y Tannen (2007) | de dónde vino un valor, separado de cuánto se le cree | que la procedencia se deriva de la operación, no se declara | no hay operación: hay una emisión, y su procedencia no está en la salida |
+| Arquitectura BDI (Rao y Georgeff, 1995) | deliberación separada de ejecución | sensores que no alucinan, un sensor roto se detecta por inconsistencia | alucina consistentemente, así que la inconsistencia no lo delata |
+| Políticas como datos, aprendidas offline: Soar (Laird, Newell y Rosenbloom, 1987), ACT-R | la política es un artefacto inspeccionable, no un peso | que las condiciones de las reglas son observables | las condiciones interesantes las emite el LLM, y entonces la clave de la política hereda su varianza (§6.2.5) |
+| Plasticidad hebbiana (Hebb, 1949) | una asociación entre pares tiene contenido propio sobre sus marginales | que los eventos asociados son eventos, no descripciones de eventos | la traza es lo que el LLM pidió, no lo que ocurrió |
+| Opción de rechazo (Chow, 1970) y predicción selectiva | cubrir menos a cambio de errar menos | que hay una puntuación de confianza calibrada | la confianza declarada por el modelo no está calibrada, y §6.4.2 tuvo que construir una |
+| Argumentación abstracta (Dung, 1995) | una conclusión vale si su prueba sobrevive a los ataques disponibles | el marco se define sobre una relación de ataque dada; instanciarlo exige construirla | el espacio de respuestas plausibles y falsas no es construible, así que la admisión se decide por procedencia y no por supervivencia |
+
+La lectura crítica, en una línea por columna. Las tres primeras líneas aportan la
+maquinaria de creencias y las tres suponen sinceridad, existencia de justificación o
+derivabilidad de procedencia, y las tres suposiciones caen a la vez cuando la fuente puede
+inventar con forma correcta. BDI aporta la separación que este trabajo hereda y su detección de
+sensores rotos no funciona sobre un LLM que alucina de forma consistente. Soar aporta la
+política como dato y su supuesto de condiciones observables es lo que §6.2.5 mide
+que falla. Chow aporta la abstención y su supuesto de confianza calibrada es el que §6.4.2
+reemplaza por una curva medida.
+
+Qué se hizo con cada supuesto roto, línea por línea. Donde AGM asume que la creencia entrante
+se acepta, el motor pone una compuerta de admisión: una proposición entra a la base sólo con su
+procedencia declarada, y la procedencia decide qué puede gobernar. Donde el mantenimiento de
+verdad asume que la justificación existe, el motor no le pide al modelo que justifique; exige
+que el código pueda exhibir de qué unidad del material salió el valor, y si no puede, el valor
+no se emite (Teorema 2). Donde la procedencia clásica se deriva de la operación que produjo el
+dato, acá el dato llega como una emisión del modelo, sin operación de la que derivar nada, así
+que la procedencia se declara en el punto de entrada y se verifica contra el índice. Donde BDI
+detecta un sensor roto por inconsistencia, acá el sensor alucina de forma consistente, y la
+detección se reemplaza por tipar la salida antes de usarla y por el acuerdo entre estructuras
+de control distintas (§6.4.2). Donde Soar asume condiciones observables, las condiciones de la
+política pasan a exigirse `COMPUTED`, porque una clave elicitada convierte la tabla de decisión
+en una variable aleatoria (§6.2.5). Donde Hebb asocia eventos, el motor asocia lo que ocurrió,
+contado por el arnés, y no lo que el modelo dijo que pedía. Donde Chow asume una confianza
+calibrada, la confianza deja de leerse del modelo y pasa a calibrarse contra el registro, y
+§6.4.2 construye esa curva. Y donde Dung necesita el espacio de ataques, la admisión se decide
+por procedencia y no por supervivencia a ataques que nadie puede enumerar.
+
+---
+
+## D.9 Capacidades declaradas contra descripciones de habilidades
+
+El vecino de §6.3 del lado de la ingeniería es el ruteo por tarjetas de habilidades (Agent2Agent
+y sus antecesores multiagente): texto que el agente o su autor escriben sobre sí mismos, leído
+con un modelo o un matcher semántico, que nada verifica contra la conducta. Es `ELICITED` sobre
+el propio agente, la clase de evidencia que los contratos de delegación de §2.2 midieron que
+selecciona a los peores. Una capacidad de §6.3 es un booleano declarado desde el código del
+brazo, con el sitio donde se ve y una auditoría contra lo corrido, `COMPUTED`; y la tabla de
+exigencias va del eje de la pregunta a la capacidad, nunca al nombre, así que predice sobre un
+brazo que todavía no existe. Búsqueda fechada 2026-09-01: no se encontró trabajo que declare
+capacidades de control de flujo desde el código y las someta a leave-one-arm-out.
+
+## D.10 Tres mecanismos con antecedente
+
+Tres mecanismos que este trabajo usa tienen antecedente directo (leídos completos el 2026-08-28)
+y se acreditan:
+
+| trabajo | qué establece |
+|---|---|
+| EnvProbe, *Ask the World Before Acting: Budgeted Environment Probing for World-Model Calibration* (arXiv 2606.31422) | un operador de sondeo con presupuesto cuyo único propósito es reparar una tabla de creencias estructurada. Es la sonda de §3.4, mecanismo por mecanismo |
+| Kintsugi, *Learning Policies by Repairing Executable Knowledge Bases* (arXiv 2605.09487) | ediciones a un artefacto ejecutable tipado, filtradas por un verificador, con las fallas diagnosticadas y localizadas en ediciones candidatas. Es la consolidación de §3.5 con su guarda de promoción |
+| ProvenanceGuard, *Safeguarding LLM Agents from Misalignment through Provenance Analysis* (arXiv 2607.01236) | la desalineación como si una llamada propuesta está sostenida por evidencia trazable en el contexto. Es el piso de procedencia de §3.4.1 sobre las acciones |
+
+El área tiene survey: *From Agent Traces to Trust* (arXiv 2606.04990). Lo que queda libre es una
+conjunción, enunciada por lo que excluye: una capa de decisión que (a) elige qué topología de
+control correr, por request, con una clave `COMPUTED`; (b) puede abstenerse, con la curva
+riesgo-cobertura reportada; y (c) poda por aritmética antes de cualquier inferencia. Sacando
+cualquiera de las tres, el resto queda cubierto. Y una corroboración externa desde un lugar al
+que no llegamos: Trace2Policy (arXiv 2606.10457) reporta, en producción sobre 3.349 casos y
+cinco escalas de modelo, que la varianza atribuible a la versión de la regla supera a la de la
+elección de modelo. La estructura decide más que el modelo.
+
+## D.11 Dos observaciones sobre la tabla de gobernanza
+
+Dos observaciones salen de la tabla de §2.2. Los contratos de delegación llegan a la misma prohibición de
+la auto-evaluación por otro camino (un delegado tiene incentivo a inflar; acá, una afirmación
+sobre la propia suficiencia no supera `ELICITED`), y `reclamada`/`atestiguada` es
+`ELICITED`/`OBSERVED` restringido a una proposición. Y «procedencia + ruteo + contratos» ya está
+ocupado como frase, así que la conjunción propia se enuncia por lo que excluye: un retículo de
+procedencia sobre evidencia, un piso que filtra acciones irreversibles con él, la abstención
+tasada como curva riesgo-cobertura medida, y el mismo cálculo sobre factibilidad, control y
+contenido. Cualquier término suelto tiene antecedentes.
+
 # Referencias
 
 Los trabajos se identifican por su identificador persistente. Los marcados con ★ se leyeron
@@ -3420,7 +3524,7 @@ le hace.
 - Self-Consistency. Wang et al. (2022), *Self-Consistency Improves Chain of Thought Reasoning in Language Models*. arXiv:2203.11171.
 - Universal Self-Consistency. Chen et al. (2023). arXiv:2311.17311. Antecedentes directos de §6.4.2; lo que se agrega está dicho en §D.3.
 - DSPy. Khattab et al. (2023), *DSPy: Compiling Declarative Language Model Calls into Self-Improving Pipelines*. arXiv:2310.03714, antecedente de ingeniería de «el flujo de control vive en el código».
-- Kautz (2022), *The Third AI Summer*, AI Magazine 43(1), la taxonomía neurosimbólica que §2.5 usa para ubicar a HADD.
+- Kautz (2022), *The Third AI Summer*, AI Magazine 43(1), la taxonomía neurosimbólica que §2.2 usa para ubicar a HADD.
 - Agent2Agent, protocolo de tarjetas de agente (Google, 2025), vecino de ingeniería de §6.3 por el lado de las descripciones de habilidades.
 
 ### Gobernanza simbólica y motores de creencias
@@ -3495,7 +3599,7 @@ le hace.
 - Bouthillier et al. (2021), *Accounting for variance in machine learning benchmarks*, arXiv:2103.03098.
 - Westfall y Young (1993), *Resampling-based multiple testing*, Wiley, el procedimiento maxT de §6.2.2.
 
-El linaje de §2.1. Alchourrón, Gärdenfors y Makinson (1985), *On the logic of theory change*.
+El linaje de §D.8. Alchourrón, Gärdenfors y Makinson (1985), *On the logic of theory change*.
 Doyle (1979), *A truth maintenance system*. de Kleer (1986), *An assumption-based TMS*.
 Buneman, Khanna y Tan (2001), *Why and where: a characterization of data provenance*. Green,
 Karvounarakis y Tannen (2007), *Provenance semirings*. Rao y Georgeff (1995), *BDI agents: from

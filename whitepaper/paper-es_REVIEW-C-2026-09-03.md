@@ -1,3 +1,10 @@
+# Informe de revisión C. `paper-es.md`, borrador 3.1 (2026-09-03)
+
+Revisión externa con foco de revisor arXiv cs.AI / cs.LG, recibida como texto y archivada tal
+cual. Lo que se tomó de ella entró en el borrador 3.2 del mismo día (commit «Revision Codex sol»).
+
+---
+
 Sí. Lo revisé con foco de **revisor de arXiv / cs.AI-cs.LG**, no sólo de estilo. Mi impresión es que el paper tiene una idea central valiosa y bastante más sólida que una simple “arquitectura de agentes”: intenta convertir una intuición de ingeniería —no dejar que el LLM gobierne el flujo— en una propiedad formal, una arquitectura ejecutable y una medición empírica. El propio paper además hace algo poco común y positivo: declara explícitamente qué está probado, qué está medido y qué queda fuera de alcance. 
 
 Pero antes de enviarlo, yo haría cambios importantes. El principal riesgo no es que el paper sea débil; es que **está intentando defender demasiadas contribuciones a la vez**, y algunas son mucho más fuertes que otras.

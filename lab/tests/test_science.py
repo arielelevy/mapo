@@ -3433,53 +3433,163 @@ def check_who_sets_the_dial(ok: bool) -> bool:
 
 
 def check_stochasticity_confinement(ok: bool) -> bool:
-    """Instancia finita de las Proposiciones 4 y 5 del paper."""
+    """S47b: la Proposicion 4 sobre brazos REALES del catalogo, y la 5 en instancia finita.
+
+    QUE PRUEBA. Dos sensores falsos que responden DISTINTO —otro numero, y otra unidad
+    cuando se les deja elegir— corren cada brazo sobre el mismo material. La trayectoria
+    es la secuencia de nodos que la superficie registra: cada lectura estructural
+    (`read_one`, la hace el codigo) y cada llamada del modelo (`dispatch`, con sus
+    argumentos). Un brazo con `d(T)=0` tiene que recorrer los mismos nodos con los dos
+    sensores y puede contestar distinto: V_T=0 con V_Y>0. Un brazo que delega la lectura
+    al modelo diverge cuando el modelo elige otra unidad. Y `pointer_chase`, al que §6.1.4
+    del paper le saco el ancla al modelo, recorre los mismos nodos: la intervencion del
+    paper queda en la suite, no solo en la prosa.
+
+    QUE NO PRUEBA. Nada del stack de servicio real ni de cuanto V_T hay en la campana; eso
+    es §8.2 del paper. Es la instancia operativa de la proposicion, no su medicion.
+
+    ANTES ERA UN JUGUETE: comparaba tuplas de strings escritas a mano y no importaba nada
+    de `app`. El paper lo citaba como «instancia operativa», y no lo era.
+    """
+    import json
+    import tempfile
     from itertools import product
 
-    print("\n--- 47b. confinamiento de estocasticidad ---")
+    from app.llm import Usage as _RealUsage
+    from app.paradigms import Infeasible, REGISTRY
+    from app.retrieval import CorpusView, LexicalRetriever
+    from app.tools import ToolSurface
 
-    emissions = ("alpha", "beta", "gamma")
+    print("\n--- 47b. confinamiento de estocasticidad, sobre el catalogo ---")
 
-    def disagreement(values) -> float:
-        pairs = list(product(values, repeat=2))
-        return sum(left != right for left, right in pairs) / len(pairs)
+    _tmp = Path(tempfile.mkdtemp(prefix="mapo-test-"))
 
-    confined_trajectories = [
-        ("sense", "route", "read", "answer")
-        for _emission in emissions
-    ]
-    stochastic_outputs = [f"answer:{emission}" for emission in emissions]
-    ok &= check("d(T)=0: la emision no cambia la secuencia de nodos y V_T=0",
-                disagreement(confined_trajectories) == 0.0)
-    ok &= check("V_T=0 no fuerza V_Y=0: el contenido puede seguir variando",
-                disagreement(stochastic_outputs) > 0.0)
+    class _Completion:
+        def __init__(self, texto, tool_calls=None):
+            self.text, self.usage = texto, _RealUsage()
+            self.tool_calls = tool_calls or []
+            self.from_cache, self.model_version = False, ""
 
-    delegated_trajectories = [
-        ("sense", "route", f"read:{emission}", "answer")
-        for emission in emissions
-    ]
-    ok &= check("delegar el proximo nodo abre un canal y puede dar V_T>0",
-                disagreement(delegated_trajectories) > 0.0)
+    class _Sensor:
+        """Responde `respuesta`; si se le ofrecen tools y todavia no leyo, pide `unidad`."""
+        fingerprint = "fake|t=0"
+        cache_root = _tmp
+        spent = _RealUsage()
 
-    collapsed_branch = {emission: "read:fixed" for emission in emissions}
-    constant_delegated = [
-        ("sense", "route", collapsed_branch[emission], "answer")
-        for emission in emissions
-    ]
-    ok &= check("d(T)>0 no fuerza V_T>0 si la rama delegada coincide de hecho",
-                disagreement(constant_delegated) == 0.0)
+        def __init__(self, respuesta, unidad=None):
+            self.respuesta, self.unidad = respuesta, unidad
 
-    computed_keys = [(12, True, False) for _emission in emissions]
-    computed_decisions = ["dag" if key[0] > 8 and key[1] else "react"
-                          for key in computed_keys]
-    elicited_decisions = ["dag" if emission == "alpha" else "react"
-                          for emission in emissions]
-    ok &= check("una clave COMPUTED conserva la decision respecto de Z",
-                disagreement(computed_decisions) == 0.0)
-    ok &= check("una clave ELICITED puede reabrir el canal hacia la politica",
-                disagreement(elicited_decisions) > 0.0)
+        def complete(self, messages, **kw):
+            ya_leyo = any(m.get("role") == "tool" for m in messages)
+            if kw.get("tools") and self.unidad and not ya_leyo:
+                return _Completion("", [{"id": "c1", "type": "function", "function": {
+                    "name": "read", "arguments": json.dumps({"unit_ids": self.unidad})}}])
+            r = self.respuesta
+            return _Completion(
+                '{"sub_questions": [{"id": "sq_001", "question": "q", "depends_on": []}], '
+                '"steps": [], "plan": [], "read": [], "entities": [], "relations": [], '
+                f'"status": "complete", "partial": "{r}", "answer": "{r}", '
+                '"dispatch": "una sub-pregunta", "done": false}'
+                + chr(10) + f"ANSWER: {r}")
+
+    docs = {f"u{i}": f"unidad {i}: Marta Arrieta, account AR100{i}." for i in range(6)}
+    tarea = {
+        "task_id": "t", "question": "What is the account for Marta Arrieta?",
+        "cell": "C1_single_verifiable", "budget_tokens": 40_000,
+        "unit_ids": list(docs), "oracle": ["AR1000"], "has_oracle": True,
+        "irreversible": False, "shared_writes": False,
+        "truth_n_units": 1, "truth_coupling": 0.0, "truth_horizon_unknown": False,
+    }
+
+    def trayectoria(nombre, sensor):
+        """(secuencia de nodos, respuesta). La secuencia se toma en la SUPERFICIE, que es
+        el unico lugar por donde pasa todo lo que un brazo lee o llama."""
+        view = CorpusView(task_id="t", documents=docs, unit_ids=list(docs),
+                          relevant_units=["u0"])
+        surface = ToolSurface(view=view, hybrid=LexicalRetriever(),
+                              semantic=LexicalRetriever(), lexical=LexicalRetriever(),
+                              variant="basic", budget_tokens=40_000)
+        nodos = []
+        despacho, lectura = surface.dispatch, surface.read_one
+
+        def dispatch(name, args):
+            nodos.append(("tool", name, json.dumps(args, sort_keys=True)))
+            return despacho(name, args)
+
+        def read_one(uid):
+            nodos.append(("read", uid))
+            return lectura(uid)
+
+        surface.dispatch, surface.read_one = dispatch, read_one
+        try:
+            respuesta = REGISTRY[nombre](sensor, surface, tarea).answer
+        except Infeasible:
+            return ("INFEASIBLE",), None
+        # La tupla se arma DESPUES de correr: antes de la llamada esta vacia.
+        return tuple(nodos), respuesta
+
+    A, B = _Sensor("AR1000", "u0"), _Sensor("AR2000", "u3")
+
+    # 1. d(T)=0. El codigo fija QUE se lee y CUANDO; el modelo solo pone contenido.
+    FIJOS = ("direct", "cot", "map_reduce", "extract_compute", "streaming_scan")
+    rompen, mudos = [], []
+    for nombre in FIJOS:
+        t_a, y_a = trayectoria(nombre, A)
+        t_b, y_b = trayectoria(nombre, B)
+        if not t_a or t_a != t_b:
+            rompen.append(nombre)
+        if y_a == y_b:
+            mudos.append(nombre)
+    ok &= check(f"d(T)=0 => V_T=0: {len(FIJOS)} brazos de flujo fijado por codigo recorren los "
+                "mismos nodos bajo dos sensores que responden distinto"
+                + (f" — ROMPEN: {rompen}" if rompen else ""), not rompen)
+    ok &= check("y V_T=0 no fuerza V_Y=0: los mismos nodos, otra respuesta, en los cinco"
+                + (f" — MUDOS: {mudos}" if mudos else ""), not mudos)
+
+    # 2. Delegar la lectura abre el canal: otra eleccion del modelo, otra trayectoria.
+    DELEGAN = ("react", "reflection", "dag_strategy")
+    iguales = [n for n in DELEGAN if trayectoria(n, A)[0] == trayectoria(n, B)[0]]
+    ok &= check("delegar la lectura al modelo abre el canal: react, reflection y dag_strategy "
+                "divergen cuando el sensor elige otra unidad"
+                + (f" — NO DIVERGEN: {iguales}" if iguales else ""), not iguales)
+
+    # 3. El reciproco que la proposicion NO afirma: d>0 con la rama coincidiendo de hecho.
+    t_a, _ = trayectoria("react", A)
+    t_a2, y_a2 = trayectoria("react", _Sensor("AR2000", "u0"))
+    ok &= check("d(T)>0 no fuerza V_T>0: `react` con la misma eleccion y otra respuesta recorre "
+                "los mismos nodos", t_a == t_a2 and y_a2 == "AR2000")
+
+    # 4. La intervencion de §6.1.4: el ancla la resuelve el codigo, no el modelo.
+    t_a, _ = trayectoria("pointer_chase", A)
+    t_b, _ = trayectoria("pointer_chase", B)
+    herramientas = [n[1] for n in t_a if n[0] == "tool"]
+    ok &= check("`pointer_chase` resuelve el ancla por codigo (paper §6.1.4): misma busqueda y "
+                "misma lectura bajo los dos sensores",
+                t_a == t_b and herramientas[:2] == ["search", "read"],
+                f"nodos del modelo: {herramientas}")
+
+    # 5. La premisa de la proposicion, sobre el banco: el stack no-modelo es determinista.
+    inestables = [n for n in sorted(REGISTRY)
+                  if trayectoria(n, A)[0] != trayectoria(n, A)[0]]
+    ok &= check(f"el stack del banco es determinista: el mismo sensor dos veces da la misma "
+                f"trayectoria en los {len(REGISTRY)} brazos del registro"
+                + (f" — INESTABLES: {inestables}" if inestables else ""), not inestables)
+
+    # 6. Proposicion 5, instancia finita ABSTRACTA: no hay brazo que ejecutar, es la clave.
+    emisiones = ("alpha", "beta", "gamma")
+
+    def desacuerdo(valores) -> float:
+        pares = list(product(valores, repeat=2))
+        return sum(a != b for a, b in pares) / len(pares)
+
+    computadas = ["dag" if k[0] > 8 and k[1] else "react"
+                  for k in [(12, True, False) for _ in emisiones]]
+    elicitadas = ["dag" if e == "alpha" else "react" for e in emisiones]
+    ok &= check("Prop. 5, instancia finita: una clave COMPUTED conserva la decision respecto "
+                "de Z", desacuerdo(computadas) == 0.0)
+    ok &= check("y una clave ELICITED puede reabrir el canal hacia la politica",
+                desacuerdo(elicitadas) > 0.0)
     return ok
-
 
 def check_assembler_soundness(ok: bool) -> bool:
     """§46: T-3, el teorema de soundness del ensamblador. Exhaustivo, no por casos.

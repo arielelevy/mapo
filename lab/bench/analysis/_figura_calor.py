@@ -128,7 +128,7 @@ def main() -> None:
              + chr(10) +
              f"el mejor brazo cae en un contendiente en {int((mejor < 3).sum())} de {len(tareas)} tareas",
              fontsize=12, color=TINTA, ha="left", va="top", wrap=True)
-    fig.text(0.02, 0.958,
+    fig.text(0.02, 0.940,  # debajo de las DOS lineas del titulo; a 0.958 se pisaban
              f"Rectángulo 64 × 8, filas agrupadas por región y columnas por media. El punto es el mejor brazo de la fila;"
              + chr(10) +
              f"el marco punteado, los tres contendientes (a menos de 0,05 del mejor fijo). "

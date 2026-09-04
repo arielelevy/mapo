@@ -9,5 +9,5 @@ p  { margin: 0 0 7pt; }
 pre code { font-size: 8.5pt; line-height: 1.38; }
 table { margin: 8pt 0 11pt; font-size: 8.9pt; }
 figure { margin: 11pt 0 13pt; }
-figure svg { max-width: 84%; }
+figure svg { width: 100%; }  /* al 84% la letra de las figuras bajaba de 6pt */
 hr { margin: 12pt 0; }

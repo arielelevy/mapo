@@ -93,6 +93,9 @@ tiene ocho puntos. El paper los declara como límites, no como notas al pie.
 Los SVG activos están en `figuras/`. `contrato-de-garantia.svg` y
 `metodo-determinista.svg` se regeneran con `py _figuras_arquitectura.py`; las versiones previas
 viven en `historico/`.
+Las tres que pidió la revisión C (estabilidad contra ramificación, riesgo contra cobertura,
+frontera de costo y utilidad) salen de `py bench/analysis/_figuras_revision.py`, desde `lab/`,
+y leen sus números de los JSON de `_predictores.py` y `_p34_costo.py`.
 
 `artefactos/` versiona los documentos visuales del estado vivo.
 

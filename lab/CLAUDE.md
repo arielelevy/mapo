@@ -193,7 +193,7 @@ lee igual que un efecto nulo medido. `test_science.py` §59 lo impide estructura
 ## Modelos: los tres corren con herramientas (medido 2026-08-29)
 
 > **QUIÉN MIDE, contra el registro y no contra la intención (2026-08-30).** La campaña es
-> **`luna`** — 2.478 filas de `gold_h1`—, `terra` corre **sólo C3** (90 filas) porque cuesta
+> **`luna`** — 2.511 filas de `gold_h1`—, `terra` corre **sólo C3** (90 filas) porque cuesta
 > 10× la entrada, y **`nano` no tiene ninguna fila**: `results/nano/gold_h1_rows.jsonl` no
 > existe. `luna` reemplazó a `nano` como modelo de medición y `nano` quedó como base
 > histórica. La tabla de abajo sigue siendo válida —es el smoke de capacidades de los tres—
@@ -353,7 +353,26 @@ y **`P36` FRACASO** (`bench/analysis/_p36_abstraccion.py`: la etapa de abstracci
 horizonte desde estadísticas crudas; una lo aísla en 8 de 200 particiones y la selección no la
 retiene). **No bajar `MIN_EPISODES_FOR_CONFIDENCE` ni agregar `answer_cardinality` al
 vocabulario mirando estos números**: las dos son decisiones del autor y cada una pide su propia
-predicción registrada antes de correr. Quedan `P32`, `P31`, `P35` y `P33`, en ese orden de costo.
+predicción registrada antes de correr. Quedan `P32`, `P31`, `P35` y `P33`, en ese orden de costo. La revision externa del 2026-09-03
+agrego dos mas, registradas el mismo dia y sin correr: `P37` (24 tareas a mano sobre documentos
+reales: el mecanismo sobrevive fuera del generador) y `P38` (el factorial 2x2 que separa la
+ramificacion delegada del stack de servicio y mide `V_T` con secuencias de nodos). `P38` va
+antes que `P37` porque decide que puede afirmar el paper en 6.1 y las tareas ya existen.
+`P39` (rutear por capacidades cobra el premio entre los ocho) corrio el mismo dia, a cero tokens,
+y dio FRACASO: ninguna de cuatro politicas LOTO cruza el piso p95; la causa es `EXIGE`, una
+conjuncion con dos filas de un solo brazo capaz (`material_mayor_que_ventana`, `entidad_nombrada`),
+que deja 63 de 64 tareas sin candidato. **No arreglar `EXIGE` mirando ese numero**: la fila de
+material pasa de exigencia a costo solo con su propia prediccion registrada.
+**`P40` (2026-09-04) cerro la pregunta del ruteo con una cota, y es el resultado que importa**:
+el Teorema 1 instanciado sobre el registro da `Sum(pi*G) = 0,242` contra `Sum(nu*L) = 1,536`,
+o sea `beta_max = 0,157`, replicado en `0,186` sobre el held-out. Un ruteador perfecto donde el
+brazo gana puede errar en el 16% de donde pierde y nada mas; la asimetria por tarea es 5,5x.
+Corolarios que no son opinion: `pointer_chase` tiene `pi = 0` y rutearle nunca se justifica, y
+el premio se agranda subiendo `pi` (`P31`) o bajando `L` con abstencion, no con otra clave.
+Y una trampa encontrada midiendo: el eje `ausencia` de `ejes_de` sale de `relevant_units == []`,
+que **es el gold**, y ahi vive el 80% de la brecha ruteable. La sonda de indice (recuperador
+lexico sobre el alcance, cero tokens) es la unica familia de features que correlaciona en los
+dos paneles. Script: `bench/analysis/_eda_ruteo_profunda.py`.
 
 > **Cierre del 2026-09-03**: `historico/CIERRE-2026-09-03.es.md`. Es lo que hay que leer para
 > retomar: qué se hizo en los papers y las figuras, qué destaparon `P34` y `P36`, y qué decide

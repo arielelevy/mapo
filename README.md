@@ -194,7 +194,7 @@ antes**: hoy no hay servicio que trazar.
 ## Antes de gastar un token
 
 ```powershell
-py tests\test_science.py            # 136 comprobaciones reportadas
+py tests\test_science.py            # 69 chequeos, 684 aserciones
 py tests\test_consolidation.py
 py corpus\verify.py --corpus corpus\<nombre>
 py bench\_listo.py                  # las nueve condiciones de lanzamiento

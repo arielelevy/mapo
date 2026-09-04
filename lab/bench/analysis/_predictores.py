@@ -459,6 +459,7 @@ def main() -> None:
         empatan = [p for p in elegibles if U[(t, p)] >= mejor_u - tol]
         return min(empatan, key=lambda p: C.get((t, p), float("inf")))
 
+    oraculo_costo = {}
     for etiqueta, conj in (("todo el panel", brazos), ("solo contendientes", contendientes)):
         u_or = statistics.mean(max(U[(t, p)] for p in conj) for t in tids)
         fijo = max(conj, key=lambda p: statistics.mean(U[(t, p)] for t in tids))
@@ -467,6 +468,8 @@ def main() -> None:
         elegidos = {t: politica_barata(conj, t) for t in tids}
         u_pol = statistics.mean(U[(t, elegidos[t])] for t in tids)
         c_pol = statistics.mean(C[(t, elegidos[t])] for t in tids if (t, elegidos[t]) in C)
+        if etiqueta == "todo el panel":
+            oraculo_costo = {"utilidad": round(u_pol, 4), "tokens": round(c_pol)}
         print(f"  {etiqueta} ({len(conj)} brazos)")
         print(f"    mejor fijo `{fijo}`         u={u_fj:.3f}  {c_fj:>9,.0f} tok")
         print(f"    «el mas barato que empata»  u={u_pol:.3f}  {c_pol:>9,.0f} tok"
@@ -491,6 +494,7 @@ def main() -> None:
     fijo_g = max(brazos, key=lambda p: statistics.mean(U[(t, p)] for t in tids))
     u_fijo_g = statistics.mean(U[(t, fijo_g)] for t in tids)
     c_fijo_g = statistics.mean(C[(t, fijo_g)] for t in tids if (t, fijo_g) in C)
+    senales_json = {}
     for nombre, fn in SENALES.items():
         etq = {t: fn(tmap[t], docs) for t in tids}
         us, cs = [], []
@@ -512,8 +516,23 @@ def main() -> None:
         um, cm = statistics.mean(us), statistics.mean(cs)
         print(f"  {nombre:26s} {um:9.3f} {cm:10,.0f} {um - u_fijo_g:+10.3f} "
               f"{1 - cm / c_fijo_g:7.0%}")
+        senales_json[nombre] = {"utilidad": round(um, 4), "tokens": round(cm),
+                                "delta_u": round(um - u_fijo_g, 4),
+                                "ahorro": round(1 - cm / c_fijo_g, 4)}
     print(f"\n  referencia: mejor fijo `{fijo_g}` u={u_fijo_g:.3f} "
-          f"{c_fijo_g:,.0f} tok · oraculo de costo u=0,974 10.146 tok")
+          f"{c_fijo_g:,.0f} tok · oraculo de costo u={oraculo_costo['utilidad']:.3f} "
+          f"{oraculo_costo['tokens']:,} tok")
+    # LOS NUMEROS SE GUARDAN para que la figura de la frontera (`_figuras_revision.py`) y
+    # el paper los lean de aca y no los transcriban. El «58% a utilidad igual» que el paper
+    # llevo dos dias era un numero copiado a mano de un panel anterior.
+    salida = _Path("results/luna/predictores_costo.json")
+    salida.write_text(json.dumps({
+        "panel": panel.descripcion(), "tolerancia_empate": round(tol, 4),
+        "mejor_fijo": {"brazo": fijo_g, "utilidad": round(u_fijo_g, 4),
+                       "tokens": round(c_fijo_g)},
+        "oraculo_costo": oraculo_costo, "senales": senales_json,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"  -> {salida}")
 
     print("""
   LO QUE ESTO CAMBIA. Sobre calidad la decision no tiene premio; sobre costo a utilidad

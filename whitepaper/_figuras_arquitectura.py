@@ -19,7 +19,7 @@ def defs():
 </defs>"""
 
 
-def t(x, y, s, size=10, fill=GRIS, w=None, anchor="start", italic=False):
+def t(x, y, s, size=11, fill=GRIS, w=None, anchor="start", italic=False):
     fw = f' font-weight="{w}"' if w else ""
     fs = ' font-style="italic"' if italic else ""
     return f'<text x="{x}" y="{y}" font-size="{size}" fill="{fill}" text-anchor="{anchor}"{fw}{fs}>{s}</text>'
@@ -105,11 +105,11 @@ def contrato():
     s = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" font-family="{FONT}">',
          defs(), f'<rect width="{W}" height="{H}" fill="#ffffff"/>',
          t(16, 28, "El contrato de garantía, y qué pasa cuando la evidencia no alcanza", 17, TXT, w=600),
-         t(16, 45, "la abstención es una salida, no un fallo · y el rechazo sube el piso para el próximo request, sin tocar un peso", 11)]
+         t(16, 45, "la abstención es una salida, no un fallo · y el rechazo sube el piso para el próximo request, sin tocar un peso", 12)]
 
     # carril del código
     s.append(f'<rect x="16" y="58" width="948" height="262" rx="10" fill="{PANEL_AZUL}" stroke="{BORDE}"/>')
-    s.append(t(30, 338, "LO QUE DECIDE EL CÓDIGO · determinista, contable, auditable", 11, AZUL, w=700))
+    s.append(t(30, 338, "LO QUE DECIDE EL CÓDIGO · determinista, contable, auditable", 12, AZUL, w=700))
 
     # request apilado
     req, hreq = contenedor(30, 88, 168, [
@@ -148,26 +148,26 @@ def contrato():
     s.append(icono("bifurca", 818, 196, ROJO))
     s.append(t(894, 210, "se abstiene o difiere", 12, TXT, w=600, anchor="middle"))
     s.append(t(884, 229, "ninguna procedencia alcanzó el piso", 8.8, ROJO, anchor="middle", italic=True))
-    s.append(t(884, 262, "toda decisión termina en una de las dos", 9, GRIS, anchor="middle", italic=True))
+    s.append(t(884, 262, "toda decisión termina en una de las dos", 10, GRIS, anchor="middle", italic=True))
 
     # lazo de plasticidad: de la salida roja, por abajo, hasta el paso 2
     s.append(f'<path d="M950 244 v44 H488 V{y0 + hh + 2}" fill="none" stroke="{VERDE}" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#pv)"/>')
-    s.append(t(690, 302, "el registro de rechazos sube el piso del próximo request · offline, con guarda anti-regresión, sin tocar un peso", 9.5, VERDE, anchor="middle", italic=True))
+    s.append(t(690, 302, "el registro de rechazos sube el piso del próximo request · offline, con guarda anti-regresión, sin tocar un peso", 10.5, VERDE, anchor="middle", italic=True))
 
     # carril del modelo
     s.append(f'<rect x="16" y="350" width="948" height="88" rx="10" fill="{PANEL_ROJO}" stroke="{BORDE}"/>')
-    s.append(t(30, 456, "LO QUE EMITE EL MODELO · un sensor estocástico con los pesos congelados", 11, ROJO, w=700))
+    s.append(t(30, 456, "LO QUE EMITE EL MODELO · un sensor estocástico con los pesos congelados", 12, ROJO, w=700))
     s.append(robot(120, 396))
     s.append(t(170, 388, "LLM", 13, TXT, w=600))
     s.append(t(170, 404, "lee la unidad que el código le da y contesta", 9.8))
     s.append(t(170, 418, "«¿qué dice esta unidad?» · «¿hacia dónde sigue el rastro?»", 9.8))
     # la única flecha que cruza la frontera
     s.append(flecha(488, 366, 488, y0 + hh + 4, ROJO, "pr", dash="3 3"))
-    s.append(t(500, 200, "proposiciones tipadas, hacia arriba", 9.5, ROJO, italic=True))
-    s.append(t(500, 213, "nunca control de flujo, hacia abajo", 9.5, ROJO, italic=True))
+    s.append(t(500, 200, "proposiciones tipadas, hacia arriba", 10.5, ROJO, italic=True))
+    s.append(t(500, 213, "nunca control de flujo, hacia abajo", 10.5, ROJO, italic=True))
     # el bucle, rayado: lo que el modelo no toca
     s.append(caja(226, 226, 340, 44, stroke=AZUL, fill="url(#rayas)", sw=1.2))
-    s.append(t(396, 245, "el bucle es del código", 11, AZUL, w=700, anchor="middle"))
+    s.append(t(396, 245, "el bucle es del código", 12, AZUL, w=700, anchor="middle"))
     s.append(t(396, 260, "cuántas vueltas · qué índice · cuándo parar · qué unidad es el ancla", 9.3, AZUL, anchor="middle"))
 
     s.append("</svg>")
@@ -180,10 +180,10 @@ def metodo():
     s = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" font-family="{FONT}">',
          defs(), f'<rect width="{W}" height="{H}" fill="#ffffff"/>',
          t(16, 30, "Cómo se decide un request", 17, TXT, w=600),
-         t(16, 46, "la frontera entre percepción estocástica y control determinista organiza toda la decisión", 11)]
+         t(16, 46, "la frontera entre percepción estocástica y control determinista organiza toda la decisión", 12)]
 
     s.append(f'<rect x="16" y="58" width="948" height="260" rx="10" fill="{PANEL_AZUL}" stroke="{BORDE}"/>')
-    s.append(t(30, 336, "LO QUE DECIDE EL CÓDIGO · determinista, contable, auditable", 11, AZUL, w=700))
+    s.append(t(30, 336, "LO QUE DECIDE EL CÓDIGO · determinista, contable, auditable", 12, AZUL, w=700))
 
     y = 84
     c1, h1 = contenedor(30, y, 200, [
@@ -213,13 +213,13 @@ def metodo():
     s.append(caja(ex + 10, y + 34, ew - 20, 82, stroke=AZUL, fill="url(#rayas)", sw=1.2, rx=5))
     s.append(t(ex + ew / 2, y + 52, "el bucle es del código", 10.5, AZUL, w=700, anchor="middle"))
     for i, l in enumerate(["cuántas vueltas", "qué índice", "cuándo parar"]):
-        s.append(t(ex + ew / 2, y + 68 + i * 14, l, 9.5, AZUL, anchor="middle"))
+        s.append(t(ex + ew / 2, y + 68 + i * 14, l, 10.5, AZUL, anchor="middle"))
     s.append(t(ex + ew / 2, y + 128 + 16, "ejecutar", 11.5, VERDE, w=700, anchor="middle"))
 
     # carril del modelo
     yb = 348
     s.append(f'<rect x="16" y="{yb}" width="948" height="112" rx="10" fill="{PANEL_ROJO}" stroke="{BORDE}"/>')
-    s.append(t(30, yb + 132, "LO QUE EMITE EL MODELO · sensor: proposiciones, nunca flujo de control", 11, ROJO, w=700))
+    s.append(t(30, yb + 132, "LO QUE EMITE EL MODELO · sensor: proposiciones, nunca flujo de control", 12, ROJO, w=700))
     s.append(robot(96, yb + 50))
     s.append(t(96, yb + 100, "LLM", 11.5, TXT, w=600, anchor="middle"))
 
@@ -237,12 +237,12 @@ def metodo():
 
     # flechas que cruzan la frontera
     s.append(flecha(ex + 40, y + 128, ex + 40, yb + 20, ROJO, "pr"))
-    s.append(t(ex + 36, 300, "pregunta", 9.5, ROJO, italic=True, anchor="end"))
+    s.append(t(ex + 36, 300, "pregunta", 10.5, ROJO, italic=True, anchor="end"))
     s.append(flecha(ex + ew - 30, yb + 20, ex + ew - 30, y + 130, ROJO, "pr"))
-    s.append(t(ex + ew - 36, 300, "proposición", 9.5, ROJO, italic=True, anchor="end"))
+    s.append(t(ex + ew - 36, 300, "proposición", 10.5, ROJO, italic=True, anchor="end"))
     s.append(flecha(148, yb + 50, 174, yb + 50, ROJO, "pr"))
 
-    s.append(t(16, H - 8, "Una decisión delegada puede abrir un canal desde el modelo hacia el control: en muestra, el ancla elegida por el modelo dio u=1,000 / 0,000 / 0,000 con la misma huella.", 9.5))
+    s.append(t(16, H - 8, "Una decisión delegada puede abrir un canal desde el modelo hacia el control: en muestra, el ancla elegida por el modelo dio u=1,000 / 0,000 / 0,000 con la misma huella.", 10.5))
     s.append("</svg>")
     return "\n".join(s)
 

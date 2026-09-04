@@ -47,12 +47,15 @@ h4 { font-size: 10.8pt; margin: 12pt 0 4pt; color: #3b4046; }
 h1, h2, h3, h4 { page-break-after: avoid; }
 p { margin: 0 0 8pt; }
 code { font-family: Consolas, "SF Mono", Menlo, monospace; font-size: 9.2pt;
-       background: #f2f3f5; padding: 1px 4px; border-radius: 3px; }
+       background: #f2f3f5; padding: 1px 3px; border-radius: 3px; }
 pre { background: #f7f8fa; border: 1px solid #e4e6ea; border-radius: 5px;
       padding: 8pt 10pt; overflow-x: auto; page-break-inside: avoid; }
 pre code { background: none; padding: 0; font-size: 8.6pt; line-height: 1.42; }
-table { border-collapse: collapse; margin: 9pt 0 12pt; font-size: 9.3pt; width: 100%;
-        page-break-inside: avoid; }
+table { border-collapse: collapse; margin: 9pt 0 12pt; font-size: 9.3pt; width: 100%; }
+/* la tabla SE PARTE entre paginas y la fila no: una tabla entera que no entra dejaba media
+   pagina en blanco antes de ella, y el encabezado se repite en cada tramo */
+tr { page-break-inside: avoid; }
+thead { display: table-header-group; }
 th { background: #f2f3f5; text-align: left; font-weight: 600; }
 th, td { border: 1px solid #dfe1e5; padding: 3.5pt 6pt; }
 tr:nth-child(even) td { background: #fafbfc; }
@@ -62,7 +65,7 @@ blockquote p:last-child { margin-bottom: 0; }
 ul, ol { margin: 0 0 9pt; padding-left: 20pt; }
 li { margin-bottom: 3pt; }
 figure { margin: 12pt 0 14pt; text-align: center; page-break-inside: avoid; }
-figure svg { max-width: 100%; height: auto; }
+figure svg { width: 100%; height: auto; }  /* al ancho del texto SIEMPRE: una figura angosta a su tamano intrinseco queda con letra de 6pt */
 /* matplotlib pide DejaVu Sans, que Windows no tiene; sin esto el visor cae a serif */
 figure svg text, figure svg tspan { font-family: Arial, "Helvetica Neue", sans-serif !important; }
 figcaption { font-size: 8.8pt; color: #6b7178; margin-top: 4pt; font-style: italic; }
