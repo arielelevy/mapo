@@ -378,7 +378,9 @@ dos paneles. Script: `bench/analysis/_eda_ruteo_profunda.py`.
 el déficit de completitud con una reparación acotada. `bench/runs/_run_p41_repair.py` compara
 base, retención, reparación genérica y dirigida sobre doce mundos C9 nuevos, dos ejecutores
 y tres réplicas. Los corpus y las pruebas locales pasaron. **El autor no tiene créditos hasta
-el 2026-09-13; no relanzar llamadas pagadas mientras siga esa restricción.** No hay reanudación
+el 2026-09-13; no relanzar llamadas pagadas mientras siga esa restricción.** Preflight del 05-09: el 401
+es la suscripción de Visual Studio Enterprise deshabilitada por límite de gasto, no la clave
+(detalle al final del cierre). No hay reanudación
 automática. Retomar con `historico/CIERRE-2026-09-05-P41.es.md`. La prueba es local a C9; una
 afirmación de mejora del sistema completo requiere después evaluar intervención selectiva y
 regresiones sobre todo el corpus.
