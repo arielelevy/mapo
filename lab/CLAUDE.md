@@ -374,6 +374,15 @@ que **es el gold**, y ahi vive el 80% de la brecha ruteable. La sonda de indice 
 lexico sobre el alcance, cero tokens) es la unica familia de features que correlaciona en los
 dos paneles. Script: `bench/analysis/_eda_ruteo_profunda.py`.
 
-> **Cierre del 2026-09-03**: `historico/CIERRE-2026-09-03.es.md`. Es lo que hay que leer para
+**P41 (2026-09-05), preparada y sin resultado empírico:** `app/completion_repair.py` conecta
+el déficit de completitud con una reparación acotada. `bench/runs/_run_p41_repair.py` compara
+base, retención, reparación genérica y dirigida sobre doce mundos C9 nuevos, dos ejecutores
+y tres réplicas. Los corpus y las pruebas locales pasaron. **El autor no tiene créditos hasta
+el 2026-09-13; no relanzar llamadas pagadas mientras siga esa restricción.** No hay reanudación
+automática. Retomar con `historico/CIERRE-2026-09-05-P41.es.md`. La prueba es local a C9; una
+afirmación de mejora del sistema completo requiere después evaluar intervención selectiva y
+regresiones sobre todo el corpus.
+
+> **Cierre editorial del 2026-09-03**: `historico/CIERRE-2026-09-03.es.md`. Es lo que hay que leer para
 > retomar: qué se hizo en los papers y las figuras, qué destaparon `P34` y `P36`, y qué decide
 > el autor antes de la próxima corrida.

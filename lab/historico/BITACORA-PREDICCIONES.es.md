@@ -1967,3 +1967,60 @@ como política de ruteo). La parte 1 es exploratoria y se eligió mirando el rec
 que se afirma de ella es el negativo de transferencia y la salvedad del eje de ausencia. La parte
 2 no elige nada y por eso se afirma como medición.
 
+## P41 — ¿el déficit de completitud dirige una reparación que mejora la respuesta? (2026-09-05)
+
+Registrada antes de generar y medir las tareas nuevas. El diagnóstico previo sobre la campaña
+vio 10 rechazos de completitud en 225 ejecuciones; ese dato motivó la intervención y no es test.
+La ruta del runner guardaba el veredicto pero no reparaba. Se implementa `app/completion_repair.py`:
+el caller autoriza una reparación; el código calcula nombres faltantes, recupera evidencia,
+pide una revisión completa y reverifica. Una respuesta que sigue incompleta se difiere.
+
+**Diseño congelado:** doce mundos nuevos, seeds 202609050–202609061, 48 personas por mundo,
+documentos hard y 1.024 tokens aproximados por unidad; una tarea C9 por mundo, idx=0, anchos
+16 y 48 alternados. El enunciado añade para TODOS los brazos que se incluya el nombre completo
+junto a la cuenta: el contrato exige nombres y el enunciado anterior sólo pedía cuentas.
+No se induce ninguna omisión. `react` y `rewoo`, modelo `luna`, hybrid/basic, tres réplicas.
+
+Se conserva una única respuesta inicial por tarea, brazo y réplica. Cuatro condiciones:
+base; retener si el contrato falla; una reparación genérica que recupera por la pregunta;
+una reparación dirigida que recupera por cada nombre faltante, con intercalado de resultados.
+Las dos reparaciones tienen el MISMO disparador, prompt de revisión y límites: 6 unidades,
+24.000 caracteres de evidencia, 40.000 caracteres de entrada y 1.024 tokens de salida,
+una sola llamada. El modelo no recibe gold ni unidades relevantes. Los errores de transporte
+se registran como `infra_error`, quedan fuera de los pares y son reintentables.
+
+El presupuesto del ejecutor inicial se acota a 16 llamadas, 320.000 caracteres acumulados
+de mensajes y herramientas y 1.024 tokens máximos de salida por llamada. Si no alcanza,
+se registra agotamiento de presupuesto; nunca se lo disfraza como error de infraestructura.
+Se cobra el gasto inicial más la reparación en cada condición. La factura física no cobra
+cuatro veces la base compartida; la comparación lógica sí la incluye en cada alternativa.
+La estimación se imprime desde los doce corpus antes de correr.
+
+**Objetivo primario:** utilidad emitida de dirigida contra genérica, promedio por mundo sobre
+los dos ejecutores y tres réplicas, IC95 por bootstrap de mundos. Diferir puntúa 0 en esta
+utilidad; también se informa utilidad candidata, cobertura, error condicionado a emisión,
+pass^3, regresiones respecto de la base, tokens y utilidad neta a λ=0,05 por 100.000 tokens.
+Se reporta piso por pseudo-brazos construidos de las réplicas de la misma condición, por celda,
+y su agregado; no se usa bootstrap del premio como si fuera un nulo.
+
+**Éxito:** al menos seis mundos con disparo; dirigida mejora utilidad emitida contra base y
+contra genérica con límites inferiores de IC95 > 0; el efecto primario excede el piso p95
+agregado y la utilidad neta contra genérica es positiva. Si mejora sólo contra base, se mide
+el valor de una segunda oportunidad, no del diagnóstico. Con menos de seis mundos con disparo,
+el experimento es inconcluso para la reparación por falta de exposición; se conserva el dato
+y no se fuerzan fallas. Si el diagnóstico no gana, se retira la afirmación de mejora y se
+mantiene únicamente el mecanismo ejecutado. Esto no prueba ganar contra todo el catálogo.
+
+No se modifican θ, EXIGE ni su piso de episodios. No se cambia el paper con una mejora supuesta.
+Script de preparación, ejecución y análisis: `bench/runs/_run_p41_repair.py`.
+
+### Estado P41 (2026-09-05): preparada, sin resultado empírico
+
+El controlador y el ensayo están implementados. Los doce mundos se generaron y verificaron
+independientemente. Las suites `test_science.py` y `test_consolidation.py` pasaron. El intento
+desde el sandbox falló por conexión y dejó una fila `infra_error`, con cero tokens; al
+reintentar fuera del sandbox el endpoint devolvió 401 PermissionDenied, antes de generar
+respuestas. Ninguna fila válida ni resultado de mejora. El autor informó que no tiene créditos
+hasta el **2026-09-13**: no se hacen más llamadas pagadas mientras siga esa restricción.
+La fecha no programa una reanudación automática. Al retomar, verificar disponibilidad y usar
+el mismo script resumible, sin modificar corpus, umbrales ni reglas para P41.

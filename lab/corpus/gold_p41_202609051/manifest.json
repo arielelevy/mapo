@@ -1,0 +1,10 @@
+{
+  "generator_version": 2,
+  "seed": 202609051,
+  "people": 48,
+  "unit_tokens": 1024,
+  "hard": true,
+  "tasks": 1,
+  "experiment": "P41",
+  "question_contract": "full_name_and_account"
+}

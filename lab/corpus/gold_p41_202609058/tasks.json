@@ -1,0 +1,62 @@
+[
+  {
+    "task_id": "c9-000-w16",
+    "cell": "C9_declared_roster",
+    "question": "For each of the following individuals, report the settlement account on file: Marta Arrieta, Damian Casaubon, Renata Berutti, Ramiro Herrera, Agustina Goitia. Return one account per individual, in any order. Include each individual's full name next to their account.",
+    "oracle": [
+      "AR3888861778",
+      "AR5032307765",
+      "AR6079729863",
+      "AR8816711390",
+      "AR8909831083"
+    ],
+    "unit_ids": [
+      "memo-000",
+      "memo-001",
+      "memo-002",
+      "memo-003",
+      "note-000",
+      "memo-004",
+      "memo-005",
+      "memo-006",
+      "memo-007",
+      "note-001",
+      "memo-008",
+      "memo-009",
+      "memo-010",
+      "memo-011",
+      "note-002",
+      "memo-012",
+      "memo-013",
+      "memo-014",
+      "memo-015",
+      "note-003"
+    ],
+    "budget_tokens": 40000,
+    "relevant_units": [
+      "memo-000",
+      "memo-005",
+      "memo-007",
+      "memo-012",
+      "memo-014"
+    ],
+    "has_oracle": false,
+    "irreversible": false,
+    "shared_writes": false,
+    "truth_n_units": 20,
+    "truth_coupling": 0.0,
+    "truth_horizon_unknown": false,
+    "obligations": [],
+    "budget_usd": null,
+    "answer_cardinality": "enumerative",
+    "coverage_demanded": "exhaustive",
+    "completeness_domain": "from_question",
+    "domain_keys": [
+      "Marta Arrieta",
+      "Damian Casaubon",
+      "Renata Berutti",
+      "Ramiro Herrera",
+      "Agustina Goitia"
+    ]
+  }
+]

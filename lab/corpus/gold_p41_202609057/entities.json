@@ -1,0 +1,785 @@
+{
+  "people": {
+    "Marta Arrieta": {
+      "surfaces": [
+        "Marta Arrieta",
+        "M. Arrieta",
+        "Marta A.",
+        "Arrieta"
+      ],
+      "canonical": "Marta Arrieta",
+      "mentioned_in": [
+        "memo-000",
+        "memo-001",
+        "note-007"
+      ],
+      "supervisor": null
+    },
+    "Ignacio Ybarra": {
+      "surfaces": [
+        "Ignacio Ybarra",
+        "I. Ybarra",
+        "Ignacio Y.",
+        "Ybarra"
+      ],
+      "canonical": "Ignacio Ybarra",
+      "mentioned_in": [
+        "memo-001",
+        "memo-005"
+      ],
+      "supervisor": "Marta Arrieta"
+    },
+    "Lucia Vallejos": {
+      "surfaces": [
+        "Lucia Vallejos",
+        "L. Vallejos",
+        "Lucia V.",
+        "Vallejos"
+      ],
+      "canonical": "Lucia Vallejos",
+      "mentioned_in": [
+        "memo-002",
+        "memo-003",
+        "memo-004",
+        "note-002"
+      ],
+      "supervisor": null
+    },
+    "Tomas Peralta": {
+      "surfaces": [
+        "Tomas Peralta",
+        "T. Peralta",
+        "Tomas P.",
+        "Peralta"
+      ],
+      "canonical": "Tomas Peralta",
+      "mentioned_in": [
+        "memo-003",
+        "memo-012",
+        "memo-037"
+      ],
+      "supervisor": "Lucia Vallejos"
+    },
+    "Valeria Novoa": {
+      "surfaces": [
+        "Valeria Novoa",
+        "V. Novoa",
+        "Valeria N.",
+        "Novoa"
+      ],
+      "canonical": "Valeria Novoa",
+      "mentioned_in": [
+        "memo-004",
+        "memo-007",
+        "memo-009",
+        "memo-029",
+        "memo-031",
+        "memo-040"
+      ],
+      "supervisor": "Lucia Vallejos"
+    },
+    "Ramiro Herrera": {
+      "surfaces": [
+        "Ramiro Herrera",
+        "R. Herrera",
+        "Ramiro H.",
+        "Herrera"
+      ],
+      "canonical": "Ramiro Herrera",
+      "mentioned_in": [
+        "memo-003",
+        "memo-005",
+        "memo-006",
+        "memo-019"
+      ],
+      "supervisor": "Ignacio Ybarra"
+    },
+    "Sofia Fontana": {
+      "surfaces": [
+        "Sofia Fontana",
+        "S. Fontana",
+        "Sofia F.",
+        "Fontana"
+      ],
+      "canonical": "Sofia Fontana",
+      "mentioned_in": [
+        "memo-006",
+        "note-013"
+      ],
+      "supervisor": "Ramiro Herrera"
+    },
+    "Damian Casaubon": {
+      "surfaces": [
+        "Damian Casaubon",
+        "D. Casaubon",
+        "Damian C.",
+        "Casaubon"
+      ],
+      "canonical": "Damian Casaubon",
+      "mentioned_in": [
+        "memo-007"
+      ],
+      "supervisor": "Valeria Novoa"
+    },
+    "Camila Wachtel": {
+      "surfaces": [
+        "Camila Wachtel",
+        "C. Wachtel",
+        "Camila W.",
+        "Wachtel"
+      ],
+      "canonical": "Camila Wachtel",
+      "mentioned_in": [
+        "memo-008",
+        "memo-009",
+        "memo-010",
+        "memo-013",
+        "memo-026",
+        "memo-036",
+        "memo-046"
+      ],
+      "supervisor": null
+    },
+    "Nicolas Uriburu": {
+      "surfaces": [
+        "Nicolas Uriburu",
+        "N. Uriburu",
+        "Nicolas U.",
+        "Uriburu"
+      ],
+      "canonical": "Nicolas Uriburu",
+      "mentioned_in": [
+        "memo-009",
+        "memo-011",
+        "memo-015",
+        "memo-022",
+        "note-010"
+      ],
+      "supervisor": "Camila Wachtel"
+    },
+    "Julieta Ochoa": {
+      "surfaces": [
+        "Julieta Ochoa",
+        "J. Ochoa",
+        "Julieta O.",
+        "Ochoa"
+      ],
+      "canonical": "Julieta Ochoa",
+      "mentioned_in": [
+        "memo-010",
+        "memo-012",
+        "memo-014"
+      ],
+      "supervisor": "Camila Wachtel"
+    },
+    "Federico Marchetti": {
+      "surfaces": [
+        "Federico Marchetti",
+        "F. Marchetti",
+        "Federico M.",
+        "Marchetti"
+      ],
+      "canonical": "Federico Marchetti",
+      "mentioned_in": [
+        "memo-011",
+        "memo-016",
+        "note-009"
+      ],
+      "supervisor": "Nicolas Uriburu"
+    },
+    "Agustina Goitia": {
+      "surfaces": [
+        "Agustina Goitia",
+        "A. Goitia",
+        "Agustina G.",
+        "Goitia"
+      ],
+      "canonical": "Agustina Goitia",
+      "mentioned_in": [
+        "memo-005",
+        "memo-012",
+        "memo-043"
+      ],
+      "supervisor": "Julieta Ochoa"
+    },
+    "Emilio Escalante": {
+      "surfaces": [
+        "Emilio Escalante",
+        "E. Escalante",
+        "Emilio E.",
+        "Escalante"
+      ],
+      "canonical": "Emilio Escalante",
+      "mentioned_in": [
+        "memo-013",
+        "memo-024",
+        "memo-027"
+      ],
+      "supervisor": "Camila Wachtel"
+    },
+    "Renata Berutti": {
+      "surfaces": [
+        "Renata Berutti",
+        "R. Berutti",
+        "Renata B.",
+        "Berutti"
+      ],
+      "canonical": "Renata Berutti",
+      "mentioned_in": [
+        "memo-014",
+        "memo-038"
+      ],
+      "supervisor": "Julieta Ochoa"
+    },
+    "Bruno Verdaguer": {
+      "surfaces": [
+        "Bruno Verdaguer",
+        "B. Verdaguer",
+        "Bruno V.",
+        "Verdaguer"
+      ],
+      "canonical": "Bruno Verdaguer",
+      "mentioned_in": [
+        "memo-015"
+      ],
+      "supervisor": "Nicolas Uriburu"
+    },
+    "Carolina Tagliaferri": {
+      "surfaces": [
+        "Carolina Tagliaferri",
+        "C. Tagliaferri",
+        "Carolina T.",
+        "Tagliaferri"
+      ],
+      "canonical": "Carolina Tagliaferri",
+      "mentioned_in": [
+        "memo-016",
+        "memo-020"
+      ],
+      "supervisor": null
+    },
+    "Mateo Nardelli": {
+      "surfaces": [
+        "Mateo Nardelli",
+        "M. Nardelli",
+        "Mateo N.",
+        "Nardelli"
+      ],
+      "canonical": "Mateo Nardelli",
+      "mentioned_in": [
+        "memo-017",
+        "memo-019",
+        "memo-023",
+        "note-005"
+      ],
+      "supervisor": null
+    },
+    "Paula Lascano": {
+      "surfaces": [
+        "Paula Lascano",
+        "P. Lascano",
+        "Paula L.",
+        "Lascano"
+      ],
+      "canonical": "Paula Lascano",
+      "mentioned_in": [
+        "memo-010",
+        "memo-018",
+        "memo-021",
+        "memo-028",
+        "memo-033"
+      ],
+      "supervisor": null
+    },
+    "Gonzalo Ferreyra": {
+      "surfaces": [
+        "Gonzalo Ferreyra",
+        "G. Ferreyra",
+        "Gonzalo F.",
+        "Ferreyra"
+      ],
+      "canonical": "Gonzalo Ferreyra",
+      "mentioned_in": [
+        "memo-019",
+        "memo-021",
+        "note-002",
+        "note-006"
+      ],
+      "supervisor": "Mateo Nardelli"
+    },
+    "Micaela Dellepiane": {
+      "surfaces": [
+        "Micaela Dellepiane",
+        "M. Dellepiane",
+        "Micaela D.",
+        "Dellepiane"
+      ],
+      "canonical": "Micaela Dellepiane",
+      "mentioned_in": [
+        "memo-020",
+        "note-014"
+      ],
+      "supervisor": "Carolina Tagliaferri"
+    },
+    "Esteban Aguirregaray": {
+      "surfaces": [
+        "Esteban Aguirregaray",
+        "E. Aguirregaray",
+        "Esteban A.",
+        "Aguirregaray"
+      ],
+      "canonical": "Esteban Aguirregaray",
+      "mentioned_in": [
+        "memo-021",
+        "note-001",
+        "note-012"
+      ],
+      "supervisor": "Gonzalo Ferreyra"
+    },
+    "Marta Urquiza": {
+      "surfaces": [
+        "Marta Urquiza",
+        "M. Urquiza",
+        "Marta U.",
+        "Urquiza"
+      ],
+      "canonical": "Marta Urquiza",
+      "mentioned_in": [
+        "memo-000",
+        "memo-022",
+        "note-004",
+        "note-014"
+      ],
+      "supervisor": null
+    },
+    "Ignacio Sotelo": {
+      "surfaces": [
+        "Ignacio Sotelo",
+        "I. Sotelo",
+        "Ignacio S.",
+        "Sotelo"
+      ],
+      "canonical": "Ignacio Sotelo",
+      "mentioned_in": [
+        "memo-007",
+        "memo-023"
+      ],
+      "supervisor": "Mateo Nardelli"
+    },
+    "Lucia Maidana": {
+      "surfaces": [
+        "Lucia Maidana",
+        "L. Maidana",
+        "Lucia M.",
+        "Maidana"
+      ],
+      "canonical": "Lucia Maidana",
+      "mentioned_in": [
+        "memo-014",
+        "memo-024",
+        "memo-025",
+        "memo-026",
+        "memo-031"
+      ],
+      "supervisor": null
+    },
+    "Tomas Krause": {
+      "surfaces": [
+        "Tomas Krause",
+        "T. Krause",
+        "Tomas K.",
+        "Krause"
+      ],
+      "canonical": "Tomas Krause",
+      "mentioned_in": [
+        "memo-025",
+        "note-012"
+      ],
+      "supervisor": "Lucia Maidana"
+    },
+    "Valeria Elizalde": {
+      "surfaces": [
+        "Valeria Elizalde",
+        "V. Elizalde",
+        "Valeria E.",
+        "Elizalde"
+      ],
+      "canonical": "Valeria Elizalde",
+      "mentioned_in": [
+        "memo-002",
+        "memo-026",
+        "memo-027",
+        "memo-028",
+        "memo-029"
+      ],
+      "supervisor": "Lucia Maidana"
+    },
+    "Ramiro Camino": {
+      "surfaces": [
+        "Ramiro Camino",
+        "R. Camino",
+        "Ramiro C.",
+        "Camino"
+      ],
+      "canonical": "Ramiro Camino",
+      "mentioned_in": [
+        "memo-027",
+        "memo-035",
+        "memo-045"
+      ],
+      "supervisor": "Valeria Elizalde"
+    },
+    "Sofia Zabaleta": {
+      "surfaces": [
+        "Sofia Zabaleta",
+        "S. Zabaleta",
+        "Sofia Z.",
+        "Zabaleta"
+      ],
+      "canonical": "Sofia Zabaleta",
+      "mentioned_in": [
+        "memo-028",
+        "memo-030",
+        "memo-034"
+      ],
+      "supervisor": "Valeria Elizalde"
+    },
+    "Damian Toledo": {
+      "surfaces": [
+        "Damian Toledo",
+        "D. Toledo",
+        "Damian T.",
+        "Toledo"
+      ],
+      "canonical": "Damian Toledo",
+      "mentioned_in": [
+        "memo-018",
+        "memo-025",
+        "memo-029",
+        "memo-030",
+        "note-010"
+      ],
+      "supervisor": "Valeria Elizalde"
+    },
+    "Camila Robledo": {
+      "surfaces": [
+        "Camila Robledo",
+        "C. Robledo",
+        "Camila R.",
+        "Robledo"
+      ],
+      "canonical": "Camila Robledo",
+      "mentioned_in": [
+        "memo-005",
+        "memo-030",
+        "memo-042"
+      ],
+      "supervisor": "Damian Toledo"
+    },
+    "Nicolas Lombardi": {
+      "surfaces": [
+        "Nicolas Lombardi",
+        "N. Lombardi",
+        "Nicolas L.",
+        "Lombardi"
+      ],
+      "canonical": "Nicolas Lombardi",
+      "mentioned_in": [
+        "memo-007",
+        "memo-031",
+        "note-008"
+      ],
+      "supervisor": "Lucia Maidana"
+    },
+    "Julieta Jauregui": {
+      "surfaces": [
+        "Julieta Jauregui",
+        "J. Jauregui",
+        "Julieta J.",
+        "Jauregui"
+      ],
+      "canonical": "Julieta Jauregui",
+      "mentioned_in": [
+        "memo-019",
+        "memo-032"
+      ],
+      "supervisor": null
+    },
+    "Federico Duarte": {
+      "surfaces": [
+        "Federico Duarte",
+        "F. Duarte",
+        "Federico D.",
+        "Duarte"
+      ],
+      "canonical": "Federico Duarte",
+      "mentioned_in": [
+        "memo-033",
+        "memo-036",
+        "memo-037"
+      ],
+      "supervisor": null
+    },
+    "Agustina Basualdo": {
+      "surfaces": [
+        "Agustina Basualdo",
+        "A. Basualdo",
+        "Agustina B.",
+        "Basualdo"
+      ],
+      "canonical": "Agustina Basualdo",
+      "mentioned_in": [
+        "memo-034",
+        "memo-035"
+      ],
+      "supervisor": null
+    },
+    "Emilio Yrigoyen": {
+      "surfaces": [
+        "Emilio Yrigoyen",
+        "E. Yrigoyen",
+        "Emilio Y.",
+        "Yrigoyen"
+      ],
+      "canonical": "Emilio Yrigoyen",
+      "mentioned_in": [
+        "memo-006",
+        "memo-035",
+        "note-015"
+      ],
+      "supervisor": "Agustina Basualdo"
+    },
+    "Renata Sarmiento": {
+      "surfaces": [
+        "Renata Sarmiento",
+        "R. Sarmiento",
+        "Renata S.",
+        "Sarmiento"
+      ],
+      "canonical": "Renata Sarmiento",
+      "mentioned_in": [
+        "memo-036",
+        "note-003",
+        "note-009"
+      ],
+      "supervisor": "Federico Duarte"
+    },
+    "Bruno Quintana": {
+      "surfaces": [
+        "Bruno Quintana",
+        "B. Quintana",
+        "Bruno Q.",
+        "Quintana"
+      ],
+      "canonical": "Bruno Quintana",
+      "mentioned_in": [
+        "memo-037",
+        "memo-038"
+      ],
+      "supervisor": "Federico Duarte"
+    },
+    "Carolina Kessler": {
+      "surfaces": [
+        "Carolina Kessler",
+        "C. Kessler",
+        "Carolina K.",
+        "Kessler"
+      ],
+      "canonical": "Carolina Kessler",
+      "mentioned_in": [
+        "memo-038",
+        "note-001"
+      ],
+      "supervisor": "Bruno Quintana"
+    },
+    "Mateo Iriarte": {
+      "surfaces": [
+        "Mateo Iriarte",
+        "M. Iriarte",
+        "Mateo I.",
+        "Iriarte"
+      ],
+      "canonical": "Mateo Iriarte",
+      "mentioned_in": [
+        "memo-001",
+        "memo-039"
+      ],
+      "supervisor": null
+    },
+    "Paula Cavallero": {
+      "surfaces": [
+        "Paula Cavallero",
+        "P. Cavallero",
+        "Paula C.",
+        "Cavallero"
+      ],
+      "canonical": "Paula Cavallero",
+      "mentioned_in": [
+        "memo-033",
+        "memo-040",
+        "memo-041",
+        "memo-045",
+        "note-000"
+      ],
+      "supervisor": null
+    },
+    "Gonzalo Alcorta": {
+      "surfaces": [
+        "Gonzalo Alcorta",
+        "G. Alcorta",
+        "Gonzalo A.",
+        "Alcorta"
+      ],
+      "canonical": "Gonzalo Alcorta",
+      "mentioned_in": [
+        "memo-004",
+        "memo-041"
+      ],
+      "supervisor": "Paula Cavallero"
+    },
+    "Micaela Ximenez": {
+      "surfaces": [
+        "Micaela Ximenez",
+        "M. Ximenez",
+        "Micaela X.",
+        "Ximenez"
+      ],
+      "canonical": "Micaela Ximenez",
+      "mentioned_in": [
+        "memo-042",
+        "memo-043"
+      ],
+      "supervisor": null
+    },
+    "Esteban Rinaldi": {
+      "surfaces": [
+        "Esteban Rinaldi",
+        "E. Rinaldi",
+        "Esteban R.",
+        "Rinaldi"
+      ],
+      "canonical": "Esteban Rinaldi",
+      "mentioned_in": [
+        "memo-003",
+        "memo-043",
+        "memo-044"
+      ],
+      "supervisor": "Micaela Ximenez"
+    },
+    "Marta Pizarro": {
+      "surfaces": [
+        "Marta Pizarro",
+        "M. Pizarro",
+        "Marta P.",
+        "Pizarro"
+      ],
+      "canonical": "Marta Pizarro",
+      "mentioned_in": [
+        "memo-044"
+      ],
+      "supervisor": "Esteban Rinaldi"
+    },
+    "Ignacio Juarez": {
+      "surfaces": [
+        "Ignacio Juarez",
+        "I. Juarez",
+        "Ignacio J.",
+        "Juarez"
+      ],
+      "canonical": "Ignacio Juarez",
+      "mentioned_in": [
+        "memo-045"
+      ],
+      "supervisor": "Paula Cavallero"
+    },
+    "Lucia Hurtado": {
+      "surfaces": [
+        "Lucia Hurtado",
+        "L. Hurtado",
+        "Lucia H.",
+        "Hurtado"
+      ],
+      "canonical": "Lucia Hurtado",
+      "mentioned_in": [
+        "memo-006",
+        "memo-015",
+        "memo-046"
+      ],
+      "supervisor": null
+    },
+    "Tomas Bengochea": {
+      "surfaces": [
+        "Tomas Bengochea",
+        "T. Bengochea",
+        "Tomas B.",
+        "Bengochea"
+      ],
+      "canonical": "Tomas Bengochea",
+      "mentioned_in": [
+        "memo-013",
+        "memo-020",
+        "memo-039",
+        "memo-047"
+      ],
+      "supervisor": null
+    }
+  },
+  "firms": {
+    "Andesmar Holdings": [
+      "Andesmar Holdings",
+      "AH",
+      "Andesmar"
+    ],
+    "Boreal Trading": [
+      "Boreal Trading",
+      "BT",
+      "Boreal"
+    ],
+    "Cardenal Capital": [
+      "Cardenal Capital",
+      "CC",
+      "Cardenal"
+    ],
+    "Delta Sur SA": [
+      "Delta Sur SA",
+      "DSS",
+      "Delta"
+    ],
+    "Elqui Partners": [
+      "Elqui Partners",
+      "EP",
+      "Elqui"
+    ],
+    "Farallon Group": [
+      "Farallon Group",
+      "FG",
+      "Farallon"
+    ],
+    "Huemul Invest": [
+      "Huemul Invest",
+      "HI",
+      "Huemul"
+    ],
+    "Ipanema Freight": [
+      "Ipanema Freight",
+      "IF",
+      "Ipanema"
+    ],
+    "Jujuy Minerals": [
+      "Jujuy Minerals",
+      "JM",
+      "Jujuy"
+    ],
+    "Kaipo Servicios": [
+      "Kaipo Servicios",
+      "KS",
+      "Kaipo"
+    ],
+    "Lanin Assets": [
+      "Lanin Assets",
+      "LA",
+      "Lanin"
+    ]
+  },
+  "ambiguous": {}
+}

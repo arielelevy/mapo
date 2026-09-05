@@ -35,7 +35,11 @@ contra un piso de ruido de `0,0655` al λ=0,05 con que decide el banco, y sólo 
 λ=0,2. `aceptada: False`; el mundo final no se consumió. Diseño en `lab/PATRON_REC.es.md`;
 arquitectura y deuda en `lab/DISENO.es.md`. Nada entra al paper hasta ejecutarse y medirse.
 Handoff exhaustivo para retomar sin el chat: `lab/historico/CIERRE-2026-08-27.es.md`.
-**El más reciente es `lab/historico/CIERRE-2026-09-03.es.md`**: pasada editorial de los dos
+**El más reciente es `lab/historico/CIERRE-2026-09-05-P41.es.md`**: reparación dirigida por
+déficit de completitud implementada, doce mundos nuevos verificados y pruebas locales aprobadas.
+**Sin resultado empírico; el autor no tiene créditos hasta el 2026-09-13.** No relanzar llamadas
+pagadas mientras siga esa restricción. No hay reanudación automática.
+El cierre editorial anterior es `lab/historico/CIERRE-2026-09-03.es.md`: pasada editorial de los dos
 papers, figuras de arquitectura nuevas, recorte del largo, las seis apuestas `P31`–`P36` y el
 veredicto de las dos gratis (`P34` parcial, `P36` fracaso), con dos decisiones pendientes del
 autor: el eje `answer_cardinality` en el vocabulario y el piso de ocho episodios.
