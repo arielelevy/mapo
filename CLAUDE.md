@@ -146,6 +146,10 @@ paradigma es el caso medido primero, no el alcance del producto.
   ejecutado en `spikes/temporal/` (cuatro pruebas pasadas, `RESULTADO.md`; detalle en
   `ARQUITECTURA.es.md` §2.3bis). Lo que no cambia: `mapo.core` nunca corre dentro de un
   workflow, el banco sigue sin framework, y el plano de query sigue en SSE.
+  **Infra local (2026-09-05): `infra/`.** Contenedores con `wslc` (WSL 2.9.10 pre-release),
+  no Docker Desktop; `infra/wslc/stack.ps1` levanta Postgres 18, Temporal y su UI. El
+  esquema del ledger (§5) está aplicado y sus guardas SQL (§10) pasan. Falta la migración
+  del JSONL y el adapter. Contraseña de Postgres en la variable de usuario `MAPO_PG_PASSWORD`.
 
 - **MAPO es este repo en `D:\Apps\MAPO`** (whitepaper + lab + legacy juntos),
   remote `origin` = github.com/arielelevy/mapo (PRIVADO), rama `main`, con las dos

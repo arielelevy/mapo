@@ -163,9 +163,15 @@ como candidato en evaluación, y el `not_before` de la work table que este docum
 hubiera necesitado para esperas largas con hora conocida ya no hace falta: es
 `workflow.sleep`. La razón 1 de §2.1 se sostiene con una regla, no con una prohibición:
 el workflow sólo orquesta; `mapo.core` nunca corre dentro de uno y la decisión no aparece
-en la event history. La razón 2 sigue abierta y es lo que el spike no midió: el costo de
-levantar el server con su esquema en Postgres y la UI on-prem. La razón 3 no cambia: el
-plano de query sigue en §6.
+en la event history. La razón 3 no cambia: el plano de query sigue en §6.
+
+La razón 2 se midió el mismo día, más tarde: server `temporalio/auto-setup` con esquema en
+el Postgres 18 del ledger (bases `temporal` y `temporal_visibility`) más `temporalio/ui`,
+en contenedores `wslc` (`infra/wslc/stack.ps1`, `infra/README.es.md`). El spike pasó igual
+que contra el server de desarrollo (7,8 s, 10,0 s, duplicado rechazado, fan-out 7,1 s). La
+VM de contenedores pasó de 763 MB vacía a 1.248 MB con Postgres, Temporal y UI corriendo.
+Ése es el costo operativo: dos contenedores más que §7 y dos bases en el Postgres que ya
+existe.
 
 ### 2.4 Por qué la fase 0 alcanza
 
@@ -583,6 +589,12 @@ tei             embeddings on-prem       (perfil opcional)
 ```
 
 Volúmenes: `pgdata`, `weaviate_data`, `artifacts` (content-addressed).
+
+**Runtime local (2026-09-05): `wslc`, no Docker Desktop.** Contenedores nativos de WSL
+2.9.10 (pre-release), misma sintaxis que Docker, sin `compose`: lo reemplaza
+`infra/wslc/stack.ps1`. Postgres 18 ya corre ahí con el esquema de §5 aplicado
+(`infra/postgres/001_ledger.sql`) y las guardas SQL de §10 en verde
+(`infra/postgres/test_ledger.sql`). Pendiente del paso 1 de §9: migrar el JSONL y el adapter.
 
 Redis es opcional con una sola réplica de `mapo-api` —bus in-process detrás del mismo
 port `EventBus`— y pasa a obligatorio en cuanto haya dos.
