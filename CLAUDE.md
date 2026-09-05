@@ -45,8 +45,8 @@ veredicto de las dos gratis (`P34` parcial, `P36` fracaso), con dos decisiones p
 autor: el eje `answer_cardinality` en el vocabulario y el piso de ocho episodios.
 
 **Arquitectura de plataforma (PROPUESTA, 2026-08-27): `lab/ARQUITECTURA.es.md`.** Fija
-las decisiones físicas del producto: on-prem/Docker; NO Temporal todavía (work table en
-Postgres ahora, DBOS después, Temporal sólo con disparadores escritos) y NO LangGraph
+las decisiones físicas del producto: on-prem/Docker; Temporal en prueba desde el 2026-09-05
+para ingesta y fan-out de agentes (`spikes/temporal/`; antes decía "NO todavía") y NO LangGraph
 nunca; Docling como extractor primario con procedencia página+bbox y un sensor barato
 —`pypdfium2`, no PyMuPDF, que es AGPL— decidiendo OCR antes de la primera pasada;
 Weaviate con hybrid y una colección por versión de índice, con `live_pointer` en Postgres
@@ -141,6 +141,11 @@ paradigma es el caso medido primero, no el alcance del producto.
   paradigmas siguen siendo funciones async planas — el banco mide exactamente lo que
   producción ejecuta. (Supersede la entrada anterior "Temporal: sí para la ingesta",
   que era una decisión en principio.)
+  **Actualización 2026-09-05: el autor decidió probar Temporal** para la ingesta, las
+  tareas async y el fan-out/fan-in de agentes, antes de que dispare un gatillo. Spike
+  ejecutado en `spikes/temporal/` (cuatro pruebas pasadas, `RESULTADO.md`; detalle en
+  `ARQUITECTURA.es.md` §2.3bis). Lo que no cambia: `mapo.core` nunca corre dentro de un
+  workflow, el banco sigue sin framework, y el plano de query sigue en SSE.
 
 - **MAPO es este repo en `D:\Apps\MAPO`** (whitepaper + lab + legacy juntos),
   remote `origin` = github.com/arielelevy/mapo (PRIVADO), rama `main`, con las dos

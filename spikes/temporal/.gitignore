@@ -1,0 +1,6 @@
+.temporal-dev.db*
+spike_ledger.db*
+.mark_*
+.crash_after_verify
+__pycache__/
+demo_run.log

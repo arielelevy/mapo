@@ -137,6 +137,36 @@ que la decisión no se vuelva a discutir:
 - fan-out sobre más de una máquina;
 - un segundo lenguaje o servicio en el pipeline.
 
+### 2.3bis Spike ejecutado (2026-09-05): el autor decide probar Temporal
+
+El autor decidió probar Temporal para la ingesta, las tareas asincrónicas y el
+fan-out/fan-in de agentes, antes de que dispare ninguno de los tres gatillos de §2.3. Por
+la regla del repo, primero se corrió y después se escribe: el spike está en
+`spikes/temporal/` (`README.es.md`, `RESULTADO.md`) y pasó cuatro pruebas contra un
+`temporal server start-dev` local con actividades stub, sin llamadas al modelo:
+
+- caída del worker entre `verify` y el flip de `live_pointer`: los cinco pasos previos
+  corrieron una sola vez y `promote` lo completó otro worker, 7,4 s en total;
+- un 429 con hora de reset convertido en timer durable del server, con el worker matado
+  durante la espera: el workflow durmió 5,99 s y completó en otro worker;
+- reingesta del mismo hash rechazada con `REJECT_DUPLICATE`, tabla `chunk` sin cambios;
+- fan-out de cinco agentes con `asyncio.gather` en el workflow, una rama reintentada por
+  RetryPolicy y otra reejecutada tras timer durable sin afectar al resto.
+
+Dos parámetros salieron de medir, no de leer: `heartbeat_timeout` en toda actividad
+(sin él la caída se detectó a los 20 s del `start_to_close`, con él a los 3 s) y
+`sticky_queue_schedule_to_start_timeout` bajo en el `Worker` (el default de 10 s retenía
+el workflow task en la cola del worker muerto).
+
+Qué cambia y qué no. El plano de ingesta y el fan-out de agentes pasan a tener a Temporal
+como candidato en evaluación, y el `not_before` de la work table que este documento
+hubiera necesitado para esperas largas con hora conocida ya no hace falta: es
+`workflow.sleep`. La razón 1 de §2.1 se sostiene con una regla, no con una prohibición:
+el workflow sólo orquesta; `mapo.core` nunca corre dentro de uno y la decisión no aparece
+en la event history. La razón 2 sigue abierta y es lo que el spike no midió: el costo de
+levantar el server con su esquema en Postgres y la UI on-prem. La razón 3 no cambia: el
+plano de query sigue en §6.
+
 ### 2.4 Por qué la fase 0 alcanza
 
 `chat/batch/services/redis_task_queue.py` son 612 líneas de cola artesanal: Redis
