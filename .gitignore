@@ -6,3 +6,6 @@ __pycache__/
 lab/cache/
 lab/results/
 lab/state/
+
+# skills del proyecto: junction al store en OneDrive, no se versiona
+.agents/
