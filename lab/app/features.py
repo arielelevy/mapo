@@ -30,6 +30,7 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 from typing import Any
 
+from .beliefs import Acquisition
 from .llm import LLMClient, Usage
 
 
@@ -105,6 +106,27 @@ FEATURE_SENSOR: dict[str, str | None] = {
     # Sin sensor, y por eso no cuenta como hueco cerrable. Darle uno o sacarlo es una
     # decisión abierta (`EP-3`); mientras tanto, que no haga abstenerse por nada.
     "horizon_unknown": None,
+}
+
+# POR QUÉ VÍA SE CIERRA CADA HUECO (2026-09-07)
+#
+# `FEATURE_SENSOR` contesta «¿quién lo puede ir a buscar?» con un binario: hay sonda o hay
+# `None`. Eso alcanzaba mientras las dos únicas vías fueran *medir este request* o *nada*.
+# `beliefs.Acquisition` tipa la respuesta y agrega la que faltaba —`LEARNABLE`, que no se
+# saca de este pedido pero sí del ledger— y con eso el `None` deja de ser ambiguo: hoy
+# significa las dos cosas a la vez, «nadie puede» y «no está declarado».
+#
+# ESTE MAPA NO AGREGA NINGÚN EJE A φ, y es deliberado. El primer eje `LEARNABLE` del sistema
+# —`reuse_horizon`, ver `reuse.py`— **no es un feature**: es una creencia sobre la población
+# de pedidos, no sobre éste. Meterlo en `Features` sería el mismo error de categoría que
+# `Scope` existe para impedir, y lo haría entrar a `region()` y a la proyección D2, donde no
+# tiene nada que hacer. φ describe un request; el ledger describe la población.
+#
+# O sea que acá `LEARNABLE` no aparece, y `learnable_gaps()` devuelve vacío **por
+# construcción y no por casualidad**: es la frontera entre las dos capas, escrita.
+FEATURE_ACQUISITION: dict[str, Acquisition] = {
+    "coupling": Acquisition.PROBEABLE,      # `probe.probe_coupling`, y cuesta una llamada
+    "horizon_unknown": Acquisition.UNAVAILABLE,  # el `None` de §78, ahora con nombre
 }
 
 COMPUTABLE_FEATURES = tuple(
@@ -354,12 +376,52 @@ class Features:
         fallback, así que un eje que **nadie** puede llenar hace abstenerse al motor para
         siempre y sin motivo. Medido, `horizon_unknown` es exactamente eso: sin sensor, sin
         regla que lo lea, fuera de la región, y constante en las 3.884 filas que lo llevan.
+
+        DOS CONDICIONES, y son más angostas que «tiene entrada en `FEATURE_SENSOR`»:
+        cerrarlo tiene que **costar una llamada** y tiene que haber quién la haga. Un eje
+        aprendible del ledger cumple lo segundo y no lo primero, y por eso no dispara nada:
+        mandar una sonda ahí gastaría una llamada por algo que es aritmética gratis.
         """
-        return tuple(n for n in self.missing() if FEATURE_SENSOR.get(n))
+        return tuple(
+            n for n in self.missing()
+            if FEATURE_ACQUISITION.get(n, Acquisition.UNAVAILABLE).costs_a_call
+            and FEATURE_SENSOR.get(n)
+        )
+
+    def learnable_gaps(self) -> tuple[str, ...]:
+        """Lo que falta, ningún sensor puede medir en este pedido, y el LEDGER sabría.
+
+        HOY DEVUELVE VACÍO, Y ESO ES LA AFIRMACIÓN, no una pendiente. Ningún eje de φ es
+        `LEARNABLE` porque φ describe **este** request y lo aprendible describe la
+        **población**: son dos alcances y `Scope` existe para no confundirlos. El primer
+        eje `LEARNABLE` del sistema vive en `reuse.py`, fuera de acá, y por eso este método
+        es la frontera entre las dos capas escrita como código en vez de como comentario.
+
+        Se prueba que siga vacío (`test_science` §81). El día que alguien meta un eje
+        aprendible en φ, ese chequeo falla y obliga a justificar el cambio de capa.
+        """
+        aprendible = Acquisition.LEARNABLE
+        return tuple(
+            n for n in self.missing()
+            if FEATURE_ACQUISITION.get(n, Acquisition.UNAVAILABLE) is aprendible
+        )
 
     def permanent_gaps(self) -> tuple[str, ...]:
-        """Lo que falta y **ningún sensor puede establecer**. Informa, no dispara nada."""
-        return tuple(n for n in self.missing() if not FEATURE_SENSOR.get(n))
+        """Lo que falta y **nadie puede establecer, por ninguna vía**. Informa, no dispara.
+
+        AHORA SE DECIDE POR `Acquisition` Y NO POR LA AUSENCIA DE SONDA. Antes era «no hay
+        entrada en `FEATURE_SENSOR`», y esa condición es verdadera para dos cosas distintas:
+        un eje que nadie puede cerrar, y un eje que **nadie declaró**.
+
+        EL DEFAULT SIGUE SIENDO CONSERVADOR —lo no declarado se trata como incerrable— y por
+        eso el default NO es lo que arregla el silencio: lo arregla `test_science` §81, que
+        exige que todo eje `DERIVED` tenga su vía declarada. El default está para que un
+        olvido falle del lado seguro mientras tanto, no para tolerarlo.
+        """
+        return tuple(
+            n for n in self.missing()
+            if not FEATURE_ACQUISITION.get(n, Acquisition.UNAVAILABLE).closeable
+        )
 
     def region(self) -> str:
         """La región discreta: la clave con la que se aprende. **Medida, no elegida.**

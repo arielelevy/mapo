@@ -109,6 +109,100 @@ class Scope(str, Enum):
     POPULATION = "population"
 
 
+class Acquisition(str, Enum):
+    """CÓMO SE PUEDE LLEGAR A CREER lo que hoy no se cree. El tercer eje.
+
+    `Provenance` ordena **cómo** se obtuvo una creencia y `Scope` dice **sobre qué** es.
+    Los dos describen una creencia que YA EXISTE. Faltaba el eje que describe un HUECO:
+    cuando `current()` devuelve `None`, la base sabe que no sabe, y no sabe nada más.
+
+    Y NO ES SIMETRÍA DE DISEÑO, ES UN DEFECTO CON PRECIO MEDIDO. `features.py` ya tuvo que
+    inventar media respuesta —`FEATURE_SENSOR`, con `None` como valor válido— porque un eje
+    sin establecer acota la confianza y empuja al router al fallback: un hueco que **nadie
+    puede cerrar** hace abstenerse al motor para siempre y sin motivo. Eso fue
+    `horizon_unknown`, y costó 3.884 filas descubrirlo (`test_science` §78).
+
+    Esa media respuesta es BINARIA —hay sonda o no hay— y hay un caso que no es ninguno de
+    los dos:
+
+        MEASURED     una función pura del payload lo computa        -> COMPUTED  / REQUEST
+        PROBEABLE    una sonda lo puede ir a medir, pagando         -> OBSERVED  / REQUEST
+        ELICITABLE   se le puede preguntar al modelo                -> ELICITED  / REQUEST
+        LEARNABLE    de ESTE pedido nadie; del LEDGER, aritmética   -> COMPUTED  / POPULATION
+        UNAVAILABLE  nadie, por ninguna vía                         -> nada
+
+    `LEARNABLE` ES EL CASILLERO QUE FALTABA, y no es una comodidad de vocabulario: hoy un
+    eje así cae en `permanent_gaps()` —«nadie puede»— que es **exactamente** la mentira que
+    §78 arregló, con la misma consecuencia de abstenerse sin motivo sobre algo que el
+    registro ya sabe.
+
+    Y ES SEGURO SIN AGREGAR NINGUNA GUARDA, que es lo que lo hace admisible acá. Una
+    creencia aprendida entra `COMPUTED` sobre `POPULATION`, y `admissible_for_action` ya
+    exige `Scope.REQUEST`: una regularidad estadística **no puede gatear lo irreversible**
+    porque el retículo ya lo impide, no porque este enum agregue una excepción. Es la misma
+    honestidad en dos ejes que `association.py` tuvo que justificar a mano; acá se declara.
+
+    LO QUE ESTE ENUM NO HACE, y conviene decirlo antes de que alguien lo asuma: no promete
+    que la vía exista hoy. `LEARNABLE` dice que **el ledger es el lugar donde se aprendería**,
+    no que este ledger tenga las filas. Un eje puede ser `LEARNABLE` y devolver nada, y eso
+    es una medición de ausencia, no un error. Ver `reuse.py`.
+    """
+
+    MEASURED = "measured"
+    PROBEABLE = "probeable"
+    ELICITABLE = "elicitable"
+    LEARNABLE = "learnable"
+    UNAVAILABLE = "unavailable"
+
+    def resolves_to(self) -> tuple[Provenance, Scope] | None:
+        """Con qué procedencia y alcance entraría la creencia si esa vía se ejerciera.
+
+        `None` para `UNAVAILABLE`: no hay creencia al final de esa vía porque no hay vía.
+        """
+        return {
+            Acquisition.MEASURED: (Provenance.COMPUTED, Scope.REQUEST),
+            Acquisition.PROBEABLE: (Provenance.OBSERVED, Scope.REQUEST),
+            Acquisition.ELICITABLE: (Provenance.ELICITED, Scope.REQUEST),
+            Acquisition.LEARNABLE: (Provenance.COMPUTED, Scope.POPULATION),
+            Acquisition.UNAVAILABLE: None,
+        }[self]
+
+    @property
+    def closeable(self) -> bool:
+        """Si el hueco se puede cerrar por ALGUNA vía. Es lo que separa un hueco de un límite."""
+        return self is not Acquisition.UNAVAILABLE
+
+    @property
+    def costs_a_call(self) -> bool:
+        """Si ejercer la vía gasta una llamada al modelo. Lo que decide si vale sondear.
+
+        `LEARNABLE` es gratis y por eso es la vía preferida cuando existe: es aritmética
+        sobre filas que ya se pagaron. Es el mismo argumento por el que `consolidation.py`
+        no necesita inferencia — el sustrato ya está.
+        """
+        return self in (Acquisition.PROBEABLE, Acquisition.ELICITABLE)
+
+
+def acquisition_closes_for_action(acq: Acquisition, floor: Provenance) -> bool:
+    """Si cerrar el hueco por esa vía alcanzaría para SOSTENER UNA ACCIÓN con ese piso.
+
+    LA PREGUNTA QUE CONTESTA, y que hoy sólo se contesta después de gastar: un plan que
+    manda a sondear para poder tomar una acción irreversible puede estar mandando a pagar
+    una llamada que **no va a alcanzar igual**. Con las dos condiciones de
+    `admissible_for_action` —piso de procedencia y alcance `REQUEST`— eso se sabe antes.
+
+    `LEARNABLE` devuelve `False` para **todo** piso, `ASSUMED` incluido, y ésa es la
+    afirmación central: aprender del registro nunca habilita una acción, por bien medido que
+    esté el número. No lo decide la procedencia —que es `COMPUTED`, la más alta— sino el
+    alcance, que es la segunda condición de `admissible_for_action`.
+    """
+    resuelve = acq.resolves_to()
+    if resuelve is None:
+        return False
+    provenance, scope = resuelve
+    return provenance.at_least(floor) and scope is Scope.REQUEST
+
+
 class Rejection(str, Enum):
     """Why a requirement was not met — as a value, not as a sentence.
 

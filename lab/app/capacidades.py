@@ -142,6 +142,19 @@ CATALOGO: tuple[Capacidad, ...] = (
         "respuestas equivocadas. Los demás contestan igual. El banco puntúa las dos con "
         "0,000 y ahí es ciego",
     ),
+    # ── la que NO tiene ningún brazo, y por eso vale declararla (2026-09-07) ────────
+    Capacidad(
+        "PERSISTE_ENTRE_REQUESTS",
+        "lo que este pedido establece sobrevive a que se descargue el contexto, y cambia lo "
+        "que hace un pedido POSTERIOR: no un hilo más largo, un trazo que otro request lee",
+        "el número es EXTERNO y se declara como tal — `Memory Depth, Not Memory Access` "
+        "(arXiv 2606.26806) mide el *depth flip*: recuperación 0,956-0,973 contra escritura "
+        "selectiva 0,463-0,483 en recall factual corto, y 0,394-0,398 contra 0,812-0,904 en "
+        "persistencia de meta tras descargar el contexto. Ningún lado gana los dos, así que "
+        "el ganador lo decide un eje y no un brazo — que es la forma exacta de `P15`. "
+        "**Cero de los doce brazos la tienen**: el banco es de turno único por construcción, "
+        "y ésa es la afirmación, no una omisión",
+    ),
 )
 
 NOMBRES = tuple(c.nombre for c in CATALOGO)
@@ -222,6 +235,12 @@ EXIGE: dict[str, set[str]] = {
     "horizonte_desconocido": {"ADAPTA"},
     "entidad_nombrada": {"ELIGE_INDICE_POR_CONSULTA"},
     "material_mayor_que_ventana": {"COSTO_NO_ESCALA_CON_ALCANCE"},
+    # EL SEGUNDO HUECO QUE LA TABLA ENCUENTRA SIN CORRER NADA (`C2`, 2026-09-07). Igual que
+    # `ausencia`, `reuso_diferido` no tiene NINGÚN brazo capaz — y a diferencia de `ausencia`,
+    # que necesita juntar dos capacidades que existen por separado, ésta no la tiene nadie
+    # porque **ningún brazo del catálogo escribe nada que sobreviva al request**. Predice
+    # sobre un brazo que todavía no existe, que es para lo que el catálogo se declaró.
+    "reuso_diferido": {"PERSISTE_ENTRE_REQUESTS"},
 }
 
 

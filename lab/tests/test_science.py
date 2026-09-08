@@ -5925,6 +5925,140 @@ def check_measured_cost_supersedes_prior(ok: bool) -> bool:
     return ok
 
 
+def check_learnable_is_a_third_kind_of_gap(ok: bool) -> bool:
+    """§81: hay una tercera forma de cerrar un hueco, y no habilita lo irreversible.
+
+    §78 dejo la superficie de «que puede faltar» partida en DOS —«no lo se y puedo
+    averiguarlo» contra «no lo se y nadie puede»— y esa particion es incompleta. Hay un
+    tercer caso: **de este pedido nadie lo puede establecer, y el ledger lo sabe**. Hoy cae
+    del lado de «nadie puede», que es exactamente la mentira que §78 arreglo, con la misma
+    consecuencia: abstenerse para siempre sobre algo que el registro ya contesta.
+
+    `beliefs.Acquisition` tipa las cinco vias y le pone nombre al `None` de `FEATURE_SENSOR`.
+    Lo que se prueba aca son las tres afirmaciones que lo hacen valer la pena, y ninguna es
+    sobre el enum:
+
+      1. `LEARNABLE` resuelve a `COMPUTED` sobre `POPULATION`, y por eso **no cierra un hueco
+         que gatee una accion irreversible**. No hace falta una guarda nueva:
+         `admissible_for_action` ya exige `Scope.REQUEST` desde que entraron las asociaciones.
+
+      2. **φ NO TIENE NINGUN EJE APRENDIBLE, y eso es la frontera entre las dos capas.** φ
+         describe este request; lo aprendible describe la poblacion. Si alguien mete un eje
+         aprendible en `Features`, este chequeo falla y lo obliga a justificar el cambio de
+         capa en vez de dejarlo pasar como un campo mas.
+
+      3. El primer eje `LEARNABLE` del sistema —`reuse_horizon`, el lado que a `C1` de la
+         ontologia le faltaba— **corre y mide su propia ausencia**. Sobre las 7.838 filas del
+         registro devuelve cero sesiones y dice por que. Es la cuarta vez que el corpus decide
+         en silencio que hipotesis se pueden poner a prueba, y la primera que queda contada.
+    """
+    from app.beliefs import (Acquisition, Provenance, Scope, admissible_for_action,
+                             acquisition_closes_for_action)
+    from app.capacidades import EXIGE, TIENE, capaces
+    from app.features import FEATURE_ACQUISITION, DERIVED_FEATURES, Features
+    from app.reuse import (ACQUISITION, MIN_OBSERVACIONES, PROPOSITION, Trace,
+                           learn_reuse, traces_from_rows)
+
+    print("\n--- 81. LEARNABLE: la tercera forma de cerrar un hueco ---")
+
+    # 1. LAS CINCO VIAS RESUELVEN A UN PAR (procedencia, alcance), y `UNAVAILABLE` a nada.
+    ok &= check("toda via declara con que procedencia y alcance entraria la creencia",
+                all((a.resolves_to() is None) == (a is Acquisition.UNAVAILABLE)
+                    for a in Acquisition))
+    ok &= check("`LEARNABLE` resuelve a COMPUTED sobre POPULATION - las dos mitades honestas",
+                Acquisition.LEARNABLE.resolves_to() == (Provenance.COMPUTED, Scope.POPULATION))
+    ok &= check("y es GRATIS: no cuesta una llamada, porque es aritmetica sobre filas ya pagas",
+                not Acquisition.LEARNABLE.costs_a_call
+                and Acquisition.PROBEABLE.costs_a_call)
+
+    # 2. NO HABILITA LO IRREVERSIBLE, y sin guarda nueva.
+    ok &= check("sondear SI puede cerrar un hueco que gatea una accion (piso OBSERVED)",
+                acquisition_closes_for_action(Acquisition.PROBEABLE, Provenance.OBSERVED))
+    ok &= check("aprender del registro NO, por bien medido que este: el alcance es POPULATION",
+                not acquisition_closes_for_action(Acquisition.LEARNABLE, Provenance.OBSERVED)
+                and not acquisition_closes_for_action(Acquisition.LEARNABLE,
+                                                      Provenance.COMPUTED))
+
+    # 3. LA FRONTERA: φ no tiene ejes aprendibles, y esa ausencia se prueba.
+    f = Features(n_units=10, has_oracle=True, irreversible=False, shared_writes=False,
+                 budget_tokens=9000)
+    ok &= check("todo eje DERIVED declara su VIA, no solo su sensor",
+                set(FEATURE_ACQUISITION) == set(DERIVED_FEATURES))
+    ok &= check("φ no tiene ningun eje aprendible: describe ESTE request, no la poblacion",
+                f.learnable_gaps() == ())
+    ok &= check(f"y la particion de §78 se conserva: {f.fillable_gaps()} / {f.permanent_gaps()}",
+                f.fillable_gaps() == ("coupling",)
+                and f.permanent_gaps() == ("horizon_unknown",))
+
+    # 4. EL EJE APRENDIBLE APRENDE, cuando el registro tiene la forma que necesita.
+    trazas = []
+    for s in range(10):
+        trazas.append(Trace(f"s{s}", 0, "A"))
+        trazas.append(Trace(f"s{s}", 1, "A" if s < 6 else "B"))
+    m = learn_reuse(trazas)
+    ok &= check(f"cuenta la tasa por region: A = {m.por_region['A'].tasa:.3f} "
+                f"sobre {m.por_region['A'].observaciones} observaciones",
+                m.por_region["A"].reusos == 6 and m.por_region["A"].observaciones == 16)
+    b = m.belief_for("A")
+    ok &= check("y la emite COMPUTED/POPULATION con credencia 1,0 - la incertidumbre no esta "
+                "en el numero, esta en que el numero es sobre otros pedidos",
+                b is not None and b.provenance is Provenance.COMPUTED
+                and b.scope is Scope.POPULATION and b.credence == 1.0)
+    ok &= check("la creencia aprendida NO es admisible para una accion irreversible",
+                not admissible_for_action(b, Provenance.OBSERVED))
+
+    # LA DECLARACION Y LA EMISION TIENEN QUE COINCIDIR, y es el invariante que hace que
+    # `Acquisition` sirva para algo. Una via declarada que emite con otra procedencia o con
+    # otro alcance es una etiqueta que miente, y mentiria justo en el eje que decide que
+    # puede gatear una accion.
+    ok &= check("`reuse_horizon` esta declarado LEARNABLE en el registro de vias",
+                ACQUISITION[PROPOSITION] is Acquisition.LEARNABLE)
+    ok &= check("y lo que EMITE coincide con lo que su via PROMETE - una etiqueta que "
+                "miente lo haria en el eje que decide que puede gatear una accion",
+                ACQUISITION[PROPOSITION].resolves_to() == (b.provenance, b.scope))
+    ok &= check(f"por debajo del piso de {MIN_OBSERVACIONES} observaciones no se emite nada - "
+                f"una credencia baja invita a confiar en lo que no se gano",
+                m.belief_for("B") is None)
+
+    # UNA SESION SIN PRECEDENCIA DEFINIDA SE DESCARTA, no se adivina. Este eje afirma
+    # «mas adelante en la misma sesion»; con dos pedidos en la misma posicion, ordenar
+    # dejaria que el orden del ARCHIVO decida quien vino antes, y eso mide como se escribio
+    # el JSONL. Es el mismo defecto que `traces_from_rows` se niega a cometer con `task_id`.
+    ambigua = learn_reuse([Trace("s", 0, "A"), Trace("s", 0, "A"), Trace("s", 0, "A")])
+    ok &= check("una sesion con `orden` repetido se descarta entera y se cuenta",
+                ambigua.sesiones_sin_orden == 1 and ambigua.sesiones == 0
+                and not ambigua.por_region)
+    ok &= check(f"y no es establecible, con su motivo: {ambigua.porque_no()}",
+                not ambigua.establecible and "orden ambiguo" in ambigua.porque_no())
+
+    # 5. Y SOBRE EL REGISTRO REAL MIDE SU AUSENCIA, con el motivo, en vez de devolver cero.
+    import glob as _glob
+    import json as _json
+    filas = []
+    for ruta in _glob.glob("results/**/*_rows.jsonl", recursive=True):
+        for linea in Path(ruta).read_text(encoding="utf-8").splitlines():
+            if linea.strip():
+                filas.append(_json.loads(linea))
+    if filas:
+        real = learn_reuse(traces_from_rows(filas))
+        ok &= check(f"registro real: {len(filas):,} filas, {real.sesiones} sesiones - el eje "
+                    f"NO es establecible en este banco, y el banco lo dice",
+                    not real.establecible and real.sesiones == 0
+                    and real.sin_sesion == len(filas))
+        ok &= check(f"con su motivo: {real.porque_no()}", bool(real.porque_no()))
+        ok &= check("y no inventa la columna: `task_id` como sesion contaria dos replicas de "
+                    "la misma pregunta como un reuso, que mide el banco y no el mundo",
+                    not real.por_region)
+
+    # 6. LA CAPACIDAD QUE HARIA FALTA DEL LADO PROFUNDO, y no la tiene nadie.
+    ok &= check("`reuso_diferido` exige `PERSISTE_ENTRE_REQUESTS` y CERO de los doce brazos "
+                "la tiene - el catalogo predice el hueco sin correr nada, igual que `ausencia`",
+                capaces(EXIGE["reuso_diferido"]) == []
+                and not any("PERSISTE_ENTRE_REQUESTS" in c for c in TIENE.values()))
+
+    return ok
+
+
 def main() -> int:
     ok = True
     study = build_study()
@@ -6244,6 +6378,7 @@ def main() -> int:
     ok = check_hyde_branch_is_separable(ok)
     ok = check_surfacing_is_recorded_apart_from_reading(ok)
     ok = check_noise_floor_detects_a_real_prize(ok)
+    ok = check_learnable_is_a_third_kind_of_gap(ok)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "THERE ARE FAILURES"))
     return 0 if ok else 1

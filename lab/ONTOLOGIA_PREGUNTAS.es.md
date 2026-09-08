@@ -207,6 +207,40 @@ el `Request`, ni siquiera habría de dónde sacar la entrada.
 Importa porque **la relación conversacional determina el alcance heredado**, y el alcance
 determina la cardinalidad, que determina la región, que determina el ruteo.
 
+### C2 · Horizonte de reuso · *el eje simétrico, agregado 2026-09-07*
+
+| | |
+|---|---|
+| **forma** | efímero · reusable en la sesión · durable entre sesiones |
+| **falla** | tratar como efímero lo reusable paga la misma resolución N veces; tratar como durable lo efímero deja escrito un resumen que después se cita **como si fuera la fuente** |
+| **procedencia** | `COMPUTED` sobre `POPULATION` |
+| **¿medible acá?** | **NO** — cuarto caso. El corpus es de turno único y `Episode` no lleva sesión |
+
+Toda esta tabla mira hacia atrás. `C1` pregunta qué alcance heredó este pedido del anterior
+y **nada pregunta qué le deja al siguiente**, que es la mitad donde se decide si vale la pena
+escribir algo.
+
+Es el único eje del documento cuyo techo de procedencia **no es `ELICITED`**, y eso no es un
+detalle de tipos: los demás ejes se leen de la pregunta y por eso no pueden superar lo que el
+modelo infiere de ella. Éste no se lee de ninguna parte — se **cuenta** sobre el ledger, así
+que es aritmética exacta y aun así no dice nada de este pedido. Por eso entra con los dos
+ejes de `beliefs.py` declarados por separado: `COMPUTED` porque es una división entre dos
+enteros, `POPULATION` porque es sobre otros pedidos. `admissible_for_action` ya lo deja fuera
+de cualquier acción irreversible sin que haya que agregar una regla.
+
+Por qué importa medirlo y no declararlo: el *depth flip* de `arXiv 2606.26806` mide que la
+recuperación gana el recall factual corto (0,956-0,973 contra 0,463-0,483) y lo pierde contra
+la escritura selectiva en persistencia de meta tras descargar el contexto (0,394-0,398 contra
+0,812-0,904). **Ningún lado gana los dos**, así que el ganador lo decide este eje. Es la misma
+forma de `P15`, donde θ perdió `−0,087` porque el vocabulario de región no representaba
+continuidad ni horizonte.
+
+Y es la **cuarta** vez que el corpus decide en silencio qué se puede poner a prueba, que es
+para lo que el encabezado de este documento dice que existe. No se tapa: `app/reuse.py` lo
+implementa, corre sobre el registro y devuelve la ausencia con su motivo —`porque_no()`—
+en vez de un cero. La capacidad que un brazo necesitaría para el lado profundo está declarada
+como `PERSISTE_ENTRE_REQUESTS` y **no la tiene ninguno de los doce**.
+
 ---
 
 ## D. Sobre si la pregunta es contestable

@@ -2024,3 +2024,52 @@ respuestas. Ninguna fila válida ni resultado de mejora. El autor informó que n
 hasta el **2026-09-13**: no se hacen más llamadas pagadas mientras siga esa restricción.
 La fecha no programa una reanudación automática. Al retomar, verificar disponibilidad y usar
 el mismo script resumible, sin modificar corpus, umbrales ni reglas para P41.
+
+## P42 — ¿el horizonte de reuso separa lo que la región no separa? (2026-09-07)
+
+Registrada ANTES de que exista el corpus que la puede falsar, y ése es el punto: el eje se
+declara desde teoría y desde un resultado externo, no mirando el registro propio. El corpus
+actual es de turno único —7.838 filas, 0 sesiones, verificado por `app/reuse.py` sobre el
+registro completo— así que no hay dato que pueda haber sugerido el eje.
+
+**De dónde sale.** `Memory Depth, Not Memory Access` (2606.26806) mide un depth flip: la
+recuperación gana el recall factual corto (0,956-0,973 contra 0,463-0,483) y lo pierde contra
+la escritura selectiva en persistencia de meta tras descargar el contexto (0,394-0,398 contra
+0,812-0,904). Ningún lado gana los dos, así que el ganador lo decide un eje. Es la forma de
+`P15`, donde θ perdió `-0,087` porque la región no representaba continuidad ni horizonte.
+
+**La predicción.** Sobre un corpus con sesiones encadenadas, la tasa de reuso por región
+—cuántos pedidos de una región vuelven a pedirse en la misma sesión— varía entre regiones más
+allá del ruido, y una política que la consume captura brecha NETA positiva contra el mejor
+fijo, incluido siempre-`react`, sobre datos held-out.
+
+**Lo implementado y corrido, sin ninguna llamada paga.** `beliefs.Acquisition` con sus cinco
+vías; `acquisition_closes_for_action`; `features.FEATURE_ACQUISITION` y `learnable_gaps()`;
+`app/reuse.py` con `learn_reuse`, piso de 8 observaciones y `porque_no()`;
+`capacidades.PERSISTE_ENTRE_REQUESTS` y el eje `reuso_diferido`; `ONTOLOGIA_PREGUNTAS.es.md`
+§C2. Probado en `test_science.py` §81. Las tres suites pasan.
+
+**Diseño congelado de lo que se mediría.** Un corpus con sesiones de al menos 3 pedidos
+encadenados, con `session_id` y `turn` en la fila; mínimo 8 observaciones por región antes de
+emitir la tasa, el mismo piso que θ; la tasa se aprende sobre la partición `search`, se puntúa
+sobre `validate`, y el mundo final se toca una vez. Piso de ruido por celda con pseudo-brazos
+de las réplicas de la misma condición, nunca bootstrap del premio. Decisión sobre la brecha
+NETA a lambda=0,05 por 100.000 tokens, que es el eje con que el banco decide.
+
+**Éxito:** la dispersión de la tasa entre regiones excede su piso de ruido; y una política que
+la consume gana brecha NETA con límite inferior de IC95 > 0 contra el mejor fijo. Si la tasa
+varía pero la política no gana, se conserva el eje como medición descriptiva y se retira la
+afirmación de ruteo. Si la tasa no varía, el eje se retira del catálogo: sería vocabulario.
+
+**Lo que NO se toca:** el vocabulario de región, `REGION_VOCABULARY`, θ, `EXIGE` ni el piso de
+episodios. Ninguna regla lee `reuse_horizon` hasta que esto se mida — asentar una creencia que
+nadie lee es el defecto de `horizon_unknown` repetido.
+
+### Estado P42 (2026-09-07): implementada, bloqueada por CORPUS y no por créditos
+
+El eje, su vía de adquisición y su capacidad están en el código y corren. El resultado sobre el
+registro existente es una ausencia medida con su motivo: turno único, ninguna secuencia. El
+bloqueo es que el corpus no tiene la forma que el eje necesita, y armar uno con sesiones
+encadenadas es una decisión del autor y un costo aparte. La parte aritmética cuesta cero
+llamadas una vez que ese registro exista. Detalle y vecinos en
+`notes/2026-09-07-horizonte-de-reuso.md`.

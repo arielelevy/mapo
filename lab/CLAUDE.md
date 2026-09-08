@@ -385,6 +385,22 @@ automática. Retomar con `historico/CIERRE-2026-09-05-P41.es.md`. La prueba es l
 afirmación de mejora del sistema completo requiere después evaluar intervención selectiva y
 regresiones sobre todo el corpus.
 
+**P42 (2026-09-07), implementada y bloqueada por CORPUS, no por créditos:** el horizonte de
+reuso —¿lo que este pedido establece lo va a consumir otro?— entra como el **primer eje
+`LEARNABLE`** del sistema. `beliefs.Acquisition` agrega el tercer eje de la base de creencias:
+cómo se llegaría a creer lo que hoy no se cree (`MEASURED`/`PROBEABLE`/`ELICITABLE`/
+`LEARNABLE`/`UNAVAILABLE`). `LEARNABLE` resuelve a `COMPUTED` sobre `POPULATION`, así que
+`admissible_for_action` ya lo deja fuera de lo irreversible **sin agregar ninguna guarda**.
+**No es un feature y no toca el vocabulario de región**: φ describe este request, el ledger
+describe la población, y `learnable_gaps()` devuelve vacío por construcción. `app/reuse.py`
+corre sobre el registro completo y mide su propia ausencia: **7.838 filas, 0 sesiones**, con el
+motivo en `porque_no()` en vez de un cero. La capacidad del lado profundo —
+`PERSISTE_ENTRE_REQUESTS`, eje `reuso_diferido`— **no la tiene ninguno de los doce brazos**, que
+es el segundo hueco que el catálogo predice sin correr nada después de `ausencia`.
+`ONTOLOGIA_PREGUNTAS.es.md` §C2, `test_science.py` §81, tres suites en verde, cero llamadas
+pagas. Correrlo exige un corpus con sesiones encadenadas, que es decisión del autor.
+Detalle y once vecinos en `notes/2026-09-07-horizonte-de-reuso.md`.
+
 > **Cierre editorial del 2026-09-03**: `historico/CIERRE-2026-09-03.es.md`. Es lo que hay que leer para
 > retomar: qué se hizo en los papers y las figuras, qué destaparon `P34` y `P36`, y qué decide
 > el autor antes de la próxima corrida.

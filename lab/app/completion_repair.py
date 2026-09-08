@@ -20,6 +20,17 @@ MODES = frozenset({"retain", "directed", "generic"})
 
 @dataclass(frozen=True)
 class RepairRequest:
+    """Lo que el caller AUTORIZA para una reparacion, con sus limites adentro.
+
+    Los limites viajan en el pedido y no en una constante del modulo porque una reparacion
+    es gasto que alguien habilito: quien la pide declara cuanto. `__post_init__` los valida
+    en el constructor, asi que un pedido mal formado no llega a hacer una llamada.
+
+    `domain` son las claves declaradas que la respuesta tiene que cubrir. Es la entrada del
+    diagnostico de completitud, y es del caller: el codigo cuenta cuales faltan, nunca las
+    infiere del enunciado.
+    """
+
     question: str
     domain: tuple[str, ...]
     unit_ids: tuple[str, ...]
@@ -42,6 +53,16 @@ class RepairRequest:
 
 @dataclass
 class RepairResult:
+    """El resultado de una reparacion, con las DOS respuestas conservadas por separado.
+
+    `original` y `candidate` no se pisan: una reparacion que empeora tiene que poder verse,
+    y con una sola cadena el registro solo mostraria la ultima. `answer` es lo que se emite
+    —`None` cuando se difiere—, que es la tercera cosa y no un alias de ninguna de las dos.
+
+    `status` dice que paso, y una respuesta que sigue incompleta se difiere en vez de
+    emitirse: el gasto quedo hecho igual y se cobra igual, asi que se registra igual.
+    """
+
     original: str
     candidate: str
     answer: str | None
